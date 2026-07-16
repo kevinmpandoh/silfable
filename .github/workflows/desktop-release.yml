@@ -1,0 +1,52 @@
+name: Desktop Linux Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to build and review
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  linux-artifacts:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Install Electron runtime
+        run: npm run setup:electron
+
+      - name: Verify
+        run: npm run typecheck && npm test
+
+      - name: Build AppImage and Debian packages
+        run: npm run dist:linux --workspace @silfable/desktop
+
+      - name: Generate checksums
+        working-directory: apps/desktop/release
+        run: sha256sum Silfable-* > SHA256SUMS.txt
+
+      - name: Upload draft artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: silfable-linux-${{ inputs.version }}
+          path: |
+            apps/desktop/release/Silfable-*
+            apps/desktop/release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
