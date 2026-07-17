@@ -21,8 +21,6 @@
     "dist:linux:x64": "npm run build && electron-builder --linux AppImage deb --x64"
   },
   "dependencies": {
-    "@silfable/contracts": "0.1.0",
-    "@silfable/core": "0.1.0",
     "@solana-program/system": "^0.13.0",
     "@solana-program/token": "^0.15.0",
     "@solana/kit": "^7.0.0",
@@ -32,6 +30,8 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@silfable/contracts": "0.1.0",
+    "@silfable/core": "0.1.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19",
     "@types/react-dom": "^19",

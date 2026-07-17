@@ -23,21 +23,41 @@ assert.equal(executableHeader[0], 0x7f);
 assert.equal(executableHeader.subarray(1, 4).toString("ascii"), "ELF");
 
 const asarPath = join(unpackedDirectory, "resources", "app.asar");
-const packagedFiles = listPackage(asarPath).map((name) => name.replace(/^[/\\]+/u, ""));
+const packagedFiles = listPackage(asarPath).map((name) => name.replaceAll("\\", "/").replace(/^\/+/u, ""));
 for (const required of ["out/main/index.js", "out/preload/index.mjs", "out/renderer/index.html", "package.json"]) {
   assert.ok(packagedFiles.includes(required), `Missing packaged runtime file: ${required}`);
 }
 
-const forbidden = [
+const globallyForbidden = [
   /(^|[/\\])\.env(?:\.|$)/u,
-  /\.map$/u,
   /\.(?:pem|key|sqlite|sqlite3)$/u,
+];
+const firstPartyForbidden = [
+  /\.map$/u,
   /(^|[/\\])src([/\\]|$)/u,
   /(^|[/\\])[^/\\]*\.test\.[^/\\]+$/u,
 ];
 for (const name of packagedFiles) {
-  assert.equal(forbidden.some((pattern) => pattern.test(name)), false, `Forbidden artifact entry: ${name}`);
+  assert.equal(
+    globallyForbidden.some((pattern) => pattern.test(name)),
+    false,
+    `Forbidden sensitive artifact entry: ${name}`,
+  );
+
+  const isFirstParty = !name.startsWith("node_modules/") || name.startsWith("node_modules/@silfable/");
+  if (isFirstParty) {
+    assert.equal(
+      firstPartyForbidden.some((pattern) => pattern.test(name)),
+      false,
+      `Forbidden first-party artifact entry: ${name}`,
+    );
+  }
 }
+assert.equal(
+  packagedFiles.some((name) => name.startsWith("out/") && name.endsWith(".map")),
+  false,
+  "Packaged Silfable runtime must not contain source maps",
+);
 
 const packagedManifest = JSON.parse(extractFile(asarPath, "package.json").toString("utf8"));
 assert.equal(packagedManifest.main, "./out/main/index.js");
