@@ -9,6 +9,38 @@
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, input, textarea { font: inherit; }
 
+.startupFailure {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 20px;
+  padding: clamp(32px, 8vw, 120px);
+}
+.startupFailure h1 {
+  max-width: 900px;
+  margin: 0;
+  font-family: Georgia, serif;
+  font-size: clamp(52px, 9vw, 120px);
+  font-weight: 400;
+  letter-spacing: -0.06em;
+  line-height: 0.88;
+}
+.startupFailure p:not(.eyebrow) {
+  max-width: 620px;
+  margin: 0;
+  color: rgb(255 255 255 / 0.62);
+  font-size: 16px;
+  line-height: 1.7;
+}
+.startupFailure small {
+  color: #60a5fa;
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
 .shell { min-height: 100vh; padding: 0 clamp(24px, 5vw, 80px) 64px; }
 .topbar { height: 76px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgb(255 255 255 / 0.15); }
 .topbarActions { display: flex; align-items: center; gap: 18px; }

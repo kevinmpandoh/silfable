@@ -28,16 +28,13 @@ if [[ "$mode" == "wayland" ]]; then
   done
   [[ -S "$runtime_dir/wayland-silfable-qa" ]]
   WAYLAND_DISPLAY=wayland-silfable-qa XDG_CONFIG_HOME="$config_dir" ELECTRON_OZONE_PLATFORM_HINT=wayland \
-    "$binary" --no-sandbox --enable-features=UseOzonePlatform --ozone-platform=wayland >"$log" 2>&1 &
+    "$binary" --no-sandbox --remote-debugging-port=9333 --enable-features=UseOzonePlatform --ozone-platform=wayland >"$log" 2>&1 &
 else
   XDG_RUNTIME_DIR="$runtime_dir" XDG_CONFIG_HOME="$config_dir" ELECTRON_OZONE_PLATFORM_HINT=x11 \
-    "$binary" --no-sandbox --ozone-platform=x11 >"$log" 2>&1 &
+    "$binary" --no-sandbox --remote-debugging-port=9333 --ozone-platform=x11 >"$log" 2>&1 &
 fi
 app_pid=$!
 
-sleep 10
-if ! kill -0 "$app_pid" 2>/dev/null; then
-  cat "$log"
-  exit 1
-fi
-echo "Electron $mode smoke test remained healthy for 10 seconds."
+node scripts/assert-electron-renderer.mjs "http://127.0.0.1:9333"
+kill -0 "$app_pid" 2>/dev/null || { cat "$log"; exit 1; }
+echo "Electron $mode renderer and secure preload bridge passed smoke QA."

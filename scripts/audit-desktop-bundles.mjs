@@ -18,7 +18,7 @@ const forbidden = [
 const violations = [];
 for (const root of roots) {
   for (const path of await walk(root)) {
-    if (![".html", ".js", ".mjs"].includes(extname(path))) continue;
+    if (![".cjs", ".html", ".js", ".mjs"].includes(extname(path))) continue;
     const source = await readFile(path, "utf8");
     for (const marker of forbidden) {
       if (source.includes(marker)) violations.push(`${path}: forbidden marker ${marker}`);

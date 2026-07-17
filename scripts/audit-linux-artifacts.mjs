@@ -24,7 +24,7 @@ assert.equal(executableHeader.subarray(1, 4).toString("ascii"), "ELF");
 
 const asarPath = join(unpackedDirectory, "resources", "app.asar");
 const packagedFiles = listPackage(asarPath).map((name) => name.replaceAll("\\", "/").replace(/^\/+/u, ""));
-for (const required of ["out/main/index.js", "out/preload/index.mjs", "out/renderer/index.html", "package.json"]) {
+for (const required of ["out/main/index.js", "out/preload/index.cjs", "out/renderer/index.html", "package.json"]) {
   assert.ok(packagedFiles.includes(required), `Missing packaged runtime file: ${required}`);
 }
 

@@ -149,7 +149,7 @@ function createMainWindow(): BrowserWindow {
     backgroundColor: "#050505",
     show: false,
     webPreferences: {
-      preload: fileURLToPath(new URL("../preload/index.mjs", import.meta.url)),
+      preload: fileURLToPath(new URL("../preload/index.cjs", import.meta.url)),
       ...HARDENED_WEB_PREFERENCES,
     },
   });
