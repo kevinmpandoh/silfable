@@ -4,6 +4,7 @@
   "private": true,
   "homepage": "https://github.com/kevinmpandoh/silfable",
   "author": "Silfable",
+  "desktopName": "Silfable",
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {

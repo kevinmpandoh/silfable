@@ -1,5 +1,6 @@
 appId: ai.silfable.desktop
 productName: Silfable
+executableName: silfable
 asar: true
 directories:
   output: release
@@ -9,6 +10,7 @@ files:
 linux:
   category: Finance
   synopsis: Local-first AI trading runtime with enforceable limits
+  syncDesktopName: true
   target:
     - target: AppImage
       arch:
