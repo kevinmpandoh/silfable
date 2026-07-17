@@ -1,9 +1,13 @@
 {
   "name": "@silfable/desktop",
   "version": "0.1.0",
+  "description": "Local-first AI trading runtime with enforceable limits",
   "private": true,
   "homepage": "https://github.com/kevinmpandoh/silfable",
-  "author": "Silfable",
+  "author": {
+    "name": "Silfable",
+    "email": "kevinmpandoh@users.noreply.github.com"
+  },
   "desktopName": "Silfable",
   "type": "module",
   "main": "./out/main/index.js",
