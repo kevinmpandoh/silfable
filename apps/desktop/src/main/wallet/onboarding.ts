@@ -2,6 +2,7 @@ import {
   createKeyPairSignerFromBytes,
   createKeyPairSignerFromPrivateKeyBytes,
   getBase58Encoder,
+  type KeyPairSigner,
 } from "@solana/kit";
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from "bip39";
 import HDKey from "micro-key-producer/slip10.js";
@@ -15,7 +16,7 @@ const DATA_KEY_ID = "local-data-key-v1";
 
 type SecretStore = {
   isLocked(): boolean;
-  getSecret(name: "database-data-key"): Promise<string | null>;
+  getSecret(name: "database-data-key" | "wallet-secret"): Promise<string | null>;
   setSecret(name: "wallet-secret" | "database-data-key", plaintext: string): Promise<void>;
   deleteSecret(name: "wallet-secret"): Promise<void>;
 };
@@ -73,6 +74,25 @@ export class WalletOnboardingService {
       return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
     } finally {
       dataKey.fill(0);
+    }
+  }
+
+  async withWalletSigner<T>(operation: (signer: KeyPairSigner) => Promise<T>): Promise<T> {
+    if (this.#keystore.isLocked()) throw new Error("Keystore is locked");
+    if (!this.#database.hasWallet(PROFILE_ID)) throw new Error("Devnet wallet is not configured");
+    const serialized = await this.#keystore.getSecret("wallet-secret");
+    if (serialized === null) throw new Error("Wallet secret is unavailable");
+    const privateKey = parseStoredWalletSecret(serialized);
+    try {
+      const signer =
+        privateKey.length === 32
+          ? await createKeyPairSignerFromPrivateKeyBytes(privateKey)
+          : await createKeyPairSignerFromBytes(privateKey);
+      const storedAddress = await this.getWalletAddress();
+      if (signer.address !== storedAddress) throw new Error("Wallet secret does not match encrypted metadata");
+      return await operation(signer);
+    } finally {
+      privateKey.fill(0);
     }
   }
 
@@ -172,6 +192,21 @@ function parsePrivateKey(serialized: string): Uint8Array {
   if (bytes.length !== 32 && bytes.length !== 64) {
     bytes.fill(0);
     throw new Error("Private key must contain 32 or 64 bytes");
+  }
+  return bytes;
+}
+
+function parseStoredWalletSecret(serialized: string): Uint8Array {
+  const parsed: unknown = JSON.parse(serialized);
+  if (typeof parsed !== "object" || parsed === null) throw new Error("Wallet secret is invalid");
+  const value = parsed as { version?: unknown; encoding?: unknown; bytes?: unknown };
+  if (value.version !== 1 || value.encoding !== "base64" || typeof value.bytes !== "string") {
+    throw new Error("Wallet secret is unsupported");
+  }
+  const bytes = Uint8Array.from(Buffer.from(value.bytes, "base64"));
+  if (bytes.length !== 32 && bytes.length !== 64) {
+    bytes.fill(0);
+    throw new Error("Wallet secret length is invalid");
   }
   return bytes;
 }

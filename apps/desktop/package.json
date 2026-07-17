@@ -2,6 +2,8 @@
   "name": "@silfable/desktop",
   "version": "0.1.0",
   "private": true,
+  "homepage": "https://github.com/kevinmpandoh/silfable",
+  "author": "Silfable",
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
@@ -10,11 +12,14 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "tsx --test src/main/**/*.test.ts",
-    "dist:linux": "npm run build && electron-builder --linux AppImage deb --x64 --arm64"
+    "dist:linux": "npm run build && electron-builder --linux AppImage deb --x64 --arm64",
+    "dist:linux:x64": "npm run build && electron-builder --linux AppImage deb --x64"
   },
   "dependencies": {
     "@silfable/contracts": "0.1.0",
     "@silfable/core": "0.1.0",
+    "@solana-program/system": "^0.13.0",
+    "@solana-program/token": "^0.15.0",
     "@solana/kit": "^7.0.0",
     "bip39": "^3.1.0",
     "micro-key-producer": "^0.9.0",

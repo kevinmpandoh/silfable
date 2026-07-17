@@ -39,6 +39,182 @@ export type MissionCycleStorageRecord = {
   };
 };
 
+export type DevnetCanaryStorageRecord = {
+  id: string;
+  kind: "self-transfer-zero-lamports";
+  state: "proposed" | "simulated" | "signed" | "broadcast" | "confirmed" | "failed" | "ambiguous";
+  encryptedWire: string | null;
+  wireNonce: string | null;
+  encryptedSignature: string | null;
+  signatureNonce: string | null;
+  keyId: string | null;
+  lastValidBlockHeight: string | null;
+  simulationUnits: string | null;
+  failureCode: string | null;
+  signingAttempted: boolean;
+  broadcastAttempted: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type JupiterShadowQuoteStorageRecord = {
+  id: string;
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  allowed: boolean;
+  createdAt: string;
+};
+
+export type CrashReportStorageRecord = {
+  id: string;
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  transmitted: false;
+  createdAt: string;
+};
+
+export type GuardedExecutionStorageState =
+  | "proposed" | "validated" | "simulated" | "signed" | "broadcast"
+  | "confirmed" | "receipted" | "failed" | "ambiguous";
+
+export type GuardedExecutionStorageRecord = {
+  id: string;
+  missionId: string;
+  missionRevision: number;
+  cycle: number;
+  fixtureManifestDigest: string;
+  state: GuardedExecutionStorageState;
+  messageHash: string | null;
+  signingAttempted: boolean;
+  broadcastAttempted: boolean;
+  failureCode: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GuardedExecutionEventStorageRecord = {
+  id: string;
+  executionId: string;
+  fromState: GuardedExecutionStorageState | null;
+  toState: GuardedExecutionStorageState;
+  eventName: string;
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  createdAt: string;
+};
+
+export type FixtureProvisionStorageRecord = {
+  id: string;
+  mintAddress: string;
+  state: "proposed" | "simulated" | "signed" | "broadcast" | "confirmed" | "failed" | "ambiguous";
+  messageHash: string;
+  encryptedPayload: string | null;
+  payloadNonce: string | null;
+  keyId: string | null;
+  lastValidBlockHeight: string;
+  simulationUnits: string | null;
+  failureCode: string | null;
+  signingAttempted: boolean;
+  broadcastAttempted: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FixtureReviewStorageRecord = {
+  provisionId: string;
+  manifestDigest: string;
+  mintAddress: string;
+  sourceTokenAccount: string;
+  destinationTokenAccount: string;
+  walletAuthority: string;
+  destinationOwner: string;
+  observedSlot: string;
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  active: true;
+  createdAt: string;
+};
+
+export type GuardedFixtureTransferStorageRecord = {
+  id: string;
+  fixtureManifestDigest: string;
+  state: "proposed" | "simulated" | "signed" | "broadcast" | "confirmed" | "failed" | "ambiguous";
+  messageHash: string;
+  encryptedPayload: string | null;
+  payloadNonce: string | null;
+  keyId: string | null;
+  lastValidBlockHeight: string;
+  simulationUnits: string | null;
+  failureCode: string | null;
+  signingAttempted: boolean;
+  broadcastAttempted: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GuardedFixtureTransferApprovalStorageRecord = {
+  transferId: string;
+  fixtureManifestDigest: string;
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  approvedAt: string;
+};
+
+export type GuardedMissionAuthorizationStorageRecord = {
+  id: string;
+  missionId: string;
+  missionRevision: number;
+  planDigest: string;
+  deskRuleDigest: string;
+  fixtureManifestDigest: string;
+  fixtureTransferId: string;
+  state: "active" | "revoked";
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  authorizedAt: string;
+  revokedAt: string | null;
+};
+
+export type GuardedSchedulerEvaluationStorageRecord = {
+  id: string;
+  missionId: string;
+  missionRevision: number;
+  cycle: number;
+  authorizationId: string | null;
+  outcome: "inactive" | "ready" | "denied";
+  reasonCode: string;
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  evaluatedAt: string;
+};
+
+export type GuardedSchedulerArmStorageRecord = {
+  id: string;
+  authorizationId: string;
+  missionId: string;
+  missionRevision: number;
+  planDigest: string;
+  deskRuleDigest: string;
+  fixtureManifestDigest: string;
+  scope: "devnet-fixture-cycle-once";
+  state: "active" | "consumed" | "revoked" | "expired";
+  executionId: string | null;
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  armedAt: string;
+  expiresAt: string;
+  consumedAt: string | null;
+  revokedAt: string | null;
+};
+
 export class RuntimeDatabase {
   readonly #database: DatabaseSync;
 
@@ -85,6 +261,599 @@ export class RuntimeDatabase {
 
   deleteSetting(key: string): void {
     this.#database.prepare("DELETE FROM app_settings WHERE key = ?").run(key);
+  }
+
+  insertCrashReport(input: CrashReportStorageRecord): void {
+    this.#database
+      .prepare(
+        `INSERT INTO crash_reports
+          (id, encrypted_payload, payload_nonce, key_id, transmitted, created_at)
+         VALUES (?, ?, ?, ?, 0, ?)`,
+      )
+      .run(input.id, input.encryptedPayload, input.payloadNonce, input.keyId, input.createdAt);
+  }
+
+  listCrashReports(limit = 20): CrashReportStorageRecord[] {
+    return (this.#database
+      .prepare("SELECT * FROM crash_reports ORDER BY created_at DESC LIMIT ?")
+      .all(limit) as Array<{
+      id: string;
+      encrypted_payload: string;
+      payload_nonce: string;
+      key_id: string;
+      transmitted: number;
+      created_at: string;
+    }>).map((row) => ({
+      id: row.id,
+      encryptedPayload: row.encrypted_payload,
+      payloadNonce: row.payload_nonce,
+      keyId: row.key_id,
+      transmitted: false,
+      createdAt: row.created_at,
+    }));
+  }
+
+  countCrashReports(): number {
+    const row = this.#database.prepare("SELECT COUNT(*) AS count FROM crash_reports").get() as { count: number };
+    return row.count;
+  }
+
+  deleteCrashReports(): void {
+    this.#database.prepare("DELETE FROM crash_reports").run();
+  }
+
+  setCrashTelemetryConsent(key: string, consent: boolean): void {
+    this.#transaction(() => {
+      this.setSetting(key, { schemaVersion: 1, consent });
+      if (!consent) this.deleteCrashReports();
+    });
+  }
+
+  createGuardedExecution(input: {
+    id: string;
+    missionId: string;
+    missionRevision: number;
+    cycle: number;
+    fixtureManifestDigest: string;
+    eventId: string;
+    encryptedPayload: string;
+    payloadNonce: string;
+    keyId: string;
+    now: string;
+  }): GuardedExecutionStorageRecord {
+    this.#transaction(() => {
+      this.#database.prepare(
+        `INSERT INTO guarded_devnet_executions
+          (id, mission_id, mission_revision, cycle_number, fixture_manifest_digest, state, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'proposed', ?, ?)`,
+      ).run(input.id, input.missionId, input.missionRevision, input.cycle, input.fixtureManifestDigest, input.now, input.now);
+      this.#database.prepare(
+        `INSERT INTO guarded_devnet_execution_events
+          (id, execution_id, from_state, to_state, event_name, encrypted_payload, payload_nonce, key_id, created_at)
+         VALUES (?, ?, NULL, 'proposed', 'proposal-created', ?, ?, ?, ?)`,
+      ).run(input.eventId, input.id, input.encryptedPayload, input.payloadNonce, input.keyId, input.now);
+    });
+    return this.#requireGuardedExecution(input.id);
+  }
+
+  transitionGuardedExecution(input: {
+    id: string;
+    expectedState: GuardedExecutionStorageState;
+    state: GuardedExecutionStorageState;
+    eventId: string;
+    eventName: string;
+    encryptedPayload: string;
+    payloadNonce: string;
+    keyId: string;
+    messageHash?: string;
+    signingAttempted?: boolean;
+    broadcastAttempted?: boolean;
+    failureCode?: string | null;
+    now: string;
+  }): GuardedExecutionStorageRecord {
+    this.#transaction(() => {
+      const current = this.#requireGuardedExecution(input.id);
+      if (current.state !== input.expectedState) throw new Error("Guarded execution state conflict");
+      if (current.messageHash !== null && input.messageHash !== undefined && current.messageHash !== input.messageHash) {
+        throw new Error("Guarded execution message hash conflict");
+      }
+      const result = this.#database.prepare(
+        `UPDATE guarded_devnet_executions SET state = ?, message_hash = ?, signing_attempted = ?,
+           broadcast_attempted = ?, failure_code = ?, updated_at = ? WHERE id = ? AND state = ?`,
+      ).run(
+        input.state,
+        input.messageHash ?? current.messageHash,
+        Number(input.signingAttempted ?? current.signingAttempted),
+        Number(input.broadcastAttempted ?? current.broadcastAttempted),
+        input.failureCode === undefined ? current.failureCode : input.failureCode,
+        input.now,
+        input.id,
+        input.expectedState,
+      );
+      if (Number(result.changes) !== 1) throw new Error("Guarded execution state conflict");
+      this.#database.prepare(
+        `INSERT INTO guarded_devnet_execution_events
+          (id, execution_id, from_state, to_state, event_name, encrypted_payload, payload_nonce, key_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        input.eventId, input.id, input.expectedState, input.state, input.eventName,
+        input.encryptedPayload, input.payloadNonce, input.keyId, input.now,
+      );
+    });
+    return this.#requireGuardedExecution(input.id);
+  }
+
+  getGuardedExecution(id: string): GuardedExecutionStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM guarded_devnet_executions WHERE id = ?").get(id);
+    return row === undefined ? null : toGuardedExecutionStorageRecord(row);
+  }
+
+  listPendingGuardedExecutions(): GuardedExecutionStorageRecord[] {
+    return (this.#database.prepare(
+      `SELECT * FROM guarded_devnet_executions
+       WHERE state IN ('proposed', 'validated', 'simulated', 'signed', 'broadcast', 'confirmed', 'ambiguous')
+       ORDER BY created_at`,
+    ).all() as Array<Record<string, unknown>>).map(toGuardedExecutionStorageRecord);
+  }
+
+  listGuardedExecutions(limit = 20): GuardedExecutionStorageRecord[] {
+    return (this.#database.prepare(
+      "SELECT * FROM guarded_devnet_executions ORDER BY created_at DESC LIMIT ?",
+    ).all(limit) as Array<Record<string, unknown>>).map(toGuardedExecutionStorageRecord);
+  }
+
+  listGuardedExecutionEvents(executionId: string): GuardedExecutionEventStorageRecord[] {
+    return (this.#database.prepare(
+      "SELECT * FROM guarded_devnet_execution_events WHERE execution_id = ? ORDER BY created_at, rowid",
+    ).all(executionId) as Array<Record<string, unknown>>).map(toGuardedExecutionEventStorageRecord);
+  }
+
+  createFixtureProvision(input: {
+    id: string;
+    mintAddress: string;
+    messageHash: string;
+    lastValidBlockHeight: string;
+    now: string;
+  }): FixtureProvisionStorageRecord {
+    this.#database.prepare(
+      `INSERT INTO devnet_fixture_provisions
+        (id, mint_address, state, message_hash, last_valid_block_height, created_at, updated_at)
+       VALUES (?, ?, 'proposed', ?, ?, ?, ?)`,
+    ).run(input.id, input.mintAddress, input.messageHash, input.lastValidBlockHeight, input.now, input.now);
+    return this.#requireFixtureProvision(input.id);
+  }
+
+  updateFixtureProvision(input: {
+    id: string;
+    expectedState: FixtureProvisionStorageRecord["state"];
+    state: FixtureProvisionStorageRecord["state"];
+    now: string;
+    encryptedPayload?: string;
+    payloadNonce?: string;
+    keyId?: string;
+    simulationUnits?: string;
+    failureCode?: string | null;
+    signingAttempted?: boolean;
+    broadcastAttempted?: boolean;
+  }): FixtureProvisionStorageRecord {
+    const current = this.#requireFixtureProvision(input.id);
+    if (current.state !== input.expectedState) throw new Error("Fixture provision state conflict");
+    const result = this.#database.prepare(
+      `UPDATE devnet_fixture_provisions SET state = ?, encrypted_payload = ?, payload_nonce = ?, key_id = ?,
+         simulation_units = ?, failure_code = ?, signing_attempted = ?, broadcast_attempted = ?, updated_at = ?
+       WHERE id = ? AND state = ?`,
+    ).run(
+      input.state,
+      input.encryptedPayload ?? current.encryptedPayload,
+      input.payloadNonce ?? current.payloadNonce,
+      input.keyId ?? current.keyId,
+      input.simulationUnits ?? current.simulationUnits,
+      input.failureCode === undefined ? current.failureCode : input.failureCode,
+      Number(input.signingAttempted ?? current.signingAttempted),
+      Number(input.broadcastAttempted ?? current.broadcastAttempted),
+      input.now,
+      input.id,
+      input.expectedState,
+    );
+    if (Number(result.changes) !== 1) throw new Error("Fixture provision state conflict");
+    return this.#requireFixtureProvision(input.id);
+  }
+
+  getFixtureProvision(id: string): FixtureProvisionStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM devnet_fixture_provisions WHERE id = ?").get(id);
+    return row === undefined ? null : toFixtureProvisionStorageRecord(row);
+  }
+
+  listPendingFixtureProvisions(): FixtureProvisionStorageRecord[] {
+    return this.#database.prepare(
+      "SELECT * FROM devnet_fixture_provisions WHERE state IN ('proposed', 'simulated', 'signed', 'broadcast', 'ambiguous') ORDER BY created_at",
+    ).all().map(toFixtureProvisionStorageRecord);
+  }
+
+  listFixtureProvisions(limit = 20): FixtureProvisionStorageRecord[] {
+    return this.#database.prepare(
+      "SELECT * FROM devnet_fixture_provisions ORDER BY created_at DESC LIMIT ?",
+    ).all(limit).map(toFixtureProvisionStorageRecord);
+  }
+
+  hasBlockingFixtureProvision(): boolean {
+    const row = this.#database.prepare(
+      `SELECT COUNT(*) AS count FROM devnet_fixture_provisions
+       WHERE state IN ('proposed', 'simulated', 'signed', 'broadcast', 'confirmed', 'ambiguous')`,
+    ).get() as { count: number };
+    return row.count > 0;
+  }
+
+  insertFixtureReview(record: FixtureReviewStorageRecord): void {
+    this.#database.prepare(
+      `INSERT INTO devnet_fixture_reviews
+        (provision_id, manifest_digest, mint_address, source_token_account, destination_token_account,
+         wallet_authority, destination_owner, observed_slot, encrypted_payload, payload_nonce, key_id, active, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+    ).run(
+      record.provisionId,
+      record.manifestDigest,
+      record.mintAddress,
+      record.sourceTokenAccount,
+      record.destinationTokenAccount,
+      record.walletAuthority,
+      record.destinationOwner,
+      record.observedSlot,
+      record.encryptedPayload,
+      record.payloadNonce,
+      record.keyId,
+      record.createdAt,
+    );
+  }
+
+  getActiveFixtureReview(): FixtureReviewStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM devnet_fixture_reviews WHERE active = 1").get();
+    return row === undefined ? null : toFixtureReviewStorageRecord(row);
+  }
+
+  getFixtureReview(provisionId: string): FixtureReviewStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM devnet_fixture_reviews WHERE provision_id = ?").get(provisionId);
+    return row === undefined ? null : toFixtureReviewStorageRecord(row);
+  }
+
+  createGuardedFixtureTransfer(input: {
+    id: string;
+    fixtureManifestDigest: string;
+    messageHash: string;
+    lastValidBlockHeight: string;
+    now: string;
+  }): GuardedFixtureTransferStorageRecord {
+    this.#database.prepare(
+      `INSERT INTO guarded_fixture_transfers
+        (id, fixture_manifest_digest, state, message_hash, last_valid_block_height, created_at, updated_at)
+       VALUES (?, ?, 'proposed', ?, ?, ?, ?)`,
+    ).run(input.id, input.fixtureManifestDigest, input.messageHash, input.lastValidBlockHeight, input.now, input.now);
+    return this.#requireGuardedFixtureTransfer(input.id);
+  }
+
+  updateGuardedFixtureTransfer(input: {
+    id: string;
+    expectedState: GuardedFixtureTransferStorageRecord["state"];
+    state: GuardedFixtureTransferStorageRecord["state"];
+    now: string;
+    encryptedPayload?: string;
+    payloadNonce?: string;
+    keyId?: string;
+    simulationUnits?: string;
+    failureCode?: string | null;
+    signingAttempted?: boolean;
+    broadcastAttempted?: boolean;
+  }): GuardedFixtureTransferStorageRecord {
+    const current = this.#requireGuardedFixtureTransfer(input.id);
+    if (current.state !== input.expectedState) throw new Error("Guarded fixture transfer state conflict");
+    const result = this.#database.prepare(
+      `UPDATE guarded_fixture_transfers SET state = ?, encrypted_payload = ?, payload_nonce = ?, key_id = ?,
+         simulation_units = ?, failure_code = ?, signing_attempted = ?, broadcast_attempted = ?, updated_at = ?
+       WHERE id = ? AND state = ?`,
+    ).run(
+      input.state,
+      input.encryptedPayload ?? current.encryptedPayload,
+      input.payloadNonce ?? current.payloadNonce,
+      input.keyId ?? current.keyId,
+      input.simulationUnits ?? current.simulationUnits,
+      input.failureCode === undefined ? current.failureCode : input.failureCode,
+      Number(input.signingAttempted ?? current.signingAttempted),
+      Number(input.broadcastAttempted ?? current.broadcastAttempted),
+      input.now,
+      input.id,
+      input.expectedState,
+    );
+    if (Number(result.changes) !== 1) throw new Error("Guarded fixture transfer state conflict");
+    return this.#requireGuardedFixtureTransfer(input.id);
+  }
+
+  getGuardedFixtureTransfer(id: string): GuardedFixtureTransferStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM guarded_fixture_transfers WHERE id = ?").get(id);
+    return row === undefined ? null : toGuardedFixtureTransferStorageRecord(row);
+  }
+
+  listGuardedFixtureTransfers(limit = 20): GuardedFixtureTransferStorageRecord[] {
+    return this.#database.prepare("SELECT * FROM guarded_fixture_transfers ORDER BY created_at DESC LIMIT ?")
+      .all(limit).map(toGuardedFixtureTransferStorageRecord);
+  }
+
+  listPendingGuardedFixtureTransfers(): GuardedFixtureTransferStorageRecord[] {
+    return this.#database.prepare(
+      "SELECT * FROM guarded_fixture_transfers WHERE state IN ('proposed', 'simulated', 'signed', 'broadcast', 'ambiguous') ORDER BY created_at",
+    ).all().map(toGuardedFixtureTransferStorageRecord);
+  }
+
+  insertGuardedFixtureTransferApproval(record: GuardedFixtureTransferApprovalStorageRecord): void {
+    this.#database.prepare(
+      `INSERT INTO guarded_fixture_transfer_approvals
+        (transfer_id, fixture_manifest_digest, encrypted_payload, payload_nonce, key_id, approved_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(
+      record.transferId,
+      record.fixtureManifestDigest,
+      record.encryptedPayload,
+      record.payloadNonce,
+      record.keyId,
+      record.approvedAt,
+    );
+  }
+
+  getGuardedFixtureTransferApproval(): GuardedFixtureTransferApprovalStorageRecord | null {
+    const row = this.#database.prepare(
+      "SELECT * FROM guarded_fixture_transfer_approvals ORDER BY approved_at DESC LIMIT 1",
+    ).get();
+    return row === undefined ? null : toGuardedFixtureTransferApprovalStorageRecord(row);
+  }
+
+  insertGuardedMissionAuthorization(record: GuardedMissionAuthorizationStorageRecord): void {
+    this.#database.prepare(
+      `INSERT INTO guarded_mission_authorizations
+        (id, mission_id, mission_revision, plan_digest, desk_rule_digest, fixture_manifest_digest, fixture_transfer_id,
+         state, encrypted_payload, payload_nonce, key_id, authorized_at, revoked_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, NULL)`,
+    ).run(
+      record.id,
+      record.missionId,
+      record.missionRevision,
+      record.planDigest,
+      record.deskRuleDigest,
+      record.fixtureManifestDigest,
+      record.fixtureTransferId,
+      record.encryptedPayload,
+      record.payloadNonce,
+      record.keyId,
+      record.authorizedAt,
+    );
+  }
+
+  getActiveGuardedMissionAuthorization(): GuardedMissionAuthorizationStorageRecord | null {
+    const row = this.#database.prepare(
+      "SELECT * FROM guarded_mission_authorizations WHERE state = 'active'",
+    ).get();
+    return row === undefined ? null : toGuardedMissionAuthorizationStorageRecord(row);
+  }
+
+  listGuardedMissionAuthorizations(limit = 20): GuardedMissionAuthorizationStorageRecord[] {
+    return this.#database.prepare(
+      "SELECT * FROM guarded_mission_authorizations ORDER BY authorized_at DESC LIMIT ?",
+    ).all(limit).map(toGuardedMissionAuthorizationStorageRecord);
+  }
+
+  revokeGuardedMissionAuthorization(id: string, revokedAt: string): GuardedMissionAuthorizationStorageRecord {
+    const result = this.#database.prepare(
+      `UPDATE guarded_mission_authorizations SET state = 'revoked', revoked_at = ?
+       WHERE id = ? AND state = 'active'`,
+    ).run(revokedAt, id);
+    if (Number(result.changes) !== 1) throw new Error("Guarded mission authorization revocation conflict");
+    const row = this.#database.prepare("SELECT * FROM guarded_mission_authorizations WHERE id = ?").get(id);
+    if (row === undefined) throw new Error("Guarded mission authorization does not exist");
+    return toGuardedMissionAuthorizationStorageRecord(row);
+  }
+
+  insertGuardedSchedulerEvaluation(record: GuardedSchedulerEvaluationStorageRecord): void {
+    this.#database.prepare(
+      `INSERT INTO guarded_scheduler_evaluations
+        (id, mission_id, mission_revision, cycle_number, authorization_id, outcome, reason_code,
+         encrypted_payload, payload_nonce, key_id, evaluated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      record.id,
+      record.missionId,
+      record.missionRevision,
+      record.cycle,
+      record.authorizationId,
+      record.outcome,
+      record.reasonCode,
+      record.encryptedPayload,
+      record.payloadNonce,
+      record.keyId,
+      record.evaluatedAt,
+    );
+  }
+
+  getGuardedSchedulerEvaluation(
+    missionId: string,
+    missionRevision: number,
+    cycle: number,
+  ): GuardedSchedulerEvaluationStorageRecord | null {
+    const row = this.#database.prepare(
+      `SELECT * FROM guarded_scheduler_evaluations
+       WHERE mission_id = ? AND mission_revision = ? AND cycle_number = ?`,
+    ).get(missionId, missionRevision, cycle);
+    return row === undefined ? null : toGuardedSchedulerEvaluationStorageRecord(row);
+  }
+
+  insertGuardedSchedulerArm(record: GuardedSchedulerArmStorageRecord): void {
+    this.#database.prepare(
+      `INSERT INTO guarded_scheduler_arms
+        (id, authorization_id, mission_id, mission_revision, plan_digest, desk_rule_digest,
+         fixture_manifest_digest, scope, state, execution_id, encrypted_payload, payload_nonce,
+         key_id, armed_at, expires_at, consumed_at, revoked_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'devnet-fixture-cycle-once', 'active', NULL, ?, ?, ?, ?, ?, NULL, NULL)`,
+    ).run(record.id, record.authorizationId, record.missionId, record.missionRevision, record.planDigest,
+      record.deskRuleDigest, record.fixtureManifestDigest, record.encryptedPayload, record.payloadNonce,
+      record.keyId, record.armedAt, record.expiresAt);
+  }
+
+  getActiveGuardedSchedulerArm(now: string): GuardedSchedulerArmStorageRecord | null {
+    this.#database.prepare(
+      `UPDATE guarded_scheduler_arms SET state = 'expired', revoked_at = ?
+       WHERE state = 'active' AND expires_at <= ?`,
+    ).run(now, now);
+    const row = this.#database.prepare("SELECT * FROM guarded_scheduler_arms WHERE state = 'active'").get();
+    return row === undefined ? null : toGuardedSchedulerArmStorageRecord(row);
+  }
+
+  getGuardedSchedulerArm(id: string): GuardedSchedulerArmStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM guarded_scheduler_arms WHERE id = ?").get(id);
+    return row === undefined ? null : toGuardedSchedulerArmStorageRecord(row);
+  }
+
+  listGuardedSchedulerArms(limit = 20): GuardedSchedulerArmStorageRecord[] {
+    return this.#database.prepare(
+      "SELECT * FROM guarded_scheduler_arms ORDER BY armed_at DESC LIMIT ?",
+    ).all(limit).map(toGuardedSchedulerArmStorageRecord);
+  }
+
+  consumeGuardedSchedulerArm(id: string, executionId: string, consumedAt: string): GuardedSchedulerArmStorageRecord {
+    const result = this.#database.prepare(
+      `UPDATE guarded_scheduler_arms SET state = 'consumed', execution_id = ?, consumed_at = ?
+       WHERE id = ? AND state = 'active' AND expires_at > ?`,
+    ).run(executionId, consumedAt, id, consumedAt);
+    if (Number(result.changes) !== 1) throw new Error("Guarded scheduler arm consumption conflict");
+    const record = this.getGuardedSchedulerArm(id);
+    if (record === null) throw new Error("Guarded scheduler arm does not exist");
+    return record;
+  }
+
+  revokeGuardedSchedulerArm(id: string, revokedAt: string): GuardedSchedulerArmStorageRecord {
+    const result = this.#database.prepare(
+      `UPDATE guarded_scheduler_arms SET state = 'revoked', revoked_at = ?
+       WHERE id = ? AND state IN ('active', 'consumed')`,
+    ).run(revokedAt, id);
+    if (Number(result.changes) !== 1) throw new Error("Guarded scheduler arm revocation conflict");
+    const record = this.getGuardedSchedulerArm(id);
+    if (record === null) throw new Error("Guarded scheduler arm does not exist");
+    return record;
+  }
+
+  revokeOpenGuardedSchedulerArms(revokedAt: string): number {
+    const result = this.#database.prepare(
+      `UPDATE guarded_scheduler_arms SET state = 'revoked', revoked_at = ?
+       WHERE state IN ('active', 'consumed')`,
+    ).run(revokedAt);
+    return Number(result.changes);
+  }
+
+  createDevnetCanary(id: string, now: string): DevnetCanaryStorageRecord {
+    this.#database
+      .prepare(
+        `INSERT INTO devnet_canary_executions (id, kind, state, created_at, updated_at)
+         VALUES (?, 'self-transfer-zero-lamports', 'proposed', ?, ?)`,
+      )
+      .run(id, now, now);
+    return this.#requireDevnetCanary(id);
+  }
+
+  updateDevnetCanary(input: {
+    id: string;
+    expectedState: DevnetCanaryStorageRecord["state"];
+    state: DevnetCanaryStorageRecord["state"];
+    now: string;
+    encryptedWire?: string;
+    wireNonce?: string;
+    encryptedSignature?: string;
+    signatureNonce?: string;
+    keyId?: string;
+    lastValidBlockHeight?: string;
+    simulationUnits?: string;
+    failureCode?: string | null;
+    signingAttempted?: boolean;
+    broadcastAttempted?: boolean;
+  }): DevnetCanaryStorageRecord {
+    const current = this.#requireDevnetCanary(input.id);
+    if (current.state !== input.expectedState) throw new Error("Canary execution state conflict");
+    const result = this.#database
+      .prepare(
+        `UPDATE devnet_canary_executions SET
+           state = ?, encrypted_wire = ?, wire_nonce = ?, encrypted_signature = ?, signature_nonce = ?,
+           key_id = ?, last_valid_block_height = ?, simulation_units = ?, failure_code = ?,
+           signing_attempted = ?, broadcast_attempted = ?, updated_at = ?
+         WHERE id = ? AND state = ?`,
+      )
+      .run(
+        input.state,
+        input.encryptedWire ?? current.encryptedWire,
+        input.wireNonce ?? current.wireNonce,
+        input.encryptedSignature ?? current.encryptedSignature,
+        input.signatureNonce ?? current.signatureNonce,
+        input.keyId ?? current.keyId,
+        input.lastValidBlockHeight ?? current.lastValidBlockHeight,
+        input.simulationUnits ?? current.simulationUnits,
+        input.failureCode === undefined ? current.failureCode : input.failureCode,
+        input.signingAttempted === undefined ? Number(current.signingAttempted) : Number(input.signingAttempted),
+        input.broadcastAttempted === undefined ? Number(current.broadcastAttempted) : Number(input.broadcastAttempted),
+        input.now,
+        input.id,
+        input.expectedState,
+      );
+    if (Number(result.changes) !== 1) throw new Error("Canary execution state conflict");
+    return this.#requireDevnetCanary(input.id);
+  }
+
+  listDevnetCanaries(limit = 20): DevnetCanaryStorageRecord[] {
+    return this.#database
+      .prepare("SELECT * FROM devnet_canary_executions ORDER BY created_at DESC LIMIT ?")
+      .all(limit)
+      .map(toDevnetCanaryStorageRecord);
+  }
+
+  listPendingDevnetCanaries(): DevnetCanaryStorageRecord[] {
+    return this.#database
+      .prepare(
+        "SELECT * FROM devnet_canary_executions WHERE state IN ('signed', 'broadcast', 'ambiguous') ORDER BY created_at",
+      )
+      .all()
+      .map(toDevnetCanaryStorageRecord);
+  }
+
+  insertJupiterShadowQuote(record: JupiterShadowQuoteStorageRecord): void {
+    this.#database
+      .prepare(
+        `INSERT INTO jupiter_shadow_quotes
+          (id, encrypted_payload, payload_nonce, key_id, allowed, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        record.id,
+        record.encryptedPayload,
+        record.payloadNonce,
+        record.keyId,
+        Number(record.allowed),
+        record.createdAt,
+      );
+  }
+
+  listJupiterShadowQuotes(limit = 20): JupiterShadowQuoteStorageRecord[] {
+    return (
+      this.#database
+        .prepare("SELECT * FROM jupiter_shadow_quotes ORDER BY created_at DESC LIMIT ?")
+        .all(limit) as Array<{
+        id: string;
+        encrypted_payload: string;
+        payload_nonce: string;
+        key_id: string;
+        allowed: number;
+        created_at: string;
+      }>
+    ).map((row) => ({
+      id: row.id,
+      encryptedPayload: row.encrypted_payload,
+      payloadNonce: row.payload_nonce,
+      keyId: row.key_id,
+      allowed: row.allowed === 1,
+      createdAt: row.created_at,
+    }));
   }
 
   hasWallet(profileId: "devnet-simulation"): boolean {
@@ -484,6 +1253,30 @@ export class RuntimeDatabase {
     if (record === null) throw new Error("Mission does not exist");
     return record;
   }
+
+  #requireDevnetCanary(id: string): DevnetCanaryStorageRecord {
+    const row = this.#database.prepare("SELECT * FROM devnet_canary_executions WHERE id = ?").get(id);
+    if (row === undefined) throw new Error("Canary execution does not exist");
+    return toDevnetCanaryStorageRecord(row);
+  }
+
+  #requireGuardedExecution(id: string): GuardedExecutionStorageRecord {
+    const record = this.getGuardedExecution(id);
+    if (record === null) throw new Error("Guarded execution does not exist");
+    return record;
+  }
+
+  #requireFixtureProvision(id: string): FixtureProvisionStorageRecord {
+    const record = this.getFixtureProvision(id);
+    if (record === null) throw new Error("Fixture provision does not exist");
+    return record;
+  }
+
+  #requireGuardedFixtureTransfer(id: string): GuardedFixtureTransferStorageRecord {
+    const record = this.getGuardedFixtureTransfer(id);
+    if (record === null) throw new Error("Guarded fixture transfer does not exist");
+    return record;
+  }
 }
 
 function toMissionStorageRecord(row: unknown): MissionStorageRecord {
@@ -504,5 +1297,301 @@ function toMissionStorageRecord(row: unknown): MissionStorageRecord {
     authorizedAt: value.authorized_at,
     haltReason: value.halt_reason,
     updatedAt: value.updated_at,
+  };
+}
+
+function toDevnetCanaryStorageRecord(row: unknown): DevnetCanaryStorageRecord {
+  const value = row as {
+    id: string;
+    kind: DevnetCanaryStorageRecord["kind"];
+    state: DevnetCanaryStorageRecord["state"];
+    encrypted_wire: string | null;
+    wire_nonce: string | null;
+    encrypted_signature: string | null;
+    signature_nonce: string | null;
+    key_id: string | null;
+    last_valid_block_height: string | null;
+    simulation_units: string | null;
+    failure_code: string | null;
+    signing_attempted: number;
+    broadcast_attempted: number;
+    created_at: string;
+    updated_at: string;
+  };
+  return {
+    id: value.id,
+    kind: value.kind,
+    state: value.state,
+    encryptedWire: value.encrypted_wire,
+    wireNonce: value.wire_nonce,
+    encryptedSignature: value.encrypted_signature,
+    signatureNonce: value.signature_nonce,
+    keyId: value.key_id,
+    lastValidBlockHeight: value.last_valid_block_height,
+    simulationUnits: value.simulation_units,
+    failureCode: value.failure_code,
+    signingAttempted: value.signing_attempted === 1,
+    broadcastAttempted: value.broadcast_attempted === 1,
+    createdAt: value.created_at,
+    updatedAt: value.updated_at,
+  };
+}
+
+function toGuardedExecutionStorageRecord(row: unknown): GuardedExecutionStorageRecord {
+  const value = row as {
+    id: string;
+    mission_id: string;
+    mission_revision: number;
+    cycle_number: number;
+    fixture_manifest_digest: string;
+    state: GuardedExecutionStorageState;
+    message_hash: string | null;
+    signing_attempted: number;
+    broadcast_attempted: number;
+    failure_code: string | null;
+    created_at: string;
+    updated_at: string;
+  };
+  return {
+    id: value.id,
+    missionId: value.mission_id,
+    missionRevision: value.mission_revision,
+    cycle: value.cycle_number,
+    fixtureManifestDigest: value.fixture_manifest_digest,
+    state: value.state,
+    messageHash: value.message_hash,
+    signingAttempted: value.signing_attempted === 1,
+    broadcastAttempted: value.broadcast_attempted === 1,
+    failureCode: value.failure_code,
+    createdAt: value.created_at,
+    updatedAt: value.updated_at,
+  };
+}
+
+function toGuardedExecutionEventStorageRecord(row: unknown): GuardedExecutionEventStorageRecord {
+  const value = row as {
+    id: string;
+    execution_id: string;
+    from_state: GuardedExecutionStorageState | null;
+    to_state: GuardedExecutionStorageState;
+    event_name: string;
+    encrypted_payload: string;
+    payload_nonce: string;
+    key_id: string;
+    created_at: string;
+  };
+  return {
+    id: value.id,
+    executionId: value.execution_id,
+    fromState: value.from_state,
+    toState: value.to_state,
+    eventName: value.event_name,
+    encryptedPayload: value.encrypted_payload,
+    payloadNonce: value.payload_nonce,
+    keyId: value.key_id,
+    createdAt: value.created_at,
+  };
+}
+
+function toFixtureProvisionStorageRecord(row: unknown): FixtureProvisionStorageRecord {
+  const value = row as {
+    id: string;
+    mint_address: string;
+    state: FixtureProvisionStorageRecord["state"];
+    message_hash: string;
+    encrypted_payload: string | null;
+    payload_nonce: string | null;
+    key_id: string | null;
+    last_valid_block_height: string;
+    simulation_units: string | null;
+    failure_code: string | null;
+    signing_attempted: number;
+    broadcast_attempted: number;
+    created_at: string;
+    updated_at: string;
+  };
+  return {
+    id: value.id,
+    mintAddress: value.mint_address,
+    state: value.state,
+    messageHash: value.message_hash,
+    encryptedPayload: value.encrypted_payload,
+    payloadNonce: value.payload_nonce,
+    keyId: value.key_id,
+    lastValidBlockHeight: value.last_valid_block_height,
+    simulationUnits: value.simulation_units,
+    failureCode: value.failure_code,
+    signingAttempted: value.signing_attempted === 1,
+    broadcastAttempted: value.broadcast_attempted === 1,
+    createdAt: value.created_at,
+    updatedAt: value.updated_at,
+  };
+}
+
+function toFixtureReviewStorageRecord(row: unknown): FixtureReviewStorageRecord {
+  const value = row as {
+    provision_id: string;
+    manifest_digest: string;
+    mint_address: string;
+    source_token_account: string;
+    destination_token_account: string;
+    wallet_authority: string;
+    destination_owner: string;
+    observed_slot: string;
+    encrypted_payload: string;
+    payload_nonce: string;
+    key_id: string;
+    active: number;
+    created_at: string;
+  };
+  return {
+    provisionId: value.provision_id,
+    manifestDigest: value.manifest_digest,
+    mintAddress: value.mint_address,
+    sourceTokenAccount: value.source_token_account,
+    destinationTokenAccount: value.destination_token_account,
+    walletAuthority: value.wallet_authority,
+    destinationOwner: value.destination_owner,
+    observedSlot: value.observed_slot,
+    encryptedPayload: value.encrypted_payload,
+    payloadNonce: value.payload_nonce,
+    keyId: value.key_id,
+    active: true,
+    createdAt: value.created_at,
+  };
+}
+
+function toGuardedFixtureTransferStorageRecord(row: unknown): GuardedFixtureTransferStorageRecord {
+  const value = row as {
+    id: string;
+    fixture_manifest_digest: string;
+    state: GuardedFixtureTransferStorageRecord["state"];
+    message_hash: string;
+    encrypted_payload: string | null;
+    payload_nonce: string | null;
+    key_id: string | null;
+    last_valid_block_height: string;
+    simulation_units: string | null;
+    failure_code: string | null;
+    signing_attempted: number;
+    broadcast_attempted: number;
+    created_at: string;
+    updated_at: string;
+  };
+  return {
+    id: value.id,
+    fixtureManifestDigest: value.fixture_manifest_digest,
+    state: value.state,
+    messageHash: value.message_hash,
+    encryptedPayload: value.encrypted_payload,
+    payloadNonce: value.payload_nonce,
+    keyId: value.key_id,
+    lastValidBlockHeight: value.last_valid_block_height,
+    simulationUnits: value.simulation_units,
+    failureCode: value.failure_code,
+    signingAttempted: value.signing_attempted === 1,
+    broadcastAttempted: value.broadcast_attempted === 1,
+    createdAt: value.created_at,
+    updatedAt: value.updated_at,
+  };
+}
+
+function toGuardedFixtureTransferApprovalStorageRecord(row: unknown): GuardedFixtureTransferApprovalStorageRecord {
+  const value = row as {
+    transfer_id: string;
+    fixture_manifest_digest: string;
+    encrypted_payload: string;
+    payload_nonce: string;
+    key_id: string;
+    approved_at: string;
+  };
+  return {
+    transferId: value.transfer_id,
+    fixtureManifestDigest: value.fixture_manifest_digest,
+    encryptedPayload: value.encrypted_payload,
+    payloadNonce: value.payload_nonce,
+    keyId: value.key_id,
+    approvedAt: value.approved_at,
+  };
+}
+
+function toGuardedMissionAuthorizationStorageRecord(row: unknown): GuardedMissionAuthorizationStorageRecord {
+  const value = row as {
+    id: string;
+    mission_id: string;
+    mission_revision: number;
+    plan_digest: string;
+    desk_rule_digest: string;
+    fixture_manifest_digest: string;
+    fixture_transfer_id: string;
+    state: "active" | "revoked";
+    encrypted_payload: string;
+    payload_nonce: string;
+    key_id: string;
+    authorized_at: string;
+    revoked_at: string | null;
+  };
+  return {
+    id: value.id,
+    missionId: value.mission_id,
+    missionRevision: value.mission_revision,
+    planDigest: value.plan_digest,
+    deskRuleDigest: value.desk_rule_digest,
+    fixtureManifestDigest: value.fixture_manifest_digest,
+    fixtureTransferId: value.fixture_transfer_id,
+    state: value.state,
+    encryptedPayload: value.encrypted_payload,
+    payloadNonce: value.payload_nonce,
+    keyId: value.key_id,
+    authorizedAt: value.authorized_at,
+    revokedAt: value.revoked_at,
+  };
+}
+
+function toGuardedSchedulerEvaluationStorageRecord(row: unknown): GuardedSchedulerEvaluationStorageRecord {
+  const value = row as {
+    id: string;
+    mission_id: string;
+    mission_revision: number;
+    cycle_number: number;
+    authorization_id: string | null;
+    outcome: "inactive" | "ready" | "denied";
+    reason_code: string;
+    encrypted_payload: string;
+    payload_nonce: string;
+    key_id: string;
+    evaluated_at: string;
+  };
+  return {
+    id: value.id,
+    missionId: value.mission_id,
+    missionRevision: value.mission_revision,
+    cycle: value.cycle_number,
+    authorizationId: value.authorization_id,
+    outcome: value.outcome,
+    reasonCode: value.reason_code,
+    encryptedPayload: value.encrypted_payload,
+    payloadNonce: value.payload_nonce,
+    keyId: value.key_id,
+    evaluatedAt: value.evaluated_at,
+  };
+}
+
+function toGuardedSchedulerArmStorageRecord(row: unknown): GuardedSchedulerArmStorageRecord {
+  const value = row as {
+    id: string; authorization_id: string; mission_id: string; mission_revision: number;
+    plan_digest: string; desk_rule_digest: string; fixture_manifest_digest: string;
+    scope: "devnet-fixture-cycle-once"; state: GuardedSchedulerArmStorageRecord["state"];
+    execution_id: string | null; encrypted_payload: string; payload_nonce: string; key_id: string;
+    armed_at: string; expires_at: string; consumed_at: string | null; revoked_at: string | null;
+  };
+  return {
+    id: value.id, authorizationId: value.authorization_id, missionId: value.mission_id,
+    missionRevision: value.mission_revision, planDigest: value.plan_digest,
+    deskRuleDigest: value.desk_rule_digest, fixtureManifestDigest: value.fixture_manifest_digest,
+    scope: value.scope, state: value.state, executionId: value.execution_id,
+    encryptedPayload: value.encrypted_payload, payloadNonce: value.payload_nonce, keyId: value.key_id,
+    armedAt: value.armed_at, expiresAt: value.expires_at, consumedAt: value.consumed_at,
+    revokedAt: value.revoked_at,
   };
 }

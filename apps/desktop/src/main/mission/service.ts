@@ -2,21 +2,25 @@ import { createHash, randomUUID } from "node:crypto";
 
 import {
   DcaPlanV1Schema,
+  GuardedSchedulerReadinessViewSchema,
   SimulationReceiptViewSchema,
   type DcaCycleAudit,
   MissionViewSchema,
   type DcaPlanV1,
+  type GuardedFixtureCycleProposal,
   type MissionView,
 } from "@silfable/contracts";
 import { decideNextDcaAction, simulateDcaCycle } from "@silfable/core";
 
 import { DevnetWalletRpcService, NetworkHealthMonitor } from "../rpc/devnet.js";
 import { RuntimeDatabase, type MissionStorageRecord } from "../storage/database.js";
+import type { GuardedExecutionStorageRecord } from "../storage/database.js";
 import {
   LocalDataCipher,
   parseEnvelope,
   serializeEnvelope,
 } from "../storage/encryption.js";
+import type { GuardedSchedulerReadiness } from "../execution/guarded-scheduler-readiness.js";
 
 export const SIMULATION_MINTS = {
   input: "11111111111111111111111111111111",
@@ -51,6 +55,10 @@ export class MissionService {
 
   async list(): Promise<MissionView[]> {
     return Promise.all(this.#database.listMissionRecords().map((record) => this.#toView(record)));
+  }
+
+  async get(missionId: string): Promise<MissionView> {
+    return this.#requireView(missionId);
   }
 
   async saveDraft(input: { plan: DcaPlanV1; expectedRevision?: number }): Promise<MissionView> {
@@ -110,7 +118,8 @@ export class MissionService {
     if (this.#database.getMissionRecord(missionId) === null) throw new Error("Mission does not exist");
     return Promise.all(
       this.#database.listMissionCycles(missionId).map(async (cycle) => {
-        if (cycle.receipt === null) return { ...cycle, receipt: null };
+        const guardedReadiness = await this.#readGuardedReadiness(missionId, cycle.revision, cycle.cycle);
+        if (cycle.receipt === null) return { ...cycle, receipt: null, guardedReadiness };
         if (cycle.receipt.keyId !== "local-data-key-v1") throw new Error("Receipt key is unsupported");
         const payload: unknown = JSON.parse(
           await this.#cipher.decryptString({
@@ -126,6 +135,7 @@ export class MissionService {
         }
         return {
           ...cycle,
+          guardedReadiness,
           receipt: SimulationReceiptViewSchema.parse({
             receiptId: cycle.receipt.id,
             createdAt: cycle.receipt.createdAt,
@@ -138,6 +148,37 @@ export class MissionService {
         };
       }),
     );
+  }
+
+  async #readGuardedReadiness(missionId: string, revision: number, cycle: number) {
+    const record = this.#database.getGuardedSchedulerEvaluation(missionId, revision, cycle);
+    if (record === null) return null;
+    if (record.keyId !== "local-data-key-v1") throw new Error("Guarded readiness key is unsupported");
+    const value: unknown = JSON.parse(await this.#cipher.decryptString({
+      ciphertext: record.encryptedPayload,
+      nonce: record.payloadNonce,
+      keyId: record.keyId,
+    }));
+    if (typeof value !== "object" || value === null) throw new Error("Guarded readiness evidence is invalid");
+    const item = value as Record<string, unknown>;
+    if (
+      item.missionId !== missionId
+      || item.evaluationId !== record.id
+      || item.missionRevision !== revision
+      || item.cycle !== cycle
+      || item.outcome !== record.outcome
+      || item.reasonCode !== record.reasonCode
+      || item.authorizationId !== record.authorizationId
+    ) throw new Error("Guarded readiness evidence context mismatch");
+    return GuardedSchedulerReadinessViewSchema.parse({
+      evaluationId: record.id,
+      outcome: item.outcome,
+      reasonCode: item.reasonCode,
+      authorizationId: item.authorizationId,
+      evaluatedAt: item.evaluatedAt,
+      executionEnabled: item.executionEnabled,
+      signingAttempted: item.signingAttempted,
+    });
   }
 
   async #requireView(id: string): Promise<MissionView> {
@@ -178,6 +219,9 @@ export class MissionSimulationScheduler {
   readonly #keystore: KeystoreState;
   readonly #walletRpc: DevnetWalletRpcService;
   readonly #onEvent: (event: MissionRuntimeEvent) => void;
+  readonly #guardedReadiness: { evaluate(mission: MissionView, cycle: number): Promise<GuardedSchedulerReadiness> } | undefined;
+  readonly #guardedProposal: { prepare(mission: MissionView, cycle: number): Promise<GuardedFixtureCycleProposal> } | undefined;
+  readonly #guardedExecution: { execute(proposal: GuardedFixtureCycleProposal): Promise<GuardedExecutionStorageRecord> } | undefined;
   #timer: ReturnType<typeof setInterval> | null = null;
   #ticking = false;
   #lastTickAt = new Date();
@@ -190,6 +234,9 @@ export class MissionSimulationScheduler {
     keystore: KeystoreState;
     walletRpc: DevnetWalletRpcService;
     onEvent?: (event: MissionRuntimeEvent) => void;
+    guardedReadiness?: { evaluate(mission: MissionView, cycle: number): Promise<GuardedSchedulerReadiness> };
+    guardedProposal?: { prepare(mission: MissionView, cycle: number): Promise<GuardedFixtureCycleProposal> };
+    guardedExecution?: { execute(proposal: GuardedFixtureCycleProposal): Promise<GuardedExecutionStorageRecord> };
   }) {
     this.#database = input.database;
     this.#missions = input.missions;
@@ -198,6 +245,9 @@ export class MissionSimulationScheduler {
     this.#keystore = input.keystore;
     this.#walletRpc = input.walletRpc;
     this.#onEvent = input.onEvent ?? (() => undefined);
+    this.#guardedReadiness = input.guardedReadiness;
+    this.#guardedProposal = input.guardedProposal;
+    this.#guardedExecution = input.guardedExecution;
   }
 
   initialize(): void {
@@ -318,6 +368,46 @@ export class MissionSimulationScheduler {
         return;
       }
 
+      const guardedReadiness = this.#guardedReadiness === undefined
+        ? null
+        : await this.#guardedReadiness.evaluate(mission, simulation.cycle ?? mission.completedCycles + 1);
+      if (guardedReadiness?.outcome === "denied") {
+        const denialReason = `guarded-${guardedReadiness.reasonCode}`;
+        this.#database.recordHaltedCycle({
+          id: randomUUID(),
+          missionId: mission.id,
+          revision: mission.revision,
+          cycle: simulation.cycle ?? mission.completedCycles + 1,
+          dueAt: simulation.dueAt ?? evaluationNow.toISOString(),
+          reason: denialReason,
+        });
+        this.#database.haltMission(mission.id, mission.revision, denialReason, evaluationNow.toISOString());
+        this.#emit({ missionId: mission.id, type: "halted", detail: denialReason });
+        return;
+      }
+      let guardedProposal: GuardedFixtureCycleProposal | null = null;
+      if (guardedReadiness?.outcome === "ready" && this.#guardedProposal !== undefined) {
+        try {
+          guardedProposal = await this.#guardedProposal.prepare(
+            mission,
+            simulation.cycle ?? mission.completedCycles + 1,
+          );
+        } catch {
+          const denialReason = "guarded-proposal-invalid";
+          this.#database.recordHaltedCycle({
+            id: randomUUID(),
+            missionId: mission.id,
+            revision: mission.revision,
+            cycle: simulation.cycle ?? mission.completedCycles + 1,
+            dueAt: simulation.dueAt ?? evaluationNow.toISOString(),
+            reason: denialReason,
+          });
+          this.#database.haltMission(mission.id, mission.revision, denialReason, evaluationNow.toISOString());
+          this.#emit({ missionId: mission.id, type: "halted", detail: denialReason });
+          return;
+        }
+      }
+
       const receipt = await this.#cipher.encryptString(
         JSON.stringify({
           version: 1,
@@ -329,6 +419,8 @@ export class MissionSimulationScheduler {
           dueAt: simulation.dueAt,
           outcome: simulation.outcome,
           signingAttempted: false,
+          guardedReadiness,
+          guardedProposal,
           observedAt: balance.observedAt,
         }),
       );
@@ -349,6 +441,14 @@ export class MissionSimulationScheduler {
         now: evaluationNow.toISOString(),
       });
       this.#emit({ missionId: mission.id, type: "receipted", detail: `cycle-${simulation.cycle}` });
+      if (guardedProposal !== null && this.#guardedExecution !== undefined) {
+        const execution = await this.#guardedExecution.execute(guardedProposal);
+        const reason = execution.state === "receipted"
+          ? "guarded-one-shot-complete"
+          : `guarded-execution-${execution.state}`;
+        this.#database.haltMission(mission.id, mission.revision, reason, new Date().toISOString());
+        this.#emit({ missionId: mission.id, type: "halted", detail: reason });
+      }
     } catch {
       this.#database.haltMission(mission.id, mission.revision, "simulation-runtime-failure", now.toISOString());
       this.#emit({ missionId: mission.id, type: "halted", detail: "simulation-runtime-failure" });

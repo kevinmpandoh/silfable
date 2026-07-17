@@ -13,6 +13,7 @@ type DataKeyStore = {
 
 export class LocalDataCipher {
   readonly #keystore: DataKeyStore;
+  #keyInitialization: Promise<string> | null = null;
 
   constructor(keystore: DataKeyStore) {
     this.#keystore = keystore;
@@ -56,9 +57,25 @@ export class LocalDataCipher {
       if (key.length !== 32) throw new Error("Database data key is invalid");
       return key;
     }
+    this.#keyInitialization ??= this.#createAndStoreKey();
+    try {
+      return Buffer.from(await this.#keyInitialization, "base64");
+    } finally {
+      this.#keyInitialization = null;
+    }
+  }
+
+  async #createAndStoreKey(): Promise<string> {
+    const existing = await this.#keystore.getSecret("database-data-key");
+    if (existing !== null) return existing;
     const key = randomBytes(32);
-    await this.#keystore.setSecret("database-data-key", key.toString("base64"));
-    return key;
+    try {
+      const encoded = key.toString("base64");
+      await this.#keystore.setSecret("database-data-key", encoded);
+      return encoded;
+    } finally {
+      key.fill(0);
+    }
   }
 }
 

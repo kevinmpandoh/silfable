@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "homepage": "https://github.com/kevinmpandoh/silfable#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kevinmpandoh/silfable.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kevinmpandoh/silfable/issues"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -13,6 +21,7 @@
     "lint:web": "npm run lint --workspace @silfable/web",
     "dev:desktop": "npm run dev --workspace @silfable/desktop",
     "build:desktop": "npm run build --workspace @silfable/desktop",
+    "audit:desktop": "node scripts/audit-desktop-bundles.mjs",
     "setup:electron": "npm exec --workspace @silfable/desktop -- install-electron",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",

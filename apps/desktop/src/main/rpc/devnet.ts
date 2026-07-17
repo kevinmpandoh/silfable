@@ -1,4 +1,11 @@
-import { address, createSolanaRpc, devnet, lamports } from "@solana/kit";
+import {
+  address,
+  createSolanaRpc,
+  devnet,
+  lamports,
+  signature,
+  type Base64EncodedWireTransaction,
+} from "@solana/kit";
 
 const DEVNET_ENDPOINT = "https://api.devnet.solana.com";
 const REQUEST_TIMEOUT_MS = 5_000;
@@ -19,7 +26,37 @@ export type DevnetRpcPort = {
   requestAirdrop(addressValue: string): Promise<string>;
 };
 
-export class SolanaDevnetRpc implements DevnetRpcPort {
+export type DevnetTransactionRpcPort = {
+  getLatestBlockhash(): Promise<{ blockhash: string; lastValidBlockHeight: bigint }>;
+  simulateTransaction(wireTransaction: string): Promise<{ error: boolean; unitsConsumed: bigint | null; fee: bigint | null }>;
+  sendTransaction(wireTransaction: string): Promise<string>;
+  getSignatureStatus(signatureValue: string): Promise<{
+    found: boolean;
+    error: boolean;
+    confirmationStatus: "processed" | "confirmed" | "finalized" | null;
+  }>;
+  getBlockHeight(): Promise<bigint>;
+};
+
+export type DevnetProvisioningRpcPort = DevnetTransactionRpcPort & {
+  getMinimumBalanceForRentExemption(space: bigint): Promise<bigint>;
+};
+
+export type DevnetEncodedAccount = {
+  address: string;
+  programAddress: string;
+  executable: boolean;
+  dataBase64: string;
+} | null;
+
+export type DevnetFixtureRpcPort = {
+  getMultipleAccountsBase64(addressesValue: readonly string[]): Promise<{
+    contextSlot: bigint;
+    accounts: DevnetEncodedAccount[];
+  }>;
+};
+
+export class SolanaDevnetRpc implements DevnetRpcPort, DevnetTransactionRpcPort, DevnetFixtureRpcPort {
   readonly #rpc = createSolanaRpc(devnet(DEVNET_ENDPOINT));
 
   async probeHealth(): Promise<{ latencyMs: number }> {
@@ -40,6 +77,88 @@ export class SolanaDevnetRpc implements DevnetRpcPort {
     return this.#rpc
       .requestAirdrop(address(addressValue), lamports(AIRDROP_LAMPORTS), { commitment: "confirmed" })
       .send({ abortSignal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  }
+
+  async getLatestBlockhash(): Promise<{ blockhash: string; lastValidBlockHeight: bigint }> {
+    const response = await this.#rpc
+      .getLatestBlockhash({ commitment: "confirmed" })
+      .send({ abortSignal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    return { blockhash: response.value.blockhash, lastValidBlockHeight: response.value.lastValidBlockHeight };
+  }
+
+  async getMinimumBalanceForRentExemption(space: bigint): Promise<bigint> {
+    return this.#rpc
+      .getMinimumBalanceForRentExemption(space, { commitment: "confirmed" })
+      .send({ abortSignal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  }
+
+  async simulateTransaction(wireTransaction: string): Promise<{ error: boolean; unitsConsumed: bigint | null; fee: bigint | null }> {
+    const response = await this.#rpc
+      .simulateTransaction(wireTransaction as Base64EncodedWireTransaction, {
+        commitment: "confirmed",
+        encoding: "base64",
+        sigVerify: false,
+      })
+      .send({ abortSignal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    return {
+      error: response.value.err !== null,
+      unitsConsumed: response.value.unitsConsumed ?? null,
+      fee: response.value.fee,
+    };
+  }
+
+  async sendTransaction(wireTransaction: string): Promise<string> {
+    return this.#rpc
+      .sendTransaction(wireTransaction as Base64EncodedWireTransaction, {
+        encoding: "base64",
+        maxRetries: 0n,
+        preflightCommitment: "confirmed",
+        skipPreflight: false,
+      })
+      .send({ abortSignal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  }
+
+  async getSignatureStatus(signatureValue: string): Promise<{
+    found: boolean;
+    error: boolean;
+    confirmationStatus: "processed" | "confirmed" | "finalized" | null;
+  }> {
+    const response = await this.#rpc
+      .getSignatureStatuses([signature(signatureValue)], { searchTransactionHistory: true })
+      .send({ abortSignal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    const status = response.value[0];
+    if (status === null || status === undefined) return { found: false, error: false, confirmationStatus: null };
+    return {
+      found: true,
+      error: status.err !== null,
+      confirmationStatus: status.confirmationStatus,
+    };
+  }
+
+  async getBlockHeight(): Promise<bigint> {
+    return this.#rpc
+      .getBlockHeight({ commitment: "confirmed" })
+      .send({ abortSignal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  }
+
+  async getMultipleAccountsBase64(addressesValue: readonly string[]): Promise<{
+    contextSlot: bigint;
+    accounts: DevnetEncodedAccount[];
+  }> {
+    if (addressesValue.length === 0 || addressesValue.length > 8) throw new Error("Devnet fixture account count is invalid");
+    const addresses = addressesValue.map((value) => address(value));
+    const response = await this.#rpc
+      .getMultipleAccounts(addresses, { commitment: "confirmed", encoding: "base64" })
+      .send({ abortSignal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    return {
+      contextSlot: BigInt(response.context.slot),
+      accounts: response.value.map((accountInfo, index) => accountInfo === null ? null : {
+        address: addressesValue[index]!,
+        programAddress: accountInfo.owner,
+        executable: accountInfo.executable,
+        dataBase64: accountInfo.data[0],
+      }),
+    };
   }
 }
 
