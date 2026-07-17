@@ -59,11 +59,14 @@ jobs:
       - name: Install workspace
         run: npm ci
 
-      - name: Verify source and privilege boundary
-        run: npm run typecheck && npm test && npm run audit:desktop
+      - name: Verify source
+        run: npm run typecheck && npm test
 
       - name: Build x64 AppImage and Debian package
         run: npm run dist:linux:x64 --workspace @silfable/desktop
+
+      - name: Audit desktop privilege boundary
+        run: npm run audit:desktop
 
       - name: Audit packaged files
         run: node scripts/audit-linux-artifacts.mjs apps/desktop/release
