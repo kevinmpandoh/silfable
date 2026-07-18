@@ -13,7 +13,7 @@ class MemoryKeystore {
     return this.locked;
   }
 
-  async getSecret(name: "database-data-key") {
+  async getSecret(name: "database-data-key" | "wallet-secret") {
     return this.records.get(name) ?? null;
   }
 

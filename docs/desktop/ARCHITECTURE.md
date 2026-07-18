@@ -47,7 +47,7 @@ The adapter cannot call tools and has no reference to the mission service, signe
 ### Solana profiles
 
 - `devnet-simulation`: deterministic quote adapter plus Devnet SPL test transactions.
-- `mainnet-shadow`: real Jupiter quote and validation, signing disabled.
+- `mainnet-shadow`: real Jupiter Swap V2 SOL/USDC quote-only observation with local validation and an encrypted journal. The request omits `taker`, and no transaction builder, signer, or broadcaster is reachable from this profile.
 - `mainnet-guarded`: real Jupiter execution with explicit low-value caps.
 
 Profiles use separate database namespaces, wallet records, receipts, and configuration. Switching profile halts all missions and locks the keystore.
@@ -62,6 +62,8 @@ Profiles use separate database namespaces, wallet records, receipts, and configu
 - navigation and new-window creation denied by default
 - external URLs opened only after allowlist validation
 - versioned, one-purpose IPC methods
+- strict request objects that reject unknown fields
+- exact main-window WebContents and top-frame identity for every IPC invocation
 - secrets copied into memory only for the shortest required operation
 - structured logs with denylisted and pattern-based redaction
 

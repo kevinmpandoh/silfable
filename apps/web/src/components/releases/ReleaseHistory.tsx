@@ -6,31 +6,13 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 const releases = [
   {
-    version: "1.2.0",
-    date: "July 10, 2026",
-    latest: true,
-    summary: "Mission recovery and policy evidence",
-    added: ["Deterministic mission recovery after device sleep", "Per-rule evidence for rejected routes", "Signed Debian desktop package"],
-    changed: ["Desk Rule compilation is substantially faster", "Wallet authorization shows its exact scope", "Paused missions use fewer system resources"],
-    fixed: ["Duplicate observations after reconnect", "Slippage precision on thin routes", "Receipt viewer scroll position"],
-  },
-  {
-    version: "1.1.0",
-    date: "June 21, 2026",
-    latest: false,
-    summary: "Local signer hardening",
-    added: ["Signer health and permission expiry panel", "Exportable JSON receipt bundles"],
-    changed: ["Faster wallet reconnect flow", "Clearer mission halt explanations"],
-    fixed: ["Intermittent lock after Linux suspend", "Expired mission status display"],
-  },
-  {
-    version: "1.0.0",
-    date: "May 30, 2026",
-    latest: false,
-    summary: "The first stable Desk Rule runtime",
-    added: ["Local `.silf` policy engine", "Append-only mission receipts", "Linux AppImage and Debian builds"],
-    changed: ["Market adapters run in isolated processes", "First-run permission review is mandatory"],
-    fixed: ["Route cancellation during application shutdown"],
+    version: "0.1.0",
+    date: "Release pending",
+    status: "Preview",
+    summary: "Linux-first local runtime foundation",
+    added: ["Linux AppImage and Debian builds", "Devnet wallet onboarding", "Encrypted local mission storage"],
+    changed: ["Desk Rules fail closed", "Mission signing remains explicitly scoped", "Updates require manual review"],
+    fixed: ["QA coverage for Ubuntu 22.04 and 24.04", "Desktop privilege-boundary audits", "Linux package compatibility checks"],
   },
 ] as const;
 
@@ -42,7 +24,7 @@ export function ReleaseHistory() {
           <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-electric">Release timeline</p>
           <h2 className="mt-5 font-serif text-5xl tracking-[-0.05em] sm:text-7xl">Version history</h2>
         </div>
-        <p className="max-w-md text-sm leading-7 text-black/50 lg:justify-self-end">Three stable milestones, with every user-visible change grouped by intent.</p>
+        <p className="max-w-md text-sm leading-7 text-black/50 lg:justify-self-end">The current preview milestone, with Linux available first and more desktop platforms planned.</p>
       </div>
 
       <div className="relative space-y-10 before:absolute before:bottom-0 before:left-[7px] before:top-0 before:w-px before:bg-black/20 sm:before:left-[10.5rem]">
@@ -58,7 +40,7 @@ export function ReleaseHistory() {
               <CardHeader className="border-b border-black/10 p-7 sm:p-9">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <h3 className="font-serif text-3xl tracking-[-0.04em] sm:text-4xl">{release.summary}</h3>
-                  <Badge className="border-blue-200 bg-blue-50 text-electric">{release.latest ? "Latest" : "Stable"}</Badge>
+                  <Badge className="border-blue-200 bg-blue-50 text-electric">{release.status}</Badge>
                 </div>
               </CardHeader>
               <CardContent className="p-7 sm:p-9">
@@ -69,7 +51,7 @@ export function ReleaseHistory() {
                 </div>
                 <div className="mt-9 border-t border-black/10 pt-7">
                   <Button asChild variant="blue">
-                    <a href={`#download-${release.version}`} aria-label={`Download Silfable version ${release.version}`}>
+                    <a href="#downloads" aria-label={`View downloads for Silfable version ${release.version}`}>
                       Download v{release.version} <ArrowDownToLine className="ml-3 size-3.5" />
                     </a>
                   </Button>

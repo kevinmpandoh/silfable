@@ -10,7 +10,11 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -39,3 +43,6 @@ jobs:
 
       - name: Build desktop source
         run: npm run build:desktop
+
+      - name: Audit desktop privilege boundary
+        run: npm run audit:desktop

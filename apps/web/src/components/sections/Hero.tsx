@@ -54,15 +54,12 @@ export function Hero() {
             </p>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div>
             <Button asChild size="lg">
               <a href="#download">
                 Download for Linux
                 <ArrowDownRight className="ml-4 size-4" />
               </a>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <a href="#token">Buy $SILF</a>
             </Button>
           </div>
         </motion.div>

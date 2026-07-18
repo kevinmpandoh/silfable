@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import type { DcaPlanV1 } from "@silfable/contracts";
+import type { DcaPlanV1, GuardedFixtureCycleProposal } from "@silfable/contracts";
 
 import { DevnetWalletRpcService, NetworkHealthMonitor, type DevnetRpcPort } from "../rpc/devnet";
 import { RuntimeDatabase } from "../storage/database";
@@ -46,6 +46,17 @@ class FakeRpc implements DevnetRpcPort {
 
   async requestAirdrop() {
     return "5".repeat(88);
+  }
+}
+
+class DeferredBalanceRpc extends FakeRpc {
+  balanceCalls = 0;
+  releaseBalance: (() => void) | null = null;
+
+  override async getBalance() {
+    this.balanceCalls += 1;
+    await new Promise<void>((resolve) => { this.releaseBalance = resolve; });
+    return 10_000_000_000n;
   }
 }
 
@@ -172,6 +183,274 @@ test("editing a halted authorized mission creates an unauthorized next revision"
     assert.equal(revised.revision, 2);
     assert.equal(revised.state, "draft");
     assert.equal(revised.authorizedAt, null);
+  } finally {
+    database.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("overlapping scheduler wakes produce exactly one cycle receipt", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "silfable-scheduler-race-"));
+  const database = await RuntimeDatabase.open(join(directory, "runtime.sqlite3"));
+  try {
+    database.insertWallet({
+      id: "wallet-race",
+      profileId: "devnet-simulation",
+      ciphertext: "encrypted",
+      nonce: "nonce",
+      keyId: "local-data-key-v1",
+      createdAt: new Date().toISOString(),
+    });
+    const keyStore = new MemoryDataKeyStore();
+    const cipher = new LocalDataCipher(keyStore);
+    const rpc = new DeferredBalanceRpc();
+    const health = new NetworkHealthMonitor(rpc);
+    await health.checkNow();
+    const missions = new MissionService({ database, cipher, keystore: keyStore, health });
+    const id = "35debe43-37bb-4a5f-bfb0-85f69096dfb1";
+    const draft = await missions.saveDraft({ plan: plan(id) });
+    await missions.authorize({ missionId: id, expectedRevision: 1, expectedPlanDigest: draft.planDigest });
+    await missions.start(id, 1);
+    const scheduler = new MissionSimulationScheduler({
+      database,
+      missions,
+      cipher,
+      health,
+      keystore: keyStore,
+      walletRpc: new DevnetWalletRpcService({
+        rpc,
+        health,
+        getWalletAddress: async () => "11111111111111111111111111111111",
+      }),
+    });
+    const first = scheduler.tick();
+    const duplicate = scheduler.tick();
+    while (rpc.releaseBalance === null) await new Promise((resolve) => setTimeout(resolve, 1));
+    rpc.releaseBalance();
+    await Promise.all([first, duplicate]);
+    assert.equal(rpc.balanceCalls, 1);
+    assert.equal((await missions.getAudit(id)).length, 1);
+  } finally {
+    database.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("restart initialization halts running missions without executing catch-up", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "silfable-scheduler-restart-"));
+  const database = await RuntimeDatabase.open(join(directory, "runtime.sqlite3"));
+  try {
+    database.insertWallet({
+      id: "wallet-restart",
+      profileId: "devnet-simulation",
+      ciphertext: "encrypted",
+      nonce: "nonce",
+      keyId: "local-data-key-v1",
+      createdAt: new Date().toISOString(),
+    });
+    const keyStore = new MemoryDataKeyStore();
+    const cipher = new LocalDataCipher(keyStore);
+    const rpc = new FakeRpc();
+    const health = new NetworkHealthMonitor(rpc);
+    await health.checkNow();
+    const missions = new MissionService({ database, cipher, keystore: keyStore, health });
+    const id = "7bb0d511-d07a-43d9-96a1-63377b64cf07";
+    const draft = await missions.saveDraft({ plan: plan(id) });
+    await missions.authorize({ missionId: id, expectedRevision: 1, expectedPlanDigest: draft.planDigest });
+    await missions.start(id, 1);
+    const scheduler = new MissionSimulationScheduler({
+      database,
+      missions,
+      cipher,
+      health,
+      keystore: keyStore,
+      walletRpc: new DevnetWalletRpcService({
+        rpc,
+        health,
+        getWalletAddress: async () => "11111111111111111111111111111111",
+      }),
+    });
+    scheduler.initialize();
+    await scheduler.tick();
+    const [mission] = await missions.list();
+    assert.equal(mission?.state, "halted");
+    assert.equal(mission?.haltReason, "application-restarted");
+    assert.equal((await missions.getAudit(id)).length, 0);
+  } finally {
+    database.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a denied guarded readiness evaluation halts before any signing-capable path", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "silfable-guarded-readiness-denial-"));
+  const database = await RuntimeDatabase.open(join(directory, "runtime.sqlite3"));
+  try {
+    database.insertWallet({
+      id: "wallet-guarded-denial",
+      profileId: "devnet-simulation",
+      ciphertext: "encrypted",
+      nonce: "nonce",
+      keyId: "local-data-key-v1",
+      createdAt: new Date().toISOString(),
+    });
+    const keyStore = new MemoryDataKeyStore();
+    const cipher = new LocalDataCipher(keyStore);
+    const rpc = new FakeRpc();
+    const health = new NetworkHealthMonitor(rpc);
+    await health.checkNow();
+    const missions = new MissionService({ database, cipher, keystore: keyStore, health });
+    const id = "00000000-0000-4000-8000-000000000951";
+    const draft = await missions.saveDraft({ plan: plan(id) });
+    await missions.authorize({ missionId: id, expectedRevision: 1, expectedPlanDigest: draft.planDigest });
+    await missions.start(id, 1);
+    let evaluations = 0;
+    const scheduler = new MissionSimulationScheduler({
+      database,
+      missions,
+      cipher,
+      health,
+      keystore: keyStore,
+      walletRpc: new DevnetWalletRpcService({
+        rpc,
+        health,
+        getWalletAddress: async () => "11111111111111111111111111111111",
+      }),
+      guardedReadiness: {
+        evaluate: async () => {
+          evaluations += 1;
+          return {
+            evaluationId: "00000000-0000-4000-8000-000000000953",
+            outcome: "denied",
+            reasonCode: "authorization-plan-mismatch",
+            authorizationId: "00000000-0000-4000-8000-000000000952",
+            evaluatedAt: new Date().toISOString(),
+            executionEnabled: false,
+            signingAttempted: false,
+          };
+        },
+      },
+    });
+    await scheduler.tick();
+    const [mission] = await missions.list();
+    assert.equal(evaluations, 1);
+    assert.equal(mission?.state, "halted");
+    assert.equal(mission?.haltReason, "guarded-authorization-plan-mismatch");
+    assert.equal((await missions.getAudit(id))[0]?.receipt, null);
+  } finally {
+    database.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("an armed ready cycle executes once after its simulation receipt and then halts for review", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "silfable-guarded-scheduler-execution-"));
+  const database = await RuntimeDatabase.open(join(directory, "runtime.sqlite3"));
+  try {
+    database.insertWallet({
+      id: "wallet-guarded-execution",
+      profileId: "devnet-simulation",
+      ciphertext: "encrypted",
+      nonce: "nonce",
+      keyId: "local-data-key-v1",
+      createdAt: new Date().toISOString(),
+    });
+    const keyStore = new MemoryDataKeyStore();
+    const cipher = new LocalDataCipher(keyStore);
+    const rpc = new FakeRpc();
+    const health = new NetworkHealthMonitor(rpc);
+    await health.checkNow();
+    const missions = new MissionService({ database, cipher, keystore: keyStore, health });
+    const id = "00000000-0000-4000-8000-000000000961";
+    const draft = await missions.saveDraft({ plan: plan(id) });
+    await missions.authorize({ missionId: id, expectedRevision: 1, expectedPlanDigest: draft.planDigest });
+    await missions.start(id, 1);
+    let executions = 0;
+    let proposalId = "";
+    const scheduler = new MissionSimulationScheduler({
+      database,
+      missions,
+      cipher,
+      health,
+      keystore: keyStore,
+      walletRpc: new DevnetWalletRpcService({
+        rpc,
+        health,
+        getWalletAddress: async () => "11111111111111111111111111111111",
+      }),
+      guardedReadiness: {
+        evaluate: async () => ({
+          evaluationId: "00000000-0000-4000-8000-000000000962",
+          outcome: "ready",
+          reasonCode: "guarded-prerequisites-ready",
+          authorizationId: "00000000-0000-4000-8000-000000000963",
+          evaluatedAt: new Date().toISOString(),
+          executionEnabled: false,
+          signingAttempted: false,
+        }),
+      },
+      guardedProposal: {
+        prepare: async (mission, cycle): Promise<GuardedFixtureCycleProposal> => {
+          proposalId = "00000000-0000-4000-8000-000000000964";
+          return {
+            schemaVersion: 1,
+            id: proposalId,
+            proposalKind: "spl-transfer-checked-cycle-v1",
+            purpose: "devnet-execution-path-proof",
+            missionId: mission.id,
+            missionRevision: mission.revision,
+            cycle,
+            planDigest: mission.planDigest,
+            deskRuleDigest: "a".repeat(64),
+            authorizationId: "00000000-0000-4000-8000-000000000963",
+            schedulerArmId: "00000000-0000-4000-8000-000000000965",
+            readinessEvaluationId: "00000000-0000-4000-8000-000000000962",
+            fixtureManifestDigest: "b".repeat(64),
+            sourceTokenAccount: "1".repeat(32),
+            mintAddress: "2".repeat(32),
+            destinationTokenAccount: "3".repeat(32),
+            walletAuthority: "4".repeat(32),
+            fixtureAmountAtomic: "1000000",
+            mintDecimals: 6,
+            authorizedDcaAmountAtomic: mission.plan.amountPerCycleAtomic,
+            economicValueMapping: "none",
+            marketSwapPerformed: false,
+            executionEnabled: false,
+            observedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 15_000).toISOString(),
+          };
+        },
+      },
+      guardedExecution: {
+        execute: async (proposal) => {
+          executions += 1;
+          assert.equal((await missions.getAudit(id)).length, 1);
+          assert.equal(proposal.id, proposalId);
+          const now = new Date().toISOString();
+          return {
+            id: proposal.id,
+            missionId: proposal.missionId,
+            missionRevision: proposal.missionRevision,
+            cycle: proposal.cycle,
+            fixtureManifestDigest: proposal.fixtureManifestDigest,
+            state: "receipted",
+            messageHash: "c".repeat(64),
+            signingAttempted: true,
+            broadcastAttempted: true,
+            failureCode: null,
+            createdAt: now,
+            updatedAt: now,
+          };
+        },
+      },
+    });
+    await scheduler.tick();
+    await scheduler.tick();
+    const [mission] = await missions.list();
+    assert.equal(executions, 1);
+    assert.equal(mission?.state, "halted");
+    assert.equal(mission?.haltReason, "guarded-one-shot-complete");
+    assert.equal((await missions.getAudit(id)).length, 1);
   } finally {
     database.close();
     await rm(directory, { recursive: true, force: true });

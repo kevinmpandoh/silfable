@@ -5,7 +5,7 @@ const navLinks = [
   { label: "Home", href: "/" },
   { label: "Docs", href: "/docs" },
   { label: "Releases", href: "/releases" },
-  { label: "GitHub", href: "https://github.com" },
+  { label: "GitHub", href: "https://github.com/kevinmpandoh/silfable" },
 ];
 
 export function Navbar() {
@@ -29,7 +29,6 @@ export function Navbar() {
         </Link>
 
         <div className="flex items-center justify-end gap-3 sm:gap-5">
-          <span className="hidden font-mono text-[11px] text-electric xl:inline">$SILF&nbsp; $0.006198</span>
           <Link
             href="https://x.com/silfable"
             aria-label="Follow Silfable on X"

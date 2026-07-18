@@ -24,11 +24,6 @@ const faqs = [
       "The proposed action is halted locally and recorded in the mission receipt. Depending on your configuration, Silfable can notify you, pause the mission, or require fresh authorization before continuing.",
   },
   {
-    question: "Do I need $SILF to use the desktop app?",
-    answer:
-      "No. The desktop application is the product and can run without a token balance. $SILF is designed for network utilities and incentives rather than gating access to the local runtime.",
-  },
-  {
     question: "Which markets and operating systems are supported?",
     answer:
       "The initial release targets Solana markets and ships for x86_64 Linux as AppImage and Debian packages. macOS, Windows, and additional execution environments are planned for later releases.",

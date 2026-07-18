@@ -1,0 +1,216 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  AiDraftDcaRequestSchema,
+  DevnetFixtureProvisionExecuteRequestSchema,
+  DevnetFixtureReviewActivateRequestSchema,
+  DevnetFixtureTransferExecuteRequestSchema,
+  DevnetFixtureTransferApproveRequestSchema,
+  GuardedMissionAuthorizeRequestSchema,
+  GuardedMissionRevokeRequestSchema,
+  GuardedSchedulerArmRequestSchema,
+  GuardedSchedulerArmRevokeRequestSchema,
+  GuardedExecutionViewSchema,
+  IPC_CHANNELS,
+  JupiterShadowQuoteRequestSchema,
+  MissionCommandRequestSchema,
+  TelemetryConsentRequestSchema,
+  UpdateCommandRequestSchema,
+  WalletUnlockRequestSchema,
+} from "@silfable/contracts";
+
+const requestId = "00000000-0000-4000-8000-000000000001";
+
+test("every IPC channel is unique, namespaced, and non-generic", () => {
+  const channels = Object.values(IPC_CHANNELS);
+  assert.equal(new Set(channels).size, channels.length);
+  for (const channel of channels) {
+    assert.match(channel, /^[a-z]+:[a-z-]+$/u);
+    assert.equal(["shell", "filesystem", "sql", "http", "eval"].includes(channel.split(":")[0] ?? ""), false);
+  }
+});
+
+test("security-sensitive requests reject unknown privilege-shaped fields", () => {
+  const cases = [
+    [UpdateCommandRequestSchema, { schemaVersion: 1, requestId, url: "file:///etc/passwd" }],
+    [TelemetryConsentRequestSchema, { schemaVersion: 1, requestId, consent: true, acknowledgedCrashOnly: true, uploadUrl: "https://evil.invalid" }],
+    [WalletUnlockRequestSchema, { schemaVersion: 1, requestId, privateKey: "must-not-be-accepted" }],
+    [DevnetFixtureProvisionExecuteRequestSchema, {
+      schemaVersion: 1,
+      requestId,
+      acknowledgedCreatesDevnetMint: true,
+      acknowledgedPaysNetworkFees: true,
+      acknowledgedAuthorityRevocationIsPermanent: true,
+      acknowledgedDoesNotEnableAutomaticTrading: true,
+      destinationOwner: "renderer-must-not-select-fixture-accounts",
+    }],
+    [DevnetFixtureReviewActivateRequestSchema, {
+      schemaVersion: 1,
+      requestId,
+      provisionId: requestId,
+      acknowledgedFreshOnChainReview: true,
+      acknowledgedGuardedDevnetOnly: true,
+      acknowledgedAutomaticTradingRemainsDisabled: true,
+      rpcEndpoint: "https://evil.invalid",
+    }],
+    [DevnetFixtureTransferExecuteRequestSchema, {
+      schemaVersion: 1,
+      requestId,
+      acknowledgedUsesActiveReviewedFixture: true,
+      acknowledgedFixedLowValueTransfer: true,
+      acknowledgedPaysNetworkFee: true,
+      acknowledgedAutomaticTradingRemainsDisabled: true,
+      amountAtomic: "999999999",
+    }],
+    [DevnetFixtureTransferApproveRequestSchema, {
+      schemaVersion: 1,
+      requestId,
+      transferId: requestId,
+      acknowledgedReviewedExactReceipt: true,
+      acknowledgedFreshOnChainConfirmation: true,
+      acknowledgedAutomaticTradingRemainsDisabled: true,
+      signature: "renderer-must-not-submit-signatures",
+    }],
+    [GuardedMissionAuthorizeRequestSchema, {
+      schemaVersion: 1,
+      requestId,
+      missionId: requestId,
+      expectedRevision: 1,
+      expectedPlanDigest: "a".repeat(64),
+      acknowledgedExactMissionRevision: true,
+      acknowledgedDeskRuleLimits: true,
+      acknowledgedDedicatedHotWallet: true,
+      acknowledgedSchedulerSigningRemainsDisabled: true,
+      schedulerSigningEnabled: true,
+    }],
+    [GuardedSchedulerArmRequestSchema, {
+      schemaVersion: 1,
+      requestId,
+      authorizationId: requestId,
+      acknowledgedAutomaticSigning: true,
+      acknowledgedHotWallet: true,
+      acknowledgedDevnetFixtureOnly: true,
+      transactionBytes: "renderer-must-not-submit-transactions",
+    }],
+    [MissionCommandRequestSchema, { schemaVersion: 1, requestId, missionId: requestId, expectedRevision: 1, instruction: "arbitrary-solana-program" }],
+    [AiDraftDcaRequestSchema, { schemaVersion: 1, requestId, provider: "openai", prompt: "Create a bounded DCA plan", acknowledgedExternalProcessing: true, tools: ["shell"] }],
+    [JupiterShadowQuoteRequestSchema, {
+      schemaVersion: 1,
+      requestId,
+      direction: "sol-to-usdc",
+      amountAtomic: "1",
+      slippageBps: 50,
+      maxPriceImpactBps: 100,
+      maxFeeBps: 50,
+      acknowledgedQuoteOnly: true,
+      taker: "wallet-address-must-not-be-accepted",
+    }],
+  ] as const;
+  for (const [schema, value] of cases) assert.equal(schema.safeParse(value).success, false);
+});
+
+test("acknowledgements cannot be omitted or replaced with truthy strings", () => {
+  assert.equal(TelemetryConsentRequestSchema.safeParse({ schemaVersion: 1, requestId, consent: true }).success, false);
+  assert.equal(TelemetryConsentRequestSchema.safeParse({
+    schemaVersion: 1,
+    requestId,
+    consent: true,
+    acknowledgedCrashOnly: "true",
+  }).success, false);
+  assert.equal(DevnetFixtureProvisionExecuteRequestSchema.safeParse({
+    schemaVersion: 1,
+    requestId,
+    acknowledgedCreatesDevnetMint: true,
+    acknowledgedPaysNetworkFees: true,
+    acknowledgedAuthorityRevocationIsPermanent: "true",
+    acknowledgedDoesNotEnableAutomaticTrading: true,
+  }).success, false);
+  assert.equal(DevnetFixtureReviewActivateRequestSchema.safeParse({
+    schemaVersion: 1,
+    requestId,
+    provisionId: requestId,
+    acknowledgedFreshOnChainReview: true,
+    acknowledgedGuardedDevnetOnly: true,
+    acknowledgedAutomaticTradingRemainsDisabled: 1,
+  }).success, false);
+  assert.equal(DevnetFixtureTransferExecuteRequestSchema.safeParse({
+    schemaVersion: 1,
+    requestId,
+    acknowledgedUsesActiveReviewedFixture: true,
+    acknowledgedFixedLowValueTransfer: "true",
+    acknowledgedPaysNetworkFee: true,
+    acknowledgedAutomaticTradingRemainsDisabled: true,
+  }).success, false);
+  assert.equal(DevnetFixtureTransferApproveRequestSchema.safeParse({
+    schemaVersion: 1,
+    requestId,
+    transferId: requestId,
+    acknowledgedReviewedExactReceipt: true,
+    acknowledgedFreshOnChainConfirmation: 1,
+    acknowledgedAutomaticTradingRemainsDisabled: true,
+  }).success, false);
+  assert.equal(GuardedMissionAuthorizeRequestSchema.safeParse({
+    schemaVersion: 1,
+    requestId,
+    missionId: requestId,
+    expectedRevision: 1,
+    expectedPlanDigest: "a".repeat(64),
+    acknowledgedExactMissionRevision: true,
+    acknowledgedDeskRuleLimits: true,
+    acknowledgedDedicatedHotWallet: true,
+    acknowledgedSchedulerSigningRemainsDisabled: "true",
+  }).success, false);
+  assert.equal(GuardedMissionRevokeRequestSchema.safeParse({
+    schemaVersion: 1,
+    requestId,
+    authorizationId: requestId,
+    acknowledgedRevocation: 1,
+  }).success, false);
+  assert.equal(GuardedSchedulerArmRequestSchema.safeParse({
+    schemaVersion: 1,
+    requestId,
+    authorizationId: requestId,
+    acknowledgedAutomaticSigning: "true",
+    acknowledgedHotWallet: true,
+    acknowledgedDevnetFixtureOnly: true,
+  }).success, false);
+  assert.equal(GuardedSchedulerArmRevokeRequestSchema.safeParse({
+    schemaVersion: 1,
+    requestId,
+    schedulerArmId: requestId,
+    acknowledgedImmediateRevocation: 1,
+  }).success, false);
+});
+
+test("public guarded execution receipts reject signatures and transaction evidence", () => {
+  const receipt = {
+    schemaVersion: 1,
+    id: requestId,
+    missionId: "00000000-0000-4000-8000-000000000002",
+    missionRevision: 1,
+    cycle: 1,
+    fixtureManifestDigest: "a".repeat(64),
+    state: "receipted",
+    signingAttempted: true,
+    broadcastAttempted: true,
+    failureCode: null,
+    marketSwapPerformed: false,
+    mainnetEnabled: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    events: [{
+      id: "00000000-0000-4000-8000-000000000003",
+      fromState: null,
+      toState: "proposed",
+      eventName: "proposal-created",
+      createdAt: new Date().toISOString(),
+    }],
+  };
+  assert.equal(GuardedExecutionViewSchema.safeParse(receipt).success, true);
+  assert.equal(GuardedExecutionViewSchema.safeParse({
+    ...receipt,
+    signature: "must-remain-encrypted",
+    wireTransaction: "must-remain-encrypted",
+  }).success, false);
+});

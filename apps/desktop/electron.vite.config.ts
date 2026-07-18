@@ -11,6 +11,12 @@ export default defineConfig({
   },
   preload: {
     build: {
+      rollupOptions: {
+        output: {
+          entryFileNames: "[name].cjs",
+          format: "cjs",
+        },
+      },
       externalizeDeps: {
         exclude: ["@silfable/contracts", "@silfable/core"],
       },
