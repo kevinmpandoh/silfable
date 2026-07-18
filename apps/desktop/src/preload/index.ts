@@ -2,11 +2,29 @@ import { contextBridge, ipcRenderer } from "electron";
 
 import {
   AiDeleteProviderRequestSchema,
+  AiApproveShadowTradeRequestSchema,
   AiDraftDcaRequestSchema,
   AiDraftDcaResponseSchema,
   AiProviderMutationResponseSchema,
+  AiProposeShadowTradeRequestSchema,
+  AiProposeShadowTradeResponseSchema,
+  AiRejectShadowTradeRequestSchema,
   AiSaveProviderRequestSchema,
   AiSettingsResponseSchema,
+  AgentCreateSessionRequestSchema,
+  AgentHaltSessionRequestSchema,
+  AgentEvaluateObservationRequestSchema,
+  AgentApproveIntentRequestSchema,
+  AgentRejectIntentRequestSchema,
+  AgentSessionMutationResponseSchema,
+  AgentEvaluateObservationResponseSchema,
+  AgentIntentMutationResponseSchema,
+  AgentSessionListResponseSchema,
+  AgentSimulateDevnetIntentRequestSchema,
+  AgentSimulateDevnetIntentResponseSchema,
+  AgentDevnetSimulationListResponseSchema,
+  AiShadowTradeListResponseSchema,
+  AiShadowTradeMutationResponseSchema,
   DcaSimulationRequestSchema,
   DcaSimulationResponseSchema,
   DevnetAirdropRequestSchema,
@@ -49,6 +67,13 @@ import {
   JupiterShadowListResponseSchema,
   JupiterShadowQuoteRequestSchema,
   JupiterShadowQuoteResponseSchema,
+  MarketCreateObservationRequestSchema,
+  MarketCreateObservationResponseSchema,
+  MarketObservationListResponseSchema,
+  MarketCreateWatchRequestSchema,
+  MarketPauseWatchRequestSchema,
+  MarketWatchListResponseSchema,
+  MarketWatchMutationResponseSchema,
   RuntimeStatusSchema,
   UpdateCheckResponseSchema,
   UpdateCommandRequestSchema,
@@ -118,6 +143,13 @@ import {
   type JupiterShadowListResponse,
   type JupiterShadowQuoteRequest,
   type JupiterShadowQuoteResponse,
+  type MarketCreateObservationRequest,
+  type MarketCreateObservationResponse,
+  type MarketObservationListResponse,
+  type MarketCreateWatchRequest,
+  type MarketPauseWatchRequest,
+  type MarketWatchListResponse,
+  type MarketWatchMutationResponse,
   type WalletCreateRequest,
   type WalletCreateResponse,
   type WalletLockResponse,
@@ -129,11 +161,29 @@ import {
   type WalletUnlockRequest,
   type WalletUnlockResponse,
   type AiDeleteProviderRequest,
+  type AiApproveShadowTradeRequest,
   type AiDraftDcaRequest,
   type AiDraftDcaResponse,
   type AiProviderMutationResponse,
+  type AiProposeShadowTradeRequest,
+  type AiProposeShadowTradeResponse,
+  type AiRejectShadowTradeRequest,
   type AiSaveProviderRequest,
   type AiSettingsResponse,
+  type AgentCreateSessionRequest,
+  type AgentHaltSessionRequest,
+  type AgentEvaluateObservationRequest,
+  type AgentApproveIntentRequest,
+  type AgentRejectIntentRequest,
+  type AgentSessionMutationResponse,
+  type AgentEvaluateObservationResponse,
+  type AgentIntentMutationResponse,
+  type AgentSessionListResponse,
+  type AgentSimulateDevnetIntentRequest,
+  type AgentSimulateDevnetIntentResponse,
+  type AgentDevnetSimulationListResponse,
+  type AiShadowTradeListResponse,
+  type AiShadowTradeMutationResponse,
 } from "@silfable/contracts";
 
 const api = Object.freeze({
@@ -364,6 +414,31 @@ const api = Object.freeze({
     );
     return AiDraftDcaResponseSchema.parse(response);
   },
+  async proposeShadowTradeWithAi(request: AiProposeShadowTradeRequest): Promise<AiProposeShadowTradeResponse> {
+    const response: unknown = await ipcRenderer.invoke(
+      IPC_CHANNELS.aiProposeShadowTrade,
+      AiProposeShadowTradeRequestSchema.parse(request),
+    );
+    return AiProposeShadowTradeResponseSchema.parse(response);
+  },
+  async listAiShadowTrades(): Promise<AiShadowTradeListResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.aiListShadowTrades);
+    return AiShadowTradeListResponseSchema.parse(response);
+  },
+  async approveAiShadowTrade(request: AiApproveShadowTradeRequest): Promise<AiShadowTradeMutationResponse> {
+    const response: unknown = await ipcRenderer.invoke(
+      IPC_CHANNELS.aiApproveShadowTrade,
+      AiApproveShadowTradeRequestSchema.parse(request),
+    );
+    return AiShadowTradeMutationResponseSchema.parse(response);
+  },
+  async rejectAiShadowTrade(request: AiRejectShadowTradeRequest): Promise<AiShadowTradeMutationResponse> {
+    const response: unknown = await ipcRenderer.invoke(
+      IPC_CHANNELS.aiRejectShadowTrade,
+      AiRejectShadowTradeRequestSchema.parse(request),
+    );
+    return AiShadowTradeMutationResponseSchema.parse(response);
+  },
   async getJupiterSettings(): Promise<JupiterSettingsResponse> {
     const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.jupiterGetSettings);
     return JupiterSettingsResponseSchema.parse(response);
@@ -392,6 +467,67 @@ const api = Object.freeze({
   async listJupiterShadowQuotes(): Promise<JupiterShadowListResponse> {
     const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.jupiterShadowList);
     return JupiterShadowListResponseSchema.parse(response);
+  },
+  async createMarketObservation(request: MarketCreateObservationRequest): Promise<MarketCreateObservationResponse> {
+    const response: unknown = await ipcRenderer.invoke(
+      IPC_CHANNELS.marketCreateObservation,
+      MarketCreateObservationRequestSchema.parse(request),
+    );
+    return MarketCreateObservationResponseSchema.parse(response);
+  },
+  async listMarketObservations(): Promise<MarketObservationListResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.marketListObservations);
+    return MarketObservationListResponseSchema.parse(response);
+  },
+  async createMarketWatch(request: MarketCreateWatchRequest): Promise<MarketWatchMutationResponse> {
+    const response: unknown = await ipcRenderer.invoke(
+      IPC_CHANNELS.marketCreateWatch,
+      MarketCreateWatchRequestSchema.parse(request),
+    );
+    return MarketWatchMutationResponseSchema.parse(response);
+  },
+  async pauseMarketWatch(request: MarketPauseWatchRequest): Promise<MarketWatchMutationResponse> {
+    const response: unknown = await ipcRenderer.invoke(
+      IPC_CHANNELS.marketPauseWatch,
+      MarketPauseWatchRequestSchema.parse(request),
+    );
+    return MarketWatchMutationResponseSchema.parse(response);
+  },
+  async listMarketWatches(): Promise<MarketWatchListResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.marketListWatches);
+    return MarketWatchListResponseSchema.parse(response);
+  },
+  async createAgentSession(request: AgentCreateSessionRequest): Promise<AgentSessionMutationResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentCreateSession, AgentCreateSessionRequestSchema.parse(request));
+    return AgentSessionMutationResponseSchema.parse(response);
+  },
+  async haltAgentSession(request: AgentHaltSessionRequest): Promise<AgentSessionMutationResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentHaltSession, AgentHaltSessionRequestSchema.parse(request));
+    return AgentSessionMutationResponseSchema.parse(response);
+  },
+  async evaluateAgentObservation(request: AgentEvaluateObservationRequest): Promise<AgentEvaluateObservationResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentEvaluateObservation, AgentEvaluateObservationRequestSchema.parse(request));
+    return AgentEvaluateObservationResponseSchema.parse(response);
+  },
+  async listAgentSessions(): Promise<AgentSessionListResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListSessions);
+    return AgentSessionListResponseSchema.parse(response);
+  },
+  async approveAgentIntent(request: AgentApproveIntentRequest): Promise<AgentIntentMutationResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentApproveIntent, AgentApproveIntentRequestSchema.parse(request));
+    return AgentIntentMutationResponseSchema.parse(response);
+  },
+  async rejectAgentIntent(request: AgentRejectIntentRequest): Promise<AgentIntentMutationResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentRejectIntent, AgentRejectIntentRequestSchema.parse(request));
+    return AgentIntentMutationResponseSchema.parse(response);
+  },
+  async simulateAgentIntentOnDevnet(request: AgentSimulateDevnetIntentRequest): Promise<AgentSimulateDevnetIntentResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentSimulateDevnetIntent, AgentSimulateDevnetIntentRequestSchema.parse(request));
+    return AgentSimulateDevnetIntentResponseSchema.parse(response);
+  },
+  async listAgentDevnetSimulations(): Promise<AgentDevnetSimulationListResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListDevnetSimulations);
+    return AgentDevnetSimulationListResponseSchema.parse(response);
   },
   async getUpdateStatus(): Promise<UpdateStatus> {
     const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.updateGetStatus);

@@ -2,8 +2,13 @@ import { useEffect, useState } from "react";
 
 import type {
   AiDraftDcaResponse,
+  AiProposeShadowTradeResponse,
   AiProvider,
   AiProviderSetting,
+  AiShadowTradeEvaluationView,
+  AgentIntentEvaluationView,
+  AgentDevnetSimulationView,
+  AgentSessionView,
   DevnetCanaryView,
   DevnetFixtureProvisionView,
   DevnetFixtureReviewView,
@@ -13,6 +18,9 @@ import type {
   GuardedSchedulerArmView,
   GuardedExecutionView,
   JupiterShadowQuoteView,
+  MarketObservationView,
+  MarketWakeReceiptView,
+  MarketWatchView,
   DcaSimulationRequest,
   DcaSimulationResponse,
   DcaCycleAudit,
@@ -901,6 +909,30 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
   const [maxFeeBps, setMaxFeeBps] = useState("100");
   const [acknowledged, setAcknowledged] = useState(false);
   const [quotes, setQuotes] = useState<JupiterShadowQuoteView[]>([]);
+  const [aiSettings, setAiSettings] = useState<AiProviderSetting[]>([]);
+  const [aiProvider, setAiProvider] = useState<AiProvider>("openai");
+  const [aiObjective, setAiObjective] = useState("Protect capital and hold unless this exact route offers a compelling risk-adjusted swap.");
+  const [aiProposal, setAiProposal] = useState<AiProposeShadowTradeResponse | null>(null);
+  const [aiEvaluations, setAiEvaluations] = useState<AiShadowTradeEvaluationView[]>([]);
+  const [marketObservations, setMarketObservations] = useState<MarketObservationView[]>([]);
+  const [marketWatches, setMarketWatches] = useState<MarketWatchView[]>([]);
+  const [marketWakeReceipts, setMarketWakeReceipts] = useState<MarketWakeReceiptView[]>([]);
+  const [watchCondition, setWatchCondition] = useState<"price-at-or-below" | "price-at-or-above">("price-at-or-below");
+  const [watchThreshold, setWatchThreshold] = useState("140");
+  const [watchImpactBps, setWatchImpactBps] = useState("50");
+  const [watchIntervalMinutes, setWatchIntervalMinutes] = useState("5");
+  const [watchAcknowledged, setWatchAcknowledged] = useState(false);
+  const [agentSessions, setAgentSessions] = useState<AgentSessionView[]>([]);
+  const [agentEvaluations, setAgentEvaluations] = useState<AgentIntentEvaluationView[]>([]);
+  const [agentDevnetSimulations, setAgentDevnetSimulations] = useState<AgentDevnetSimulationView[]>([]);
+  const [agentObjective, setAgentObjective] = useState("Protect capital and propose a SOL action only when the validated observation fits conservative risk limits.");
+  const [agentMaxNotional, setAgentMaxNotional] = useState("20");
+  const [agentMaxImpactBps, setAgentMaxImpactBps] = useState("50");
+  const [agentMaxVolatilityBps, setAgentMaxVolatilityBps] = useState("100");
+  const [agentDurationHours, setAgentDurationHours] = useState("1");
+  const [agentSessionAcknowledged, setAgentSessionAcknowledged] = useState(false);
+  const [agentApprovalAcknowledged, setAgentApprovalAcknowledged] = useState(false);
+  const [aiApprovalAcknowledged, setAiApprovalAcknowledged] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -909,18 +941,59 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
       setConfigured(false);
       setApiKey("");
       setQuotes([]);
+      setAiSettings([]);
+      setAiEvaluations([]);
+      setMarketObservations([]);
+      setMarketWatches([]);
+      setMarketWakeReceipts([]);
+      setAgentSessions([]);
+      setAgentEvaluations([]);
+      setAgentDevnetSimulations([]);
+      setAiProposal(null);
       return;
     }
     let active = true;
-    Promise.all([window.silfable.getJupiterSettings(), window.silfable.listJupiterShadowQuotes()])
-      .then(([settings, history]) => {
+    Promise.all([
+      window.silfable.getJupiterSettings(),
+      window.silfable.listJupiterShadowQuotes(),
+      window.silfable.getAiSettings(),
+      window.silfable.listAiShadowTrades(),
+      window.silfable.listMarketObservations(),
+      window.silfable.listMarketWatches(),
+      window.silfable.listAgentSessions(),
+      window.silfable.listAgentDevnetSimulations(),
+    ])
+      .then(([settings, history, providers, evaluations, observations, watches, agents, devnetSimulations]) => {
         if (!active) return;
         setConfigured(settings.configured);
         setQuotes(history.quotes);
+        setAiSettings(providers.providers);
+        setAiEvaluations(evaluations.evaluations);
+        setMarketObservations(observations.observations);
+        setMarketWatches(watches.watches);
+        setMarketWakeReceipts(watches.wakeReceipts);
+        setAgentSessions(agents.sessions);
+        setAgentEvaluations(agents.evaluations);
+        setAgentDevnetSimulations(devnetSimulations.simulations);
       })
       .catch(() => active && setMessage("Jupiter shadow settings are unavailable."));
+    const timer = window.setInterval(() => {
+      Promise.all([
+        window.silfable.listMarketWatches(),
+        window.silfable.listAgentSessions(),
+        window.silfable.listAgentDevnetSimulations(),
+      ]).then(([watches, agents, devnetSimulations]) => {
+        if (!active) return;
+        setMarketWatches(watches.watches);
+        setMarketWakeReceipts(watches.wakeReceipts);
+        setAgentSessions(agents.sessions);
+        setAgentEvaluations(agents.evaluations);
+        setAgentDevnetSimulations(devnetSimulations.simulations);
+      }).catch(() => undefined);
+    }, 5_000);
     return () => {
       active = false;
+      window.clearInterval(timer);
     };
   }, [status?.keystore]);
 
@@ -990,6 +1063,277 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
     }
   }
 
+  async function proposeShadowTrade(quoteId: string): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    setAiProposal(null);
+    try {
+      const response = await window.silfable.proposeShadowTradeWithAi({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        provider: aiProvider,
+        quoteId,
+        objective: aiObjective,
+        acknowledgedExternalProcessing: true,
+        acknowledgedQuoteOnly: true,
+      });
+      setAiProposal(response);
+      setAiEvaluations((await window.silfable.listAiShadowTrades()).evaluations);
+      setMessage(
+        `AI proposed ${response.proposal.action}; deterministic outcome: ${response.receipt.outcome}. No signing or execution was attempted.`,
+      );
+    } catch {
+      setMessage("AI shadow proposal failed closed. No signing or execution was attempted.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createMarketObservation(quoteId: string): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await window.silfable.createMarketObservation({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        quoteId,
+        acknowledgedObservationOnly: true,
+      });
+      setMarketObservations((await window.silfable.listMarketObservations()).observations);
+      setMessage(
+        `Observation captured at ${response.observation.market.priceMicros} price-micros. No AI call, signing, or execution was attempted.`,
+      );
+    } catch {
+      setMessage("Observation failed closed. Request a fresh allowed quote and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createMarketWatch(): Promise<void> {
+    if (!watchAcknowledged) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await window.silfable.createMarketWatch({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        direction,
+        condition: watchCondition,
+        thresholdPriceMicros: parseTokenUnits(watchThreshold, 6),
+        maxPriceImpactBps: Number(watchImpactBps),
+        intervalSeconds: Number(watchIntervalMinutes) * 60,
+        acknowledgedBackgroundMarketData: true,
+        acknowledgedZeroAiCallsWhileSleeping: true,
+        acknowledgedNoExecution: true,
+      });
+      const result = await window.silfable.listMarketWatches();
+      setMarketWatches(result.watches);
+      setMarketWakeReceipts(result.wakeReceipts);
+      setWatchAcknowledged(false);
+      setMessage("Background market watch activated. It calls Jupiter only; AI and execution remain disabled.");
+    } catch {
+      setMessage("Market watch could not be activated. Check the Jupiter key, limits, and existing active watch.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function pauseMarketWatch(watchId: string): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await window.silfable.pauseMarketWatch({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        watchId,
+        acknowledgedImmediatePause: true,
+      });
+      const result = await window.silfable.listMarketWatches();
+      setMarketWatches(result.watches);
+      setMarketWakeReceipts(result.wakeReceipts);
+      setMessage("Market watch paused immediately.");
+    } catch {
+      setMessage("Market watch is no longer active or could not be paused.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createAgentSession(): Promise<void> {
+    if (!agentSessionAcknowledged) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const durationHours = Number(agentDurationHours);
+      await window.silfable.createAgentSession({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        provider: aiProvider,
+        objective: agentObjective,
+        maxActionNotionalUsdcMicros: parseTokenUnits(agentMaxNotional, 6),
+        maxPriceImpactBps: Number(agentMaxImpactBps),
+        maxVolatilityBps: Number(agentMaxVolatilityBps),
+        deadlineAt: new Date(Date.now() + durationHours * 60 * 60_000).toISOString(),
+        acknowledgedExternalAiProcessing: true,
+        acknowledgedPerActionApproval: true,
+        acknowledgedNoExecution: true,
+      });
+      const result = await window.silfable.listAgentSessions();
+      setAgentSessions(result.sessions);
+      setAgentEvaluations(result.evaluations);
+      setAgentSessionAcknowledged(false);
+      setMessage("Restricted agent session created. It cannot execute and every buy/sell intent requires approval.");
+    } catch {
+      setMessage("Agent session could not be created. Check provider configuration, deadline, limits, and active sessions.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function evaluateAgentObservation(observationId: string): Promise<void> {
+    const session = agentSessions.find((candidate) => candidate.state === "active");
+    if (session === undefined) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await window.silfable.evaluateAgentObservation({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        sessionId: session.id,
+        observationId,
+        acknowledgedExternalAiProcessing: true,
+        acknowledgedIntentOnly: true,
+      });
+      const result = await window.silfable.listAgentSessions();
+      setAgentSessions(result.sessions);
+      setAgentEvaluations(result.evaluations);
+      setMessage(`Agent proposed ${response.evaluation.proposal.action}; outcome ${response.evaluation.receipt.outcome}. Execution remains disabled.`);
+    } catch {
+      setMessage("Agent evaluation failed closed. Use a fresh observation and an active configured session.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function haltAgentSession(sessionId: string): Promise<void> {
+    setBusy(true);
+    try {
+      await window.silfable.haltAgentSession({ schemaVersion: 1, requestId: crypto.randomUUID(), sessionId, acknowledgedImmediateHalt: true });
+      const result = await window.silfable.listAgentSessions();
+      setAgentSessions(result.sessions);
+      setAgentEvaluations(result.evaluations);
+      setMessage("Restricted agent session halted immediately.");
+    } catch {
+      setMessage("Agent session is no longer active.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function decideAgentIntent(evaluation: AgentIntentEvaluationView, approve: boolean): Promise<void> {
+    if (approve && !agentApprovalAcknowledged) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const base = {
+        schemaVersion: 1 as const,
+        requestId: crypto.randomUUID(),
+        evaluationId: evaluation.receipt.id,
+        expectedProposalDigest: evaluation.receipt.proposalDigest,
+      };
+      if (approve) {
+        await window.silfable.approveAgentIntent({
+          ...base,
+          acknowledgedIntentOnly: true,
+          acknowledgedFreshQuoteRequired: true,
+          acknowledgedNoExecution: true,
+        });
+        setAgentApprovalAcknowledged(false);
+      } else {
+        await window.silfable.rejectAgentIntent({ ...base, acknowledgedRejectionOrRevocation: true });
+      }
+      const result = await window.silfable.listAgentSessions();
+      setAgentSessions(result.sessions);
+      setAgentEvaluations(result.evaluations);
+      setMessage(approve ? "Agent intent approved for review only; execution remains disabled." : "Agent intent rejected or revoked.");
+    } catch {
+      setMessage("Agent intent decision failed closed because state, digest, session, or expiry changed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function simulateAgentIntentOnDevnet(evaluation: AgentIntentEvaluationView): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await window.silfable.simulateAgentIntentOnDevnet({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        evaluationId: evaluation.receipt.id,
+        expectedProposalDigest: evaluation.receipt.proposalDigest,
+        acknowledgedDevnetFixtureProofOnly: true,
+        acknowledgedNoEconomicValueMapping: true,
+        acknowledgedNoSigningOrBroadcast: true,
+      });
+      setAgentDevnetSimulations((await window.silfable.listAgentDevnetSimulations()).simulations);
+      setMessage(
+        response.simulation.outcome === "simulated"
+          ? "Exact-message Devnet fixture simulation passed. It is not a market swap and nothing was signed or broadcast."
+          : `Devnet proof failed closed: ${response.simulation.failureCode ?? "simulation-failed"}. Nothing was signed or broadcast.`,
+      );
+    } catch {
+      setMessage("Devnet proof could not run. It requires the exact approved intent, an active reviewed fixture, and healthy Devnet; no signing or broadcast occurred.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approveShadowTrade(evaluation: AiShadowTradeEvaluationView): Promise<void> {
+    if (!aiApprovalAcknowledged) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await window.silfable.approveAiShadowTrade({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        evaluationId: evaluation.receipt.id,
+        expectedProposalDigest: evaluation.receipt.proposalDigest,
+        acknowledgedIntentOnly: true,
+        acknowledgedFreshQuoteRequired: true,
+        acknowledgedNoExecution: true,
+      });
+      setAiEvaluations((await window.silfable.listAiShadowTrades()).evaluations);
+      setAiApprovalAcknowledged(false);
+      setMessage("AI intent approved for review only. Signing and execution remain disabled.");
+    } catch {
+      setMessage("Approval failed closed. The intent may have expired or changed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function rejectShadowTrade(evaluation: AiShadowTradeEvaluationView): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await window.silfable.rejectAiShadowTrade({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        evaluationId: evaluation.receipt.id,
+        expectedProposalDigest: evaluation.receipt.proposalDigest,
+        acknowledgedRejectionOrRevocation: true,
+      });
+      setAiEvaluations((await window.silfable.listAiShadowTrades()).evaluations);
+      setMessage(evaluation.approval.state === "approved" ? "Approval revoked." : "AI intent rejected.");
+    } catch {
+      setMessage("Rejection failed closed. Refresh the evaluation journal and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="shadowPanel">
       <div className="shadowIntro">
@@ -1027,6 +1371,98 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
           <MissionField label="Max total fee (bps)" value={maxFeeBps} onChange={setMaxFeeBps} />
         </div>
         <button type="button" disabled={busy || !configured || !acknowledged} onClick={() => void requestQuote()}>Request quote-only shadow</button>
+        <div className="aiPanelHeading">
+          <div><span>AI shadow analyst</span><strong>Proposal only</strong></div>
+          <em>{aiSettings.find((setting) => setting.provider === aiProvider)?.configured ? "configured" : "not configured"}</em>
+        </div>
+        <div className="modeTabs" role="tablist" aria-label="Shadow AI provider">
+          {(["openai", "anthropic"] as const).map((provider) => (
+            <button type="button" role="tab" aria-selected={aiProvider === provider} className={aiProvider === provider ? "active" : ""} onClick={() => setAiProvider(provider)} key={provider}>
+              {provider}
+            </button>
+          ))}
+        </div>
+        <label className="aiPrompt">
+          <span>Objective for the selected observation</span>
+          <textarea value={aiObjective} onChange={(event) => setAiObjective(event.target.value)} rows={3} maxLength={2_000} />
+        </label>
+        {aiProposal !== null && (
+          <div className="aiDraftBox">
+            <span>{aiProposal.provider} · {aiProposal.model} · persisted locally: true</span>
+            <strong>{aiProposal.proposal.action} · {aiProposal.receipt.outcome}</strong>
+            <p>{aiProposal.proposal.rationale}</p>
+            <code>confidence {aiProposal.proposal.confidenceBps} bps · signed=false · executed=false</code>
+            {aiProposal.receipt.denialCodes.length > 0 && <small>{aiProposal.receipt.denialCodes.join(", ")}</small>}
+          </div>
+        )}
+        <label className="riskAck">
+          <input
+            type="checkbox"
+            checked={aiApprovalAcknowledged}
+            onChange={(event) => setAiApprovalAcknowledged(event.target.checked)}
+          />
+          <span>Approval records intent only. A fresh quote and new policy checks are required; signing and execution stay disabled.</span>
+        </label>
+        <div className="aiPanelHeading">
+          <div><span>Scheduled market wake</span><strong>Jupiter-only monitor</strong></div>
+          <em>{marketWatches.some((watch) => watch.state === "active") ? "active" : "inactive"}</em>
+        </div>
+        <div className="modeTabs" role="tablist" aria-label="Market wake condition">
+          {(["price-at-or-below", "price-at-or-above"] as const).map((condition) => (
+            <button type="button" role="tab" aria-selected={watchCondition === condition} className={watchCondition === condition ? "active" : ""} onClick={() => setWatchCondition(condition)} key={condition}>
+              {condition === "price-at-or-below" ? "Price ≤ target" : "Price ≥ target"}
+            </button>
+          ))}
+        </div>
+        <div className="fieldGrid">
+          <MissionField label="Target USDC per SOL" value={watchThreshold} onChange={setWatchThreshold} />
+          <MissionField label="Max impact (bps)" value={watchImpactBps} onChange={setWatchImpactBps} />
+          <MissionField label="Poll interval (minutes)" value={watchIntervalMinutes} onChange={setWatchIntervalMinutes} />
+        </div>
+        <label className="riskAck">
+          <input type="checkbox" checked={watchAcknowledged} onChange={(event) => setWatchAcknowledged(event.target.checked)} />
+          <span>I allow periodic Jupiter market-data requests. Sleeping makes zero AI calls and a wake can never sign or trade.</span>
+        </label>
+        <button
+          type="button"
+          disabled={busy || !configured || !watchAcknowledged || marketWatches.some((watch) => watch.state === "active")}
+          onClick={() => void createMarketWatch()}
+        >
+          Activate market watch
+        </button>
+        <div className="aiPanelHeading">
+          <div><span>Restricted agent session</span><strong>Intent-only analyst</strong></div>
+          <em>{agentSessions.find((session) => session.state === "active")?.state ?? "inactive"}</em>
+        </div>
+        <label className="aiPrompt">
+          <span>Session objective</span>
+          <textarea value={agentObjective} onChange={(event) => setAgentObjective(event.target.value)} rows={3} maxLength={2_000} />
+        </label>
+        <div className="fieldGrid">
+          <MissionField label="Max per action (USDC)" value={agentMaxNotional} onChange={setAgentMaxNotional} />
+          <MissionField label="Max impact (bps)" value={agentMaxImpactBps} onChange={setAgentMaxImpactBps} />
+          <MissionField label="Max volatility (bps)" value={agentMaxVolatilityBps} onChange={setAgentMaxVolatilityBps} />
+          <MissionField label="Session duration (hours)" value={agentDurationHours} onChange={setAgentDurationHours} />
+        </div>
+        <label className="riskAck">
+          <input type="checkbox" checked={agentSessionAcknowledged} onChange={(event) => setAgentSessionAcknowledged(event.target.checked)} />
+          <span>I allow observation data to be sent to the selected AI. Every buy/sell is intent-only, needs approval, and cannot execute.</span>
+        </label>
+        <button
+          type="button"
+          disabled={
+            busy || !agentSessionAcknowledged || agentObjective.trim().length < 10
+            || agentSessions.some((session) => session.state === "active")
+            || !aiSettings.find((setting) => setting.provider === aiProvider)?.configured
+          }
+          onClick={() => void createAgentSession()}
+        >
+          Create restricted session
+        </button>
+        <label className="riskAck">
+          <input type="checkbox" checked={agentApprovalAcknowledged} onChange={(event) => setAgentApprovalAcknowledged(event.target.checked)} />
+          <span>I understand approval records intent only; execution requires a future fresh quote and separate guarded milestone.</span>
+        </label>
         {message !== null && <p className="formMessage">{message}</p>}
       </div>
       <div className="shadowHistory">
@@ -1040,6 +1476,161 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
                 <div><span>Output atomic</span><code>{quote.outAmount}</code></div>
                 <div><span>Risk</span><code>{quote.priceImpactBps} impact bps · {quote.feeBps} fee bps</code></div>
                 <div><span>Execution</span><code>signed=false · broadcast=false</code></div>
+                <button
+                  type="button"
+                  disabled={
+                    busy ||
+                    !quote.allowed ||
+                    aiObjective.trim().length < 10 ||
+                    !aiSettings.find((setting) => setting.provider === aiProvider)?.configured
+                  }
+                  onClick={() => void proposeShadowTrade(quote.id)}
+                >
+                  Ask AI: trade or hold
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || !acknowledged || !quote.allowed || Date.parse(quote.expiresAt) <= Date.now()}
+                  onClick={() => void createMarketObservation(quote.id)}
+                >
+                  Capture market observation
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="shadowHistory">
+        <div className="auditHeading"><div><p className="eyebrow">Encrypted AI evaluation journal</p><h3>Restricted intent approvals</h3></div><span>{aiEvaluations.length} evaluations</span></div>
+        {aiEvaluations.length === 0 ? <p className="auditEmpty">No AI shadow evaluations recorded.</p> : (
+          <div className="auditList">
+            {aiEvaluations.map((evaluation) => (
+              <article className="shadowRow" key={evaluation.receipt.id}>
+                <div><span>Proposal</span><strong>{evaluation.proposal.action}</strong></div>
+                <div><span>Approval</span><code>{evaluation.approval.state} · execution=false</code></div>
+                <div><span>Confidence</span><code>{evaluation.proposal.confidenceBps} bps</code></div>
+                <div><span>Expiry</span><code>{evaluation.approval.expiresAt ?? "not applicable"}</code></div>
+                <div><span>Receipt</span><code>{evaluation.receipt.id}</code></div>
+                {evaluation.approval.state === "pending" && (
+                  <div className="shadowActions">
+                    <button type="button" disabled={busy || !aiApprovalAcknowledged} onClick={() => void approveShadowTrade(evaluation)}>Approve intent only</button>
+                    <button type="button" disabled={busy} onClick={() => void rejectShadowTrade(evaluation)}>Reject</button>
+                  </div>
+                )}
+                {evaluation.approval.state === "approved" && (
+                  <button type="button" disabled={busy} onClick={() => void rejectShadowTrade(evaluation)}>Revoke approval</button>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="shadowHistory">
+        <div className="auditHeading"><div><p className="eyebrow">Encrypted market journal</p><h3>Main-owned observations</h3></div><span>{marketObservations.length} snapshots</span></div>
+        {marketObservations.length === 0 ? <p className="auditEmpty">No market observation snapshots recorded.</p> : (
+          <div className="auditList">
+            {marketObservations.map((observation) => (
+              <article className="shadowRow" key={observation.id}>
+                <div><span>Price</span><strong>{observation.market.priceMicros} µUSDC/SOL</strong></div>
+                <div><span>Liquidity proxy</span><code>{observation.market.liquidityProxy} · impact {observation.market.priceImpactBps} bps</code></div>
+                <div><span>Volatility</span><code>{observation.market.volatility.status} · {observation.market.volatility.rangeBps ?? "n/a"} bps</code></div>
+                <div><span>Freshness</span><code>{observation.freshnessStatus} · expires {observation.provenance.expiresAt}</code></div>
+                <div><span>Wallet exposure</span><code>{observation.walletContext.reason}</code></div>
+                <div className="observationDigest"><span>Digest</span><code>{observation.observationDigest}</code></div>
+                <button
+                  type="button"
+                  disabled={busy || observation.freshnessStatus !== "fresh" || !agentSessions.some((session) => session.state === "active")}
+                  onClick={() => void evaluateAgentObservation(observation.id)}
+                >
+                  Ask restricted agent
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="shadowHistory">
+        <div className="auditHeading"><div><p className="eyebrow">Zero-AI wake scheduler</p><h3>Market watches</h3></div><span>{marketWatches.length} watches · {marketWakeReceipts.length} checks</span></div>
+        {marketWatches.length === 0 ? <p className="auditEmpty">No scheduled market watch recorded.</p> : (
+          <div className="auditList">
+            {marketWatches.map((watch) => (
+              <article className="shadowRow" key={watch.id}>
+                <div><span>State</span><strong>{watch.state}</strong></div>
+                <div><span>Condition</span><code>{watch.condition} {watch.thresholdPriceMicros} µUSDC</code></div>
+                <div><span>Risk gate</span><code>impact ≤ {watch.maxPriceImpactBps} bps</code></div>
+                <div><span>Schedule</span><code>{watch.intervalSeconds}s · next {watch.nextCheckAt}</code></div>
+                <div><span>Boundary</span><code>AI=false · execution=false</code></div>
+                {watch.state === "active" && <button type="button" disabled={busy} onClick={() => void pauseMarketWatch(watch.id)}>Pause watch</button>}
+              </article>
+            ))}
+            {marketWakeReceipts.map((receipt) => (
+              <article className="shadowRow" key={receipt.id}>
+                <div><span>Check</span><strong>{receipt.outcome}</strong></div>
+                <div><span>Price</span><code>{receipt.observedPriceMicros ?? "unavailable"}</code></div>
+                <div><span>Impact</span><code>{receipt.priceImpactBps ?? "unavailable"} bps</code></div>
+                <div><span>Failure</span><code>{receipt.failureCode ?? "none"}</code></div>
+                <div><span>Evaluated</span><code>{receipt.evaluatedAt}</code></div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="shadowHistory">
+        <div className="auditHeading"><div><p className="eyebrow">Restricted agent journal</p><h3>Sessions and intents</h3></div><span>{agentSessions.length} sessions · {agentEvaluations.length} intents</span></div>
+        {agentSessions.length === 0 ? <p className="auditEmpty">No restricted agent session recorded.</p> : (
+          <div className="auditList">
+            {agentSessions.map((session) => (
+              <article className="shadowRow" key={session.id}>
+                <div><span>Session</span><strong>{session.state}</strong></div>
+                <div><span>Provider</span><code>{session.provider} · {session.venue}</code></div>
+                <div><span>Capital cap</span><code>{session.maxActionNotionalUsdcMicros} µUSDC/action</code></div>
+                <div><span>Risk stops</span><code>{session.maxPriceImpactBps} impact · {session.maxVolatilityBps} volatility bps</code></div>
+                <div><span>Deadline</span><code>{session.deadlineAt} · execution=false</code></div>
+                {session.state === "active" && <button type="button" disabled={busy} onClick={() => void haltAgentSession(session.id)}>Halt session</button>}
+              </article>
+            ))}
+            {agentEvaluations.map((evaluation) => (
+              <article className="shadowRow" key={evaluation.receipt.id}>
+                <div><span>Intent</span><strong>{evaluation.proposal.action}</strong></div>
+                <div><span>Outcome</span><code>{evaluation.receipt.outcome} · {evaluation.approval.state}</code></div>
+                <div><span>Notional</span><code>{evaluation.proposal.notionalUsdcMicros} µUSDC</code></div>
+                <div><span>Confidence</span><code>{evaluation.proposal.confidenceBps} bps</code></div>
+                <div><span>Boundary</span><code>signed=false · executed=false</code></div>
+                {evaluation.approval.state === "pending" && (
+                  <div className="shadowActions">
+                    <button type="button" disabled={busy || !agentApprovalAcknowledged} onClick={() => void decideAgentIntent(evaluation, true)}>Approve intent only</button>
+                    <button type="button" disabled={busy} onClick={() => void decideAgentIntent(evaluation, false)}>Reject</button>
+                  </div>
+                )}
+                {evaluation.approval.state === "approved" && (
+                  <div className="shadowActions">
+                    <button
+                      type="button"
+                      disabled={busy || agentDevnetSimulations.some((simulation) => simulation.evaluationId === evaluation.receipt.id)}
+                      onClick={() => void simulateAgentIntentOnDevnet(evaluation)}
+                    >
+                      Simulate Devnet proof
+                    </button>
+                    <button type="button" disabled={busy} onClick={() => void decideAgentIntent(evaluation, false)}>Revoke intent</button>
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="shadowHistory">
+        <div className="auditHeading"><div><p className="eyebrow">Encrypted Devnet proof journal</p><h3>Approved intent simulations</h3></div><span>{agentDevnetSimulations.length} proofs</span></div>
+        {agentDevnetSimulations.length === 0 ? <p className="auditEmpty">No approved agent intent has an exact-message Devnet proof.</p> : (
+          <div className="auditList">
+            {agentDevnetSimulations.map((simulation) => (
+              <article className="shadowRow" key={simulation.id}>
+                <div><span>Proof</span><strong>{simulation.outcome} · {simulation.agentAction}</strong></div>
+                <div><span>Message</span><code>{simulation.messageHash ?? "unavailable"}</code></div>
+                <div><span>Runtime</span><code>{simulation.unitsConsumed ?? "n/a"} units · {simulation.feeLamports ?? "n/a"} lamports</code></div>
+                <div><span>Failure</span><code>{simulation.failureCode ?? "none"}</code></div>
+                <div><span>Economic boundary</span><code>mapping=none · marketSwap=false</code></div>
+                <div><span>Privilege boundary</span><code>signed=false · broadcast=false · executed=false</code></div>
               </article>
             ))}
           </div>

@@ -1,10 +1,120 @@
 import type {
+  AiShadowTradeEvaluationDenialCode,
+  AiShadowTradeProposalV1,
+  AgentIntentDenialCode,
+  AgentIntentProposalV1,
+  AgentSessionView,
   DcaPlanV1,
   DcaSimulationRequest,
   DcaSimulationResponse,
   DeskRuleDenialCode,
   DeskRuleSnapshot,
+  JupiterShadowQuoteView,
+  MarketObservationView,
 } from "@silfable/contracts";
+
+export type AiShadowTradeEvaluation = {
+  outcome: "hold" | "would-execute" | "blocked";
+  denialCodes: AiShadowTradeEvaluationDenialCode[];
+  signingAttempted: false;
+  executionAttempted: false;
+};
+
+export function evaluateAiShadowTradeProposal(input: {
+  proposal: AiShadowTradeProposalV1;
+  quote: JupiterShadowQuoteView;
+  now: Date;
+}): AiShadowTradeEvaluation {
+  const { proposal, quote, now } = input;
+  const denialCodes: AiShadowTradeEvaluationDenialCode[] = [];
+
+  if (!quote.allowed || quote.denialCodes.length > 0) denialCodes.push("quote-not-allowed");
+  if (new Date(quote.expiresAt).getTime() <= now.getTime()) denialCodes.push("quote-expired");
+  if (quote.transactionReturned) denialCodes.push("transaction-returned");
+  if (
+    proposal.quoteId !== quote.id ||
+    proposal.direction !== quote.direction ||
+    proposal.inAmount !== quote.inAmount
+  ) {
+    denialCodes.push("proposal-quote-mismatch");
+  }
+
+  return {
+    outcome: denialCodes.length > 0
+      ? "blocked"
+      : proposal.action === "hold"
+        ? "hold"
+        : "would-execute",
+    denialCodes,
+    signingAttempted: false,
+    executionAttempted: false,
+  };
+}
+
+export type AgentIntentEvaluation = {
+  outcome: "pending-approval" | "hold" | "halted" | "blocked";
+  denialCodes: AgentIntentDenialCode[];
+  signingAttempted: false;
+  executionAttempted: false;
+};
+
+export function evaluateAgentIntent(input: {
+  session: AgentSessionView;
+  observation: MarketObservationView;
+  quote: JupiterShadowQuoteView;
+  proposal: AgentIntentProposalV1;
+  now: Date;
+}): AgentIntentEvaluation {
+  const { session, observation, quote, proposal, now } = input;
+  const denialCodes: AgentIntentDenialCode[] = [];
+  const actionable = proposal.action === "buy-sol" || proposal.action === "sell-sol";
+
+  if (session.state !== "active") denialCodes.push("session-not-active");
+  if (Date.parse(session.deadlineAt) <= now.getTime()) denialCodes.push("session-expired");
+  if (observation.freshnessStatus !== "fresh" || Date.parse(observation.provenance.expiresAt) <= now.getTime()) {
+    denialCodes.push("observation-stale");
+  }
+  if (observation.primaryQuoteId !== quote.id || proposal.quoteId !== quote.id) {
+    denialCodes.push("observation-quote-mismatch");
+  }
+  if (!quote.allowed || quote.denialCodes.length > 0) denialCodes.push("quote-not-allowed");
+  if (Date.parse(quote.expiresAt) <= now.getTime()) denialCodes.push("quote-expired");
+  if (quote.transactionReturned) denialCodes.push("transaction-returned");
+  if (proposal.sessionId !== session.id || proposal.observationId !== observation.id) {
+    denialCodes.push("proposal-binding-mismatch");
+  }
+
+  const expectedNotional = proposal.action === "buy-sol"
+    ? (quote.direction === "usdc-to-sol" ? BigInt(quote.inAmount) : null)
+    : proposal.action === "sell-sol"
+      ? (quote.direction === "sol-to-usdc" ? BigInt(quote.outAmount) : null)
+      : 0n;
+  if (expectedNotional === null) denialCodes.push("action-direction-mismatch");
+  else if (BigInt(proposal.notionalUsdcMicros) !== expectedNotional) denialCodes.push("notional-mismatch");
+  if (actionable && BigInt(proposal.notionalUsdcMicros) > BigInt(session.maxActionNotionalUsdcMicros)) {
+    denialCodes.push("capital-cap-exceeded");
+  }
+  if (actionable && observation.market.priceImpactBps > session.maxPriceImpactBps) {
+    denialCodes.push("price-impact-exceeded");
+  }
+  if (actionable && observation.market.volatility.rangeBps === null) denialCodes.push("volatility-unavailable");
+  else if (actionable && (observation.market.volatility.rangeBps ?? 0) > session.maxVolatilityBps) {
+    denialCodes.push("volatility-exceeded");
+  }
+
+  return {
+    outcome: denialCodes.length > 0
+      ? "blocked"
+      : proposal.action === "hold"
+        ? "hold"
+        : proposal.action === "halt"
+          ? "halted"
+          : "pending-approval",
+    denialCodes,
+    signingAttempted: false,
+    executionAttempted: false,
+  };
+}
 
 export type MissionHaltReason =
   | "network-offline"

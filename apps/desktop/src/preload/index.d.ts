@@ -1,10 +1,28 @@
 import type {
   AiDeleteProviderRequest,
+  AiApproveShadowTradeRequest,
   AiDraftDcaRequest,
   AiDraftDcaResponse,
   AiProviderMutationResponse,
+  AiProposeShadowTradeRequest,
+  AiProposeShadowTradeResponse,
+  AiRejectShadowTradeRequest,
   AiSaveProviderRequest,
   AiSettingsResponse,
+  AgentCreateSessionRequest,
+  AgentHaltSessionRequest,
+  AgentEvaluateObservationRequest,
+  AgentApproveIntentRequest,
+  AgentRejectIntentRequest,
+  AgentSessionMutationResponse,
+  AgentEvaluateObservationResponse,
+  AgentIntentMutationResponse,
+  AgentSessionListResponse,
+  AgentSimulateDevnetIntentRequest,
+  AgentSimulateDevnetIntentResponse,
+  AgentDevnetSimulationListResponse,
+  AiShadowTradeListResponse,
+  AiShadowTradeMutationResponse,
   DcaSimulationRequest,
   DcaSimulationResponse,
   DevnetAirdropRequest,
@@ -46,6 +64,13 @@ import type {
   JupiterShadowListResponse,
   JupiterShadowQuoteRequest,
   JupiterShadowQuoteResponse,
+  MarketCreateObservationRequest,
+  MarketCreateObservationResponse,
+  MarketObservationListResponse,
+  MarketCreateWatchRequest,
+  MarketPauseWatchRequest,
+  MarketWatchListResponse,
+  MarketWatchMutationResponse,
   RuntimeStatus,
   UpdateCheckResponse,
   UpdateCommandRequest,
@@ -106,11 +131,28 @@ declare global {
       saveAiProvider(request: AiSaveProviderRequest): Promise<AiProviderMutationResponse>;
       deleteAiProvider(request: AiDeleteProviderRequest): Promise<AiProviderMutationResponse>;
       draftDcaWithAi(request: AiDraftDcaRequest): Promise<AiDraftDcaResponse>;
+      proposeShadowTradeWithAi(request: AiProposeShadowTradeRequest): Promise<AiProposeShadowTradeResponse>;
+      listAiShadowTrades(): Promise<AiShadowTradeListResponse>;
+      approveAiShadowTrade(request: AiApproveShadowTradeRequest): Promise<AiShadowTradeMutationResponse>;
+      rejectAiShadowTrade(request: AiRejectShadowTradeRequest): Promise<AiShadowTradeMutationResponse>;
       getJupiterSettings(): Promise<JupiterSettingsResponse>;
       saveJupiterKey(request: JupiterSaveKeyRequest): Promise<JupiterKeyMutationResponse>;
       deleteJupiterKey(request: WalletUnlockRequest): Promise<JupiterKeyMutationResponse>;
       getJupiterShadowQuote(request: JupiterShadowQuoteRequest): Promise<JupiterShadowQuoteResponse>;
       listJupiterShadowQuotes(): Promise<JupiterShadowListResponse>;
+      createMarketObservation(request: MarketCreateObservationRequest): Promise<MarketCreateObservationResponse>;
+      listMarketObservations(): Promise<MarketObservationListResponse>;
+      createMarketWatch(request: MarketCreateWatchRequest): Promise<MarketWatchMutationResponse>;
+      pauseMarketWatch(request: MarketPauseWatchRequest): Promise<MarketWatchMutationResponse>;
+      listMarketWatches(): Promise<MarketWatchListResponse>;
+      createAgentSession(request: AgentCreateSessionRequest): Promise<AgentSessionMutationResponse>;
+      haltAgentSession(request: AgentHaltSessionRequest): Promise<AgentSessionMutationResponse>;
+      evaluateAgentObservation(request: AgentEvaluateObservationRequest): Promise<AgentEvaluateObservationResponse>;
+      listAgentSessions(): Promise<AgentSessionListResponse>;
+      approveAgentIntent(request: AgentApproveIntentRequest): Promise<AgentIntentMutationResponse>;
+      rejectAgentIntent(request: AgentRejectIntentRequest): Promise<AgentIntentMutationResponse>;
+      simulateAgentIntentOnDevnet(request: AgentSimulateDevnetIntentRequest): Promise<AgentSimulateDevnetIntentResponse>;
+      listAgentDevnetSimulations(): Promise<AgentDevnetSimulationListResponse>;
       getUpdateStatus(): Promise<UpdateStatus>;
       checkForUpdate(request: UpdateCommandRequest): Promise<UpdateCheckResponse>;
       openUpdateReview(request: UpdateCommandRequest): Promise<UpdateOpenReviewResponse>;

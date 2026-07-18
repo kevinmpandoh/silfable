@@ -2,13 +2,28 @@ import {
   AiDcaIntentV1Schema,
   AiProviderSchema,
   AiProviderSettingSchema,
+  AiShadowTradeProposalV1Schema,
+  AgentIntentProposalV1Schema,
   type AiDcaIntentV1,
   type AiProvider,
   type AiProviderSetting,
+  type AiShadowTradeProposalV1,
+  type AgentIntentProposalV1,
+  type AgentSessionView,
+  type JupiterShadowQuoteView,
+  type MarketObservationView,
 } from "@silfable/contracts";
 
 import type { SecretName } from "../storage/keystore.js";
-import { callAiProvider, DEFAULT_AI_MODELS, type AiProviderTransport } from "./providers.js";
+import {
+  callAiProvider,
+  callAiShadowTradeProvider,
+  callAgentIntentProvider,
+  DEFAULT_AI_MODELS,
+  type AiProviderTransport,
+  type AiShadowTradeProviderTransport,
+  type AgentIntentProviderTransport,
+} from "./providers.js";
 
 type AiSecretStore = {
   getSecret(name: SecretName): Promise<string | null>;
@@ -26,11 +41,21 @@ export class AiDraftService {
   readonly #keystore: AiSecretStore;
   readonly #settings: AiSettingsStore;
   readonly #transport: AiProviderTransport;
+  readonly #tradeTransport: AiShadowTradeProviderTransport;
+  readonly #agentTransport: AgentIntentProviderTransport;
 
-  constructor(input: { keystore: AiSecretStore; settings: AiSettingsStore; transport?: AiProviderTransport }) {
+  constructor(input: {
+    keystore: AiSecretStore;
+    settings: AiSettingsStore;
+    transport?: AiProviderTransport;
+    tradeTransport?: AiShadowTradeProviderTransport;
+    agentTransport?: AgentIntentProviderTransport;
+  }) {
     this.#keystore = input.keystore;
     this.#settings = input.settings;
     this.#transport = input.transport ?? callAiProvider;
+    this.#tradeTransport = input.tradeTransport ?? callAiShadowTradeProvider;
+    this.#agentTransport = input.agentTransport ?? callAgentIntentProvider;
   }
 
   async listSettings(): Promise<AiProviderSetting[]> {
@@ -66,6 +91,42 @@ export class AiDraftService {
       await this.#transport({ provider, apiKey: key, model, prompt }),
     );
     return { model, intent };
+  }
+
+  async proposeShadowTrade(
+    providerInput: AiProvider,
+    objective: string,
+    quote: JupiterShadowQuoteView,
+  ): Promise<{ model: string; proposal: AiShadowTradeProposalV1 }> {
+    const provider = AiProviderSchema.parse(providerInput);
+    const key = await this.#keystore.getSecret(secretName(provider));
+    if (key === null) throw new Error(`${provider} is not configured`);
+    const model = readModel(this.#settings.getSetting(settingKey(provider))) ?? DEFAULT_AI_MODELS[provider];
+    const proposal = AiShadowTradeProposalV1Schema.parse(
+      await this.#tradeTransport({ provider, apiKey: key, model, objective, quote }),
+    );
+    return { model, proposal };
+  }
+
+  async proposeAgentIntent(input: {
+    provider: AiProvider;
+    session: AgentSessionView;
+    observation: MarketObservationView;
+    quote: JupiterShadowQuoteView;
+  }): Promise<{ model: string; proposal: AgentIntentProposalV1 }> {
+    const provider = AiProviderSchema.parse(input.provider);
+    const key = await this.#keystore.getSecret(secretName(provider));
+    if (key === null) throw new Error(`${provider} is not configured`);
+    const model = readModel(this.#settings.getSetting(settingKey(provider))) ?? DEFAULT_AI_MODELS[provider];
+    const proposal = AgentIntentProposalV1Schema.parse(await this.#agentTransport({
+      provider,
+      apiKey: key,
+      model,
+      session: input.session,
+      observation: input.observation,
+      quote: input.quote,
+    }));
+    return { model, proposal };
   }
 
   async #setting(provider: AiProvider): Promise<AiProviderSetting> {

@@ -37,11 +37,28 @@ export const IPC_CHANNELS = {
   aiSaveProvider: "ai:save-provider",
   aiDeleteProvider: "ai:delete-provider",
   aiDraftDca: "ai:draft-dca",
+  aiProposeShadowTrade: "ai:propose-shadow-trade",
+  aiListShadowTrades: "ai:list-shadow-trades",
+  aiApproveShadowTrade: "ai:approve-shadow-trade",
+  aiRejectShadowTrade: "ai:reject-shadow-trade",
   jupiterGetSettings: "jupiter:get-settings",
   jupiterSaveKey: "jupiter:save-key",
   jupiterDeleteKey: "jupiter:delete-key",
   jupiterShadowQuote: "jupiter:shadow-quote",
   jupiterShadowList: "jupiter:list-shadow-quotes",
+  marketCreateObservation: "market:create-observation",
+  marketListObservations: "market:list-observations",
+  marketCreateWatch: "market:create-watch",
+  marketPauseWatch: "market:pause-watch",
+  marketListWatches: "market:list-watches",
+  agentCreateSession: "agent:create-session",
+  agentHaltSession: "agent:halt-session",
+  agentEvaluateObservation: "agent:evaluate-observation",
+  agentListSessions: "agent:list-sessions",
+  agentApproveIntent: "agent:approve-intent",
+  agentRejectIntent: "agent:reject-intent",
+  agentSimulateDevnetIntent: "agent:simulate-devnet-intent",
+  agentListDevnetSimulations: "agent:list-devnet-simulations",
   updateGetStatus: "update:get-status",
   updateCheck: "update:check",
   updateOpenReview: "update:open-review",
@@ -994,6 +1011,117 @@ export type AiProviderMutationResponse = z.infer<typeof AiProviderMutationRespon
 export type AiDraftDcaRequest = z.infer<typeof AiDraftDcaRequestSchema>;
 export type AiDraftDcaResponse = z.infer<typeof AiDraftDcaResponseSchema>;
 
+export const AiShadowTradeProposalV1Schema = z.object({
+  schemaVersion: z.literal(1),
+  intentType: z.literal("shadow-trade-proposal"),
+  quoteId: z.string().uuid(),
+  action: z.enum(["execute-quoted-swap", "hold"]),
+  direction: z.enum(["sol-to-usdc", "usdc-to-sol"]),
+  inAmount: AtomicAmountSchema.refine((value) => BigInt(value) > 0n),
+  confidenceBps: BasisPointsSchema,
+  rationale: z.string().min(1).max(600),
+  riskFlags: z.array(z.string().min(1).max(120)).max(8),
+}).strict();
+
+export const AiShadowTradeEvaluationDenialCodeSchema = z.enum([
+  "quote-not-allowed",
+  "quote-expired",
+  "proposal-quote-mismatch",
+  "transaction-returned",
+]);
+
+export const AiShadowTradeEvaluationReceiptSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.string().uuid(),
+  quoteId: z.string().uuid(),
+  proposalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  outcome: z.enum(["hold", "would-execute", "blocked"]),
+  denialCodes: z.array(AiShadowTradeEvaluationDenialCodeSchema),
+  observedAt: z.string().datetime(),
+  evaluatedAt: z.string().datetime(),
+  signingAttempted: z.literal(false),
+  executionAttempted: z.literal(false),
+  persistedLocally: z.literal(true),
+});
+
+export const AiProposeShadowTradeRequestSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  provider: AiProviderSchema,
+  quoteId: z.string().uuid(),
+  objective: z.string().trim().min(10).max(2_000),
+  acknowledgedExternalProcessing: z.literal(true),
+  acknowledgedQuoteOnly: z.literal(true),
+}).strict();
+
+export const AiProposeShadowTradeResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  provider: AiProviderSchema,
+  model: z.string().min(1).max(128),
+  quote: z.lazy(() => JupiterShadowQuoteViewSchema),
+  proposal: AiShadowTradeProposalV1Schema,
+  receipt: AiShadowTradeEvaluationReceiptSchema,
+});
+
+export const AiShadowTradeApprovalSchema = z.object({
+  state: z.enum(["not-actionable", "pending", "approved", "rejected", "expired"]),
+  expiresAt: z.string().datetime().nullable(),
+  decidedAt: z.string().datetime().nullable(),
+  executionEnabled: z.literal(false),
+});
+
+export const AiShadowTradeEvaluationViewSchema = z.object({
+  schemaVersion: z.literal(1),
+  provider: AiProviderSchema,
+  model: z.string().min(1).max(128),
+  objective: z.string().min(10).max(2_000),
+  quote: z.lazy(() => JupiterShadowQuoteViewSchema),
+  proposal: AiShadowTradeProposalV1Schema,
+  receipt: AiShadowTradeEvaluationReceiptSchema,
+  approval: AiShadowTradeApprovalSchema,
+});
+
+export const AiShadowTradeListResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  evaluations: z.array(AiShadowTradeEvaluationViewSchema).max(20),
+});
+
+const AiShadowTradeDecisionBaseSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  evaluationId: z.string().uuid(),
+  expectedProposalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+});
+
+export const AiApproveShadowTradeRequestSchema = AiShadowTradeDecisionBaseSchema.extend({
+  acknowledgedIntentOnly: z.literal(true),
+  acknowledgedFreshQuoteRequired: z.literal(true),
+  acknowledgedNoExecution: z.literal(true),
+}).strict();
+
+export const AiRejectShadowTradeRequestSchema = AiShadowTradeDecisionBaseSchema.extend({
+  acknowledgedRejectionOrRevocation: z.literal(true),
+}).strict();
+
+export const AiShadowTradeMutationResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  evaluation: AiShadowTradeEvaluationViewSchema,
+});
+
+export type AiShadowTradeProposalV1 = z.infer<typeof AiShadowTradeProposalV1Schema>;
+export type AiShadowTradeEvaluationDenialCode = z.infer<typeof AiShadowTradeEvaluationDenialCodeSchema>;
+export type AiShadowTradeEvaluationReceipt = z.infer<typeof AiShadowTradeEvaluationReceiptSchema>;
+export type AiProposeShadowTradeRequest = z.infer<typeof AiProposeShadowTradeRequestSchema>;
+export type AiProposeShadowTradeResponse = z.infer<typeof AiProposeShadowTradeResponseSchema>;
+export type AiShadowTradeApproval = z.infer<typeof AiShadowTradeApprovalSchema>;
+export type AiShadowTradeEvaluationView = z.infer<typeof AiShadowTradeEvaluationViewSchema>;
+export type AiShadowTradeListResponse = z.infer<typeof AiShadowTradeListResponseSchema>;
+export type AiApproveShadowTradeRequest = z.infer<typeof AiApproveShadowTradeRequestSchema>;
+export type AiRejectShadowTradeRequest = z.infer<typeof AiRejectShadowTradeRequestSchema>;
+export type AiShadowTradeMutationResponse = z.infer<typeof AiShadowTradeMutationResponseSchema>;
+
 export const JupiterSettingsResponseSchema = z.object({
   schemaVersion: z.literal(1),
   configured: z.boolean(),
@@ -1080,6 +1208,364 @@ export type JupiterShadowDenialCode = z.infer<typeof JupiterShadowDenialCodeSche
 export type JupiterShadowQuoteView = z.infer<typeof JupiterShadowQuoteViewSchema>;
 export type JupiterShadowQuoteResponse = z.infer<typeof JupiterShadowQuoteResponseSchema>;
 export type JupiterShadowListResponse = z.infer<typeof JupiterShadowListResponseSchema>;
+
+export const MarketObservationViewSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.string().uuid(),
+  profile: z.literal("mainnet-shadow"),
+  pair: z.literal("SOL/USDC"),
+  primaryQuoteId: z.string().uuid(),
+  market: z.object({
+    priceMicros: AtomicAmountSchema.refine((value) => BigInt(value) > 0n),
+    priceImpactBps: BasisPointsSchema,
+    feeBps: BasisPointsSchema,
+    routeCount: z.number().int().min(1).max(16),
+    liquidityProxy: z.enum(["healthy", "caution", "thin"]),
+    volatility: z.object({
+      status: z.enum(["available", "insufficient-data"]),
+      sampleCount: z.number().int().min(1).max(20),
+      windowSeconds: z.number().int().min(0).max(86_400),
+      rangeBps: BasisPointsSchema.nullable(),
+    }),
+  }),
+  walletContext: z.object({
+    status: z.literal("unavailable"),
+    reason: z.literal("mainnet-wallet-not-configured"),
+  }),
+  provenance: z.object({
+    provider: z.literal("jupiter-swap-v2"),
+    sourceQuoteIds: z.array(z.string().uuid()).min(1).max(20),
+    sourceSlot: z.null(),
+    sourceBlock: z.null(),
+    observedAt: z.string().datetime(),
+    capturedAt: z.string().datetime(),
+    freshnessBudgetSeconds: z.literal(10),
+    expiresAt: z.string().datetime(),
+  }),
+  freshnessStatus: z.enum(["fresh", "stale"]),
+  observationDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  modelCallsAttempted: z.literal(false),
+  signingAttempted: z.literal(false),
+  executionAttempted: z.literal(false),
+}).strict();
+
+export const MarketCreateObservationRequestSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  quoteId: z.string().uuid(),
+  acknowledgedObservationOnly: z.literal(true),
+}).strict();
+
+export const MarketCreateObservationResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  observation: MarketObservationViewSchema,
+});
+
+export const MarketObservationListResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  observations: z.array(MarketObservationViewSchema).max(20),
+});
+
+export type MarketObservationView = z.infer<typeof MarketObservationViewSchema>;
+export type MarketCreateObservationRequest = z.infer<typeof MarketCreateObservationRequestSchema>;
+export type MarketCreateObservationResponse = z.infer<typeof MarketCreateObservationResponseSchema>;
+export type MarketObservationListResponse = z.infer<typeof MarketObservationListResponseSchema>;
+
+export const MarketWatchViewSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.string().uuid(),
+  state: z.enum(["active", "triggered", "paused"]),
+  direction: z.enum(["sol-to-usdc", "usdc-to-sol"]),
+  condition: z.enum(["price-at-or-below", "price-at-or-above"]),
+  thresholdPriceMicros: AtomicAmountSchema.refine((value) => BigInt(value) > 0n),
+  maxPriceImpactBps: BasisPointsSchema,
+  intervalSeconds: z.number().int().min(60).max(3_600),
+  fixedProbeAmountAtomic: AtomicAmountSchema.refine((value) => BigInt(value) > 0n),
+  nextCheckAt: z.string().datetime(),
+  lastCheckedAt: z.string().datetime().nullable(),
+  triggeredAt: z.string().datetime().nullable(),
+  pausedAt: z.string().datetime().nullable(),
+  lastObservationId: z.string().uuid().nullable(),
+  consecutiveFailures: z.number().int().min(0).max(5),
+  modelCallsAttempted: z.literal(false),
+  executionEnabled: z.literal(false),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+}).strict();
+
+export const MarketWakeReceiptViewSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.string().uuid(),
+  watchId: z.string().uuid(),
+  observationId: z.string().uuid().nullable(),
+  outcome: z.enum(["waiting", "triggered", "failed"]),
+  observedPriceMicros: AtomicAmountSchema.nullable(),
+  priceImpactBps: BasisPointsSchema.nullable(),
+  failureCode: z.enum(["quote-unavailable", "observation-rejected", "scheduler-stopped"]).nullable(),
+  evaluatedAt: z.string().datetime(),
+  modelCallsAttempted: z.literal(false),
+  signingAttempted: z.literal(false),
+  executionAttempted: z.literal(false),
+}).strict();
+
+export const MarketCreateWatchRequestSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  direction: z.enum(["sol-to-usdc", "usdc-to-sol"]),
+  condition: z.enum(["price-at-or-below", "price-at-or-above"]),
+  thresholdPriceMicros: AtomicAmountSchema.refine((value) => BigInt(value) > 0n),
+  maxPriceImpactBps: BasisPointsSchema,
+  intervalSeconds: z.number().int().min(60).max(3_600),
+  acknowledgedBackgroundMarketData: z.literal(true),
+  acknowledgedZeroAiCallsWhileSleeping: z.literal(true),
+  acknowledgedNoExecution: z.literal(true),
+}).strict();
+
+export const MarketPauseWatchRequestSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  watchId: z.string().uuid(),
+  acknowledgedImmediatePause: z.literal(true),
+}).strict();
+
+export const MarketWatchMutationResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  watch: MarketWatchViewSchema,
+});
+
+export const MarketWatchListResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  watches: z.array(MarketWatchViewSchema).max(20),
+  wakeReceipts: z.array(MarketWakeReceiptViewSchema).max(20),
+});
+
+export type MarketWatchView = z.infer<typeof MarketWatchViewSchema>;
+export type MarketWakeReceiptView = z.infer<typeof MarketWakeReceiptViewSchema>;
+export type MarketCreateWatchRequest = z.infer<typeof MarketCreateWatchRequestSchema>;
+export type MarketPauseWatchRequest = z.infer<typeof MarketPauseWatchRequestSchema>;
+export type MarketWatchMutationResponse = z.infer<typeof MarketWatchMutationResponseSchema>;
+export type MarketWatchListResponse = z.infer<typeof MarketWatchListResponseSchema>;
+
+export const AgentSessionViewSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.string().uuid(),
+  state: z.enum(["active", "halted", "expired"]),
+  provider: AiProviderSchema,
+  objective: z.string().trim().min(10).max(2_000),
+  venue: z.literal("jupiter-swap-v2"),
+  maxActionNotionalUsdcMicros: AtomicAmountSchema.refine((value) => BigInt(value) > 0n),
+  maxPriceImpactBps: BasisPointsSchema,
+  maxVolatilityBps: BasisPointsSchema,
+  deadlineAt: z.string().datetime(),
+  haltedAt: z.string().datetime().nullable(),
+  haltReason: z.enum(["operator", "ai-halt", "deadline", "policy-denial"]).nullable(),
+  executionEnabled: z.literal(false),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+}).strict();
+
+export const AgentIntentProposalV1Schema = z.object({
+  schemaVersion: z.literal(1),
+  intentType: z.literal("restricted-agent-intent"),
+  sessionId: z.string().uuid(),
+  observationId: z.string().uuid(),
+  quoteId: z.string().uuid(),
+  action: z.enum(["buy-sol", "sell-sol", "hold", "halt"]),
+  notionalUsdcMicros: AtomicAmountSchema,
+  confidenceBps: BasisPointsSchema,
+  rationale: z.string().min(1).max(600),
+  riskFlags: z.array(z.string().min(1).max(120)).max(8),
+}).strict();
+
+export const AgentIntentDenialCodeSchema = z.enum([
+  "session-not-active",
+  "session-expired",
+  "observation-stale",
+  "observation-quote-mismatch",
+  "quote-not-allowed",
+  "quote-expired",
+  "transaction-returned",
+  "proposal-binding-mismatch",
+  "action-direction-mismatch",
+  "notional-mismatch",
+  "capital-cap-exceeded",
+  "price-impact-exceeded",
+  "volatility-unavailable",
+  "volatility-exceeded",
+]);
+
+export const AgentIntentReceiptSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  observationId: z.string().uuid(),
+  proposalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  outcome: z.enum(["pending-approval", "hold", "halted", "blocked"]),
+  denialCodes: z.array(AgentIntentDenialCodeSchema),
+  evaluatedAt: z.string().datetime(),
+  modelCallsAttempted: z.literal(true),
+  signingAttempted: z.literal(false),
+  executionAttempted: z.literal(false),
+  persistedLocally: z.literal(true),
+});
+
+export const AgentIntentApprovalSchema = z.object({
+  state: z.enum(["not-actionable", "pending", "approved", "rejected", "expired"]),
+  expiresAt: z.string().datetime().nullable(),
+  decidedAt: z.string().datetime().nullable(),
+  executionEnabled: z.literal(false),
+});
+
+export const AgentIntentEvaluationViewSchema = z.object({
+  schemaVersion: z.literal(1),
+  provider: AiProviderSchema,
+  model: z.string().min(1).max(128),
+  session: AgentSessionViewSchema,
+  observation: MarketObservationViewSchema,
+  quote: JupiterShadowQuoteViewSchema,
+  proposal: AgentIntentProposalV1Schema,
+  receipt: AgentIntentReceiptSchema,
+  approval: AgentIntentApprovalSchema,
+}).strict();
+
+export const AgentCreateSessionRequestSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  provider: AiProviderSchema,
+  objective: z.string().trim().min(10).max(2_000),
+  maxActionNotionalUsdcMicros: AtomicAmountSchema.refine((value) => BigInt(value) > 0n),
+  maxPriceImpactBps: BasisPointsSchema,
+  maxVolatilityBps: BasisPointsSchema,
+  deadlineAt: z.string().datetime(),
+  acknowledgedExternalAiProcessing: z.literal(true),
+  acknowledgedPerActionApproval: z.literal(true),
+  acknowledgedNoExecution: z.literal(true),
+}).strict();
+
+export const AgentHaltSessionRequestSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  acknowledgedImmediateHalt: z.literal(true),
+}).strict();
+
+export const AgentEvaluateObservationRequestSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  observationId: z.string().uuid(),
+  acknowledgedExternalAiProcessing: z.literal(true),
+  acknowledgedIntentOnly: z.literal(true),
+}).strict();
+
+const AgentIntentDecisionBaseSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  evaluationId: z.string().uuid(),
+  expectedProposalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+});
+
+export const AgentApproveIntentRequestSchema = AgentIntentDecisionBaseSchema.extend({
+  acknowledgedIntentOnly: z.literal(true),
+  acknowledgedFreshQuoteRequired: z.literal(true),
+  acknowledgedNoExecution: z.literal(true),
+}).strict();
+
+export const AgentRejectIntentRequestSchema = AgentIntentDecisionBaseSchema.extend({
+  acknowledgedRejectionOrRevocation: z.literal(true),
+}).strict();
+
+export const AgentSessionMutationResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  session: AgentSessionViewSchema,
+});
+
+export const AgentEvaluateObservationResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  evaluation: AgentIntentEvaluationViewSchema,
+});
+
+export const AgentIntentMutationResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  evaluation: AgentIntentEvaluationViewSchema,
+});
+
+export const AgentSessionListResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  sessions: z.array(AgentSessionViewSchema).max(20),
+  evaluations: z.array(AgentIntentEvaluationViewSchema).max(20),
+});
+
+export type AgentSessionView = z.infer<typeof AgentSessionViewSchema>;
+export type AgentIntentProposalV1 = z.infer<typeof AgentIntentProposalV1Schema>;
+export type AgentIntentDenialCode = z.infer<typeof AgentIntentDenialCodeSchema>;
+export type AgentIntentReceipt = z.infer<typeof AgentIntentReceiptSchema>;
+export type AgentIntentApproval = z.infer<typeof AgentIntentApprovalSchema>;
+export type AgentIntentEvaluationView = z.infer<typeof AgentIntentEvaluationViewSchema>;
+export type AgentCreateSessionRequest = z.infer<typeof AgentCreateSessionRequestSchema>;
+export type AgentHaltSessionRequest = z.infer<typeof AgentHaltSessionRequestSchema>;
+export type AgentEvaluateObservationRequest = z.infer<typeof AgentEvaluateObservationRequestSchema>;
+export type AgentApproveIntentRequest = z.infer<typeof AgentApproveIntentRequestSchema>;
+export type AgentRejectIntentRequest = z.infer<typeof AgentRejectIntentRequestSchema>;
+export type AgentSessionMutationResponse = z.infer<typeof AgentSessionMutationResponseSchema>;
+export type AgentEvaluateObservationResponse = z.infer<typeof AgentEvaluateObservationResponseSchema>;
+export type AgentIntentMutationResponse = z.infer<typeof AgentIntentMutationResponseSchema>;
+export type AgentSessionListResponse = z.infer<typeof AgentSessionListResponseSchema>;
+
+export const AgentDevnetSimulationViewSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.string().uuid(),
+  evaluationId: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  agentAction: z.enum(["buy-sol", "sell-sol"]),
+  proposalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  profile: z.literal("devnet-simulation"),
+  proofKind: z.literal("spl-transfer-checked-simulation-v1"),
+  outcome: z.enum(["simulated", "failed"]),
+  fixtureManifestDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  messageHash: z.string().regex(/^[a-f0-9]{64}$/u).nullable(),
+  programIds: z.array(z.string().min(32).max(64)).max(4),
+  unitsConsumed: AtomicAmountSchema.nullable(),
+  feeLamports: AtomicAmountSchema.nullable(),
+  failureCode: z.enum(["provenance-denied", "simulation-failed", "fee-exceeded", "binding-changed"]).nullable(),
+  economicValueMapping: z.literal("none"),
+  marketSwapPerformed: z.literal(false),
+  signingAttempted: z.literal(false),
+  broadcastAttempted: z.literal(false),
+  executionAttempted: z.literal(false),
+  simulatedAt: z.string().datetime(),
+}).strict();
+
+export const AgentSimulateDevnetIntentRequestSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  evaluationId: z.string().uuid(),
+  expectedProposalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  acknowledgedDevnetFixtureProofOnly: z.literal(true),
+  acknowledgedNoEconomicValueMapping: z.literal(true),
+  acknowledgedNoSigningOrBroadcast: z.literal(true),
+}).strict();
+
+export const AgentSimulateDevnetIntentResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  simulation: AgentDevnetSimulationViewSchema,
+});
+
+export const AgentDevnetSimulationListResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  simulations: z.array(AgentDevnetSimulationViewSchema).max(20),
+});
+
+export type AgentDevnetSimulationView = z.infer<typeof AgentDevnetSimulationViewSchema>;
+export type AgentSimulateDevnetIntentRequest = z.infer<typeof AgentSimulateDevnetIntentRequestSchema>;
+export type AgentSimulateDevnetIntentResponse = z.infer<typeof AgentSimulateDevnetIntentResponseSchema>;
+export type AgentDevnetSimulationListResponse = z.infer<typeof AgentDevnetSimulationListResponseSchema>;
 
 export const JupiterOrderQuoteSchema = z.object({
   mode: z.string().min(1),

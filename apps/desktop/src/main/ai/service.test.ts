@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { SecretName } from "../storage/keystore.js";
+import { JupiterShadowQuoteViewSchema } from "@silfable/contracts";
 import { AiDraftService } from "./service.js";
 
 class MemorySecrets {
@@ -74,6 +75,36 @@ test("invalid provider output is rejected before it reaches IPC", async () => {
   await assert.rejects(() => service.draftDca("anthropic", "Create a conservative DCA plan"));
 });
 
+test("shadow trade proposals receive only the selected sanitized quote", async () => {
+  const keystore = new MemorySecrets();
+  const settings = new MemorySettings();
+  const quote = shadowQuote();
+  let receivedQuoteId = "";
+  const service = new AiDraftService({
+    keystore,
+    settings,
+    tradeTransport: async (request) => {
+      receivedQuoteId = request.quote.id;
+      return {
+        schemaVersion: 1,
+        intentType: "shadow-trade-proposal",
+        quoteId: request.quote.id,
+        action: "hold",
+        direction: request.quote.direction,
+        inAmount: request.quote.inAmount,
+        confidenceBps: 4_000,
+        rationale: "Wait for a stronger observation.",
+        riskFlags: ["Quote expires quickly"],
+      };
+    },
+  });
+  await service.saveProvider("openai", "sk-private-test-value", "gpt-5.6-luna");
+
+  const result = await service.proposeShadowTrade("openai", "Protect capital unless the route is compelling", quote);
+  assert.equal(receivedQuoteId, quote.id);
+  assert.equal(result.proposal.action, "hold");
+});
+
 function intent() {
   return {
     schemaVersion: 1 as const,
@@ -88,4 +119,30 @@ function intent() {
     rationale: "A conservative draft for human review.",
     assumptions: ["Devnet simulation only"],
   };
+}
+
+function shadowQuote() {
+  return JupiterShadowQuoteViewSchema.parse({
+    schemaVersion: 1,
+    id: "1b74b2c6-75d1-4fcb-8b37-bff4a95534a8",
+    profile: "mainnet-shadow",
+    direction: "sol-to-usdc",
+    inputMint: "So11111111111111111111111111111111111111112",
+    outputMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    inAmount: "100000000",
+    outAmount: "15000000",
+    otherAmountThreshold: "14900000",
+    slippageBps: 100,
+    priceImpactBps: 20,
+    feeBps: 10,
+    router: "metis",
+    routeLabels: ["Orca"],
+    allowed: true,
+    denialCodes: [],
+    transactionReturned: false,
+    signingAttempted: false,
+    broadcastAttempted: false,
+    observedAt: "2026-07-18T00:00:00.000Z",
+    expiresAt: "2026-07-18T00:00:10.000Z",
+  });
 }

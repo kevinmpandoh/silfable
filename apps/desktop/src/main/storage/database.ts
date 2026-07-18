@@ -66,6 +66,120 @@ export type JupiterShadowQuoteStorageRecord = {
   createdAt: string;
 };
 
+export type AiShadowTradeEvaluationStorageRecord = {
+  id: string;
+  quoteId: string;
+  proposalDigest: string;
+  outcome: "hold" | "would-execute" | "blocked";
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  signingAttempted: false;
+  executionAttempted: false;
+  evaluatedAt: string;
+  approvalState: "not-actionable" | "pending" | "approved" | "rejected" | "expired";
+  approvalExpiresAt: string | null;
+  decidedAt: string | null;
+};
+
+export type MarketObservationStorageRecord = {
+  id: string;
+  sourceQuoteId: string;
+  observationDigest: string;
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  observedAt: string;
+  capturedAt: string;
+  expiresAt: string;
+  modelCallsAttempted: false;
+  signingAttempted: false;
+  executionAttempted: false;
+};
+
+export type MarketWatchStorageRecord = {
+  id: string;
+  state: "active" | "triggered" | "paused";
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  nextCheckAt: string;
+  lastCheckedAt: string | null;
+  triggeredAt: string | null;
+  pausedAt: string | null;
+  lastObservationId: string | null;
+  consecutiveFailures: number;
+  modelCallsAttempted: false;
+  executionEnabled: false;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MarketWakeReceiptStorageRecord = {
+  id: string;
+  watchId: string;
+  observationId: string | null;
+  outcome: "waiting" | "triggered" | "failed";
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  evaluatedAt: string;
+  modelCallsAttempted: false;
+  signingAttempted: false;
+  executionAttempted: false;
+};
+
+export type AgentSessionStorageRecord = {
+  id: string;
+  state: "active" | "halted" | "expired";
+  provider: "openai" | "anthropic";
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  deadlineAt: string;
+  haltedAt: string | null;
+  haltReason: "operator" | "ai-halt" | "deadline" | "policy-denial" | null;
+  executionEnabled: false;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AgentIntentEvaluationStorageRecord = {
+  id: string;
+  sessionId: string;
+  observationId: string;
+  quoteId: string;
+  proposalDigest: string;
+  outcome: "pending-approval" | "hold" | "halted" | "blocked";
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  approvalState: "not-actionable" | "pending" | "approved" | "rejected" | "expired";
+  approvalExpiresAt: string | null;
+  decidedAt: string | null;
+  modelCallsAttempted: true;
+  signingAttempted: false;
+  executionAttempted: false;
+  evaluatedAt: string;
+};
+
+export type AgentDevnetSimulationStorageRecord = {
+  id: string;
+  evaluationId: string;
+  sessionId: string;
+  proposalDigest: string;
+  outcome: "simulated" | "failed";
+  fixtureManifestDigest: string;
+  messageHash: string | null;
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  signingAttempted: false;
+  broadcastAttempted: false;
+  executionAttempted: false;
+  simulatedAt: string;
+};
+
 export type CrashReportStorageRecord = {
   id: string;
   encryptedPayload: string;
@@ -856,6 +970,316 @@ export class RuntimeDatabase {
     }));
   }
 
+  insertMarketObservation(record: MarketObservationStorageRecord): void {
+    this.#database.prepare(
+      `INSERT INTO market_observations
+        (id, source_quote_id, observation_digest, encrypted_payload, payload_nonce, key_id,
+         observed_at, captured_at, expires_at, model_calls_attempted, signing_attempted, execution_attempted)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0)`,
+    ).run(
+      record.id,
+      record.sourceQuoteId,
+      record.observationDigest,
+      record.encryptedPayload,
+      record.payloadNonce,
+      record.keyId,
+      record.observedAt,
+      record.capturedAt,
+      record.expiresAt,
+    );
+  }
+
+  listMarketObservations(limit = 20): MarketObservationStorageRecord[] {
+    return this.#database.prepare(
+      "SELECT * FROM market_observations ORDER BY captured_at DESC LIMIT ?",
+    ).all(limit).map(toMarketObservationStorageRecord);
+  }
+
+  insertMarketWatch(record: MarketWatchStorageRecord): void {
+    this.#database.prepare(
+      `INSERT INTO market_watches
+        (id, state, encrypted_payload, payload_nonce, key_id, next_check_at, last_checked_at,
+         triggered_at, paused_at, last_observation_id, consecutive_failures,
+         model_calls_attempted, execution_enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`,
+    ).run(
+      record.id, record.state, record.encryptedPayload, record.payloadNonce, record.keyId,
+      record.nextCheckAt, record.lastCheckedAt, record.triggeredAt, record.pausedAt,
+      record.lastObservationId, record.consecutiveFailures, record.createdAt, record.updatedAt,
+    );
+  }
+
+  getMarketWatch(id: string): MarketWatchStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM market_watches WHERE id = ?").get(id);
+    return row === undefined ? null : toMarketWatchStorageRecord(row);
+  }
+
+  getDueMarketWatch(now: string): MarketWatchStorageRecord | null {
+    const row = this.#database.prepare(
+      "SELECT * FROM market_watches WHERE state = 'active' AND next_check_at <= ? ORDER BY next_check_at LIMIT 1",
+    ).get(now);
+    return row === undefined ? null : toMarketWatchStorageRecord(row);
+  }
+
+  listMarketWatches(limit = 20): MarketWatchStorageRecord[] {
+    return this.#database.prepare(
+      "SELECT * FROM market_watches ORDER BY updated_at DESC LIMIT ?",
+    ).all(limit).map(toMarketWatchStorageRecord);
+  }
+
+  pauseMarketWatch(id: string, pausedAt: string): MarketWatchStorageRecord {
+    const result = this.#database.prepare(
+      `UPDATE market_watches SET state = 'paused', paused_at = ?, updated_at = ?
+       WHERE id = ? AND state = 'active'`,
+    ).run(pausedAt, pausedAt, id);
+    if (Number(result.changes) !== 1) throw new Error("Active market watch does not exist");
+    const record = this.getMarketWatch(id);
+    if (record === null) throw new Error("Market watch does not exist");
+    return record;
+  }
+
+  recordMarketWake(input: {
+    watchId: string;
+    state: "active" | "triggered" | "paused";
+    nextCheckAt: string;
+    checkedAt: string;
+    triggeredAt: string | null;
+    pausedAt: string | null;
+    observationId: string | null;
+    consecutiveFailures: number;
+    receipt: MarketWakeReceiptStorageRecord;
+  }): MarketWatchStorageRecord {
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      const result = this.#database.prepare(
+        `UPDATE market_watches SET state = ?, next_check_at = ?, last_checked_at = ?,
+         triggered_at = ?, paused_at = ?, last_observation_id = ?, consecutive_failures = ?, updated_at = ?
+         WHERE id = ? AND state = 'active'`,
+      ).run(
+        input.state, input.nextCheckAt, input.checkedAt, input.triggeredAt, input.pausedAt,
+        input.observationId, input.consecutiveFailures, input.checkedAt, input.watchId,
+      );
+      if (Number(result.changes) !== 1) throw new Error("Market watch changed during evaluation");
+      this.#database.prepare(
+        `INSERT INTO market_wake_receipts
+          (id, watch_id, observation_id, outcome, encrypted_payload, payload_nonce, key_id,
+           evaluated_at, model_calls_attempted, signing_attempted, execution_attempted)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0)`,
+      ).run(
+        input.receipt.id, input.receipt.watchId, input.receipt.observationId, input.receipt.outcome,
+        input.receipt.encryptedPayload, input.receipt.payloadNonce, input.receipt.keyId,
+        input.receipt.evaluatedAt,
+      );
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
+    const record = this.getMarketWatch(input.watchId);
+    if (record === null) throw new Error("Market watch does not exist");
+    return record;
+  }
+
+  listMarketWakeReceipts(limit = 20): MarketWakeReceiptStorageRecord[] {
+    return this.#database.prepare(
+      "SELECT * FROM market_wake_receipts ORDER BY evaluated_at DESC LIMIT ?",
+    ).all(limit).map(toMarketWakeReceiptStorageRecord);
+  }
+
+  insertAgentSession(record: AgentSessionStorageRecord): void {
+    this.#database.prepare(
+      `INSERT INTO agent_sessions
+        (id, state, provider, encrypted_payload, payload_nonce, key_id, deadline_at,
+         halted_at, halt_reason, execution_enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+    ).run(
+      record.id, record.state, record.provider, record.encryptedPayload, record.payloadNonce,
+      record.keyId, record.deadlineAt, record.haltedAt, record.haltReason, record.createdAt, record.updatedAt,
+    );
+  }
+
+  expireAgentSessions(now: string): number {
+    const result = this.#database.prepare(
+      `UPDATE agent_sessions SET state = 'expired', halted_at = ?, halt_reason = 'deadline', updated_at = ?
+       WHERE state = 'active' AND deadline_at <= ?`,
+    ).run(now, now, now);
+    return Number(result.changes);
+  }
+
+  getAgentSession(id: string): AgentSessionStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM agent_sessions WHERE id = ?").get(id);
+    return row === undefined ? null : toAgentSessionStorageRecord(row);
+  }
+
+  listAgentSessions(limit = 20): AgentSessionStorageRecord[] {
+    return this.#database.prepare("SELECT * FROM agent_sessions ORDER BY updated_at DESC LIMIT ?")
+      .all(limit).map(toAgentSessionStorageRecord);
+  }
+
+  haltAgentSession(id: string, reason: AgentSessionStorageRecord["haltReason"], haltedAt: string): AgentSessionStorageRecord {
+    const result = this.#database.prepare(
+      `UPDATE agent_sessions SET state = 'halted', halted_at = ?, halt_reason = ?, updated_at = ?
+       WHERE id = ? AND state = 'active'`,
+    ).run(haltedAt, reason, haltedAt, id);
+    if (Number(result.changes) !== 1) throw new Error("Active agent session does not exist");
+    const record = this.getAgentSession(id);
+    if (record === null) throw new Error("Agent session does not exist");
+    return record;
+  }
+
+  insertAgentIntentEvaluation(record: AgentIntentEvaluationStorageRecord): void {
+    this.#database.prepare(
+      `INSERT INTO agent_intent_evaluations
+        (id, session_id, observation_id, quote_id, proposal_digest, outcome,
+         encrypted_payload, payload_nonce, key_id, approval_state, approval_expires_at,
+         decided_at, model_calls_attempted, signing_attempted, execution_attempted, evaluated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0, ?)`,
+    ).run(
+      record.id, record.sessionId, record.observationId, record.quoteId, record.proposalDigest,
+      record.outcome, record.encryptedPayload, record.payloadNonce, record.keyId,
+      record.approvalState, record.approvalExpiresAt, record.decidedAt, record.evaluatedAt,
+    );
+  }
+
+  expireAgentIntentApprovals(now: string): number {
+    const result = this.#database.prepare(
+      `UPDATE agent_intent_evaluations SET approval_state = 'expired', decided_at = ?
+       WHERE approval_state IN ('pending', 'approved') AND approval_expires_at <= ?`,
+    ).run(now, now);
+    return Number(result.changes);
+  }
+
+  getAgentIntentEvaluation(id: string): AgentIntentEvaluationStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM agent_intent_evaluations WHERE id = ?").get(id);
+    return row === undefined ? null : toAgentIntentEvaluationStorageRecord(row);
+  }
+
+  listAgentIntentEvaluations(limit = 20): AgentIntentEvaluationStorageRecord[] {
+    return this.#database.prepare("SELECT * FROM agent_intent_evaluations ORDER BY evaluated_at DESC LIMIT ?")
+      .all(limit).map(toAgentIntentEvaluationStorageRecord);
+  }
+
+  approveAgentIntent(input: { id: string; expectedProposalDigest: string; decidedAt: string }): AgentIntentEvaluationStorageRecord {
+    this.expireAgentIntentApprovals(input.decidedAt);
+    const result = this.#database.prepare(
+      `UPDATE agent_intent_evaluations SET approval_state = 'approved', decided_at = ?
+       WHERE id = ? AND proposal_digest = ? AND approval_state = 'pending' AND approval_expires_at > ?`,
+    ).run(input.decidedAt, input.id, input.expectedProposalDigest, input.decidedAt);
+    if (Number(result.changes) !== 1) throw new Error("Agent intent approval conflict or expiry");
+    const record = this.getAgentIntentEvaluation(input.id);
+    if (record === null) throw new Error("Agent intent evaluation does not exist");
+    return record;
+  }
+
+  rejectAgentIntent(input: { id: string; expectedProposalDigest: string; decidedAt: string }): AgentIntentEvaluationStorageRecord {
+    this.expireAgentIntentApprovals(input.decidedAt);
+    const result = this.#database.prepare(
+      `UPDATE agent_intent_evaluations SET approval_state = 'rejected', decided_at = ?
+       WHERE id = ? AND proposal_digest = ? AND approval_state IN ('pending', 'approved')`,
+    ).run(input.decidedAt, input.id, input.expectedProposalDigest);
+    if (Number(result.changes) !== 1) throw new Error("Agent intent rejection conflict or expiry");
+    const record = this.getAgentIntentEvaluation(input.id);
+    if (record === null) throw new Error("Agent intent evaluation does not exist");
+    return record;
+  }
+
+  insertAgentDevnetSimulation(record: AgentDevnetSimulationStorageRecord): void {
+    this.#database.prepare(
+      `INSERT INTO agent_devnet_simulations
+        (id, evaluation_id, session_id, proposal_digest, outcome, fixture_manifest_digest,
+         message_hash, encrypted_payload, payload_nonce, key_id, signing_attempted,
+         broadcast_attempted, execution_attempted, simulated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)`,
+    ).run(
+      record.id, record.evaluationId, record.sessionId, record.proposalDigest, record.outcome,
+      record.fixtureManifestDigest, record.messageHash, record.encryptedPayload, record.payloadNonce,
+      record.keyId, record.simulatedAt,
+    );
+  }
+
+  listAgentDevnetSimulations(limit = 20): AgentDevnetSimulationStorageRecord[] {
+    return this.#database.prepare("SELECT * FROM agent_devnet_simulations ORDER BY simulated_at DESC LIMIT ?")
+      .all(limit).map(toAgentDevnetSimulationStorageRecord);
+  }
+
+  getAgentDevnetSimulationByEvaluation(evaluationId: string): AgentDevnetSimulationStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM agent_devnet_simulations WHERE evaluation_id = ?").get(evaluationId);
+    return row === undefined ? null : toAgentDevnetSimulationStorageRecord(row);
+  }
+
+  insertAiShadowTradeEvaluation(record: AiShadowTradeEvaluationStorageRecord): void {
+    this.#database.prepare(
+      `INSERT INTO ai_shadow_trade_evaluations
+        (id, quote_id, proposal_digest, outcome, encrypted_payload, payload_nonce, key_id,
+         signing_attempted, execution_attempted, evaluated_at, approval_state, approval_expires_at, decided_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)`,
+    ).run(
+      record.id,
+      record.quoteId,
+      record.proposalDigest,
+      record.outcome,
+      record.encryptedPayload,
+      record.payloadNonce,
+      record.keyId,
+      record.evaluatedAt,
+      record.approvalState,
+      record.approvalExpiresAt,
+      record.decidedAt,
+    );
+  }
+
+  expireOpenAiShadowTradeApprovals(now: string): number {
+    const result = this.#database.prepare(
+      `UPDATE ai_shadow_trade_evaluations
+       SET approval_state = 'expired', decided_at = ?
+       WHERE approval_state IN ('pending', 'approved') AND approval_expires_at <= ?`,
+    ).run(now, now);
+    return Number(result.changes);
+  }
+
+  listAiShadowTradeEvaluations(limit = 20): AiShadowTradeEvaluationStorageRecord[] {
+    return this.#database.prepare(
+      "SELECT * FROM ai_shadow_trade_evaluations ORDER BY evaluated_at DESC LIMIT ?",
+    ).all(limit).map(toAiShadowTradeEvaluationStorageRecord);
+  }
+
+  getAiShadowTradeEvaluation(id: string): AiShadowTradeEvaluationStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM ai_shadow_trade_evaluations WHERE id = ?").get(id);
+    return row === undefined ? null : toAiShadowTradeEvaluationStorageRecord(row);
+  }
+
+  approveAiShadowTradeEvaluation(input: {
+    id: string;
+    expectedProposalDigest: string;
+    decidedAt: string;
+  }): AiShadowTradeEvaluationStorageRecord {
+    this.expireOpenAiShadowTradeApprovals(input.decidedAt);
+    const result = this.#database.prepare(
+      `UPDATE ai_shadow_trade_evaluations SET approval_state = 'approved', decided_at = ?
+       WHERE id = ? AND proposal_digest = ? AND approval_state = 'pending' AND approval_expires_at > ?`,
+    ).run(input.decidedAt, input.id, input.expectedProposalDigest, input.decidedAt);
+    if (Number(result.changes) !== 1) throw new Error("AI shadow approval conflict or expiry");
+    const record = this.getAiShadowTradeEvaluation(input.id);
+    if (record === null) throw new Error("AI shadow evaluation does not exist");
+    return record;
+  }
+
+  rejectAiShadowTradeEvaluation(input: {
+    id: string;
+    expectedProposalDigest: string;
+    decidedAt: string;
+  }): AiShadowTradeEvaluationStorageRecord {
+    this.expireOpenAiShadowTradeApprovals(input.decidedAt);
+    const result = this.#database.prepare(
+      `UPDATE ai_shadow_trade_evaluations SET approval_state = 'rejected', decided_at = ?
+       WHERE id = ? AND proposal_digest = ? AND approval_state IN ('pending', 'approved')`,
+    ).run(input.decidedAt, input.id, input.expectedProposalDigest);
+    if (Number(result.changes) !== 1) throw new Error("AI shadow rejection conflict or expiry");
+    const record = this.getAiShadowTradeEvaluation(input.id);
+    if (record === null) throw new Error("AI shadow evaluation does not exist");
+    return record;
+  }
+
   hasWallet(profileId: "devnet-simulation"): boolean {
     const row = this.#database
       .prepare("SELECT COUNT(*) AS count FROM wallet_metadata WHERE profile_id = ?")
@@ -1593,5 +2017,171 @@ function toGuardedSchedulerArmStorageRecord(row: unknown): GuardedSchedulerArmSt
     encryptedPayload: value.encrypted_payload, payloadNonce: value.payload_nonce, keyId: value.key_id,
     armedAt: value.armed_at, expiresAt: value.expires_at, consumedAt: value.consumed_at,
     revokedAt: value.revoked_at,
+  };
+}
+
+function toAiShadowTradeEvaluationStorageRecord(row: unknown): AiShadowTradeEvaluationStorageRecord {
+  const value = row as {
+    id: string;
+    quote_id: string;
+    proposal_digest: string;
+    outcome: AiShadowTradeEvaluationStorageRecord["outcome"];
+    encrypted_payload: string;
+    payload_nonce: string;
+    key_id: string;
+    signing_attempted: number;
+    execution_attempted: number;
+    evaluated_at: string;
+    approval_state: AiShadowTradeEvaluationStorageRecord["approvalState"];
+    approval_expires_at: string | null;
+    decided_at: string | null;
+  };
+  if (value.signing_attempted !== 0 || value.execution_attempted !== 0) {
+    throw new Error("AI shadow evaluation cannot contain execution evidence");
+  }
+  return {
+    id: value.id,
+    quoteId: value.quote_id,
+    proposalDigest: value.proposal_digest,
+    outcome: value.outcome,
+    encryptedPayload: value.encrypted_payload,
+    payloadNonce: value.payload_nonce,
+    keyId: value.key_id,
+    signingAttempted: false,
+    executionAttempted: false,
+    evaluatedAt: value.evaluated_at,
+    approvalState: value.approval_state,
+    approvalExpiresAt: value.approval_expires_at,
+    decidedAt: value.decided_at,
+  };
+}
+
+function toMarketObservationStorageRecord(row: unknown): MarketObservationStorageRecord {
+  const value = row as {
+    id: string;
+    source_quote_id: string;
+    observation_digest: string;
+    encrypted_payload: string;
+    payload_nonce: string;
+    key_id: string;
+    observed_at: string;
+    captured_at: string;
+    expires_at: string;
+    model_calls_attempted: number;
+    signing_attempted: number;
+    execution_attempted: number;
+  };
+  if (value.model_calls_attempted !== 0 || value.signing_attempted !== 0 || value.execution_attempted !== 0) {
+    throw new Error("Market observation cannot contain model or execution evidence");
+  }
+  return {
+    id: value.id,
+    sourceQuoteId: value.source_quote_id,
+    observationDigest: value.observation_digest,
+    encryptedPayload: value.encrypted_payload,
+    payloadNonce: value.payload_nonce,
+    keyId: value.key_id,
+    observedAt: value.observed_at,
+    capturedAt: value.captured_at,
+    expiresAt: value.expires_at,
+    modelCallsAttempted: false,
+    signingAttempted: false,
+    executionAttempted: false,
+  };
+}
+
+function toMarketWatchStorageRecord(row: unknown): MarketWatchStorageRecord {
+  const value = row as {
+    id: string; state: MarketWatchStorageRecord["state"]; encrypted_payload: string;
+    payload_nonce: string; key_id: string; next_check_at: string; last_checked_at: string | null;
+    triggered_at: string | null; paused_at: string | null; last_observation_id: string | null;
+    consecutive_failures: number; model_calls_attempted: number; execution_enabled: number;
+    created_at: string; updated_at: string;
+  };
+  if (value.model_calls_attempted !== 0 || value.execution_enabled !== 0) {
+    throw new Error("Market watch cannot enable AI or execution");
+  }
+  return {
+    id: value.id, state: value.state, encryptedPayload: value.encrypted_payload,
+    payloadNonce: value.payload_nonce, keyId: value.key_id, nextCheckAt: value.next_check_at,
+    lastCheckedAt: value.last_checked_at, triggeredAt: value.triggered_at, pausedAt: value.paused_at,
+    lastObservationId: value.last_observation_id, consecutiveFailures: value.consecutive_failures,
+    modelCallsAttempted: false, executionEnabled: false, createdAt: value.created_at,
+    updatedAt: value.updated_at,
+  };
+}
+
+function toMarketWakeReceiptStorageRecord(row: unknown): MarketWakeReceiptStorageRecord {
+  const value = row as {
+    id: string; watch_id: string; observation_id: string | null;
+    outcome: MarketWakeReceiptStorageRecord["outcome"]; encrypted_payload: string;
+    payload_nonce: string; key_id: string; evaluated_at: string;
+    model_calls_attempted: number; signing_attempted: number; execution_attempted: number;
+  };
+  if (value.model_calls_attempted !== 0 || value.signing_attempted !== 0 || value.execution_attempted !== 0) {
+    throw new Error("Market wake receipt cannot contain AI or execution evidence");
+  }
+  return {
+    id: value.id, watchId: value.watch_id, observationId: value.observation_id,
+    outcome: value.outcome, encryptedPayload: value.encrypted_payload,
+    payloadNonce: value.payload_nonce, keyId: value.key_id, evaluatedAt: value.evaluated_at,
+    modelCallsAttempted: false, signingAttempted: false, executionAttempted: false,
+  };
+}
+
+function toAgentSessionStorageRecord(row: unknown): AgentSessionStorageRecord {
+  const value = row as {
+    id: string; state: AgentSessionStorageRecord["state"]; provider: AgentSessionStorageRecord["provider"];
+    encrypted_payload: string; payload_nonce: string; key_id: string; deadline_at: string;
+    halted_at: string | null; halt_reason: AgentSessionStorageRecord["haltReason"];
+    execution_enabled: number; created_at: string; updated_at: string;
+  };
+  if (value.execution_enabled !== 0) throw new Error("Agent session cannot enable execution");
+  return {
+    id: value.id, state: value.state, provider: value.provider,
+    encryptedPayload: value.encrypted_payload, payloadNonce: value.payload_nonce, keyId: value.key_id,
+    deadlineAt: value.deadline_at, haltedAt: value.halted_at, haltReason: value.halt_reason,
+    executionEnabled: false, createdAt: value.created_at, updatedAt: value.updated_at,
+  };
+}
+
+function toAgentIntentEvaluationStorageRecord(row: unknown): AgentIntentEvaluationStorageRecord {
+  const value = row as {
+    id: string; session_id: string; observation_id: string; quote_id: string; proposal_digest: string;
+    outcome: AgentIntentEvaluationStorageRecord["outcome"]; encrypted_payload: string;
+    payload_nonce: string; key_id: string; approval_state: AgentIntentEvaluationStorageRecord["approvalState"];
+    approval_expires_at: string | null; decided_at: string | null; model_calls_attempted: number;
+    signing_attempted: number; execution_attempted: number; evaluated_at: string;
+  };
+  if (value.model_calls_attempted !== 1 || value.signing_attempted !== 0 || value.execution_attempted !== 0) {
+    throw new Error("Agent intent evaluation has invalid privilege evidence");
+  }
+  return {
+    id: value.id, sessionId: value.session_id, observationId: value.observation_id,
+    quoteId: value.quote_id, proposalDigest: value.proposal_digest, outcome: value.outcome,
+    encryptedPayload: value.encrypted_payload, payloadNonce: value.payload_nonce, keyId: value.key_id,
+    approvalState: value.approval_state, approvalExpiresAt: value.approval_expires_at,
+    decidedAt: value.decided_at, modelCallsAttempted: true, signingAttempted: false,
+    executionAttempted: false, evaluatedAt: value.evaluated_at,
+  };
+}
+
+function toAgentDevnetSimulationStorageRecord(row: unknown): AgentDevnetSimulationStorageRecord {
+  const value = row as {
+    id: string; evaluation_id: string; session_id: string; proposal_digest: string;
+    outcome: AgentDevnetSimulationStorageRecord["outcome"]; fixture_manifest_digest: string;
+    message_hash: string | null; encrypted_payload: string; payload_nonce: string; key_id: string;
+    signing_attempted: number; broadcast_attempted: number; execution_attempted: number; simulated_at: string;
+  };
+  if (value.signing_attempted !== 0 || value.broadcast_attempted !== 0 || value.execution_attempted !== 0) {
+    throw new Error("Agent Devnet simulation cannot contain execution evidence");
+  }
+  return {
+    id: value.id, evaluationId: value.evaluation_id, sessionId: value.session_id,
+    proposalDigest: value.proposal_digest, outcome: value.outcome,
+    fixtureManifestDigest: value.fixture_manifest_digest, messageHash: value.message_hash,
+    encryptedPayload: value.encrypted_payload, payloadNonce: value.payload_nonce, keyId: value.key_id,
+    signingAttempted: false, broadcastAttempted: false, executionAttempted: false,
+    simulatedAt: value.simulated_at,
   };
 }

@@ -429,4 +429,171 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
       END;
     `,
   },
+  {
+    version: 15,
+    name: "ai-shadow-trade-evaluation-journal",
+    sql: `
+      CREATE TABLE ai_shadow_trade_evaluations (
+        id TEXT PRIMARY KEY,
+        quote_id TEXT NOT NULL REFERENCES jupiter_shadow_quotes(id),
+        proposal_digest TEXT NOT NULL CHECK (length(proposal_digest) = 64 AND proposal_digest NOT GLOB '*[^0-9a-f]*'),
+        outcome TEXT NOT NULL CHECK (outcome IN ('hold', 'would-execute', 'blocked')),
+        encrypted_payload TEXT NOT NULL,
+        payload_nonce TEXT NOT NULL,
+        key_id TEXT NOT NULL,
+        signing_attempted INTEGER NOT NULL DEFAULT 0 CHECK (signing_attempted = 0),
+        execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK (execution_attempted = 0),
+        evaluated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX ai_shadow_trade_evaluations_history
+        ON ai_shadow_trade_evaluations(evaluated_at DESC);
+    `,
+  },
+  {
+    version: 16,
+    name: "restricted-ai-shadow-intent-approval",
+    sql: `
+      ALTER TABLE ai_shadow_trade_evaluations ADD COLUMN approval_state TEXT NOT NULL DEFAULT 'not-actionable'
+        CHECK (approval_state IN ('not-actionable', 'pending', 'approved', 'rejected', 'expired'));
+      ALTER TABLE ai_shadow_trade_evaluations ADD COLUMN approval_expires_at TEXT;
+      ALTER TABLE ai_shadow_trade_evaluations ADD COLUMN decided_at TEXT;
+      CREATE INDEX ai_shadow_trade_open_approvals
+        ON ai_shadow_trade_evaluations(approval_state, approval_expires_at);
+    `,
+  },
+  {
+    version: 17,
+    name: "encrypted-mainnet-market-observations",
+    sql: `
+      CREATE TABLE market_observations (
+        id TEXT PRIMARY KEY,
+        source_quote_id TEXT NOT NULL REFERENCES jupiter_shadow_quotes(id),
+        observation_digest TEXT NOT NULL CHECK (length(observation_digest) = 64 AND observation_digest NOT GLOB '*[^0-9a-f]*'),
+        encrypted_payload TEXT NOT NULL,
+        payload_nonce TEXT NOT NULL,
+        key_id TEXT NOT NULL,
+        observed_at TEXT NOT NULL,
+        captured_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        model_calls_attempted INTEGER NOT NULL DEFAULT 0 CHECK (model_calls_attempted = 0),
+        signing_attempted INTEGER NOT NULL DEFAULT 0 CHECK (signing_attempted = 0),
+        execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK (execution_attempted = 0)
+      ) STRICT;
+      CREATE INDEX market_observation_history ON market_observations(captured_at DESC);
+    `,
+  },
+  {
+    version: 18,
+    name: "scheduled-market-wake-journal",
+    sql: `
+      CREATE TABLE market_watches (
+        id TEXT PRIMARY KEY,
+        state TEXT NOT NULL CHECK (state IN ('active', 'triggered', 'paused')),
+        encrypted_payload TEXT NOT NULL,
+        payload_nonce TEXT NOT NULL,
+        key_id TEXT NOT NULL,
+        next_check_at TEXT NOT NULL,
+        last_checked_at TEXT,
+        triggered_at TEXT,
+        paused_at TEXT,
+        last_observation_id TEXT REFERENCES market_observations(id),
+        consecutive_failures INTEGER NOT NULL DEFAULT 0 CHECK (consecutive_failures BETWEEN 0 AND 5),
+        model_calls_attempted INTEGER NOT NULL DEFAULT 0 CHECK (model_calls_attempted = 0),
+        execution_enabled INTEGER NOT NULL DEFAULT 0 CHECK (execution_enabled = 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE UNIQUE INDEX one_active_market_watch ON market_watches((1)) WHERE state = 'active';
+      CREATE INDEX market_watch_history ON market_watches(updated_at DESC);
+
+      CREATE TABLE market_wake_receipts (
+        id TEXT PRIMARY KEY,
+        watch_id TEXT NOT NULL REFERENCES market_watches(id),
+        observation_id TEXT REFERENCES market_observations(id),
+        outcome TEXT NOT NULL CHECK (outcome IN ('waiting', 'triggered', 'failed')),
+        encrypted_payload TEXT NOT NULL,
+        payload_nonce TEXT NOT NULL,
+        key_id TEXT NOT NULL,
+        evaluated_at TEXT NOT NULL,
+        model_calls_attempted INTEGER NOT NULL DEFAULT 0 CHECK (model_calls_attempted = 0),
+        signing_attempted INTEGER NOT NULL DEFAULT 0 CHECK (signing_attempted = 0),
+        execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK (execution_attempted = 0)
+      ) STRICT;
+      CREATE INDEX market_wake_receipt_history ON market_wake_receipts(evaluated_at DESC);
+    `,
+  },
+  {
+    version: 19,
+    name: "restricted-agent-session-journal",
+    sql: `
+      CREATE TABLE agent_sessions (
+        id TEXT PRIMARY KEY,
+        state TEXT NOT NULL CHECK (state IN ('active', 'halted', 'expired')),
+        provider TEXT NOT NULL CHECK (provider IN ('openai', 'anthropic')),
+        encrypted_payload TEXT NOT NULL,
+        payload_nonce TEXT NOT NULL,
+        key_id TEXT NOT NULL,
+        deadline_at TEXT NOT NULL,
+        halted_at TEXT,
+        halt_reason TEXT CHECK (halt_reason IS NULL OR halt_reason IN ('operator', 'ai-halt', 'deadline', 'policy-denial')),
+        execution_enabled INTEGER NOT NULL DEFAULT 0 CHECK (execution_enabled = 0),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE UNIQUE INDEX one_active_agent_session ON agent_sessions((1)) WHERE state = 'active';
+      CREATE INDEX agent_session_history ON agent_sessions(updated_at DESC);
+
+      CREATE TABLE agent_intent_evaluations (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES agent_sessions(id),
+        observation_id TEXT NOT NULL REFERENCES market_observations(id),
+        quote_id TEXT NOT NULL REFERENCES jupiter_shadow_quotes(id),
+        proposal_digest TEXT NOT NULL CHECK (length(proposal_digest) = 64 AND proposal_digest NOT GLOB '*[^0-9a-f]*'),
+        outcome TEXT NOT NULL CHECK (outcome IN ('pending-approval', 'hold', 'halted', 'blocked')),
+        encrypted_payload TEXT NOT NULL,
+        payload_nonce TEXT NOT NULL,
+        key_id TEXT NOT NULL,
+        approval_state TEXT NOT NULL CHECK (approval_state IN ('not-actionable', 'pending', 'approved', 'rejected', 'expired')),
+        approval_expires_at TEXT,
+        decided_at TEXT,
+        model_calls_attempted INTEGER NOT NULL DEFAULT 1 CHECK (model_calls_attempted = 1),
+        signing_attempted INTEGER NOT NULL DEFAULT 0 CHECK (signing_attempted = 0),
+        execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK (execution_attempted = 0),
+        evaluated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX agent_intent_history ON agent_intent_evaluations(evaluated_at DESC);
+      CREATE INDEX agent_open_intents ON agent_intent_evaluations(approval_state, approval_expires_at);
+      CREATE TRIGGER expire_agent_intents_on_session_end
+      AFTER UPDATE OF state ON agent_sessions
+      WHEN NEW.state IN ('halted', 'expired')
+      BEGIN
+        UPDATE agent_intent_evaluations
+        SET approval_state = 'expired', decided_at = NEW.updated_at
+        WHERE session_id = NEW.id AND approval_state IN ('pending', 'approved');
+      END;
+    `,
+  },
+  {
+    version: 20,
+    name: "agent-devnet-simulation-proof-journal",
+    sql: `
+      CREATE TABLE agent_devnet_simulations (
+        id TEXT PRIMARY KEY,
+        evaluation_id TEXT NOT NULL UNIQUE REFERENCES agent_intent_evaluations(id),
+        session_id TEXT NOT NULL REFERENCES agent_sessions(id),
+        proposal_digest TEXT NOT NULL CHECK (length(proposal_digest) = 64 AND proposal_digest NOT GLOB '*[^0-9a-f]*'),
+        outcome TEXT NOT NULL CHECK (outcome IN ('simulated', 'failed')),
+        fixture_manifest_digest TEXT NOT NULL CHECK (length(fixture_manifest_digest) = 64 AND fixture_manifest_digest NOT GLOB '*[^0-9a-f]*'),
+        message_hash TEXT CHECK (message_hash IS NULL OR (length(message_hash) = 64 AND message_hash NOT GLOB '*[^0-9a-f]*')),
+        encrypted_payload TEXT NOT NULL,
+        payload_nonce TEXT NOT NULL,
+        key_id TEXT NOT NULL,
+        signing_attempted INTEGER NOT NULL DEFAULT 0 CHECK (signing_attempted = 0),
+        broadcast_attempted INTEGER NOT NULL DEFAULT 0 CHECK (broadcast_attempted = 0),
+        execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK (execution_attempted = 0),
+        simulated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX agent_devnet_simulation_history ON agent_devnet_simulations(simulated_at DESC);
+    `,
+  },
 ] as const;

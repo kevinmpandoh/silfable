@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, powerMonitor, session, shell, Tray } from "electron";
+import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateKeyPairSigner } from "@solana/kit";
@@ -8,8 +9,28 @@ import {
   AiDraftDcaRequestSchema,
   AiDraftDcaResponseSchema,
   AiProviderMutationResponseSchema,
+  AiProposeShadowTradeRequestSchema,
+  AiProposeShadowTradeResponseSchema,
+  AiApproveShadowTradeRequestSchema,
+  AiRejectShadowTradeRequestSchema,
+  AiShadowTradeEvaluationViewSchema,
+  AiShadowTradeListResponseSchema,
+  AiShadowTradeMutationResponseSchema,
+  AiShadowTradeEvaluationReceiptSchema,
   AiSaveProviderRequestSchema,
   AiSettingsResponseSchema,
+  AgentCreateSessionRequestSchema,
+  AgentHaltSessionRequestSchema,
+  AgentEvaluateObservationRequestSchema,
+  AgentApproveIntentRequestSchema,
+  AgentRejectIntentRequestSchema,
+  AgentSessionMutationResponseSchema,
+  AgentEvaluateObservationResponseSchema,
+  AgentIntentMutationResponseSchema,
+  AgentSessionListResponseSchema,
+  AgentSimulateDevnetIntentRequestSchema,
+  AgentSimulateDevnetIntentResponseSchema,
+  AgentDevnetSimulationListResponseSchema,
   DcaSimulationRequestSchema,
   DcaSimulationResponseSchema,
   DevnetAirdropRequestSchema,
@@ -52,6 +73,13 @@ import {
   JupiterShadowListResponseSchema,
   JupiterShadowQuoteRequestSchema,
   JupiterShadowQuoteResponseSchema,
+  MarketCreateObservationRequestSchema,
+  MarketCreateObservationResponseSchema,
+  MarketObservationListResponseSchema,
+  MarketCreateWatchRequestSchema,
+  MarketPauseWatchRequestSchema,
+  MarketWatchListResponseSchema,
+  MarketWatchMutationResponseSchema,
   RuntimeStatusSchema,
   UpdateCheckResponseSchema,
   UpdateCommandRequestSchema,
@@ -72,11 +100,12 @@ import {
   WalletUnlockRequestSchema,
   WalletUnlockResponseSchema,
 } from "@silfable/contracts";
-import { simulateDcaCycle } from "@silfable/core";
+import { evaluateAiShadowTradeProposal, simulateDcaCycle } from "@silfable/core";
 
 import { LocalEncryptedKeystore } from "./storage/keystore.js";
 import {
   RuntimeDatabase,
+  type AiShadowTradeEvaluationStorageRecord,
   type FixtureProvisionStorageRecord,
   type FixtureReviewStorageRecord,
   type GuardedFixtureTransferStorageRecord,
@@ -115,6 +144,13 @@ import { GuardedFixtureCycleProposalService } from "./execution/guarded-fixture-
 import { GuardedSchedulerArmService } from "./execution/guarded-scheduler-arm.js";
 import { GuardedFixtureCycleExecutionBridge } from "./execution/guarded-fixture-cycle-bridge.js";
 import { JUPITER_ORDER_ENDPOINT, JupiterShadowService } from "./jupiter/shadow.js";
+import { MarketObservationService } from "./market/observation.js";
+import { MarketWakeScheduler } from "./market/wake.js";
+import { AgentSessionService } from "./market/agent-session.js";
+import {
+  AgentDevnetSimulationService,
+  SolanaAgentDevnetSimulationAdapter,
+} from "./execution/agent-devnet-simulation.js";
 import { UpdateReviewService } from "./update/service.js";
 import {
   LocalCrashTelemetryService,
@@ -137,6 +173,7 @@ let keystore: LocalEncryptedKeystore | null = null;
 let runtimeDatabase: RuntimeDatabase | null = null;
 let networkMonitor: NetworkHealthMonitor | null = null;
 let missionScheduler: MissionSimulationScheduler | null = null;
+let marketWakeScheduler: MarketWakeScheduler | null = null;
 
 app.enableSandbox();
 
@@ -229,9 +266,32 @@ function registerIpc(
   guardedSchedulerArm: GuardedSchedulerArmService,
   guardedExecution: GuardedFixtureCycleExecutionBridge,
   jupiter: JupiterShadowService,
+  marketObservations: MarketObservationService,
+  marketWake: MarketWakeScheduler,
+  agentSessions: AgentSessionService,
+  agentDevnetSimulations: AgentDevnetSimulationService,
+  dataCipher: LocalDataCipher,
   updates: UpdateReviewService,
   telemetry: LocalCrashTelemetryService,
 ): void {
+  const hydrateAiShadowTradeEvaluation = async (record: AiShadowTradeEvaluationStorageRecord) => {
+    if (record.keyId !== "local-data-key-v1") throw new Error("AI shadow evaluation key is unsupported");
+    const payload: unknown = JSON.parse(await dataCipher.decryptString({
+      ciphertext: record.encryptedPayload,
+      nonce: record.payloadNonce,
+      keyId: record.keyId,
+    }));
+    return AiShadowTradeEvaluationViewSchema.parse({
+      ...(typeof payload === "object" && payload !== null ? payload : {}),
+      approval: {
+        state: record.approvalState,
+        expiresAt: record.approvalExpiresAt,
+        decidedAt: record.decidedAt,
+        executionEnabled: false,
+      },
+    });
+  };
+
   ipcMain.handle(IPC_CHANNELS.runtimeStatus, (event) => {
     assertTrustedSender(event);
 
@@ -260,6 +320,7 @@ function registerIpc(
     await fixtureTransfer.reconcilePending();
     await guardedExecution.reconcilePending();
     missionScheduler?.start();
+    marketWake.start();
     return WalletUnlockResponseSchema.parse({
       schemaVersion: 1,
       requestId: request.requestId,
@@ -273,6 +334,7 @@ function registerIpc(
     const now = new Date().toISOString();
     const halted = database.haltAllRunningMissions("explicit-lock", now);
     database.revokeOpenGuardedSchedulerArms(now);
+    marketWake.stop();
     secretStore.lock();
     for (const missionId of halted) notifyMissionEvent({ missionId, type: "halted", detail: "explicit-lock" });
     return WalletLockResponseSchema.parse({
@@ -584,6 +646,106 @@ function registerIpc(
     });
   });
 
+  ipcMain.handle(IPC_CHANNELS.aiProposeShadowTrade, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = AiProposeShadowTradeRequestSchema.parse(untrustedRequest);
+    const quote = (await jupiter.list()).find((candidate) => candidate.id === request.quoteId);
+    if (quote === undefined) throw new Error("Main-owned shadow quote does not exist");
+    const result = await ai.proposeShadowTrade(request.provider, request.objective, quote);
+    const evaluatedAt = new Date();
+    const evaluation = evaluateAiShadowTradeProposal({ proposal: result.proposal, quote, now: evaluatedAt });
+    const proposalDigest = createHash("sha256")
+      .update(JSON.stringify(result.proposal), "utf8")
+      .digest("hex");
+    const receipt = AiShadowTradeEvaluationReceiptSchema.parse({
+      schemaVersion: 1,
+      id: randomUUID(),
+      quoteId: quote.id,
+      proposalDigest,
+      outcome: evaluation.outcome,
+      denialCodes: evaluation.denialCodes,
+      observedAt: quote.observedAt,
+      evaluatedAt: evaluatedAt.toISOString(),
+      signingAttempted: false,
+      executionAttempted: false,
+      persistedLocally: true,
+    });
+    const envelope = await dataCipher.encryptString(JSON.stringify({
+      schemaVersion: 1,
+      provider: request.provider,
+      model: result.model,
+      objective: request.objective,
+      quote,
+      proposal: result.proposal,
+      receipt,
+    }));
+    database.insertAiShadowTradeEvaluation({
+      id: receipt.id,
+      quoteId: quote.id,
+      proposalDigest,
+      outcome: receipt.outcome,
+      encryptedPayload: envelope.ciphertext,
+      payloadNonce: envelope.nonce,
+      keyId: envelope.keyId,
+      signingAttempted: false,
+      executionAttempted: false,
+      evaluatedAt: receipt.evaluatedAt,
+      approvalState: receipt.outcome === "would-execute" ? "pending" : "not-actionable",
+      approvalExpiresAt: receipt.outcome === "would-execute"
+        ? new Date(evaluatedAt.getTime() + 60 * 60 * 1_000).toISOString()
+        : null,
+      decidedAt: null,
+    });
+    return AiProposeShadowTradeResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      provider: request.provider,
+      model: result.model,
+      quote,
+      proposal: result.proposal,
+      receipt,
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.aiListShadowTrades, async (event) => {
+    assertTrustedSender(event);
+    database.expireOpenAiShadowTradeApprovals(new Date().toISOString());
+    return AiShadowTradeListResponseSchema.parse({
+      schemaVersion: 1,
+      evaluations: await Promise.all(database.listAiShadowTradeEvaluations().map(hydrateAiShadowTradeEvaluation)),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.aiApproveShadowTrade, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = AiApproveShadowTradeRequestSchema.parse(untrustedRequest);
+    const record = database.approveAiShadowTradeEvaluation({
+      id: request.evaluationId,
+      expectedProposalDigest: request.expectedProposalDigest,
+      decidedAt: new Date().toISOString(),
+    });
+    return AiShadowTradeMutationResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      evaluation: await hydrateAiShadowTradeEvaluation(record),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.aiRejectShadowTrade, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = AiRejectShadowTradeRequestSchema.parse(untrustedRequest);
+    const record = database.rejectAiShadowTradeEvaluation({
+      id: request.evaluationId,
+      expectedProposalDigest: request.expectedProposalDigest,
+      decidedAt: new Date().toISOString(),
+    });
+    return AiShadowTradeMutationResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      evaluation: await hydrateAiShadowTradeEvaluation(record),
+    });
+  });
+
   ipcMain.handle(IPC_CHANNELS.jupiterGetSettings, async (event) => {
     assertTrustedSender(event);
     return JupiterSettingsResponseSchema.parse({
@@ -620,6 +782,122 @@ function registerIpc(
   ipcMain.handle(IPC_CHANNELS.jupiterShadowList, async (event) => {
     assertTrustedSender(event);
     return JupiterShadowListResponseSchema.parse({ schemaVersion: 1, quotes: await jupiter.list() });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.marketCreateObservation, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = MarketCreateObservationRequestSchema.parse(untrustedRequest);
+    return MarketCreateObservationResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      observation: await marketObservations.create(request.quoteId),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.marketListObservations, async (event) => {
+    assertTrustedSender(event);
+    return MarketObservationListResponseSchema.parse({
+      schemaVersion: 1,
+      observations: await marketObservations.list(),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.marketCreateWatch, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = MarketCreateWatchRequestSchema.parse(untrustedRequest);
+    return MarketWatchMutationResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      watch: await marketWake.create(request),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.marketPauseWatch, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = MarketPauseWatchRequestSchema.parse(untrustedRequest);
+    return MarketWatchMutationResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      watch: await marketWake.pause(request.watchId),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.marketListWatches, async (event) => {
+    assertTrustedSender(event);
+    return MarketWatchListResponseSchema.parse({ schemaVersion: 1, ...(await marketWake.list()) });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.agentCreateSession, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = AgentCreateSessionRequestSchema.parse(untrustedRequest);
+    return AgentSessionMutationResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      session: await agentSessions.create(request),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.agentHaltSession, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = AgentHaltSessionRequestSchema.parse(untrustedRequest);
+    return AgentSessionMutationResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      session: await agentSessions.halt(request.sessionId),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.agentEvaluateObservation, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = AgentEvaluateObservationRequestSchema.parse(untrustedRequest);
+    return AgentEvaluateObservationResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      evaluation: await agentSessions.evaluate(request.sessionId, request.observationId),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.agentListSessions, async (event) => {
+    assertTrustedSender(event);
+    return AgentSessionListResponseSchema.parse({ schemaVersion: 1, ...(await agentSessions.list()) });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.agentApproveIntent, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = AgentApproveIntentRequestSchema.parse(untrustedRequest);
+    return AgentIntentMutationResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      evaluation: await agentSessions.approve(request.evaluationId, request.expectedProposalDigest),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.agentRejectIntent, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = AgentRejectIntentRequestSchema.parse(untrustedRequest);
+    return AgentIntentMutationResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      evaluation: await agentSessions.reject(request.evaluationId, request.expectedProposalDigest),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.agentSimulateDevnetIntent, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = AgentSimulateDevnetIntentRequestSchema.parse(untrustedRequest);
+    return AgentSimulateDevnetIntentResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      simulation: await agentDevnetSimulations.simulate(request.evaluationId, request.expectedProposalDigest),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.agentListDevnetSimulations, async (event) => {
+    assertTrustedSender(event);
+    return AgentDevnetSimulationListResponseSchema.parse({
+      schemaVersion: 1,
+      simulations: await agentDevnetSimulations.list(),
+    });
   });
 
   ipcMain.handle(IPC_CHANNELS.updateGetStatus, (event) => {
@@ -901,6 +1179,34 @@ app.whenReady().then(async () => {
   });
   const ai = new AiDraftService({ keystore, settings: runtimeDatabase });
   const jupiter = new JupiterShadowService({ keystore, database: runtimeDatabase, cipher: dataCipher });
+  const marketObservations = new MarketObservationService({
+    database: runtimeDatabase,
+    cipher: dataCipher,
+    quotes: jupiter,
+  });
+  marketWakeScheduler = new MarketWakeScheduler({
+    database: runtimeDatabase,
+    cipher: dataCipher,
+    quotes: jupiter,
+    observations: marketObservations,
+    onTriggered: notifyMarketWake,
+  });
+  const agentSessions = new AgentSessionService({
+    database: runtimeDatabase,
+    cipher: dataCipher,
+    ai,
+    observations: marketObservations,
+    quotes: jupiter,
+  });
+  const agentDevnetSimulations = new AgentDevnetSimulationService({
+    database: runtimeDatabase,
+    cipher: dataCipher,
+    keystore,
+    health: networkMonitor,
+    fixtures: fixtureReview,
+    agents: agentSessions,
+    adapter: new SolanaAgentDevnetSimulationAdapter(devnetRpc),
+  });
   const updates = new UpdateReviewService({
     currentVersion: app.getVersion(),
     openExternal: async (url) => shell.openExternal(url),
@@ -923,7 +1229,7 @@ app.whenReady().then(async () => {
     onEvent: notifyMissionEvent,
   });
   missionScheduler.initialize();
-  registerIpc(keystore, runtimeDatabase, networkMonitor, walletRpc, walletOnboarding, missions, ai, canary, fixtureProvisioning, fixtureReview, fixtureTransfer, fixtureTransferApproval, guardedMissionAuthorization, guardedSchedulerArm, guardedExecution, jupiter, updates, telemetry);
+  registerIpc(keystore, runtimeDatabase, networkMonitor, walletRpc, walletOnboarding, missions, ai, canary, fixtureProvisioning, fixtureReview, fixtureTransfer, fixtureTransferApproval, guardedMissionAuthorization, guardedSchedulerArm, guardedExecution, jupiter, marketObservations, marketWakeScheduler, agentSessions, agentDevnetSimulations, dataCipher, updates, telemetry);
   networkMonitor.start();
   missionScheduler.start();
   mainWindow = createMainWindow();
@@ -958,12 +1264,14 @@ app.whenReady().then(async () => {
 
   powerMonitor.on("suspend", () => {
     missionScheduler?.stop("system-suspend");
+    marketWakeScheduler?.stop();
     keystore?.lock();
     networkMonitor?.stop();
   });
   powerMonitor.on("resume", () => {
     networkMonitor?.start();
     missionScheduler?.start();
+    if (!keystore?.isLocked()) marketWakeScheduler?.start();
   });
 
   app.on("activate", () => {
@@ -995,10 +1303,26 @@ function notifyMissionEvent(event: MissionRuntimeEvent): void {
   notification.show();
 }
 
+function notifyMarketWake(): void {
+  tray?.setToolTip("Silfable — market condition reached");
+  if (!Notification.isSupported()) return;
+  const notification = new Notification({
+    title: "Market condition reached",
+    body: "A local SOL/USDC watch triggered. No AI call, signing, or trade was attempted.",
+  });
+  notification.on("click", () => {
+    mainWindow?.show();
+    mainWindow?.focus();
+  });
+  notification.show();
+}
+
 app.on("before-quit", () => {
   isQuitting = true;
   missionScheduler?.stop("application-quit", false);
   missionScheduler = null;
+  marketWakeScheduler?.stop();
+  marketWakeScheduler = null;
   keystore?.lock();
   networkMonitor?.stop();
   networkMonitor = null;
