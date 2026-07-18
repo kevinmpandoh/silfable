@@ -180,6 +180,26 @@ export type AgentDevnetSimulationStorageRecord = {
   simulatedAt: string;
 };
 
+export type AgentDevnetSigningArmStorageRecord = {
+  id: string;
+  simulationId: string;
+  evaluationId: string;
+  sessionId: string;
+  proposalDigest: string;
+  fixtureManifestDigest: string;
+  messageHash: string;
+  scope: "agent-devnet-fixture-sign-once";
+  state: "active" | "revoked" | "expired";
+  encryptedPayload: string;
+  payloadNonce: string;
+  keyId: string;
+  executionBridgeConnected: false;
+  mainnetEnabled: false;
+  armedAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+};
+
 export type CrashReportStorageRecord = {
   id: string;
   encryptedPayload: string;
@@ -1207,6 +1227,61 @@ export class RuntimeDatabase {
     return row === undefined ? null : toAgentDevnetSimulationStorageRecord(row);
   }
 
+  getAgentDevnetSimulation(id: string): AgentDevnetSimulationStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM agent_devnet_simulations WHERE id = ?").get(id);
+    return row === undefined ? null : toAgentDevnetSimulationStorageRecord(row);
+  }
+
+  insertAgentDevnetSigningArm(record: AgentDevnetSigningArmStorageRecord): void {
+    this.#database.prepare(
+      `INSERT INTO agent_devnet_signing_arms
+        (id, simulation_id, evaluation_id, session_id, proposal_digest, fixture_manifest_digest,
+         message_hash, scope, state, encrypted_payload, payload_nonce, key_id,
+         execution_bridge_connected, mainnet_enabled, armed_at, expires_at, revoked_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'agent-devnet-fixture-sign-once', 'active', ?, ?, ?, 0, 0, ?, ?, NULL)`,
+    ).run(
+      record.id, record.simulationId, record.evaluationId, record.sessionId, record.proposalDigest,
+      record.fixtureManifestDigest, record.messageHash, record.encryptedPayload, record.payloadNonce,
+      record.keyId, record.armedAt, record.expiresAt,
+    );
+  }
+
+  getActiveAgentDevnetSigningArm(now: string): AgentDevnetSigningArmStorageRecord | null {
+    this.#database.prepare(
+      `UPDATE agent_devnet_signing_arms SET state = 'expired', revoked_at = ?
+       WHERE state = 'active' AND expires_at <= ?`,
+    ).run(now, now);
+    const row = this.#database.prepare("SELECT * FROM agent_devnet_signing_arms WHERE state = 'active'").get();
+    return row === undefined ? null : toAgentDevnetSigningArmStorageRecord(row);
+  }
+
+  getAgentDevnetSigningArm(id: string): AgentDevnetSigningArmStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM agent_devnet_signing_arms WHERE id = ?").get(id);
+    return row === undefined ? null : toAgentDevnetSigningArmStorageRecord(row);
+  }
+
+  listAgentDevnetSigningArms(limit = 20): AgentDevnetSigningArmStorageRecord[] {
+    return this.#database.prepare("SELECT * FROM agent_devnet_signing_arms ORDER BY armed_at DESC LIMIT ?")
+      .all(limit).map(toAgentDevnetSigningArmStorageRecord);
+  }
+
+  revokeAgentDevnetSigningArm(id: string, revokedAt: string): AgentDevnetSigningArmStorageRecord {
+    const result = this.#database.prepare(
+      `UPDATE agent_devnet_signing_arms SET state = 'revoked', revoked_at = ? WHERE id = ? AND state = 'active'`,
+    ).run(revokedAt, id);
+    if (Number(result.changes) !== 1) throw new Error("Agent Devnet signing arm revocation conflict");
+    const record = this.getAgentDevnetSigningArm(id);
+    if (record === null) throw new Error("Agent Devnet signing arm does not exist");
+    return record;
+  }
+
+  revokeOpenAgentDevnetSigningArms(revokedAt: string): number {
+    const result = this.#database.prepare(
+      `UPDATE agent_devnet_signing_arms SET state = 'revoked', revoked_at = ? WHERE state = 'active'`,
+    ).run(revokedAt);
+    return Number(result.changes);
+  }
+
   insertAiShadowTradeEvaluation(record: AiShadowTradeEvaluationStorageRecord): void {
     this.#database.prepare(
       `INSERT INTO ai_shadow_trade_evaluations
@@ -2183,5 +2258,28 @@ function toAgentDevnetSimulationStorageRecord(row: unknown): AgentDevnetSimulati
     encryptedPayload: value.encrypted_payload, payloadNonce: value.payload_nonce, keyId: value.key_id,
     signingAttempted: false, broadcastAttempted: false, executionAttempted: false,
     simulatedAt: value.simulated_at,
+  };
+}
+
+function toAgentDevnetSigningArmStorageRecord(row: unknown): AgentDevnetSigningArmStorageRecord {
+  const value = row as {
+    id: string; simulation_id: string; evaluation_id: string; session_id: string;
+    proposal_digest: string; fixture_manifest_digest: string; message_hash: string;
+    scope: AgentDevnetSigningArmStorageRecord["scope"];
+    state: AgentDevnetSigningArmStorageRecord["state"]; encrypted_payload: string;
+    payload_nonce: string; key_id: string; execution_bridge_connected: number;
+    mainnet_enabled: number; armed_at: string; expires_at: string; revoked_at: string | null;
+  };
+  if (value.execution_bridge_connected !== 0 || value.mainnet_enabled !== 0) {
+    throw new Error("Agent Devnet signing arm cannot connect execution or Mainnet");
+  }
+  return {
+    id: value.id, simulationId: value.simulation_id, evaluationId: value.evaluation_id,
+    sessionId: value.session_id, proposalDigest: value.proposal_digest,
+    fixtureManifestDigest: value.fixture_manifest_digest, messageHash: value.message_hash,
+    scope: value.scope, state: value.state, encryptedPayload: value.encrypted_payload,
+    payloadNonce: value.payload_nonce, keyId: value.key_id, executionBridgeConnected: false,
+    mainnetEnabled: false, armedAt: value.armed_at, expiresAt: value.expires_at,
+    revokedAt: value.revoked_at,
   };
 }

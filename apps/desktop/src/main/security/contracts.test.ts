@@ -11,6 +11,8 @@ import {
   AgentApproveIntentRequestSchema,
   AgentHaltSessionRequestSchema,
   AgentSimulateDevnetIntentRequestSchema,
+  AgentArmDevnetSigningRequestSchema,
+  AgentRevokeDevnetSigningArmRequestSchema,
   DevnetFixtureProvisionExecuteRequestSchema,
   DevnetFixtureReviewActivateRequestSchema,
   DevnetFixtureTransferExecuteRequestSchema,
@@ -215,6 +217,24 @@ test("security-sensitive requests reject unknown privilege-shaped fields", () =>
       acknowledgedNoSigningOrBroadcast: true,
       signingEnabled: true,
     }],
+    [AgentArmDevnetSigningRequestSchema, {
+      schemaVersion: 1,
+      requestId,
+      simulationId: "00000000-0000-4000-8000-000000000002",
+      expectedProposalDigest: "a".repeat(64),
+      expectedMessageHash: "b".repeat(64),
+      acknowledgedOneShotDevnetSigning: true,
+      acknowledgedDedicatedHotWallet: true,
+      acknowledgedNoMarketSwapOrEconomicMapping: true,
+      transactionBytes: "renderer-must-not-provide-an-executable-message",
+    }],
+    [AgentRevokeDevnetSigningArmRequestSchema, {
+      schemaVersion: 1,
+      requestId,
+      signingArmId: "00000000-0000-4000-8000-000000000002",
+      acknowledgedImmediateRevocation: true,
+      preserveSigningAuthority: true,
+    }],
   ] as const;
   for (const [schema, value] of cases) assert.equal(schema.safeParse(value).success, false);
 });
@@ -354,6 +374,22 @@ test("acknowledgements cannot be omitted or replaced with truthy strings", () =>
     acknowledgedDevnetFixtureProofOnly: true,
     acknowledgedNoEconomicValueMapping: true,
     acknowledgedNoSigningOrBroadcast: "true",
+  }).success, false);
+  assert.equal(AgentArmDevnetSigningRequestSchema.safeParse({
+    schemaVersion: 1,
+    requestId,
+    simulationId: "00000000-0000-4000-8000-000000000002",
+    expectedProposalDigest: "a".repeat(64),
+    expectedMessageHash: "b".repeat(64),
+    acknowledgedOneShotDevnetSigning: true,
+    acknowledgedDedicatedHotWallet: true,
+    acknowledgedNoMarketSwapOrEconomicMapping: "true",
+  }).success, false);
+  assert.equal(AgentRevokeDevnetSigningArmRequestSchema.safeParse({
+    schemaVersion: 1,
+    requestId,
+    signingArmId: "00000000-0000-4000-8000-000000000002",
+    acknowledgedImmediateRevocation: 1,
   }).success, false);
 });
 

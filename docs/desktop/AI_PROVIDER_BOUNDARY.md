@@ -17,7 +17,7 @@ Scheduled market watches also hold no AI adapter reference. Their sleeping and w
 
 Restricted agent evaluation sends the selected provider only the encrypted session policy after local decryption and one sanitized market observation: opaque IDs, objective, venue, caps, normalized price, impact, fees, liquidity proxy, historical range, timestamps, quote direction, and expected USDC notional. Mint addresses, wallet-context reason, balances, keys, transaction material, full quote history, and wake history are excluded. The response is revalidated after provider latency and cannot authorize execution.
 
-The optional Devnet exact-message proof makes no AI provider call. It consumes an already approved local intent, maps it only to a fixed reviewed SPL fixture for pipeline verification, and exposes no signer or broadcaster. No transaction message, fixture address, RPC result, or proof journal is sent to OpenAI or Anthropic.
+The optional Devnet exact-message proof and its revocable signing-arm lifecycle make no AI provider call. They consume an already approved local intent, map it only to a fixed reviewed SPL fixture for pipeline verification, and expose no signer or broadcaster. No transaction message, fixture address, RPC result, proof journal, or signing-arm state is sent to OpenAI or Anthropic.
 
 ## Supported providers
 

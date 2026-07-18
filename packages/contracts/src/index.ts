@@ -59,6 +59,9 @@ export const IPC_CHANNELS = {
   agentRejectIntent: "agent:reject-intent",
   agentSimulateDevnetIntent: "agent:simulate-devnet-intent",
   agentListDevnetSimulations: "agent:list-devnet-simulations",
+  agentArmDevnetSigning: "agent:arm-devnet-signing",
+  agentRevokeDevnetSigningArm: "agent:revoke-devnet-signing-arm",
+  agentListDevnetSigningArms: "agent:list-devnet-signing-arms",
   updateGetStatus: "update:get-status",
   updateCheck: "update:check",
   updateOpenReview: "update:open-review",
@@ -1566,6 +1569,62 @@ export type AgentDevnetSimulationView = z.infer<typeof AgentDevnetSimulationView
 export type AgentSimulateDevnetIntentRequest = z.infer<typeof AgentSimulateDevnetIntentRequestSchema>;
 export type AgentSimulateDevnetIntentResponse = z.infer<typeof AgentSimulateDevnetIntentResponseSchema>;
 export type AgentDevnetSimulationListResponse = z.infer<typeof AgentDevnetSimulationListResponseSchema>;
+
+export const AgentDevnetSigningArmViewSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.string().uuid(),
+  simulationId: z.string().uuid(),
+  evaluationId: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  proposalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  fixtureManifestDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  messageHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  scope: z.literal("agent-devnet-fixture-sign-once"),
+  state: z.enum(["active", "revoked", "expired"]),
+  oneShotSigningAuthorized: z.literal(true),
+  executionBridgeConnected: z.literal(false),
+  economicValueMapping: z.literal("none"),
+  marketSwapPerformed: z.literal(false),
+  mainnetEnabled: z.literal(false),
+  armedAt: z.string().datetime(),
+  expiresAt: z.string().datetime(),
+  revokedAt: z.string().datetime().nullable(),
+}).strict();
+
+export const AgentArmDevnetSigningRequestSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  simulationId: z.string().uuid(),
+  expectedProposalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  expectedMessageHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  acknowledgedOneShotDevnetSigning: z.literal(true),
+  acknowledgedDedicatedHotWallet: z.literal(true),
+  acknowledgedNoMarketSwapOrEconomicMapping: z.literal(true),
+}).strict();
+
+export const AgentRevokeDevnetSigningArmRequestSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  signingArmId: z.string().uuid(),
+  acknowledgedImmediateRevocation: z.literal(true),
+}).strict();
+
+export const AgentDevnetSigningArmMutationResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  arm: AgentDevnetSigningArmViewSchema,
+}).strict();
+
+export const AgentDevnetSigningArmListResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  arms: z.array(AgentDevnetSigningArmViewSchema).max(20),
+}).strict();
+
+export type AgentDevnetSigningArmView = z.infer<typeof AgentDevnetSigningArmViewSchema>;
+export type AgentArmDevnetSigningRequest = z.infer<typeof AgentArmDevnetSigningRequestSchema>;
+export type AgentRevokeDevnetSigningArmRequest = z.infer<typeof AgentRevokeDevnetSigningArmRequestSchema>;
+export type AgentDevnetSigningArmMutationResponse = z.infer<typeof AgentDevnetSigningArmMutationResponseSchema>;
+export type AgentDevnetSigningArmListResponse = z.infer<typeof AgentDevnetSigningArmListResponseSchema>;
 
 export const JupiterOrderQuoteSchema = z.object({
   mode: z.string().min(1),

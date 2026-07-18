@@ -8,6 +8,7 @@ import type {
   AiShadowTradeEvaluationView,
   AgentIntentEvaluationView,
   AgentDevnetSimulationView,
+  AgentDevnetSigningArmView,
   AgentSessionView,
   DevnetCanaryView,
   DevnetFixtureProvisionView,
@@ -925,6 +926,8 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
   const [agentSessions, setAgentSessions] = useState<AgentSessionView[]>([]);
   const [agentEvaluations, setAgentEvaluations] = useState<AgentIntentEvaluationView[]>([]);
   const [agentDevnetSimulations, setAgentDevnetSimulations] = useState<AgentDevnetSimulationView[]>([]);
+  const [agentDevnetSigningArms, setAgentDevnetSigningArms] = useState<AgentDevnetSigningArmView[]>([]);
+  const [agentSigningArmAcks, setAgentSigningArmAcks] = useState([false, false, false]);
   const [agentObjective, setAgentObjective] = useState("Protect capital and propose a SOL action only when the validated observation fits conservative risk limits.");
   const [agentMaxNotional, setAgentMaxNotional] = useState("20");
   const [agentMaxImpactBps, setAgentMaxImpactBps] = useState("50");
@@ -949,6 +952,7 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
       setAgentSessions([]);
       setAgentEvaluations([]);
       setAgentDevnetSimulations([]);
+      setAgentDevnetSigningArms([]);
       setAiProposal(null);
       return;
     }
@@ -962,8 +966,9 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
       window.silfable.listMarketWatches(),
       window.silfable.listAgentSessions(),
       window.silfable.listAgentDevnetSimulations(),
+      window.silfable.listAgentDevnetSigningArms(),
     ])
-      .then(([settings, history, providers, evaluations, observations, watches, agents, devnetSimulations]) => {
+      .then(([settings, history, providers, evaluations, observations, watches, agents, devnetSimulations, signingArms]) => {
         if (!active) return;
         setConfigured(settings.configured);
         setQuotes(history.quotes);
@@ -975,6 +980,7 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
         setAgentSessions(agents.sessions);
         setAgentEvaluations(agents.evaluations);
         setAgentDevnetSimulations(devnetSimulations.simulations);
+        setAgentDevnetSigningArms(signingArms.arms);
       })
       .catch(() => active && setMessage("Jupiter shadow settings are unavailable."));
     const timer = window.setInterval(() => {
@@ -982,13 +988,15 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
         window.silfable.listMarketWatches(),
         window.silfable.listAgentSessions(),
         window.silfable.listAgentDevnetSimulations(),
-      ]).then(([watches, agents, devnetSimulations]) => {
+        window.silfable.listAgentDevnetSigningArms(),
+      ]).then(([watches, agents, devnetSimulations, signingArms]) => {
         if (!active) return;
         setMarketWatches(watches.watches);
         setMarketWakeReceipts(watches.wakeReceipts);
         setAgentSessions(agents.sessions);
         setAgentEvaluations(agents.evaluations);
         setAgentDevnetSimulations(devnetSimulations.simulations);
+        setAgentDevnetSigningArms(signingArms.arms);
       }).catch(() => undefined);
     }, 5_000);
     return () => {
@@ -1285,6 +1293,51 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
       );
     } catch {
       setMessage("Devnet proof could not run. It requires the exact approved intent, an active reviewed fixture, and healthy Devnet; no signing or broadcast occurred.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function armAgentDevnetSigning(simulation: AgentDevnetSimulationView): Promise<void> {
+    if (!agentSigningArmAcks.every(Boolean) || simulation.messageHash === null) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await window.silfable.armAgentDevnetSigning({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        simulationId: simulation.id,
+        expectedProposalDigest: simulation.proposalDigest,
+        expectedMessageHash: simulation.messageHash,
+        acknowledgedOneShotDevnetSigning: true,
+        acknowledgedDedicatedHotWallet: true,
+        acknowledgedNoMarketSwapOrEconomicMapping: true,
+      });
+      setAgentDevnetSigningArms((await window.silfable.listAgentDevnetSigningArms()).arms);
+      setAgentSigningArmAcks([false, false, false]);
+      setMessage(`One-shot Devnet signing arm active until ${response.arm.expiresAt}. Execution bridge remains disconnected.`);
+    } catch {
+      setAgentSigningArmAcks([false, false, false]);
+      setMessage("Signing arm failed closed because the proof, approval, session, fixture, or expiry changed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revokeAgentDevnetSigningArm(armId: string): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await window.silfable.revokeAgentDevnetSigningArm({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        signingArmId: armId,
+        acknowledgedImmediateRevocation: true,
+      });
+      setAgentDevnetSigningArms((await window.silfable.listAgentDevnetSigningArms()).arms);
+      setMessage("Agent Devnet signing arm revoked locally. No transaction was signed or broadcast.");
+    } catch {
+      setMessage("Signing arm is no longer active or could not be revoked.");
     } finally {
       setBusy(false);
     }
@@ -1621,6 +1674,24 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
       </div>
       <div className="shadowHistory">
         <div className="auditHeading"><div><p className="eyebrow">Encrypted Devnet proof journal</p><h3>Approved intent simulations</h3></div><span>{agentDevnetSimulations.length} proofs</span></div>
+        {agentDevnetSimulations.some((simulation) => simulation.outcome === "simulated" && !agentDevnetSigningArms.some((arm) => arm.simulationId === simulation.id)) && (
+          <div className="consentList">
+            {[
+              "I authorize one Devnet fixture signature bound to the exact simulated message.",
+              "I understand this authority is for the dedicated Devnet hot wallet and expires automatically.",
+              "I understand the fixture has no economic mapping to the AI intent and is not a market swap.",
+            ].map((label, index) => (
+              <label className="consent" key={label}>
+                <input
+                  type="checkbox"
+                  checked={agentSigningArmAcks[index] ?? false}
+                  onChange={(event) => setAgentSigningArmAcks((acks) => acks.map((value, itemIndex) => itemIndex === index ? event.target.checked : value))}
+                />
+                <span>{label}</span>
+              </label>
+            ))}
+          </div>
+        )}
         {agentDevnetSimulations.length === 0 ? <p className="auditEmpty">No approved agent intent has an exact-message Devnet proof.</p> : (
           <div className="auditList">
             {agentDevnetSimulations.map((simulation) => (
@@ -1631,6 +1702,21 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
                 <div><span>Failure</span><code>{simulation.failureCode ?? "none"}</code></div>
                 <div><span>Economic boundary</span><code>mapping=none · marketSwap=false</code></div>
                 <div><span>Privilege boundary</span><code>signed=false · broadcast=false · executed=false</code></div>
+                {simulation.outcome === "simulated" && !agentDevnetSigningArms.some((arm) => arm.simulationId === simulation.id) && (
+                  <button type="button" disabled={busy || !agentSigningArmAcks.every(Boolean)} onClick={() => void armAgentDevnetSigning(simulation)}>
+                    Arm one Devnet signature
+                  </button>
+                )}
+              </article>
+            ))}
+            {agentDevnetSigningArms.map((arm) => (
+              <article className="shadowRow" key={arm.id}>
+                <div><span>Signing arm</span><strong>{arm.state}</strong></div>
+                <div><span>Scope</span><code>{arm.scope}</code></div>
+                <div><span>Message</span><code>{arm.messageHash}</code></div>
+                <div><span>Expiry</span><code>{arm.expiresAt}</code></div>
+                <div><span>Boundary</span><code>bridge=false · Mainnet=false · marketSwap=false</code></div>
+                {arm.state === "active" && <button type="button" disabled={busy} onClick={() => void revokeAgentDevnetSigningArm(arm.id)}>Revoke signing arm</button>}
               </article>
             ))}
           </div>

@@ -21,6 +21,10 @@ import type {
   AgentSimulateDevnetIntentRequest,
   AgentSimulateDevnetIntentResponse,
   AgentDevnetSimulationListResponse,
+  AgentArmDevnetSigningRequest,
+  AgentRevokeDevnetSigningArmRequest,
+  AgentDevnetSigningArmMutationResponse,
+  AgentDevnetSigningArmListResponse,
   AiShadowTradeListResponse,
   AiShadowTradeMutationResponse,
   DcaSimulationRequest,
@@ -153,6 +157,9 @@ declare global {
       rejectAgentIntent(request: AgentRejectIntentRequest): Promise<AgentIntentMutationResponse>;
       simulateAgentIntentOnDevnet(request: AgentSimulateDevnetIntentRequest): Promise<AgentSimulateDevnetIntentResponse>;
       listAgentDevnetSimulations(): Promise<AgentDevnetSimulationListResponse>;
+      armAgentDevnetSigning(request: AgentArmDevnetSigningRequest): Promise<AgentDevnetSigningArmMutationResponse>;
+      revokeAgentDevnetSigningArm(request: AgentRevokeDevnetSigningArmRequest): Promise<AgentDevnetSigningArmMutationResponse>;
+      listAgentDevnetSigningArms(): Promise<AgentDevnetSigningArmListResponse>;
       getUpdateStatus(): Promise<UpdateStatus>;
       checkForUpdate(request: UpdateCommandRequest): Promise<UpdateCheckResponse>;
       openUpdateReview(request: UpdateCommandRequest): Promise<UpdateOpenReviewResponse>;

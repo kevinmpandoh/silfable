@@ -31,6 +31,10 @@ import {
   AgentSimulateDevnetIntentRequestSchema,
   AgentSimulateDevnetIntentResponseSchema,
   AgentDevnetSimulationListResponseSchema,
+  AgentArmDevnetSigningRequestSchema,
+  AgentRevokeDevnetSigningArmRequestSchema,
+  AgentDevnetSigningArmMutationResponseSchema,
+  AgentDevnetSigningArmListResponseSchema,
   DcaSimulationRequestSchema,
   DcaSimulationResponseSchema,
   DevnetAirdropRequestSchema,
@@ -151,6 +155,7 @@ import {
   AgentDevnetSimulationService,
   SolanaAgentDevnetSimulationAdapter,
 } from "./execution/agent-devnet-simulation.js";
+import { AgentDevnetSigningArmService } from "./execution/agent-devnet-signing-arm.js";
 import { UpdateReviewService } from "./update/service.js";
 import {
   LocalCrashTelemetryService,
@@ -270,6 +275,7 @@ function registerIpc(
   marketWake: MarketWakeScheduler,
   agentSessions: AgentSessionService,
   agentDevnetSimulations: AgentDevnetSimulationService,
+  agentDevnetSigningArms: AgentDevnetSigningArmService,
   dataCipher: LocalDataCipher,
   updates: UpdateReviewService,
   telemetry: LocalCrashTelemetryService,
@@ -334,6 +340,7 @@ function registerIpc(
     const now = new Date().toISOString();
     const halted = database.haltAllRunningMissions("explicit-lock", now);
     database.revokeOpenGuardedSchedulerArms(now);
+    database.revokeOpenAgentDevnetSigningArms(now);
     marketWake.stop();
     secretStore.lock();
     for (const missionId of halted) notifyMissionEvent({ missionId, type: "halted", detail: "explicit-lock" });
@@ -900,6 +907,38 @@ function registerIpc(
     });
   });
 
+  ipcMain.handle(IPC_CHANNELS.agentArmDevnetSigning, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = AgentArmDevnetSigningRequestSchema.parse(untrustedRequest);
+    return AgentDevnetSigningArmMutationResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      arm: await agentDevnetSigningArms.arm({
+        simulationId: request.simulationId,
+        expectedProposalDigest: request.expectedProposalDigest,
+        expectedMessageHash: request.expectedMessageHash,
+      }),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.agentRevokeDevnetSigningArm, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = AgentRevokeDevnetSigningArmRequestSchema.parse(untrustedRequest);
+    return AgentDevnetSigningArmMutationResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      arm: await agentDevnetSigningArms.revoke(request.signingArmId),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.agentListDevnetSigningArms, async (event) => {
+    assertTrustedSender(event);
+    return AgentDevnetSigningArmListResponseSchema.parse({
+      schemaVersion: 1,
+      arms: await agentDevnetSigningArms.list(),
+    });
+  });
+
   ipcMain.handle(IPC_CHANNELS.updateGetStatus, (event) => {
     assertTrustedSender(event);
     return UpdateStatusSchema.parse(updates.getStatus());
@@ -1087,6 +1126,7 @@ app.whenReady().then(async () => {
   keystore = new LocalEncryptedKeystore(join(app.getPath("userData"), "keystore", "secrets.v1.json"));
   runtimeDatabase = await RuntimeDatabase.open(join(app.getPath("userData"), "data", "silfable.sqlite3"));
   runtimeDatabase.revokeOpenGuardedSchedulerArms(new Date().toISOString());
+  runtimeDatabase.revokeOpenAgentDevnetSigningArms(new Date().toISOString());
   const devnetRpc = new SolanaDevnetRpc();
   networkMonitor = new NetworkHealthMonitor(devnetRpc);
   const walletOnboarding = new WalletOnboardingService(keystore, runtimeDatabase);
@@ -1207,6 +1247,14 @@ app.whenReady().then(async () => {
     agents: agentSessions,
     adapter: new SolanaAgentDevnetSimulationAdapter(devnetRpc),
   });
+  const agentDevnetSigningArms = new AgentDevnetSigningArmService({
+    database: runtimeDatabase,
+    cipher: dataCipher,
+    keystore,
+    simulations: agentDevnetSimulations,
+    agents: agentSessions,
+    fixtures: fixtureReview,
+  });
   const updates = new UpdateReviewService({
     currentVersion: app.getVersion(),
     openExternal: async (url) => shell.openExternal(url),
@@ -1229,7 +1277,7 @@ app.whenReady().then(async () => {
     onEvent: notifyMissionEvent,
   });
   missionScheduler.initialize();
-  registerIpc(keystore, runtimeDatabase, networkMonitor, walletRpc, walletOnboarding, missions, ai, canary, fixtureProvisioning, fixtureReview, fixtureTransfer, fixtureTransferApproval, guardedMissionAuthorization, guardedSchedulerArm, guardedExecution, jupiter, marketObservations, marketWakeScheduler, agentSessions, agentDevnetSimulations, dataCipher, updates, telemetry);
+  registerIpc(keystore, runtimeDatabase, networkMonitor, walletRpc, walletOnboarding, missions, ai, canary, fixtureProvisioning, fixtureReview, fixtureTransfer, fixtureTransferApproval, guardedMissionAuthorization, guardedSchedulerArm, guardedExecution, jupiter, marketObservations, marketWakeScheduler, agentSessions, agentDevnetSimulations, agentDevnetSigningArms, dataCipher, updates, telemetry);
   networkMonitor.start();
   missionScheduler.start();
   mainWindow = createMainWindow();
@@ -1265,6 +1313,7 @@ app.whenReady().then(async () => {
   powerMonitor.on("suspend", () => {
     missionScheduler?.stop("system-suspend");
     marketWakeScheduler?.stop();
+    runtimeDatabase?.revokeOpenAgentDevnetSigningArms(new Date().toISOString());
     keystore?.lock();
     networkMonitor?.stop();
   });
@@ -1323,6 +1372,7 @@ app.on("before-quit", () => {
   missionScheduler = null;
   marketWakeScheduler?.stop();
   marketWakeScheduler = null;
+  runtimeDatabase?.revokeOpenAgentDevnetSigningArms(new Date().toISOString());
   keystore?.lock();
   networkMonitor?.stop();
   networkMonitor = null;

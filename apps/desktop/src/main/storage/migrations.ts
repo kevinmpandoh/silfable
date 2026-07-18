@@ -596,4 +596,53 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
       CREATE INDEX agent_devnet_simulation_history ON agent_devnet_simulations(simulated_at DESC);
     `,
   },
+  {
+    version: 21,
+    name: "revocable-agent-devnet-signing-arm",
+    sql: `
+      CREATE TABLE agent_devnet_signing_arms (
+        id TEXT PRIMARY KEY,
+        simulation_id TEXT NOT NULL UNIQUE REFERENCES agent_devnet_simulations(id),
+        evaluation_id TEXT NOT NULL REFERENCES agent_intent_evaluations(id),
+        session_id TEXT NOT NULL REFERENCES agent_sessions(id),
+        proposal_digest TEXT NOT NULL CHECK (length(proposal_digest) = 64 AND proposal_digest NOT GLOB '*[^0-9a-f]*'),
+        fixture_manifest_digest TEXT NOT NULL CHECK (length(fixture_manifest_digest) = 64 AND fixture_manifest_digest NOT GLOB '*[^0-9a-f]*'),
+        message_hash TEXT NOT NULL CHECK (length(message_hash) = 64 AND message_hash NOT GLOB '*[^0-9a-f]*'),
+        scope TEXT NOT NULL CHECK (scope = 'agent-devnet-fixture-sign-once'),
+        state TEXT NOT NULL CHECK (state IN ('active', 'revoked', 'expired')),
+        encrypted_payload TEXT NOT NULL,
+        payload_nonce TEXT NOT NULL,
+        key_id TEXT NOT NULL,
+        execution_bridge_connected INTEGER NOT NULL DEFAULT 0 CHECK (execution_bridge_connected = 0),
+        mainnet_enabled INTEGER NOT NULL DEFAULT 0 CHECK (mainnet_enabled = 0),
+        armed_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        revoked_at TEXT,
+        CHECK (
+          (state = 'active' AND revoked_at IS NULL)
+          OR (state IN ('revoked', 'expired') AND revoked_at IS NOT NULL)
+        )
+      ) STRICT;
+      CREATE UNIQUE INDEX one_active_agent_devnet_signing_arm
+        ON agent_devnet_signing_arms((1)) WHERE state = 'active';
+      CREATE INDEX agent_devnet_signing_arm_history
+        ON agent_devnet_signing_arms(armed_at DESC);
+      CREATE TRIGGER revoke_agent_signing_arm_on_intent_change
+      AFTER UPDATE OF approval_state ON agent_intent_evaluations
+      WHEN NEW.approval_state <> 'approved'
+      BEGIN
+        UPDATE agent_devnet_signing_arms
+        SET state = 'revoked', revoked_at = COALESCE(NEW.decided_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        WHERE evaluation_id = NEW.id AND state = 'active';
+      END;
+      CREATE TRIGGER revoke_agent_signing_arm_on_session_end
+      AFTER UPDATE OF state ON agent_sessions
+      WHEN NEW.state IN ('halted', 'expired')
+      BEGIN
+        UPDATE agent_devnet_signing_arms
+        SET state = 'revoked', revoked_at = NEW.updated_at
+        WHERE session_id = NEW.id AND state = 'active';
+      END;
+    `,
+  },
 ] as const;
