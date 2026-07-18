@@ -228,6 +228,11 @@ export type AgentDevnetBroadcastExecutionStorageRecord = {
   createdAt: string; updatedAt: string;
 };
 
+export type AgentDevnetSwapQuoteStorageRecord = {
+  id: string; evaluationId: string; sessionId: string; action: "buy-sol" | "sell-sol"; allowed: boolean;
+  encryptedPayload: string; payloadNonce: string; keyId: string; quotedAt: string; expiresAt: string;
+};
+
 export type CrashReportStorageRecord = {
   id: string;
   encryptedPayload: string;
@@ -1457,6 +1462,25 @@ export class RuntimeDatabase {
       .all().map(toAgentDevnetBroadcastExecutionStorageRecord);
   }
 
+  insertAgentDevnetSwapQuote(record: AgentDevnetSwapQuoteStorageRecord): void {
+    this.#database.prepare(
+      `INSERT INTO agent_devnet_swap_quotes (id, evaluation_id, session_id, action, allowed, encrypted_payload,
+       payload_nonce, key_id, quoted_at, expires_at, transaction_built, signing_attempted, broadcast_attempted)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0)`,
+    ).run(record.id, record.evaluationId, record.sessionId, record.action, Number(record.allowed),
+      record.encryptedPayload, record.payloadNonce, record.keyId, record.quotedAt, record.expiresAt);
+  }
+
+  getAgentDevnetSwapQuoteByEvaluation(evaluationId: string): AgentDevnetSwapQuoteStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM agent_devnet_swap_quotes WHERE evaluation_id = ?").get(evaluationId);
+    return row === undefined ? null : toAgentDevnetSwapQuoteStorageRecord(row);
+  }
+
+  listAgentDevnetSwapQuotes(limit = 20): AgentDevnetSwapQuoteStorageRecord[] {
+    return this.#database.prepare("SELECT * FROM agent_devnet_swap_quotes ORDER BY quoted_at DESC LIMIT ?")
+      .all(limit).map(toAgentDevnetSwapQuoteStorageRecord);
+  }
+
   insertAiShadowTradeEvaluation(record: AiShadowTradeEvaluationStorageRecord): void {
     this.#database.prepare(
       `INSERT INTO ai_shadow_trade_evaluations
@@ -2523,4 +2547,16 @@ function toAgentDevnetBroadcastExecutionStorageRecord(row: unknown): AgentDevnet
     fixtureTransferPerformed: value.fixture_transfer_performed === 1,
     createdAt: value.created_at, updatedAt: value.updated_at,
   };
+}
+
+function toAgentDevnetSwapQuoteStorageRecord(row: unknown): AgentDevnetSwapQuoteStorageRecord {
+  const value = row as { id: string; evaluation_id: string; session_id: string; action: "buy-sol" | "sell-sol";
+    allowed: number; encrypted_payload: string; payload_nonce: string; key_id: string; quoted_at: string; expires_at: string;
+    transaction_built: number; signing_attempted: number; broadcast_attempted: number };
+  if (value.transaction_built !== 0 || value.signing_attempted !== 0 || value.broadcast_attempted !== 0) {
+    throw new Error("Agent Devnet swap quote cannot contain execution evidence");
+  }
+  return { id: value.id, evaluationId: value.evaluation_id, sessionId: value.session_id, action: value.action,
+    allowed: value.allowed === 1, encryptedPayload: value.encrypted_payload, payloadNonce: value.payload_nonce,
+    keyId: value.key_id, quotedAt: value.quoted_at, expiresAt: value.expires_at };
 }

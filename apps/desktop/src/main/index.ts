@@ -44,6 +44,9 @@ import {
   AgentBroadcastDevnetExecutionRequestSchema,
   AgentBroadcastDevnetExecutionResponseSchema,
   AgentDevnetBroadcastExecutionListResponseSchema,
+  AgentQuoteDevnetSwapRequestSchema,
+  AgentQuoteDevnetSwapResponseSchema,
+  AgentDevnetSwapQuoteListResponseSchema,
   DcaSimulationRequestSchema,
   DcaSimulationResponseSchema,
   DevnetAirdropRequestSchema,
@@ -168,6 +171,7 @@ import { AgentDevnetSigningArmService } from "./execution/agent-devnet-signing-a
 import { AgentDevnetPreSignService, SolanaAgentDevnetPreSignAdapter } from "./execution/agent-devnet-pre-sign.js";
 import { AgentDevnetSigningService, SolanaAgentDevnetSigningAdapter } from "./execution/agent-devnet-signing.js";
 import { AgentDevnetBroadcastService, SolanaAgentDevnetBroadcastAdapter } from "./execution/agent-devnet-broadcast.js";
+import { AgentDevnetSwapQuoteService } from "./execution/agent-devnet-swap-quote.js";
 import { UpdateReviewService } from "./update/service.js";
 import {
   LocalCrashTelemetryService,
@@ -291,6 +295,7 @@ function registerIpc(
   agentDevnetPreSign: AgentDevnetPreSignService,
   agentDevnetSigning: AgentDevnetSigningService,
   agentDevnetBroadcast: AgentDevnetBroadcastService,
+  agentDevnetSwapQuotes: AgentDevnetSwapQuoteService,
   dataCipher: LocalDataCipher,
   updates: UpdateReviewService,
   telemetry: LocalCrashTelemetryService,
@@ -989,6 +994,15 @@ function registerIpc(
     assertTrustedSender(event);
     return AgentDevnetBroadcastExecutionListResponseSchema.parse({ schemaVersion: 1, executions: await agentDevnetBroadcast.list() });
   });
+  ipcMain.handle(IPC_CHANNELS.agentQuoteDevnetSwap, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event); const request = AgentQuoteDevnetSwapRequestSchema.parse(untrustedRequest);
+    return AgentQuoteDevnetSwapResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId,
+      quote: await agentDevnetSwapQuotes.quote(request.evaluationId) });
+  });
+  ipcMain.handle(IPC_CHANNELS.agentListDevnetSwapQuotes, async (event) => {
+    assertTrustedSender(event);
+    return AgentDevnetSwapQuoteListResponseSchema.parse({ schemaVersion: 1, quotes: await agentDevnetSwapQuotes.list() });
+  });
 
   ipcMain.handle(IPC_CHANNELS.updateGetStatus, (event) => {
     assertTrustedSender(event);
@@ -1322,6 +1336,8 @@ app.whenReady().then(async () => {
     fixtures: fixtureReview, agents: agentSessions, simulations: agentDevnetSimulations,
     signing: agentDevnetSigning, chain: new SolanaAgentDevnetBroadcastAdapter(devnetRpc),
   });
+  const agentDevnetSwapQuotes = new AgentDevnetSwapQuoteService({ database: runtimeDatabase, cipher: dataCipher,
+    keystore, agents: agentSessions });
   const updates = new UpdateReviewService({
     currentVersion: app.getVersion(),
     openExternal: async (url) => shell.openExternal(url),
@@ -1344,7 +1360,7 @@ app.whenReady().then(async () => {
     onEvent: notifyMissionEvent,
   });
   missionScheduler.initialize();
-  registerIpc(keystore, runtimeDatabase, networkMonitor, walletRpc, walletOnboarding, missions, ai, canary, fixtureProvisioning, fixtureReview, fixtureTransfer, fixtureTransferApproval, guardedMissionAuthorization, guardedSchedulerArm, guardedExecution, jupiter, marketObservations, marketWakeScheduler, agentSessions, agentDevnetSimulations, agentDevnetSigningArms, agentDevnetPreSign, agentDevnetSigning, agentDevnetBroadcast, dataCipher, updates, telemetry);
+  registerIpc(keystore, runtimeDatabase, networkMonitor, walletRpc, walletOnboarding, missions, ai, canary, fixtureProvisioning, fixtureReview, fixtureTransfer, fixtureTransferApproval, guardedMissionAuthorization, guardedSchedulerArm, guardedExecution, jupiter, marketObservations, marketWakeScheduler, agentSessions, agentDevnetSimulations, agentDevnetSigningArms, agentDevnetPreSign, agentDevnetSigning, agentDevnetBroadcast, agentDevnetSwapQuotes, dataCipher, updates, telemetry);
   networkMonitor.start();
   missionScheduler.start();
   mainWindow = createMainWindow();

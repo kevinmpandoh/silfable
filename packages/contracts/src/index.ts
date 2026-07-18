@@ -68,6 +68,8 @@ export const IPC_CHANNELS = {
   agentListDevnetSignedExecutions: "agent:list-devnet-signed-executions",
   agentBroadcastDevnetExecution: "agent:broadcast-devnet-execution",
   agentListDevnetBroadcastExecutions: "agent:list-devnet-broadcast-executions",
+  agentQuoteDevnetSwap: "agent:quote-devnet-swap",
+  agentListDevnetSwapQuotes: "agent:list-devnet-swap-quotes",
   updateGetStatus: "update:get-status",
   updateCheck: "update:check",
   updateOpenReview: "update:open-review",
@@ -1747,6 +1749,35 @@ export type AgentDevnetBroadcastExecutionView = z.infer<typeof AgentDevnetBroadc
 export type AgentBroadcastDevnetExecutionRequest = z.infer<typeof AgentBroadcastDevnetExecutionRequestSchema>;
 export type AgentBroadcastDevnetExecutionResponse = z.infer<typeof AgentBroadcastDevnetExecutionResponseSchema>;
 export type AgentDevnetBroadcastExecutionListResponse = z.infer<typeof AgentDevnetBroadcastExecutionListResponseSchema>;
+
+export const AgentDevnetSwapQuoteViewSchema = z.object({
+  schemaVersion: z.literal(1), id: z.string().uuid(), evaluationId: z.string().uuid(), sessionId: z.string().uuid(),
+  action: z.enum(["buy-sol", "sell-sol"]), venue: z.literal("raydium-devnet"),
+  inputMint: z.string().min(32).max(44), outputMint: z.string().min(32).max(44), inputAmount: z.string().regex(/^[1-9][0-9]*$/u),
+  outputAmount: z.string().regex(/^[1-9][0-9]*$/u), minimumOutputAmount: z.string().regex(/^[1-9][0-9]*$/u),
+  slippageBps: z.number().int().min(1).max(50), priceImpactBps: z.number().int().min(0).max(10_000),
+  routePoolIds: z.array(z.string().min(32).max(44)).min(1).max(4), proposalNotionalUsdcMicros: z.string().regex(/^[1-9][0-9]*$/u),
+  economicValueMapping: z.literal("direction-only-capped-devnet"), amountPolicy: z.literal("fixed-low-value-canary-v1"),
+  allowed: z.boolean(), denialCodes: z.array(z.enum(["binding-changed", "action-unsupported", "quote-invalid", "price-impact-exceeded", "route-invalid"])).max(5),
+  transactionBuilt: z.literal(false), signingAttempted: z.literal(false), broadcastAttempted: z.literal(false),
+  marketSwapPerformed: z.literal(false), mainnetEnabled: z.literal(false), quotedAt: z.string().datetime(), expiresAt: z.string().datetime(),
+}).strict().superRefine((value, context) => {
+  if (value.allowed !== (value.denialCodes.length === 0)) {
+    context.addIssue({ code: "custom", message: "Devnet swap quote allow state is inconsistent" });
+  }
+});
+export const AgentQuoteDevnetSwapRequestSchema = z.object({ schemaVersion: z.literal(1), requestId: z.string().uuid(),
+  evaluationId: z.string().uuid(), acknowledgedDirectionOnlyCanaryAmount: z.literal(true),
+  acknowledgedDevnetPriceIsNotMarketPrice: z.literal(true), acknowledgedNoBuildSignOrBroadcast: z.literal(true),
+}).strict();
+export const AgentQuoteDevnetSwapResponseSchema = z.object({ schemaVersion: z.literal(1), requestId: z.string().uuid(),
+  quote: AgentDevnetSwapQuoteViewSchema }).strict();
+export const AgentDevnetSwapQuoteListResponseSchema = z.object({ schemaVersion: z.literal(1),
+  quotes: z.array(AgentDevnetSwapQuoteViewSchema).max(20) }).strict();
+export type AgentDevnetSwapQuoteView = z.infer<typeof AgentDevnetSwapQuoteViewSchema>;
+export type AgentQuoteDevnetSwapRequest = z.infer<typeof AgentQuoteDevnetSwapRequestSchema>;
+export type AgentQuoteDevnetSwapResponse = z.infer<typeof AgentQuoteDevnetSwapResponseSchema>;
+export type AgentDevnetSwapQuoteListResponse = z.infer<typeof AgentDevnetSwapQuoteListResponseSchema>;
 
 export const JupiterOrderQuoteSchema = z.object({
   mode: z.string().min(1),

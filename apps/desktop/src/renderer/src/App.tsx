@@ -12,6 +12,7 @@ import type {
   AgentDevnetPreSignExecutionView,
   AgentDevnetSignedExecutionView,
   AgentDevnetBroadcastExecutionView,
+  AgentDevnetSwapQuoteView,
   AgentSessionView,
   DevnetCanaryView,
   DevnetFixtureProvisionView,
@@ -933,10 +934,12 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
   const [agentDevnetPreSignExecutions, setAgentDevnetPreSignExecutions] = useState<AgentDevnetPreSignExecutionView[]>([]);
   const [agentDevnetSignedExecutions, setAgentDevnetSignedExecutions] = useState<AgentDevnetSignedExecutionView[]>([]);
   const [agentDevnetBroadcastExecutions, setAgentDevnetBroadcastExecutions] = useState<AgentDevnetBroadcastExecutionView[]>([]);
+  const [agentDevnetSwapQuotes, setAgentDevnetSwapQuotes] = useState<AgentDevnetSwapQuoteView[]>([]);
   const [agentSigningArmAcks, setAgentSigningArmAcks] = useState([false, false, false]);
   const [agentPreSignAcks, setAgentPreSignAcks] = useState([false, false, false]);
   const [agentSigningAcks, setAgentSigningAcks] = useState([false, false, false]);
   const [agentBroadcastAcks, setAgentBroadcastAcks] = useState([false, false, false]);
+  const [agentSwapQuoteAcks, setAgentSwapQuoteAcks] = useState([false, false, false]);
   const [agentObjective, setAgentObjective] = useState("Protect capital and propose a SOL action only when the validated observation fits conservative risk limits.");
   const [agentMaxNotional, setAgentMaxNotional] = useState("20");
   const [agentMaxImpactBps, setAgentMaxImpactBps] = useState("50");
@@ -965,6 +968,7 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
       setAgentDevnetPreSignExecutions([]);
       setAgentDevnetSignedExecutions([]);
       setAgentDevnetBroadcastExecutions([]);
+      setAgentDevnetSwapQuotes([]);
       setAiProposal(null);
       return;
     }
@@ -982,8 +986,9 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
       window.silfable.listAgentDevnetPreSignExecutions(),
       window.silfable.listAgentDevnetSignedExecutions(),
       window.silfable.listAgentDevnetBroadcastExecutions(),
+      window.silfable.listAgentDevnetSwapQuotes(),
     ])
-      .then(([settings, history, providers, evaluations, observations, watches, agents, devnetSimulations, signingArms, preSignExecutions, signedExecutions, broadcastExecutions]) => {
+      .then(([settings, history, providers, evaluations, observations, watches, agents, devnetSimulations, signingArms, preSignExecutions, signedExecutions, broadcastExecutions, swapQuotes]) => {
         if (!active) return;
         setConfigured(settings.configured);
         setQuotes(history.quotes);
@@ -999,6 +1004,7 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
         setAgentDevnetPreSignExecutions(preSignExecutions.executions);
         setAgentDevnetSignedExecutions(signedExecutions.executions);
         setAgentDevnetBroadcastExecutions(broadcastExecutions.executions);
+        setAgentDevnetSwapQuotes(swapQuotes.quotes);
       })
       .catch(() => active && setMessage("Jupiter shadow settings are unavailable."));
     const timer = window.setInterval(() => {
@@ -1010,7 +1016,8 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
         window.silfable.listAgentDevnetPreSignExecutions(),
         window.silfable.listAgentDevnetSignedExecutions(),
         window.silfable.listAgentDevnetBroadcastExecutions(),
-      ]).then(([watches, agents, devnetSimulations, signingArms, preSignExecutions, signedExecutions, broadcastExecutions]) => {
+        window.silfable.listAgentDevnetSwapQuotes(),
+      ]).then(([watches, agents, devnetSimulations, signingArms, preSignExecutions, signedExecutions, broadcastExecutions, swapQuotes]) => {
         if (!active) return;
         setMarketWatches(watches.watches);
         setMarketWakeReceipts(watches.wakeReceipts);
@@ -1021,6 +1028,7 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
         setAgentDevnetPreSignExecutions(preSignExecutions.executions);
         setAgentDevnetSignedExecutions(signedExecutions.executions);
         setAgentDevnetBroadcastExecutions(broadcastExecutions.executions);
+        setAgentDevnetSwapQuotes(swapQuotes.quotes);
       }).catch(() => undefined);
     }, 5_000);
     return () => {
@@ -1425,6 +1433,21 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
     finally { setBusy(false); }
   }
 
+  async function quoteAgentDevnetSwap(evaluation: AgentIntentEvaluationView): Promise<void> {
+    if (!agentSwapQuoteAcks.every(Boolean)) return;
+    setBusy(true); setMessage(null);
+    try {
+      const response = await window.silfable.quoteAgentDevnetSwap({ schemaVersion: 1, requestId: crypto.randomUUID(),
+        evaluationId: evaluation.receipt.id, acknowledgedDirectionOnlyCanaryAmount: true,
+        acknowledgedDevnetPriceIsNotMarketPrice: true, acknowledgedNoBuildSignOrBroadcast: true });
+      setAgentDevnetSwapQuotes((await window.silfable.listAgentDevnetSwapQuotes()).quotes);
+      setAgentSwapQuoteAcks([false, false, false]);
+      setMessage(response.quote.allowed ? "Direction-bound Raydium Devnet quote recorded. No transaction was built."
+        : `Raydium Devnet quote denied: ${response.quote.denialCodes.join(", ")}.`);
+    } catch { setAgentSwapQuoteAcks([false, false, false]); setMessage("Raydium Devnet quote request failed closed."); }
+    finally { setBusy(false); }
+  }
+
   async function approveShadowTrade(evaluation: AiShadowTradeEvaluationView): Promise<void> {
     if (!aiApprovalAcknowledged) return;
     setBusy(true);
@@ -1714,6 +1737,13 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
         <div className="auditHeading"><div><p className="eyebrow">Restricted agent journal</p><h3>Sessions and intents</h3></div><span>{agentSessions.length} sessions · {agentEvaluations.length} intents</span></div>
         {agentSessions.length === 0 ? <p className="auditEmpty">No restricted agent session recorded.</p> : (
           <div className="auditList">
+            {agentEvaluations.some((evaluation) => evaluation.approval.state === "approved" && (evaluation.proposal.action === "buy-sol" || evaluation.proposal.action === "sell-sol") && !agentDevnetSwapQuotes.some((quote) => quote.evaluationId === evaluation.receipt.id)) && (
+              <div className="consentList">
+                {["Map only the approved buy/sell direction to a fixed low-value Devnet canary amount.", "Devnet pool price is test evidence, not trusted market price discovery.", "Record a quote only; do not build, sign, or broadcast a transaction."].map((label, index) => (
+                  <label className="consent" key={label}><input type="checkbox" checked={agentSwapQuoteAcks[index] ?? false} onChange={(event) => setAgentSwapQuoteAcks((acks) => acks.map((value, itemIndex) => itemIndex === index ? event.target.checked : value))} /><span>{label}</span></label>
+                ))}
+              </div>
+            )}
             {agentSessions.map((session) => (
               <article className="shadowRow" key={session.id}>
                 <div><span>Session</span><strong>{session.state}</strong></div>
@@ -1739,6 +1769,9 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
                 )}
                 {evaluation.approval.state === "approved" && (
                   <div className="shadowActions">
+                    {(evaluation.proposal.action === "buy-sol" || evaluation.proposal.action === "sell-sol") && (
+                      <button type="button" disabled={busy || !agentSwapQuoteAcks.every(Boolean) || agentDevnetSwapQuotes.some((quote) => quote.evaluationId === evaluation.receipt.id)} onClick={() => void quoteAgentDevnetSwap(evaluation)}>Quote Raydium Devnet direction</button>
+                    )}
                     <button
                       type="button"
                       disabled={busy || agentDevnetSimulations.some((simulation) => simulation.evaluationId === evaluation.receipt.id)}
@@ -1749,6 +1782,16 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
                     <button type="button" disabled={busy} onClick={() => void decideAgentIntent(evaluation, false)}>Revoke intent</button>
                   </div>
                 )}
+              </article>
+            ))}
+            {agentDevnetSwapQuotes.map((quote) => (
+              <article className="shadowRow" key={quote.id}>
+                <div><span>Raydium Devnet quote</span><strong>{quote.allowed ? "allowed" : "denied"} · {quote.action}</strong></div>
+                <div><span>Canary amount</span><code>{quote.inputAmount} atomic → ≥ {quote.minimumOutputAmount}</code></div>
+                <div><span>Impact / route</span><code>{quote.priceImpactBps} bps · {quote.routePoolIds.length} pool(s)</code></div>
+                <div><span>Mapping</span><code>{quote.economicValueMapping} · {quote.amountPolicy}</code></div>
+                <div><span>Boundary</span><code>built=false · signed=false · broadcast=false · mainnet=false</code></div>
+                <div><span>Denial</span><code>{quote.denialCodes.join(", ") || "none"}</code></div>
               </article>
             ))}
           </div>

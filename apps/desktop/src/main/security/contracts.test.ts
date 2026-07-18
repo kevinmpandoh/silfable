@@ -19,6 +19,8 @@ import {
   AgentDevnetSignedExecutionViewSchema,
   AgentBroadcastDevnetExecutionRequestSchema,
   AgentDevnetBroadcastExecutionViewSchema,
+  AgentQuoteDevnetSwapRequestSchema,
+  AgentDevnetSwapQuoteViewSchema,
   DevnetFixtureProvisionExecuteRequestSchema,
   DevnetFixtureReviewActivateRequestSchema,
   DevnetFixtureTransferExecuteRequestSchema,
@@ -259,6 +261,10 @@ test("security-sensitive requests reject unknown privilege-shaped fields", () =>
       acknowledgedDevnetFeeAndFixtureTransfer: true, acknowledgedNoAutomaticRetry: true,
       acknowledgedNoMarketSwapOrMainnet: true, signedWire: "renderer-must-not-provide-wire",
     }],
+    [AgentQuoteDevnetSwapRequestSchema, { schemaVersion: 1, requestId,
+      evaluationId: "00000000-0000-4000-8000-000000000002", acknowledgedDirectionOnlyCanaryAmount: true,
+      acknowledgedDevnetPriceIsNotMarketPrice: true, acknowledgedNoBuildSignOrBroadcast: true,
+      inputMint: "renderer-must-not-select-a-mint" }],
   ] as const;
   for (const [schema, value] of cases) assert.equal(schema.safeParse(value).success, false);
 });
@@ -431,6 +437,9 @@ test("acknowledgements cannot be omitted or replaced with truthy strings", () =>
     acknowledgedDevnetFeeAndFixtureTransfer: true, acknowledgedNoAutomaticRetry: true,
     acknowledgedNoMarketSwapOrMainnet: "true",
   }).success, false);
+  assert.equal(AgentQuoteDevnetSwapRequestSchema.safeParse({ schemaVersion: 1, requestId,
+    evaluationId: "00000000-0000-4000-8000-000000000002", acknowledgedDirectionOnlyCanaryAmount: true,
+    acknowledgedDevnetPriceIsNotMarketPrice: true, acknowledgedNoBuildSignOrBroadcast: "true" }).success, false);
 });
 
 test("public agent pre-sign receipts reject wire, signatures, and execution claims", () => {
@@ -473,6 +482,21 @@ test("public agent broadcast receipts expose hashes but reject transaction mater
   assert.equal(AgentDevnetBroadcastExecutionViewSchema.safeParse({ ...view, signedWire: "secret" }).success, false);
   assert.equal(AgentDevnetBroadcastExecutionViewSchema.safeParse({ ...view, mainnetEnabled: true }).success, false);
   assert.equal(AgentDevnetBroadcastExecutionViewSchema.safeParse({ ...view, marketSwapPerformed: true }).success, false);
+});
+
+test("public Devnet economic quotes cannot claim transaction construction or execution", () => {
+  const view = { schemaVersion: 1, id: requestId, evaluationId: "00000000-0000-4000-8000-000000000002",
+    sessionId: "00000000-0000-4000-8000-000000000003", action: "sell-sol", venue: "raydium-devnet",
+    inputMint: "So11111111111111111111111111111111111111112", outputMint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+    inputAmount: "1000000", outputAmount: "90000", minimumOutputAmount: "89000", slippageBps: 50, priceImpactBps: 20,
+    routePoolIds: ["C4UR6mqrdSzQQow6nJLq2zNMVh2DmMhw4ieanAvegWs6"], proposalNotionalUsdcMicros: "1000000",
+    economicValueMapping: "direction-only-capped-devnet", amountPolicy: "fixed-low-value-canary-v1", allowed: true,
+    denialCodes: [], transactionBuilt: false, signingAttempted: false, broadcastAttempted: false,
+    marketSwapPerformed: false, mainnetEnabled: false, quotedAt: "2026-07-19T00:00:00.000Z", expiresAt: "2026-07-19T00:00:20.000Z" };
+  assert.equal(AgentDevnetSwapQuoteViewSchema.safeParse(view).success, true);
+  assert.equal(AgentDevnetSwapQuoteViewSchema.safeParse({ ...view, transactionBuilt: true }).success, false);
+  assert.equal(AgentDevnetSwapQuoteViewSchema.safeParse({ ...view, signedWire: "secret" }).success, false);
+  assert.equal(AgentDevnetSwapQuoteViewSchema.safeParse({ ...view, marketSwapPerformed: true }).success, false);
 });
 
 test("public guarded execution receipts reject signatures and transaction evidence", () => {

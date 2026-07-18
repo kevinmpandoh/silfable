@@ -52,7 +52,7 @@ This phase proves the model-to-runtime handoff without creating a new execution 
 
 The current implementation supports one active encrypted session, manual selection of a fresh main-owned observation, `buy-sol`, `sell-sol`, `hold`, and `halt` proposals, post-provider freshness revalidation, deterministic capital/risk gates, immediate safe halt, and digest-bound approve/reject/revoke controls. It deliberately has no transaction construction or signing path.
 
-### Phase 5 — Guarded Devnet autonomy (increments 1–5 implemented)
+### Phase 5 — Guarded Devnet autonomy (increments 1–6 implemented)
 
 - Construct transactions only after deterministic approval.
 - Simulate exact messages and bind authorization to their digest.
@@ -69,6 +69,8 @@ Increment 3 implements atomic arm consumption and an encrypted pre-sign journal.
 Increment 4 connects only a `ready-for-signing` receipt to the local Devnet wallet signer. A durable marker is committed before key use, all current bindings and on-chain fixture provenance are checked again, and the exact previously simulated message hash is verified before and after signing. The signed wire and signature remain encrypted while the renderer receives only a signature hash and fixed no-broadcast/no-execution flags. A receipt can be attempted only once, and restart fails unfinished journals without retrying. This still is not an AI-directed market swap: broadcast, confirmation, reconciliation, economic intent mapping, value-bearing execution, and every Mainnet signing path remain unimplemented.
 
 Increment 5 adds separately acknowledged one-shot Devnet submission and signature reconciliation for the exact signed fixture. Authorization and provenance are checked again, the attempt marker is committed before `sendTransaction`, confirmation is status-driven, and uncertainty after submission is never reported as a safe retry. Restart converts an unsubmitted proposal to failure and only queries the encrypted signature for broadcast or ambiguous records; it never rebroadcasts. A confirmed receipt proves the reviewed fixture transfer only. It has no economic mapping to the AI intent, is not a Jupiter swap, and cannot use Mainnet.
+
+Increment 6 begins the real economic bridge without adding execution privilege. Approved `buy-sol` and `sell-sol` directions map to fixed low-value Raydium Devnet SOL/devUSDC canary quotes. Main owns the pair, direction, amount, slippage, and endpoint, validates route continuity and impact against the session cap, repeats approval checks after network latency, and encrypts the result. The mapping is direction-only rather than full notional equivalence, and Devnet prices are never treated as market discovery. Transaction construction, simulation, signing, and broadcast for this economic quote remain unimplemented.
 
 ### Phase 6 — Mainnet restricted execution
 
@@ -97,4 +99,4 @@ Increment 5 adds separately acknowledged one-shot Devnet submission and signatur
 
 ## Current milestone
 
-Phase 5 increments 1–5 are complete for exact-message simulation, revocable authorization, atomic pre-sign preparation, one-shot local signing, Devnet broadcast, confirmation, and no-rebroadcast restart reconciliation. Silfable can now submit and confirm the fixed reviewed fixture transfer after full revalidation. This is still not AI market trading: the AI proposal has no economic mapping to the fixture, no Jupiter swap is constructed, and every Mainnet signing/broadcast path remains disabled. Phase 5 remains active for a real quote-to-transaction Devnet swap adapter, balance-delta policy, and bounded economic intent mapping before Phase 6 can begin.
+Phase 5 increments 1–6 are complete. The fixture pipeline reaches safe Devnet confirmation, while the separate economic path now binds approved AI direction to a real capped Raydium Devnet SOL/devUSDC quote. Silfable still does not execute that quote: no Raydium transaction is built, simulated, signed, or broadcast, and the mapping does not reproduce the full AI notional. The next increment is strict server-built transaction decoding, program/account allowlisting, exact simulation, and balance-delta policy before any new signing arm is considered. Every Mainnet signing/broadcast path remains disabled.

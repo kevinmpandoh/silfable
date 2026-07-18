@@ -34,6 +34,9 @@ import type {
   AgentBroadcastDevnetExecutionRequest,
   AgentBroadcastDevnetExecutionResponse,
   AgentDevnetBroadcastExecutionListResponse,
+  AgentQuoteDevnetSwapRequest,
+  AgentQuoteDevnetSwapResponse,
+  AgentDevnetSwapQuoteListResponse,
   AiShadowTradeListResponse,
   AiShadowTradeMutationResponse,
   DcaSimulationRequest,
@@ -175,6 +178,8 @@ declare global {
       listAgentDevnetSignedExecutions(): Promise<AgentDevnetSignedExecutionListResponse>;
       broadcastAgentDevnetExecution(request: AgentBroadcastDevnetExecutionRequest): Promise<AgentBroadcastDevnetExecutionResponse>;
       listAgentDevnetBroadcastExecutions(): Promise<AgentDevnetBroadcastExecutionListResponse>;
+      quoteAgentDevnetSwap(request: AgentQuoteDevnetSwapRequest): Promise<AgentQuoteDevnetSwapResponse>;
+      listAgentDevnetSwapQuotes(): Promise<AgentDevnetSwapQuoteListResponse>;
       getUpdateStatus(): Promise<UpdateStatus>;
       checkForUpdate(request: UpdateCommandRequest): Promise<UpdateCheckResponse>;
       openUpdateReview(request: UpdateCommandRequest): Promise<UpdateOpenReviewResponse>;
