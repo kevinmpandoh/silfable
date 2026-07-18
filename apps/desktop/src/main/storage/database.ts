@@ -210,6 +210,15 @@ export type AgentDevnetPreSignExecutionStorageRecord = {
   signingAttempted: false; broadcastAttempted: false; executionAttempted: false; preparedAt: string;
 };
 
+export type AgentDevnetSignedExecutionStorageRecord = {
+  id: string; preSignExecutionId: string; signingArmId: string; simulationId: string;
+  evaluationId: string; sessionId: string; messageHash: string;
+  state: "proposed" | "signing" | "signed-awaiting-broadcast" | "failed";
+  signatureHash: string | null; failureCode: string | null; encryptedPayload: string;
+  payloadNonce: string; keyId: string; signingAttempted: boolean;
+  broadcastAttempted: false; executionAttempted: false; createdAt: string; updatedAt: string;
+};
+
 export type CrashReportStorageRecord = {
   id: string;
   encryptedPayload: string;
@@ -1328,6 +1337,57 @@ export class RuntimeDatabase {
       .all(limit).map(toAgentDevnetPreSignExecutionStorageRecord);
   }
 
+  insertAgentDevnetSignedExecution(record: AgentDevnetSignedExecutionStorageRecord): void {
+    this.#database.prepare(
+      `INSERT INTO agent_devnet_signed_executions
+        (id, pre_sign_execution_id, signing_arm_id, simulation_id, evaluation_id, session_id,
+         message_hash, state, signature_hash, failure_code, encrypted_payload, payload_nonce, key_id,
+         signing_attempted, broadcast_attempted, execution_attempted, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'proposed', NULL, NULL, ?, ?, ?, 0, 0, 0, ?, ?)`,
+    ).run(record.id, record.preSignExecutionId, record.signingArmId, record.simulationId,
+      record.evaluationId, record.sessionId, record.messageHash, record.encryptedPayload,
+      record.payloadNonce, record.keyId, record.createdAt, record.updatedAt);
+  }
+
+  transitionAgentDevnetSignedExecution(input: {
+    id: string; expectedState: AgentDevnetSignedExecutionStorageRecord["state"];
+    state: AgentDevnetSignedExecutionStorageRecord["state"]; signatureHash?: string | null;
+    failureCode?: string | null; encryptedPayload: string; payloadNonce: string; keyId: string;
+    signingAttempted: boolean; updatedAt: string;
+  }): AgentDevnetSignedExecutionStorageRecord {
+    const result = this.#database.prepare(
+      `UPDATE agent_devnet_signed_executions
+       SET state = ?, signature_hash = ?, failure_code = ?, encrypted_payload = ?, payload_nonce = ?,
+           key_id = ?, signing_attempted = ?, updated_at = ?
+       WHERE id = ? AND state = ?`,
+    ).run(input.state, input.signatureHash ?? null, input.failureCode ?? null,
+      input.encryptedPayload, input.payloadNonce, input.keyId, Number(input.signingAttempted),
+      input.updatedAt, input.id, input.expectedState);
+    if (Number(result.changes) !== 1) throw new Error("Agent Devnet signing journal transition conflict");
+    const row = this.#database.prepare("SELECT * FROM agent_devnet_signed_executions WHERE id = ?").get(input.id);
+    if (row === undefined) throw new Error("Agent Devnet signing journal does not exist");
+    return toAgentDevnetSignedExecutionStorageRecord(row);
+  }
+
+  getAgentDevnetSignedExecutionByPreSign(preSignExecutionId: string): AgentDevnetSignedExecutionStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM agent_devnet_signed_executions WHERE pre_sign_execution_id = ?").get(preSignExecutionId);
+    return row === undefined ? null : toAgentDevnetSignedExecutionStorageRecord(row);
+  }
+
+  listAgentDevnetSignedExecutions(limit = 20): AgentDevnetSignedExecutionStorageRecord[] {
+    return this.#database.prepare("SELECT * FROM agent_devnet_signed_executions ORDER BY updated_at DESC LIMIT ?")
+      .all(limit).map(toAgentDevnetSignedExecutionStorageRecord);
+  }
+
+  failOpenAgentDevnetSignedExecutions(updatedAt: string): number {
+    const result = this.#database.prepare(
+      `UPDATE agent_devnet_signed_executions
+       SET state = 'failed', failure_code = 'restart-before-sign-complete', updated_at = ?
+       WHERE state IN ('proposed', 'signing')`,
+    ).run(updatedAt);
+    return Number(result.changes);
+  }
+
   insertAiShadowTradeEvaluation(record: AiShadowTradeEvaluationStorageRecord): void {
     this.#database.prepare(
       `INSERT INTO ai_shadow_trade_evaluations
@@ -2350,5 +2410,27 @@ function toAgentDevnetPreSignExecutionStorageRecord(row: unknown): AgentDevnetPr
     state: value.state, failureCode: value.failure_code, encryptedPayload: value.encrypted_payload,
     payloadNonce: value.payload_nonce, keyId: value.key_id, signingAttempted: false,
     broadcastAttempted: false, executionAttempted: false, preparedAt: value.prepared_at,
+  };
+}
+
+function toAgentDevnetSignedExecutionStorageRecord(row: unknown): AgentDevnetSignedExecutionStorageRecord {
+  const value = row as {
+    id: string; pre_sign_execution_id: string; signing_arm_id: string; simulation_id: string;
+    evaluation_id: string; session_id: string; message_hash: string;
+    state: AgentDevnetSignedExecutionStorageRecord["state"]; signature_hash: string | null;
+    failure_code: string | null; encrypted_payload: string; payload_nonce: string; key_id: string;
+    signing_attempted: number; broadcast_attempted: number; execution_attempted: number;
+    created_at: string; updated_at: string;
+  };
+  if (value.broadcast_attempted !== 0 || value.execution_attempted !== 0) {
+    throw new Error("Agent signed execution cannot contain broadcast or execution evidence");
+  }
+  return {
+    id: value.id, preSignExecutionId: value.pre_sign_execution_id, signingArmId: value.signing_arm_id,
+    simulationId: value.simulation_id, evaluationId: value.evaluation_id, sessionId: value.session_id,
+    messageHash: value.message_hash, state: value.state, signatureHash: value.signature_hash,
+    failureCode: value.failure_code, encryptedPayload: value.encrypted_payload,
+    payloadNonce: value.payload_nonce, keyId: value.key_id, signingAttempted: value.signing_attempted === 1,
+    broadcastAttempted: false, executionAttempted: false, createdAt: value.created_at, updatedAt: value.updated_at,
   };
 }

@@ -10,6 +10,7 @@ import type {
   AgentDevnetSimulationView,
   AgentDevnetSigningArmView,
   AgentDevnetPreSignExecutionView,
+  AgentDevnetSignedExecutionView,
   AgentSessionView,
   DevnetCanaryView,
   DevnetFixtureProvisionView,
@@ -929,8 +930,10 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
   const [agentDevnetSimulations, setAgentDevnetSimulations] = useState<AgentDevnetSimulationView[]>([]);
   const [agentDevnetSigningArms, setAgentDevnetSigningArms] = useState<AgentDevnetSigningArmView[]>([]);
   const [agentDevnetPreSignExecutions, setAgentDevnetPreSignExecutions] = useState<AgentDevnetPreSignExecutionView[]>([]);
+  const [agentDevnetSignedExecutions, setAgentDevnetSignedExecutions] = useState<AgentDevnetSignedExecutionView[]>([]);
   const [agentSigningArmAcks, setAgentSigningArmAcks] = useState([false, false, false]);
   const [agentPreSignAcks, setAgentPreSignAcks] = useState([false, false, false]);
+  const [agentSigningAcks, setAgentSigningAcks] = useState([false, false, false]);
   const [agentObjective, setAgentObjective] = useState("Protect capital and propose a SOL action only when the validated observation fits conservative risk limits.");
   const [agentMaxNotional, setAgentMaxNotional] = useState("20");
   const [agentMaxImpactBps, setAgentMaxImpactBps] = useState("50");
@@ -957,6 +960,7 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
       setAgentDevnetSimulations([]);
       setAgentDevnetSigningArms([]);
       setAgentDevnetPreSignExecutions([]);
+      setAgentDevnetSignedExecutions([]);
       setAiProposal(null);
       return;
     }
@@ -972,8 +976,9 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
       window.silfable.listAgentDevnetSimulations(),
       window.silfable.listAgentDevnetSigningArms(),
       window.silfable.listAgentDevnetPreSignExecutions(),
+      window.silfable.listAgentDevnetSignedExecutions(),
     ])
-      .then(([settings, history, providers, evaluations, observations, watches, agents, devnetSimulations, signingArms, preSignExecutions]) => {
+      .then(([settings, history, providers, evaluations, observations, watches, agents, devnetSimulations, signingArms, preSignExecutions, signedExecutions]) => {
         if (!active) return;
         setConfigured(settings.configured);
         setQuotes(history.quotes);
@@ -987,6 +992,7 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
         setAgentDevnetSimulations(devnetSimulations.simulations);
         setAgentDevnetSigningArms(signingArms.arms);
         setAgentDevnetPreSignExecutions(preSignExecutions.executions);
+        setAgentDevnetSignedExecutions(signedExecutions.executions);
       })
       .catch(() => active && setMessage("Jupiter shadow settings are unavailable."));
     const timer = window.setInterval(() => {
@@ -996,7 +1002,8 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
         window.silfable.listAgentDevnetSimulations(),
         window.silfable.listAgentDevnetSigningArms(),
         window.silfable.listAgentDevnetPreSignExecutions(),
-      ]).then(([watches, agents, devnetSimulations, signingArms, preSignExecutions]) => {
+        window.silfable.listAgentDevnetSignedExecutions(),
+      ]).then(([watches, agents, devnetSimulations, signingArms, preSignExecutions, signedExecutions]) => {
         if (!active) return;
         setMarketWatches(watches.watches);
         setMarketWakeReceipts(watches.wakeReceipts);
@@ -1005,6 +1012,7 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
         setAgentDevnetSimulations(devnetSimulations.simulations);
         setAgentDevnetSigningArms(signingArms.arms);
         setAgentDevnetPreSignExecutions(preSignExecutions.executions);
+        setAgentDevnetSignedExecutions(signedExecutions.executions);
       }).catch(() => undefined);
     }, 5_000);
     return () => {
@@ -1372,6 +1380,24 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
       setAgentPreSignAcks([false, false, false]);
       setMessage("Pre-sign preparation was rejected before any signing or broadcast.");
     } finally { setBusy(false); }
+  }
+
+  async function signAgentDevnetExecution(preSign: AgentDevnetPreSignExecutionView): Promise<void> {
+    if (!agentSigningAcks.every(Boolean)) return;
+    setBusy(true); setMessage(null);
+    try {
+      const response = await window.silfable.signAgentDevnetExecution({
+        schemaVersion: 1, requestId: crypto.randomUUID(), preSignExecutionId: preSign.id,
+        expectedMessageHash: preSign.messageHash, acknowledgedExactFixtureSignature: true,
+        acknowledgedConsumesReadyReceipt: true, acknowledgedNoBroadcastOrMarketSwap: true,
+      });
+      setAgentDevnetSignedExecutions((await window.silfable.listAgentDevnetSignedExecutions()).executions);
+      setAgentSigningAcks([false, false, false]);
+      setMessage(response.execution.state === "signed-awaiting-broadcast"
+        ? "Exact Devnet fixture message signed and encrypted locally. Nothing was broadcast."
+        : `Signing failed closed: ${response.execution.failureCode}. Nothing was broadcast.`);
+    } catch { setAgentSigningAcks([false, false, false]); setMessage("Signing request was rejected before broadcast."); }
+    finally { setBusy(false); }
   }
 
   async function approveShadowTrade(evaluation: AiShadowTradeEvaluationView): Promise<void> {
@@ -1769,6 +1795,25 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
                 <div><span>Exact message</span><code>{execution.exactMessageRevalidated ? "revalidated" : "denied"}</code></div>
                 <div><span>Failure</span><code>{execution.failureCode ?? "none"}</code></div>
                 <div><span>Boundary</span><code>bridge=false · signed=false · broadcast=false</code></div>
+                {execution.state === "ready-for-signing" && !agentDevnetSignedExecutions.some((signed) => signed.preSignExecutionId === execution.id) && (
+                  <>
+                    <div className="consentList">
+                      {["Sign only this exact simulated Devnet fixture message.", "Consume this ready receipt once and keep the signed wire encrypted locally.", "Do not broadcast, execute a market swap, or enable Mainnet."].map((label, index) => (
+                        <label className="consent" key={label}><input type="checkbox" checked={agentSigningAcks[index] ?? false} onChange={(event) => setAgentSigningAcks((acks) => acks.map((value, itemIndex) => itemIndex === index ? event.target.checked : value))} /><span>{label}</span></label>
+                      ))}
+                    </div>
+                    <button type="button" disabled={busy || !agentSigningAcks.every(Boolean)} onClick={() => void signAgentDevnetExecution(execution)}>Sign exact Devnet message</button>
+                  </>
+                )}
+              </article>
+            ))}
+            {agentDevnetSignedExecutions.map((execution) => (
+              <article className="shadowRow" key={execution.id}>
+                <div><span>Signing journal</span><strong>{execution.state}</strong></div>
+                <div><span>Message</span><code>{execution.messageHash}</code></div>
+                <div><span>Signature proof</span><code>{execution.signatureHash ?? "unavailable"}</code></div>
+                <div><span>Failure</span><code>{execution.failureCode ?? "none"}</code></div>
+                <div><span>Boundary</span><code>signed={String(execution.signingAttempted)} · broadcast=false · marketSwap=false</code></div>
               </article>
             ))}
           </div>

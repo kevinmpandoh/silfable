@@ -709,4 +709,27 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
         WHERE session_id = NEW.id AND state = 'active'; END;
     `,
   },
+  {
+    version: 23,
+    name: "agent-devnet-exact-signing-journal",
+    sql: `
+      CREATE TABLE agent_devnet_signed_executions (
+        id TEXT PRIMARY KEY, pre_sign_execution_id TEXT NOT NULL UNIQUE REFERENCES agent_devnet_pre_sign_executions(id),
+        signing_arm_id TEXT NOT NULL REFERENCES agent_devnet_signing_arms(id), simulation_id TEXT NOT NULL REFERENCES agent_devnet_simulations(id),
+        evaluation_id TEXT NOT NULL REFERENCES agent_intent_evaluations(id), session_id TEXT NOT NULL REFERENCES agent_sessions(id),
+        message_hash TEXT NOT NULL CHECK (length(message_hash) = 64 AND message_hash NOT GLOB '*[^0-9a-f]*'),
+        state TEXT NOT NULL CHECK (state IN ('proposed', 'signing', 'signed-awaiting-broadcast', 'failed')),
+        signature_hash TEXT CHECK (signature_hash IS NULL OR (length(signature_hash) = 64 AND signature_hash NOT GLOB '*[^0-9a-f]*')),
+        failure_code TEXT CHECK (failure_code IS NULL OR failure_code IN ('binding-changed', 'network-unhealthy', 'provenance-denied', 'blockhash-expired', 'signing-failed', 'journal-conflict', 'restart-before-sign-complete')),
+        encrypted_payload TEXT NOT NULL, payload_nonce TEXT NOT NULL, key_id TEXT NOT NULL,
+        signing_attempted INTEGER NOT NULL DEFAULT 0 CHECK (signing_attempted IN (0, 1)),
+        broadcast_attempted INTEGER NOT NULL DEFAULT 0 CHECK (broadcast_attempted = 0),
+        execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK (execution_attempted = 0),
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        CHECK (state <> 'signed-awaiting-broadcast' OR (signing_attempted = 1 AND signature_hash IS NOT NULL AND failure_code IS NULL)),
+        CHECK (state <> 'failed' OR failure_code IS NOT NULL)
+      ) STRICT;
+      CREATE INDEX agent_devnet_signed_execution_history ON agent_devnet_signed_executions(updated_at DESC);
+    `,
+  },
 ] as const;

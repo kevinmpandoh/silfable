@@ -64,6 +64,8 @@ export const IPC_CHANNELS = {
   agentListDevnetSigningArms: "agent:list-devnet-signing-arms",
   agentPrepareDevnetExecution: "agent:prepare-devnet-execution",
   agentListDevnetPreSignExecutions: "agent:list-devnet-pre-sign-executions",
+  agentSignDevnetExecution: "agent:sign-devnet-execution",
+  agentListDevnetSignedExecutions: "agent:list-devnet-signed-executions",
   updateGetStatus: "update:get-status",
   updateCheck: "update:check",
   updateOpenReview: "update:open-review",
@@ -1671,6 +1673,34 @@ export type AgentDevnetPreSignExecutionView = z.infer<typeof AgentDevnetPreSignE
 export type AgentPrepareDevnetExecutionRequest = z.infer<typeof AgentPrepareDevnetExecutionRequestSchema>;
 export type AgentPrepareDevnetExecutionResponse = z.infer<typeof AgentPrepareDevnetExecutionResponseSchema>;
 export type AgentDevnetPreSignExecutionListResponse = z.infer<typeof AgentDevnetPreSignExecutionListResponseSchema>;
+
+export const AgentDevnetSignedExecutionViewSchema = z.object({
+  schemaVersion: z.literal(1), id: z.string().uuid(), preSignExecutionId: z.string().uuid(),
+  signingArmId: z.string().uuid(), simulationId: z.string().uuid(), evaluationId: z.string().uuid(),
+  sessionId: z.string().uuid(), messageHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  state: z.enum(["proposed", "signing", "signed-awaiting-broadcast", "failed"]),
+  signatureHash: z.string().regex(/^[a-f0-9]{64}$/u).nullable(),
+  failureCode: z.enum(["binding-changed", "network-unhealthy", "provenance-denied", "blockhash-expired", "signing-failed", "journal-conflict", "restart-before-sign-complete"]).nullable(),
+  signingAttempted: z.boolean(), broadcastAttempted: z.literal(false), executionAttempted: z.literal(false),
+  marketSwapPerformed: z.literal(false), mainnetEnabled: z.literal(false),
+  createdAt: z.string().datetime(), updatedAt: z.string().datetime(),
+}).strict();
+export const AgentSignDevnetExecutionRequestSchema = z.object({
+  schemaVersion: z.literal(1), requestId: z.string().uuid(), preSignExecutionId: z.string().uuid(),
+  expectedMessageHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  acknowledgedExactFixtureSignature: z.literal(true), acknowledgedConsumesReadyReceipt: z.literal(true),
+  acknowledgedNoBroadcastOrMarketSwap: z.literal(true),
+}).strict();
+export const AgentSignDevnetExecutionResponseSchema = z.object({
+  schemaVersion: z.literal(1), requestId: z.string().uuid(), execution: AgentDevnetSignedExecutionViewSchema,
+}).strict();
+export const AgentDevnetSignedExecutionListResponseSchema = z.object({
+  schemaVersion: z.literal(1), executions: z.array(AgentDevnetSignedExecutionViewSchema).max(20),
+}).strict();
+export type AgentDevnetSignedExecutionView = z.infer<typeof AgentDevnetSignedExecutionViewSchema>;
+export type AgentSignDevnetExecutionRequest = z.infer<typeof AgentSignDevnetExecutionRequestSchema>;
+export type AgentSignDevnetExecutionResponse = z.infer<typeof AgentSignDevnetExecutionResponseSchema>;
+export type AgentDevnetSignedExecutionListResponse = z.infer<typeof AgentDevnetSignedExecutionListResponseSchema>;
 
 export const JupiterOrderQuoteSchema = z.object({
   mode: z.string().min(1),

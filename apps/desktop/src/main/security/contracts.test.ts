@@ -15,6 +15,8 @@ import {
   AgentRevokeDevnetSigningArmRequestSchema,
   AgentPrepareDevnetExecutionRequestSchema,
   AgentDevnetPreSignExecutionViewSchema,
+  AgentSignDevnetExecutionRequestSchema,
+  AgentDevnetSignedExecutionViewSchema,
   DevnetFixtureProvisionExecuteRequestSchema,
   DevnetFixtureReviewActivateRequestSchema,
   DevnetFixtureTransferExecuteRequestSchema,
@@ -243,6 +245,12 @@ test("security-sensitive requests reject unknown privilege-shaped fields", () =>
       acknowledgedPreSignOnly: true, acknowledgedNoSigningOrBroadcast: true,
       transactionBytes: "renderer-must-not-provide-exact-wire",
     }],
+    [AgentSignDevnetExecutionRequestSchema, {
+      schemaVersion: 1, requestId, preSignExecutionId: "00000000-0000-4000-8000-000000000002",
+      expectedMessageHash: "a".repeat(64), acknowledgedExactFixtureSignature: true,
+      acknowledgedConsumesReadyReceipt: true, acknowledgedNoBroadcastOrMarketSwap: true,
+      privateKey: "renderer-must-not-provide-signing-material",
+    }],
   ] as const;
   for (const [schema, value] of cases) assert.equal(schema.safeParse(value).success, false);
 });
@@ -404,6 +412,11 @@ test("acknowledgements cannot be omitted or replaced with truthy strings", () =>
     expectedMessageHash: "a".repeat(64), acknowledgedConsumesOneShotArm: true,
     acknowledgedPreSignOnly: true, acknowledgedNoSigningOrBroadcast: "true",
   }).success, false);
+  assert.equal(AgentSignDevnetExecutionRequestSchema.safeParse({
+    schemaVersion: 1, requestId, preSignExecutionId: "00000000-0000-4000-8000-000000000002",
+    expectedMessageHash: "a".repeat(64), acknowledgedExactFixtureSignature: true,
+    acknowledgedConsumesReadyReceipt: true, acknowledgedNoBroadcastOrMarketSwap: "true",
+  }).success, false);
 });
 
 test("public agent pre-sign receipts reject wire, signatures, and execution claims", () => {
@@ -420,6 +433,18 @@ test("public agent pre-sign receipts reject wire, signatures, and execution clai
   assert.equal(AgentDevnetPreSignExecutionViewSchema.safeParse(view).success, true);
   assert.equal(AgentDevnetPreSignExecutionViewSchema.safeParse({ ...view, wireTransaction: "secret" }).success, false);
   assert.equal(AgentDevnetPreSignExecutionViewSchema.safeParse({ ...view, signingAttempted: true }).success, false);
+});
+
+test("public signed agent receipts expose only a signature hash and reject signed wire", () => {
+  const view = { schemaVersion: 1, id: requestId, preSignExecutionId: "00000000-0000-4000-8000-000000000002",
+    signingArmId: "00000000-0000-4000-8000-000000000003", simulationId: "00000000-0000-4000-8000-000000000004",
+    evaluationId: "00000000-0000-4000-8000-000000000005", sessionId: "00000000-0000-4000-8000-000000000006",
+    messageHash: "a".repeat(64), state: "signed-awaiting-broadcast", signatureHash: "b".repeat(64), failureCode: null,
+    signingAttempted: true, broadcastAttempted: false, executionAttempted: false,
+    marketSwapPerformed: false, mainnetEnabled: false, createdAt: "2026-07-19T00:00:00.000Z", updatedAt: "2026-07-19T00:00:01.000Z" };
+  assert.equal(AgentDevnetSignedExecutionViewSchema.safeParse(view).success, true);
+  assert.equal(AgentDevnetSignedExecutionViewSchema.safeParse({ ...view, signedWire: "secret" }).success, false);
+  assert.equal(AgentDevnetSignedExecutionViewSchema.safeParse({ ...view, broadcastAttempted: true }).success, false);
 });
 
 test("public guarded execution receipts reject signatures and transaction evidence", () => {

@@ -38,6 +38,9 @@ import {
   AgentPrepareDevnetExecutionRequestSchema,
   AgentPrepareDevnetExecutionResponseSchema,
   AgentDevnetPreSignExecutionListResponseSchema,
+  AgentSignDevnetExecutionRequestSchema,
+  AgentSignDevnetExecutionResponseSchema,
+  AgentDevnetSignedExecutionListResponseSchema,
   DcaSimulationRequestSchema,
   DcaSimulationResponseSchema,
   DevnetAirdropRequestSchema,
@@ -160,6 +163,7 @@ import {
 } from "./execution/agent-devnet-simulation.js";
 import { AgentDevnetSigningArmService } from "./execution/agent-devnet-signing-arm.js";
 import { AgentDevnetPreSignService, SolanaAgentDevnetPreSignAdapter } from "./execution/agent-devnet-pre-sign.js";
+import { AgentDevnetSigningService, SolanaAgentDevnetSigningAdapter } from "./execution/agent-devnet-signing.js";
 import { UpdateReviewService } from "./update/service.js";
 import {
   LocalCrashTelemetryService,
@@ -281,6 +285,7 @@ function registerIpc(
   agentDevnetSimulations: AgentDevnetSimulationService,
   agentDevnetSigningArms: AgentDevnetSigningArmService,
   agentDevnetPreSign: AgentDevnetPreSignService,
+  agentDevnetSigning: AgentDevnetSigningService,
   dataCipher: LocalDataCipher,
   updates: UpdateReviewService,
   telemetry: LocalCrashTelemetryService,
@@ -958,6 +963,16 @@ function registerIpc(
       schemaVersion: 1, executions: await agentDevnetPreSign.list(),
     });
   });
+  ipcMain.handle(IPC_CHANNELS.agentSignDevnetExecution, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = AgentSignDevnetExecutionRequestSchema.parse(untrustedRequest);
+    return AgentSignDevnetExecutionResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId,
+      execution: await agentDevnetSigning.sign(request.preSignExecutionId, request.expectedMessageHash) });
+  });
+  ipcMain.handle(IPC_CHANNELS.agentListDevnetSignedExecutions, async (event) => {
+    assertTrustedSender(event);
+    return AgentDevnetSignedExecutionListResponseSchema.parse({ schemaVersion: 1, executions: await agentDevnetSigning.list() });
+  });
 
   ipcMain.handle(IPC_CHANNELS.updateGetStatus, (event) => {
     assertTrustedSender(event);
@@ -1147,6 +1162,7 @@ app.whenReady().then(async () => {
   runtimeDatabase = await RuntimeDatabase.open(join(app.getPath("userData"), "data", "silfable.sqlite3"));
   runtimeDatabase.revokeOpenGuardedSchedulerArms(new Date().toISOString());
   runtimeDatabase.revokeOpenAgentDevnetSigningArms(new Date().toISOString());
+  runtimeDatabase.failOpenAgentDevnetSignedExecutions(new Date().toISOString());
   const devnetRpc = new SolanaDevnetRpc();
   networkMonitor = new NetworkHealthMonitor(devnetRpc);
   const walletOnboarding = new WalletOnboardingService(keystore, runtimeDatabase);
@@ -1280,6 +1296,11 @@ app.whenReady().then(async () => {
     fixtures: fixtureReview, agents: agentSessions, simulations: agentDevnetSimulations,
     arms: agentDevnetSigningArms, adapter: new SolanaAgentDevnetPreSignAdapter(devnetRpc),
   });
+  const agentDevnetSigning = new AgentDevnetSigningService({
+    database: runtimeDatabase, cipher: dataCipher, keystore, health: networkMonitor, wallet: walletOnboarding,
+    fixtures: fixtureReview, agents: agentSessions, simulations: agentDevnetSimulations,
+    preSigns: agentDevnetPreSign, adapter: new SolanaAgentDevnetSigningAdapter(devnetRpc),
+  });
   const updates = new UpdateReviewService({
     currentVersion: app.getVersion(),
     openExternal: async (url) => shell.openExternal(url),
@@ -1302,7 +1323,7 @@ app.whenReady().then(async () => {
     onEvent: notifyMissionEvent,
   });
   missionScheduler.initialize();
-  registerIpc(keystore, runtimeDatabase, networkMonitor, walletRpc, walletOnboarding, missions, ai, canary, fixtureProvisioning, fixtureReview, fixtureTransfer, fixtureTransferApproval, guardedMissionAuthorization, guardedSchedulerArm, guardedExecution, jupiter, marketObservations, marketWakeScheduler, agentSessions, agentDevnetSimulations, agentDevnetSigningArms, agentDevnetPreSign, dataCipher, updates, telemetry);
+  registerIpc(keystore, runtimeDatabase, networkMonitor, walletRpc, walletOnboarding, missions, ai, canary, fixtureProvisioning, fixtureReview, fixtureTransfer, fixtureTransferApproval, guardedMissionAuthorization, guardedSchedulerArm, guardedExecution, jupiter, marketObservations, marketWakeScheduler, agentSessions, agentDevnetSimulations, agentDevnetSigningArms, agentDevnetPreSign, agentDevnetSigning, dataCipher, updates, telemetry);
   networkMonitor.start();
   missionScheduler.start();
   mainWindow = createMainWindow();
