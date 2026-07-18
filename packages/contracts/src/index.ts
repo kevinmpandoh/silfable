@@ -62,6 +62,8 @@ export const IPC_CHANNELS = {
   agentArmDevnetSigning: "agent:arm-devnet-signing",
   agentRevokeDevnetSigningArm: "agent:revoke-devnet-signing-arm",
   agentListDevnetSigningArms: "agent:list-devnet-signing-arms",
+  agentPrepareDevnetExecution: "agent:prepare-devnet-execution",
+  agentListDevnetPreSignExecutions: "agent:list-devnet-pre-sign-executions",
   updateGetStatus: "update:get-status",
   updateCheck: "update:check",
   updateOpenReview: "update:open-review",
@@ -1580,7 +1582,8 @@ export const AgentDevnetSigningArmViewSchema = z.object({
   fixtureManifestDigest: z.string().regex(/^[a-f0-9]{64}$/u),
   messageHash: z.string().regex(/^[a-f0-9]{64}$/u),
   scope: z.literal("agent-devnet-fixture-sign-once"),
-  state: z.enum(["active", "revoked", "expired"]),
+  state: z.enum(["active", "consumed", "revoked", "expired"]),
+  executionId: z.string().uuid().nullable(),
   oneShotSigningAuthorized: z.literal(true),
   executionBridgeConnected: z.literal(false),
   economicValueMapping: z.literal("none"),
@@ -1588,6 +1591,7 @@ export const AgentDevnetSigningArmViewSchema = z.object({
   mainnetEnabled: z.literal(false),
   armedAt: z.string().datetime(),
   expiresAt: z.string().datetime(),
+  consumedAt: z.string().datetime().nullable(),
   revokedAt: z.string().datetime().nullable(),
 }).strict();
 
@@ -1625,6 +1629,48 @@ export type AgentArmDevnetSigningRequest = z.infer<typeof AgentArmDevnetSigningR
 export type AgentRevokeDevnetSigningArmRequest = z.infer<typeof AgentRevokeDevnetSigningArmRequestSchema>;
 export type AgentDevnetSigningArmMutationResponse = z.infer<typeof AgentDevnetSigningArmMutationResponseSchema>;
 export type AgentDevnetSigningArmListResponse = z.infer<typeof AgentDevnetSigningArmListResponseSchema>;
+
+export const AgentDevnetPreSignExecutionViewSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.string().uuid(),
+  signingArmId: z.string().uuid(),
+  simulationId: z.string().uuid(),
+  evaluationId: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  proposalDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  fixtureManifestDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  messageHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  state: z.enum(["ready-for-signing", "failed"]),
+  failureCode: z.enum(["arm-invalid", "binding-changed", "network-unhealthy", "provenance-denied", "blockhash-expired", "simulation-failed", "fee-exceeded"]).nullable(),
+  signingArmConsumed: z.boolean(),
+  exactMessageRevalidated: z.boolean(),
+  executionBridgeConnected: z.literal(false),
+  signingAttempted: z.literal(false),
+  broadcastAttempted: z.literal(false),
+  executionAttempted: z.literal(false),
+  marketSwapPerformed: z.literal(false),
+  mainnetEnabled: z.literal(false),
+  preparedAt: z.string().datetime(),
+}).strict();
+
+export const AgentPrepareDevnetExecutionRequestSchema = z.object({
+  schemaVersion: z.literal(1), requestId: z.string().uuid(), signingArmId: z.string().uuid(),
+  expectedMessageHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  acknowledgedConsumesOneShotArm: z.literal(true),
+  acknowledgedPreSignOnly: z.literal(true),
+  acknowledgedNoSigningOrBroadcast: z.literal(true),
+}).strict();
+
+export const AgentPrepareDevnetExecutionResponseSchema = z.object({
+  schemaVersion: z.literal(1), requestId: z.string().uuid(), execution: AgentDevnetPreSignExecutionViewSchema,
+}).strict();
+export const AgentDevnetPreSignExecutionListResponseSchema = z.object({
+  schemaVersion: z.literal(1), executions: z.array(AgentDevnetPreSignExecutionViewSchema).max(20),
+}).strict();
+export type AgentDevnetPreSignExecutionView = z.infer<typeof AgentDevnetPreSignExecutionViewSchema>;
+export type AgentPrepareDevnetExecutionRequest = z.infer<typeof AgentPrepareDevnetExecutionRequestSchema>;
+export type AgentPrepareDevnetExecutionResponse = z.infer<typeof AgentPrepareDevnetExecutionResponseSchema>;
+export type AgentDevnetPreSignExecutionListResponse = z.infer<typeof AgentDevnetPreSignExecutionListResponseSchema>;
 
 export const JupiterOrderQuoteSchema = z.object({
   mode: z.string().min(1),

@@ -53,6 +53,10 @@ export type AgentDevnetSimulationEvidence = {
   lastValidBlockHeight: bigint;
 };
 
+export type AgentDevnetSimulationExactEvidence = AgentDevnetSimulationEvidence & {
+  view: AgentDevnetSimulationView;
+};
+
 export type AgentDevnetSimulationAdapter = {
   simulate(manifest: GuardedFixtureManifest): Promise<AgentDevnetSimulationEvidence>;
 };
@@ -242,6 +246,46 @@ export class AgentDevnetSimulationService {
     return Promise.all(this.#database.listAgentDevnetSimulations().map((record) => this.#hydrate(record)));
   }
 
+  async loadExactEvidence(id: string): Promise<AgentDevnetSimulationExactEvidence> {
+    const record = this.#database.getAgentDevnetSimulation(id);
+    if (record === null || record.outcome !== "simulated" || record.messageHash === null) {
+      throw new Error("Successful agent Devnet simulation evidence is required");
+    }
+    if (record.keyId !== "local-data-key-v1") throw new Error("Agent Devnet simulation key is unsupported");
+    const payload = JSON.parse(await this.#cipher.decryptString({
+      ciphertext: record.encryptedPayload, nonce: record.payloadNonce, keyId: record.keyId,
+    })) as Record<string, unknown>;
+    const view = AgentDevnetSimulationViewSchema.parse({
+      schemaVersion: payload.schemaVersion, id: payload.id, evaluationId: payload.evaluationId,
+      sessionId: payload.sessionId, agentAction: payload.agentAction, proposalDigest: payload.proposalDigest,
+      profile: payload.profile, proofKind: payload.proofKind, outcome: payload.outcome,
+      fixtureManifestDigest: payload.fixtureManifestDigest, messageHash: payload.messageHash,
+      programIds: payload.programIds, unitsConsumed: payload.unitsConsumed, feeLamports: payload.feeLamports,
+      failureCode: payload.failureCode, economicValueMapping: payload.economicValueMapping,
+      marketSwapPerformed: payload.marketSwapPerformed, signingAttempted: payload.signingAttempted,
+      broadcastAttempted: payload.broadcastAttempted, executionAttempted: payload.executionAttempted,
+      simulatedAt: payload.simulatedAt,
+    });
+    const wire = payload.simulationWireTransaction;
+    const initialContextSlot = payload.initialContextSlot;
+    const finalContextSlot = payload.finalContextSlot;
+    const lastValidBlockHeight = payload.lastValidBlockHeight;
+    if (
+      view.id !== record.id || view.messageHash !== record.messageHash
+      || view.proposalDigest !== record.proposalDigest || view.fixtureManifestDigest !== record.fixtureManifestDigest
+      || typeof wire !== "string" || wire.length < 1 || wire.length > 4_096
+      || typeof initialContextSlot !== "string" || typeof finalContextSlot !== "string"
+      || typeof lastValidBlockHeight !== "string" || !/^\d+$/u.test(lastValidBlockHeight)
+      || view.unitsConsumed === null || view.feeLamports === null
+    ) throw new Error("Agent Devnet exact simulation evidence changed");
+    return {
+      view, fixtureManifestDigest: view.fixtureManifestDigest, messageHash: view.messageHash!,
+      simulationWireTransaction: wire, programIds: view.programIds,
+      unitsConsumed: BigInt(view.unitsConsumed), feeLamports: BigInt(view.feeLamports),
+      initialContextSlot, finalContextSlot, lastValidBlockHeight: BigInt(lastValidBlockHeight),
+    };
+  }
+
   async #resolveApproved(id: string, digest: string): Promise<AgentIntentEvaluationView> {
     const evaluation = await this.#resolveApprovedOrNull(id, digest);
     if (evaluation === null) throw new Error("Exact approved agent intent is required");
@@ -260,6 +304,7 @@ export class AgentDevnetSimulationService {
   }
 
   async #hydrate(record: AgentDevnetSimulationStorageRecord): Promise<AgentDevnetSimulationView> {
+    if (record.outcome === "simulated") return (await this.loadExactEvidence(record.id)).view;
     if (record.keyId !== "local-data-key-v1") throw new Error("Agent Devnet simulation key is unsupported");
     const payload = JSON.parse(await this.#cipher.decryptString({
       ciphertext: record.encryptedPayload,

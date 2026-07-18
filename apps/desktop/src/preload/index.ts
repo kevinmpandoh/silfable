@@ -27,6 +27,9 @@ import {
   AgentRevokeDevnetSigningArmRequestSchema,
   AgentDevnetSigningArmMutationResponseSchema,
   AgentDevnetSigningArmListResponseSchema,
+  AgentPrepareDevnetExecutionRequestSchema,
+  AgentPrepareDevnetExecutionResponseSchema,
+  AgentDevnetPreSignExecutionListResponseSchema,
   AiShadowTradeListResponseSchema,
   AiShadowTradeMutationResponseSchema,
   DcaSimulationRequestSchema,
@@ -190,6 +193,9 @@ import {
   type AgentRevokeDevnetSigningArmRequest,
   type AgentDevnetSigningArmMutationResponse,
   type AgentDevnetSigningArmListResponse,
+  type AgentPrepareDevnetExecutionRequest,
+  type AgentPrepareDevnetExecutionResponse,
+  type AgentDevnetPreSignExecutionListResponse,
   type AiShadowTradeListResponse,
   type AiShadowTradeMutationResponse,
 } from "@silfable/contracts";
@@ -548,6 +554,14 @@ const api = Object.freeze({
   async listAgentDevnetSigningArms(): Promise<AgentDevnetSigningArmListResponse> {
     const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListDevnetSigningArms);
     return AgentDevnetSigningArmListResponseSchema.parse(response);
+  },
+  async prepareAgentDevnetExecution(request: AgentPrepareDevnetExecutionRequest): Promise<AgentPrepareDevnetExecutionResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentPrepareDevnetExecution, AgentPrepareDevnetExecutionRequestSchema.parse(request));
+    return AgentPrepareDevnetExecutionResponseSchema.parse(response);
+  },
+  async listAgentDevnetPreSignExecutions(): Promise<AgentDevnetPreSignExecutionListResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListDevnetPreSignExecutions);
+    return AgentDevnetPreSignExecutionListResponseSchema.parse(response);
   },
   async getUpdateStatus(): Promise<UpdateStatus> {
     const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.updateGetStatus);

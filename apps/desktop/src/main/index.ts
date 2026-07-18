@@ -35,6 +35,9 @@ import {
   AgentRevokeDevnetSigningArmRequestSchema,
   AgentDevnetSigningArmMutationResponseSchema,
   AgentDevnetSigningArmListResponseSchema,
+  AgentPrepareDevnetExecutionRequestSchema,
+  AgentPrepareDevnetExecutionResponseSchema,
+  AgentDevnetPreSignExecutionListResponseSchema,
   DcaSimulationRequestSchema,
   DcaSimulationResponseSchema,
   DevnetAirdropRequestSchema,
@@ -156,6 +159,7 @@ import {
   SolanaAgentDevnetSimulationAdapter,
 } from "./execution/agent-devnet-simulation.js";
 import { AgentDevnetSigningArmService } from "./execution/agent-devnet-signing-arm.js";
+import { AgentDevnetPreSignService, SolanaAgentDevnetPreSignAdapter } from "./execution/agent-devnet-pre-sign.js";
 import { UpdateReviewService } from "./update/service.js";
 import {
   LocalCrashTelemetryService,
@@ -276,6 +280,7 @@ function registerIpc(
   agentSessions: AgentSessionService,
   agentDevnetSimulations: AgentDevnetSimulationService,
   agentDevnetSigningArms: AgentDevnetSigningArmService,
+  agentDevnetPreSign: AgentDevnetPreSignService,
   dataCipher: LocalDataCipher,
   updates: UpdateReviewService,
   telemetry: LocalCrashTelemetryService,
@@ -939,6 +944,21 @@ function registerIpc(
     });
   });
 
+  ipcMain.handle(IPC_CHANNELS.agentPrepareDevnetExecution, async (event, untrustedRequest: unknown) => {
+    assertTrustedSender(event);
+    const request = AgentPrepareDevnetExecutionRequestSchema.parse(untrustedRequest);
+    return AgentPrepareDevnetExecutionResponseSchema.parse({
+      schemaVersion: 1, requestId: request.requestId,
+      execution: await agentDevnetPreSign.prepare(request.signingArmId, request.expectedMessageHash),
+    });
+  });
+  ipcMain.handle(IPC_CHANNELS.agentListDevnetPreSignExecutions, async (event) => {
+    assertTrustedSender(event);
+    return AgentDevnetPreSignExecutionListResponseSchema.parse({
+      schemaVersion: 1, executions: await agentDevnetPreSign.list(),
+    });
+  });
+
   ipcMain.handle(IPC_CHANNELS.updateGetStatus, (event) => {
     assertTrustedSender(event);
     return UpdateStatusSchema.parse(updates.getStatus());
@@ -1255,6 +1275,11 @@ app.whenReady().then(async () => {
     agents: agentSessions,
     fixtures: fixtureReview,
   });
+  const agentDevnetPreSign = new AgentDevnetPreSignService({
+    database: runtimeDatabase, cipher: dataCipher, keystore, health: networkMonitor,
+    fixtures: fixtureReview, agents: agentSessions, simulations: agentDevnetSimulations,
+    arms: agentDevnetSigningArms, adapter: new SolanaAgentDevnetPreSignAdapter(devnetRpc),
+  });
   const updates = new UpdateReviewService({
     currentVersion: app.getVersion(),
     openExternal: async (url) => shell.openExternal(url),
@@ -1277,7 +1302,7 @@ app.whenReady().then(async () => {
     onEvent: notifyMissionEvent,
   });
   missionScheduler.initialize();
-  registerIpc(keystore, runtimeDatabase, networkMonitor, walletRpc, walletOnboarding, missions, ai, canary, fixtureProvisioning, fixtureReview, fixtureTransfer, fixtureTransferApproval, guardedMissionAuthorization, guardedSchedulerArm, guardedExecution, jupiter, marketObservations, marketWakeScheduler, agentSessions, agentDevnetSimulations, agentDevnetSigningArms, dataCipher, updates, telemetry);
+  registerIpc(keystore, runtimeDatabase, networkMonitor, walletRpc, walletOnboarding, missions, ai, canary, fixtureProvisioning, fixtureReview, fixtureTransfer, fixtureTransferApproval, guardedMissionAuthorization, guardedSchedulerArm, guardedExecution, jupiter, marketObservations, marketWakeScheduler, agentSessions, agentDevnetSimulations, agentDevnetSigningArms, agentDevnetPreSign, dataCipher, updates, telemetry);
   networkMonitor.start();
   missionScheduler.start();
   mainWindow = createMainWindow();

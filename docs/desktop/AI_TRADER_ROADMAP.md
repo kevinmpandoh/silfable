@@ -52,7 +52,7 @@ This phase proves the model-to-runtime handoff without creating a new execution 
 
 The current implementation supports one active encrypted session, manual selection of a fresh main-owned observation, `buy-sol`, `sell-sol`, `hold`, and `halt` proposals, post-provider freshness revalidation, deterministic capital/risk gates, immediate safe halt, and digest-bound approve/reject/revoke controls. It deliberately has no transaction construction or signing path.
 
-### Phase 5 — Guarded Devnet autonomy (increments 1–2 implemented)
+### Phase 5 — Guarded Devnet autonomy (increments 1–3 implemented)
 
 - Construct transactions only after deterministic approval.
 - Simulate exact messages and bind authorization to their digest.
@@ -63,6 +63,8 @@ The current implementation supports one active encrypted session, manual selecti
 Increment 1 implements the boundary before signing: an exact approved buy/sell intent can trigger one replay-protected, unsigned Devnet simulation against the active reviewed SPL fixture. The runtime hashes the compiled message, stores the unsigned wire and RPC evidence encrypted, revalidates the fixture and approval after the network call, and exposes a receipt that hard-codes no economic mapping, no market swap, no signing, no broadcast, and no execution. Revocable signing arms, market-value mapping, broadcast, and reconciliation remain unimplemented.
 
 Increment 2 adds a dedicated one-shot signing-arm lifecycle without connecting it to a signer. An operator can arm only an exact successful proof no older than 30 seconds; the encrypted authorization is bound to the simulation, message, proposal, session, and fixture, lasts at most 60 seconds, and is revoked by state changes, lock, suspend, quit, restart, or explicit action. The renderer cannot submit transaction material and the public contract hard-codes `executionBridgeConnected: false`, `marketSwapPerformed: false`, and `mainnetEnabled: false`. Arm consumption, signing, broadcast, and reconciliation remain unimplemented.
+
+Increment 3 implements atomic arm consumption and an encrypted pre-sign journal. The main process privately reloads and re-simulates the original exact wire, checks block height, fee, network, on-chain fixture provenance, approval, session, and every digest before and after RPC latency, then writes `ready-for-signing` and `consumed` in one database transaction. Failures receive durable no-sign receipts without consuming the arm. The consumer has no wallet signer or broadcast port; actual signing, submission, confirmation, and reconciliation remain unimplemented.
 
 ### Phase 6 — Mainnet restricted execution
 
@@ -91,4 +93,4 @@ Increment 2 adds a dedicated one-shot signing-arm lifecycle without connecting i
 
 ## Current milestone
 
-Phase 5 increments 1–2 are complete for exact-message simulation and revocable authorization state. Silfable can turn an approved, digest-bound agent intent into a replay-protected unsigned Devnet fixture proof, then create one short-lived signing arm that is automatically revoked whenever its bindings become unsafe. The execution bridge remains disconnected, this is not a swap, and there is no economic mapping to the proposal. Phase 5 remains active: safe arm consumption, signing, value-bearing execution, broadcast, and reconciliation are next, while Mainnet signing and broadcast remain disabled.
+Phase 5 increments 1–3 are complete for exact-message simulation, revocable authorization, and atomic pre-sign preparation. Silfable can create a replay-protected unsigned Devnet fixture proof, issue one short-lived arm, and consume it only after full exact-message revalidation into a durable no-sign journal. The execution bridge remains disconnected, this is not a swap, and there is no economic mapping to the proposal. Phase 5 remains active: wallet signing, value-bearing execution, broadcast, confirmation, and reconciliation are next, while Mainnet signing and broadcast remain disabled.

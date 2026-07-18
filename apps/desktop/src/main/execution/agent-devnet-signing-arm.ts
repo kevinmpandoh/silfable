@@ -112,6 +112,7 @@ export class AgentDevnetSigningArmService {
       messageHash: simulation.messageHash,
       scope: "agent-devnet-fixture-sign-once",
       state: "active",
+      executionId: null,
       oneShotSigningAuthorized: true,
       executionBridgeConnected: false,
       economicValueMapping: "none",
@@ -119,6 +120,7 @@ export class AgentDevnetSigningArmService {
       mainnetEnabled: false,
       armedAt: now.toISOString(),
       expiresAt: new Date(expiresAtMs).toISOString(),
+      consumedAt: null,
       revokedAt: null,
     });
     const envelope = await this.#cipher.encryptString(JSON.stringify(view));
@@ -132,6 +134,7 @@ export class AgentDevnetSigningArmService {
       messageHash: view.messageHash,
       scope: view.scope,
       state: view.state,
+      executionId: null,
       encryptedPayload: envelope.ciphertext,
       payloadNonce: envelope.nonce,
       keyId: envelope.keyId,
@@ -139,6 +142,7 @@ export class AgentDevnetSigningArmService {
       mainnetEnabled: false,
       armedAt: view.armedAt,
       expiresAt: view.expiresAt,
+      consumedAt: null,
       revokedAt: null,
     });
     return view;
@@ -169,6 +173,8 @@ export class AgentDevnetSigningArmService {
     const view = AgentDevnetSigningArmViewSchema.parse({
       ...payload,
       state: record.state,
+      executionId: record.executionId,
+      consumedAt: record.consumedAt,
       revokedAt: record.revokedAt,
     });
     if (
