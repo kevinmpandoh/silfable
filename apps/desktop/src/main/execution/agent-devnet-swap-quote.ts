@@ -12,7 +12,8 @@ type Cipher = { encryptString(value: string): Promise<{ ciphertext: string; nonc
 type RawQuote = { inputMint: string; inputAmount: string; outputMint: string; outputAmount: string;
   otherAmountThreshold: string; slippageBps: number; priceImpactPct: number;
   routePlan: { poolId: string; inputMint: string; outputMint: string }[] };
-export type RaydiumDevnetQuoteTransport = (input: { inputMint: string; outputMint: string; amount: string; slippageBps: number }) => Promise<RawQuote>;
+export type RaydiumDevnetQuoteTransport = (input: { inputMint: string; outputMint: string; amount: string; slippageBps: number }) => Promise<{ quote: RawQuote; rawResponse: unknown }>;
+export type AgentDevnetSwapQuoteExactEvidence = { view: AgentDevnetSwapQuoteView; raydiumResponse: unknown };
 
 export const fetchRaydiumDevnetQuote: RaydiumDevnetQuoteTransport = async (input) => {
   const url = new URL(RAYDIUM_DEVNET_QUOTE_ENDPOINT);
@@ -22,7 +23,7 @@ export const fetchRaydiumDevnetQuote: RaydiumDevnetQuoteTransport = async (input
   const response = await fetch(url, { signal: AbortSignal.timeout(8_000) });
   const body: unknown = await response.json();
   if (!response.ok) throw new Error(`Raydium Devnet quote failed with status ${response.status}`);
-  return parseRawQuote(body);
+  return { quote: parseRawQuote(body), rawResponse: body };
 };
 
 export class AgentDevnetSwapQuoteService {
@@ -43,7 +44,7 @@ export class AgentDevnetSwapQuoteService {
     const pair = pairFor(action);
     this.#running = true;
     try {
-      const raw = await this.#transport({ ...pair, slippageBps: SLIPPAGE_BPS });
+      const evidence = await this.#transport({ ...pair, slippageBps: SLIPPAGE_BPS }); const raw = evidence.quote;
       const current = await this.#loadEligible(evaluationId);
       const denialCodes: AgentDevnetSwapQuoteView["denialCodes"] = [];
       if (current.receipt.proposalDigest !== evaluation.receipt.proposalDigest) denialCodes.push("binding-changed");
@@ -63,7 +64,7 @@ export class AgentDevnetSwapQuoteService {
         allowed: denialCodes.length === 0, denialCodes: [...new Set(denialCodes)], transactionBuilt: false,
         signingAttempted: false, broadcastAttempted: false, marketSwapPerformed: false, mainnetEnabled: false,
         quotedAt: quotedAt.toISOString(), expiresAt: new Date(quotedAt.getTime() + 20_000).toISOString() });
-      const envelope = await this.#cipher.encryptString(JSON.stringify(view));
+      const envelope = await this.#cipher.encryptString(JSON.stringify({ view, raydiumResponse: evidence.rawResponse }));
       this.#database.insertAgentDevnetSwapQuote({ id: view.id, evaluationId, sessionId: view.sessionId, action: view.action,
         allowed: view.allowed, encryptedPayload: envelope.ciphertext, payloadNonce: envelope.nonce, keyId: envelope.keyId,
         quotedAt: view.quotedAt, expiresAt: view.expiresAt });
@@ -73,11 +74,22 @@ export class AgentDevnetSwapQuoteService {
   async list() {
     this.#assertUnlocked();
     return Promise.all(this.#database.listAgentDevnetSwapQuotes().map(async (record) => {
-      const view = AgentDevnetSwapQuoteViewSchema.parse(JSON.parse(await this.#cipher.decryptString({ ciphertext: record.encryptedPayload,
-        nonce: record.payloadNonce, keyId: "local-data-key-v1" })) as unknown);
+      const payload = JSON.parse(await this.#cipher.decryptString({ ciphertext: record.encryptedPayload,
+        nonce: record.payloadNonce, keyId: "local-data-key-v1" })) as { view?: unknown };
+      const view = AgentDevnetSwapQuoteViewSchema.parse(payload.view);
       if (view.id !== record.id || view.evaluationId !== record.evaluationId || view.allowed !== record.allowed) throw new Error("Devnet swap quote metadata mismatch");
       return view;
     }));
+  }
+  async loadExactEvidence(id: string): Promise<AgentDevnetSwapQuoteExactEvidence> {
+    this.#assertUnlocked(); const record = this.#database.getAgentDevnetSwapQuote(id);
+    if (record === null) throw new Error("Devnet swap quote does not exist");
+    const payload = JSON.parse(await this.#cipher.decryptString({ ciphertext: record.encryptedPayload,
+      nonce: record.payloadNonce, keyId: "local-data-key-v1" })) as { view?: unknown; raydiumResponse?: unknown };
+    const view = AgentDevnetSwapQuoteViewSchema.parse(payload.view);
+    if (view.id !== record.id || view.evaluationId !== record.evaluationId || view.allowed !== record.allowed
+      || payload.raydiumResponse === undefined) throw new Error("Devnet swap quote evidence mismatch");
+    return { view, raydiumResponse: payload.raydiumResponse };
   }
   async #loadEligible(evaluationId: string) {
     const evaluation = (await this.#agents.list()).evaluations.find((value) => value.receipt.id === evaluationId);

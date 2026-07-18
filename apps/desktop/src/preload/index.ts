@@ -39,6 +39,9 @@ import {
   AgentQuoteDevnetSwapRequestSchema,
   AgentQuoteDevnetSwapResponseSchema,
   AgentDevnetSwapQuoteListResponseSchema,
+  AgentBuildDevnetSwapRequestSchema,
+  AgentBuildDevnetSwapResponseSchema,
+  AgentDevnetSwapBuildListResponseSchema,
   AiShadowTradeListResponseSchema,
   AiShadowTradeMutationResponseSchema,
   DcaSimulationRequestSchema,
@@ -214,6 +217,9 @@ import {
   type AgentQuoteDevnetSwapRequest,
   type AgentQuoteDevnetSwapResponse,
   type AgentDevnetSwapQuoteListResponse,
+  type AgentBuildDevnetSwapRequest,
+  type AgentBuildDevnetSwapResponse,
+  type AgentDevnetSwapBuildListResponse,
   type AiShadowTradeListResponse,
   type AiShadowTradeMutationResponse,
 } from "@silfable/contracts";
@@ -604,6 +610,14 @@ const api = Object.freeze({
   async listAgentDevnetSwapQuotes(): Promise<AgentDevnetSwapQuoteListResponse> {
     const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListDevnetSwapQuotes);
     return AgentDevnetSwapQuoteListResponseSchema.parse(response);
+  },
+  async buildAgentDevnetSwap(request: AgentBuildDevnetSwapRequest): Promise<AgentBuildDevnetSwapResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentBuildDevnetSwap, AgentBuildDevnetSwapRequestSchema.parse(request));
+    return AgentBuildDevnetSwapResponseSchema.parse(response);
+  },
+  async listAgentDevnetSwapBuilds(): Promise<AgentDevnetSwapBuildListResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListDevnetSwapBuilds);
+    return AgentDevnetSwapBuildListResponseSchema.parse(response);
   },
   async getUpdateStatus(): Promise<UpdateStatus> {
     const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.updateGetStatus);

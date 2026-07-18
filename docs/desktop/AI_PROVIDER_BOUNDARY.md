@@ -19,7 +19,7 @@ Restricted agent evaluation sends the selected provider only the encrypted sessi
 
 The optional Devnet exact-message proof, revocable signing-arm lifecycle, pre-sign preparation, exact-message signing, broadcast, and signature reconciliation make no AI provider call. They consume an already approved local intent and map it only to a fixed reviewed SPL fixture for pipeline verification. The signer, broadcaster, and status-query adapter remain isolated in the main process. No transaction message, fixture address, RPC result, proof journal, signing-arm state, pre-sign receipt, signed wire, signature, or confirmation evidence is sent to OpenAI or Anthropic.
 
-Raydium Devnet economic quoting also makes no AI call. It consumes only the locally persisted approved action and session impact cap; the provider cannot select the Devnet mints, canary amount, slippage, endpoint, pool, or route. Quote responses and route IDs remain encrypted locally and are not returned to OpenAI or Anthropic.
+Raydium Devnet economic quoting and transaction simulation make no AI call. They consume only the locally persisted approved action and session impact cap; the provider cannot select the Devnet mints, canary amount, slippage, endpoint, pool, route, programs, accounts, lookup table, or transaction bytes. Quote responses, route IDs, and unsigned transactions remain encrypted locally and are not returned to OpenAI or Anthropic.
 
 ## Supported providers
 

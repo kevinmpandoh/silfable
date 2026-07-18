@@ -13,7 +13,7 @@ test("Raydium transport uses only the fixed Devnet quote endpoint", async () => 
     const quote = await fetchRaydiumDevnetQuote({ inputMint: DEVNET_SWAP_MINTS.sol, outputMint: DEVNET_SWAP_MINTS.usdc,
       amount: "1000000", slippageBps: 50 });
     const url = new URL(requested); assert.equal(url.origin + url.pathname, RAYDIUM_DEVNET_QUOTE_ENDPOINT);
-    assert.equal(url.searchParams.get("txVersion"), "V0"); assert.equal(quote.inputAmount, "1000000");
+    assert.equal(url.searchParams.get("txVersion"), "V0"); assert.equal(quote.quote.inputAmount, "1000000");
   } finally { globalThis.fetch = original; }
 });
 
@@ -30,9 +30,9 @@ test("approved sell direction creates one encrypted low-value economic quote wit
 
 test("high impact and route mutation are denied, while approval race stores nothing", async () => {
   const deniedDb = new FakeDatabase(); const evaluation = evaluationFixture();
-  const denied = await createService(deniedDb, () => [evaluation], async () => ({ ...rawQuote().data,
+  const denied = await createService(deniedDb, () => [evaluation], async () => ({ rawResponse: rawQuote(), quote: { ...rawQuote().data,
     priceImpactPct: 2, routePlan: [{ poolId: "C4UR6mqrdSzQQow6nJLq2zNMVh2DmMhw4ieanAvegWs6",
-      inputMint: DEVNET_SWAP_MINTS.usdc, outputMint: DEVNET_SWAP_MINTS.usdc }] }))
+      inputMint: DEVNET_SWAP_MINTS.usdc, outputMint: DEVNET_SWAP_MINTS.usdc }] } }))
     .quote(evaluation.receipt.id);
   assert.equal(denied.allowed, false); assert.deepEqual(denied.denialCodes.sort(), ["price-impact-exceeded", "route-invalid"]);
 
@@ -44,7 +44,7 @@ test("high impact and route mutation are denied, while approval race stores noth
 });
 
 function createService(database: FakeDatabase, evaluations: () => AgentIntentEvaluationView[],
-  transport: RaydiumDevnetQuoteTransport = async () => rawQuote().data) {
+  transport: RaydiumDevnetQuoteTransport = async () => ({ quote: rawQuote().data, rawResponse: rawQuote() })) {
   return new AgentDevnetSwapQuoteService({ database: database as unknown as RuntimeDatabase, cipher,
     keystore: { isLocked: () => false }, agents: { async list() { return { evaluations: evaluations() }; } },
     transport, now: () => new Date("2026-07-19T00:00:10.000Z") });

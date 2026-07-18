@@ -232,6 +232,9 @@ export type AgentDevnetSwapQuoteStorageRecord = {
   id: string; evaluationId: string; sessionId: string; action: "buy-sol" | "sell-sol"; allowed: boolean;
   encryptedPayload: string; payloadNonce: string; keyId: string; quotedAt: string; expiresAt: string;
 };
+export type AgentDevnetSwapBuildStorageRecord = { id: string; quoteId: string; evaluationId: string; sessionId: string;
+  state: "simulated" | "denied"; messageHash: string | null; encryptedPayload: string; payloadNonce: string; keyId: string;
+  transactionBuilt: boolean; simulationAttempted: boolean; builtAt: string; expiresAt: string };
 
 export type CrashReportStorageRecord = {
   id: string;
@@ -1475,10 +1478,28 @@ export class RuntimeDatabase {
     const row = this.#database.prepare("SELECT * FROM agent_devnet_swap_quotes WHERE evaluation_id = ?").get(evaluationId);
     return row === undefined ? null : toAgentDevnetSwapQuoteStorageRecord(row);
   }
+  getAgentDevnetSwapQuote(id: string): AgentDevnetSwapQuoteStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM agent_devnet_swap_quotes WHERE id = ?").get(id);
+    return row === undefined ? null : toAgentDevnetSwapQuoteStorageRecord(row);
+  }
 
   listAgentDevnetSwapQuotes(limit = 20): AgentDevnetSwapQuoteStorageRecord[] {
     return this.#database.prepare("SELECT * FROM agent_devnet_swap_quotes ORDER BY quoted_at DESC LIMIT ?")
       .all(limit).map(toAgentDevnetSwapQuoteStorageRecord);
+  }
+  insertAgentDevnetSwapBuild(record: AgentDevnetSwapBuildStorageRecord): void {
+    this.#database.prepare(`INSERT INTO agent_devnet_swap_builds (id, quote_id, evaluation_id, session_id, state, message_hash,
+      encrypted_payload, payload_nonce, key_id, transaction_built, simulation_attempted, signing_attempted, broadcast_attempted, built_at, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)`).run(record.id, record.quoteId, record.evaluationId, record.sessionId,
+      record.state, record.messageHash, record.encryptedPayload, record.payloadNonce, record.keyId, Number(record.transactionBuilt),
+      Number(record.simulationAttempted), record.builtAt, record.expiresAt);
+  }
+  getAgentDevnetSwapBuildByQuote(quoteId: string): AgentDevnetSwapBuildStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM agent_devnet_swap_builds WHERE quote_id = ?").get(quoteId);
+    return row === undefined ? null : toAgentDevnetSwapBuildStorageRecord(row);
+  }
+  listAgentDevnetSwapBuilds(limit = 20): AgentDevnetSwapBuildStorageRecord[] {
+    return this.#database.prepare("SELECT * FROM agent_devnet_swap_builds ORDER BY built_at DESC LIMIT ?").all(limit).map(toAgentDevnetSwapBuildStorageRecord);
   }
 
   insertAiShadowTradeEvaluation(record: AiShadowTradeEvaluationStorageRecord): void {
@@ -2559,4 +2580,14 @@ function toAgentDevnetSwapQuoteStorageRecord(row: unknown): AgentDevnetSwapQuote
   return { id: value.id, evaluationId: value.evaluation_id, sessionId: value.session_id, action: value.action,
     allowed: value.allowed === 1, encryptedPayload: value.encrypted_payload, payloadNonce: value.payload_nonce,
     keyId: value.key_id, quotedAt: value.quoted_at, expiresAt: value.expires_at };
+}
+function toAgentDevnetSwapBuildStorageRecord(row: unknown): AgentDevnetSwapBuildStorageRecord {
+  const value = row as { id: string; quote_id: string; evaluation_id: string; session_id: string; state: "simulated" | "denied";
+    message_hash: string | null; encrypted_payload: string; payload_nonce: string; key_id: string; transaction_built: number;
+    simulation_attempted: number; signing_attempted: number; broadcast_attempted: number; built_at: string; expires_at: string };
+  if (value.signing_attempted !== 0 || value.broadcast_attempted !== 0) throw new Error("Devnet swap build cannot contain signing evidence");
+  return { id: value.id, quoteId: value.quote_id, evaluationId: value.evaluation_id, sessionId: value.session_id, state: value.state,
+    messageHash: value.message_hash, encryptedPayload: value.encrypted_payload, payloadNonce: value.payload_nonce, keyId: value.key_id,
+    transactionBuilt: value.transaction_built === 1, simulationAttempted: value.simulation_attempted === 1,
+    builtAt: value.built_at, expiresAt: value.expires_at };
 }

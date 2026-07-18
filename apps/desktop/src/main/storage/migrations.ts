@@ -774,4 +774,20 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
       CREATE INDEX agent_devnet_swap_quote_history ON agent_devnet_swap_quotes(quoted_at DESC);
     `,
   },
+  {
+    version: 26,
+    name: "agent-raydium-devnet-swap-builds",
+    sql: `
+      CREATE TABLE agent_devnet_swap_builds (
+        id TEXT PRIMARY KEY, quote_id TEXT NOT NULL UNIQUE REFERENCES agent_devnet_swap_quotes(id),
+        evaluation_id TEXT NOT NULL REFERENCES agent_intent_evaluations(id), session_id TEXT NOT NULL REFERENCES agent_sessions(id),
+        state TEXT NOT NULL CHECK (state IN ('simulated', 'denied')), message_hash TEXT,
+        encrypted_payload TEXT NOT NULL, payload_nonce TEXT NOT NULL, key_id TEXT NOT NULL,
+        transaction_built INTEGER NOT NULL CHECK (transaction_built IN (0, 1)), simulation_attempted INTEGER NOT NULL CHECK (simulation_attempted IN (0, 1)),
+        signing_attempted INTEGER NOT NULL DEFAULT 0 CHECK (signing_attempted = 0), broadcast_attempted INTEGER NOT NULL DEFAULT 0 CHECK (broadcast_attempted = 0),
+        built_at TEXT NOT NULL, expires_at TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX agent_devnet_swap_build_history ON agent_devnet_swap_builds(built_at DESC);
+    `,
+  },
 ] as const;

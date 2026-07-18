@@ -70,6 +70,8 @@ export const IPC_CHANNELS = {
   agentListDevnetBroadcastExecutions: "agent:list-devnet-broadcast-executions",
   agentQuoteDevnetSwap: "agent:quote-devnet-swap",
   agentListDevnetSwapQuotes: "agent:list-devnet-swap-quotes",
+  agentBuildDevnetSwap: "agent:build-devnet-swap",
+  agentListDevnetSwapBuilds: "agent:list-devnet-swap-builds",
   updateGetStatus: "update:get-status",
   updateCheck: "update:check",
   updateOpenReview: "update:open-review",
@@ -1778,6 +1780,29 @@ export type AgentDevnetSwapQuoteView = z.infer<typeof AgentDevnetSwapQuoteViewSc
 export type AgentQuoteDevnetSwapRequest = z.infer<typeof AgentQuoteDevnetSwapRequestSchema>;
 export type AgentQuoteDevnetSwapResponse = z.infer<typeof AgentQuoteDevnetSwapResponseSchema>;
 export type AgentDevnetSwapQuoteListResponse = z.infer<typeof AgentDevnetSwapQuoteListResponseSchema>;
+
+export const AgentDevnetSwapBuildViewSchema = z.object({ schemaVersion: z.literal(1), id: z.string().uuid(),
+  quoteId: z.string().uuid(), evaluationId: z.string().uuid(), sessionId: z.string().uuid(), action: z.literal("sell-sol"),
+  state: z.enum(["simulated", "denied"]), failureCode: z.enum(["binding-changed", "quote-expired", "build-invalid", "program-denied", "amount-mismatch", "simulation-failed", "fee-exceeded"]).nullable(),
+  messageHash: z.string().regex(/^[a-f0-9]{64}$/u).nullable(), programIds: z.array(z.string().min(32).max(44)).max(4),
+  inputAmount: z.string().regex(/^[1-9][0-9]*$/u), minimumOutputAmount: z.string().regex(/^[1-9][0-9]*$/u),
+  feeLamports: z.string().regex(/^[0-9]+$/u).nullable(), unitsConsumed: z.string().regex(/^[0-9]+$/u).nullable(),
+  exactAmountBound: z.boolean(), transactionBuilt: z.boolean(), simulationAttempted: z.boolean(), signingAttempted: z.literal(false),
+  broadcastAttempted: z.literal(false), marketSwapPerformed: z.literal(false), mainnetEnabled: z.literal(false),
+  builtAt: z.string().datetime(), expiresAt: z.string().datetime(),
+}).strict().superRefine((value, context) => {
+  if ((value.state === "simulated") !== (value.failureCode === null && value.messageHash !== null && value.exactAmountBound)) {
+    context.addIssue({ code: "custom", message: "Devnet swap build evidence is inconsistent" });
+  }
+});
+export const AgentBuildDevnetSwapRequestSchema = z.object({ schemaVersion: z.literal(1), requestId: z.string().uuid(), quoteId: z.string().uuid(),
+  acknowledgedExactServerTransaction: z.literal(true), acknowledgedSimulationOnly: z.literal(true), acknowledgedNoSigningOrBroadcast: z.literal(true) }).strict();
+export const AgentBuildDevnetSwapResponseSchema = z.object({ schemaVersion: z.literal(1), requestId: z.string().uuid(), build: AgentDevnetSwapBuildViewSchema }).strict();
+export const AgentDevnetSwapBuildListResponseSchema = z.object({ schemaVersion: z.literal(1), builds: z.array(AgentDevnetSwapBuildViewSchema).max(20) }).strict();
+export type AgentDevnetSwapBuildView = z.infer<typeof AgentDevnetSwapBuildViewSchema>;
+export type AgentBuildDevnetSwapRequest = z.infer<typeof AgentBuildDevnetSwapRequestSchema>;
+export type AgentBuildDevnetSwapResponse = z.infer<typeof AgentBuildDevnetSwapResponseSchema>;
+export type AgentDevnetSwapBuildListResponse = z.infer<typeof AgentDevnetSwapBuildListResponseSchema>;
 
 export const JupiterOrderQuoteSchema = z.object({
   mode: z.string().min(1),

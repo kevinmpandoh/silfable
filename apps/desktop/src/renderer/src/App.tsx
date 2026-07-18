@@ -13,6 +13,7 @@ import type {
   AgentDevnetSignedExecutionView,
   AgentDevnetBroadcastExecutionView,
   AgentDevnetSwapQuoteView,
+  AgentDevnetSwapBuildView,
   AgentSessionView,
   DevnetCanaryView,
   DevnetFixtureProvisionView,
@@ -935,11 +936,13 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
   const [agentDevnetSignedExecutions, setAgentDevnetSignedExecutions] = useState<AgentDevnetSignedExecutionView[]>([]);
   const [agentDevnetBroadcastExecutions, setAgentDevnetBroadcastExecutions] = useState<AgentDevnetBroadcastExecutionView[]>([]);
   const [agentDevnetSwapQuotes, setAgentDevnetSwapQuotes] = useState<AgentDevnetSwapQuoteView[]>([]);
+  const [agentDevnetSwapBuilds, setAgentDevnetSwapBuilds] = useState<AgentDevnetSwapBuildView[]>([]);
   const [agentSigningArmAcks, setAgentSigningArmAcks] = useState([false, false, false]);
   const [agentPreSignAcks, setAgentPreSignAcks] = useState([false, false, false]);
   const [agentSigningAcks, setAgentSigningAcks] = useState([false, false, false]);
   const [agentBroadcastAcks, setAgentBroadcastAcks] = useState([false, false, false]);
   const [agentSwapQuoteAcks, setAgentSwapQuoteAcks] = useState([false, false, false]);
+  const [agentSwapBuildAcks, setAgentSwapBuildAcks] = useState([false, false, false]);
   const [agentObjective, setAgentObjective] = useState("Protect capital and propose a SOL action only when the validated observation fits conservative risk limits.");
   const [agentMaxNotional, setAgentMaxNotional] = useState("20");
   const [agentMaxImpactBps, setAgentMaxImpactBps] = useState("50");
@@ -969,6 +972,7 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
       setAgentDevnetSignedExecutions([]);
       setAgentDevnetBroadcastExecutions([]);
       setAgentDevnetSwapQuotes([]);
+      setAgentDevnetSwapBuilds([]);
       setAiProposal(null);
       return;
     }
@@ -987,8 +991,9 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
       window.silfable.listAgentDevnetSignedExecutions(),
       window.silfable.listAgentDevnetBroadcastExecutions(),
       window.silfable.listAgentDevnetSwapQuotes(),
+      window.silfable.listAgentDevnetSwapBuilds(),
     ])
-      .then(([settings, history, providers, evaluations, observations, watches, agents, devnetSimulations, signingArms, preSignExecutions, signedExecutions, broadcastExecutions, swapQuotes]) => {
+      .then(([settings, history, providers, evaluations, observations, watches, agents, devnetSimulations, signingArms, preSignExecutions, signedExecutions, broadcastExecutions, swapQuotes, swapBuilds]) => {
         if (!active) return;
         setConfigured(settings.configured);
         setQuotes(history.quotes);
@@ -1005,6 +1010,7 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
         setAgentDevnetSignedExecutions(signedExecutions.executions);
         setAgentDevnetBroadcastExecutions(broadcastExecutions.executions);
         setAgentDevnetSwapQuotes(swapQuotes.quotes);
+        setAgentDevnetSwapBuilds(swapBuilds.builds);
       })
       .catch(() => active && setMessage("Jupiter shadow settings are unavailable."));
     const timer = window.setInterval(() => {
@@ -1017,7 +1023,8 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
         window.silfable.listAgentDevnetSignedExecutions(),
         window.silfable.listAgentDevnetBroadcastExecutions(),
         window.silfable.listAgentDevnetSwapQuotes(),
-      ]).then(([watches, agents, devnetSimulations, signingArms, preSignExecutions, signedExecutions, broadcastExecutions, swapQuotes]) => {
+        window.silfable.listAgentDevnetSwapBuilds(),
+      ]).then(([watches, agents, devnetSimulations, signingArms, preSignExecutions, signedExecutions, broadcastExecutions, swapQuotes, swapBuilds]) => {
         if (!active) return;
         setMarketWatches(watches.watches);
         setMarketWakeReceipts(watches.wakeReceipts);
@@ -1029,6 +1036,7 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
         setAgentDevnetSignedExecutions(signedExecutions.executions);
         setAgentDevnetBroadcastExecutions(broadcastExecutions.executions);
         setAgentDevnetSwapQuotes(swapQuotes.quotes);
+        setAgentDevnetSwapBuilds(swapBuilds.builds);
       }).catch(() => undefined);
     }, 5_000);
     return () => {
@@ -1447,6 +1455,17 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
     } catch { setAgentSwapQuoteAcks([false, false, false]); setMessage("Raydium Devnet quote request failed closed."); }
     finally { setBusy(false); }
   }
+  async function buildAgentDevnetSwap(quote: AgentDevnetSwapQuoteView): Promise<void> {
+    if (!agentSwapBuildAcks.every(Boolean)) return; setBusy(true); setMessage(null);
+    try {
+      const response = await window.silfable.buildAgentDevnetSwap({ schemaVersion: 1, requestId: crypto.randomUUID(), quoteId: quote.id,
+        acknowledgedExactServerTransaction: true, acknowledgedSimulationOnly: true, acknowledgedNoSigningOrBroadcast: true });
+      setAgentDevnetSwapBuilds((await window.silfable.listAgentDevnetSwapBuilds()).builds); setAgentSwapBuildAcks([false, false, false]);
+      setMessage(response.build.state === "simulated" ? "Exact Raydium Devnet swap transaction validated and simulated. Nothing was signed."
+        : `Raydium transaction denied: ${response.build.failureCode}.`);
+    } catch { setAgentSwapBuildAcks([false, false, false]); setMessage("Raydium transaction build failed closed without signing."); }
+    finally { setBusy(false); }
+  }
 
   async function approveShadowTrade(evaluation: AiShadowTradeEvaluationView): Promise<void> {
     if (!aiApprovalAcknowledged) return;
@@ -1792,6 +1811,27 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
                 <div><span>Mapping</span><code>{quote.economicValueMapping} · {quote.amountPolicy}</code></div>
                 <div><span>Boundary</span><code>built=false · signed=false · broadcast=false · mainnet=false</code></div>
                 <div><span>Denial</span><code>{quote.denialCodes.join(", ") || "none"}</code></div>
+                {quote.allowed && quote.action === "sell-sol" && new Date(quote.expiresAt).getTime() > Date.now()
+                  && !agentDevnetSwapBuilds.some((build) => build.quoteId === quote.id) && (
+                  <>
+                    <div className="consentList">
+                      {["Request only the server-built transaction bound to this exact encrypted quote.", "Decode, allowlist, and simulate it only; do not sign.", "Do not broadcast, execute a swap, or enable Mainnet."].map((label, index) => (
+                        <label className="consent" key={label}><input type="checkbox" checked={agentSwapBuildAcks[index] ?? false} onChange={(event) => setAgentSwapBuildAcks((acks) => acks.map((value, itemIndex) => itemIndex === index ? event.target.checked : value))} /><span>{label}</span></label>
+                      ))}
+                    </div>
+                    <button type="button" disabled={busy || !agentSwapBuildAcks.every(Boolean)} onClick={() => void buildAgentDevnetSwap(quote)}>Build and simulate exact swap</button>
+                  </>
+                )}
+              </article>
+            ))}
+            {agentDevnetSwapBuilds.map((build) => (
+              <article className="shadowRow" key={build.id}>
+                <div><span>Raydium swap build</span><strong>{build.state}</strong></div>
+                <div><span>Message</span><code>{build.messageHash ?? "denied"}</code></div>
+                <div><span>Exact amounts</span><code>{build.inputAmount} → ≥ {build.minimumOutputAmount} · bound={String(build.exactAmountBound)}</code></div>
+                <div><span>Simulation</span><code>{build.unitsConsumed ?? "n/a"} units · {build.feeLamports ?? "n/a"} lamports</code></div>
+                <div><span>Boundary</span><code>built={String(build.transactionBuilt)} · signed=false · broadcast=false · mainnet=false</code></div>
+                <div><span>Failure</span><code>{build.failureCode ?? "none"}</code></div>
               </article>
             ))}
           </div>
