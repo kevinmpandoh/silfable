@@ -219,6 +219,15 @@ export type AgentDevnetSignedExecutionStorageRecord = {
   broadcastAttempted: false; executionAttempted: false; createdAt: string; updatedAt: string;
 };
 
+export type AgentDevnetBroadcastExecutionStorageRecord = {
+  id: string; signedExecutionId: string; preSignExecutionId: string; simulationId: string;
+  evaluationId: string; sessionId: string; messageHash: string; signatureHash: string;
+  lastValidBlockHeight: string; state: "proposed" | "broadcast" | "confirmed" | "failed" | "ambiguous";
+  failureCode: string | null; encryptedPayload: string; payloadNonce: string; keyId: string;
+  broadcastAttempted: boolean; executionAttempted: boolean; fixtureTransferPerformed: boolean;
+  createdAt: string; updatedAt: string;
+};
+
 export type CrashReportStorageRecord = {
   id: string;
   encryptedPayload: string;
@@ -1374,6 +1383,11 @@ export class RuntimeDatabase {
     return row === undefined ? null : toAgentDevnetSignedExecutionStorageRecord(row);
   }
 
+  getAgentDevnetSignedExecution(id: string): AgentDevnetSignedExecutionStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM agent_devnet_signed_executions WHERE id = ?").get(id);
+    return row === undefined ? null : toAgentDevnetSignedExecutionStorageRecord(row);
+  }
+
   listAgentDevnetSignedExecutions(limit = 20): AgentDevnetSignedExecutionStorageRecord[] {
     return this.#database.prepare("SELECT * FROM agent_devnet_signed_executions ORDER BY updated_at DESC LIMIT ?")
       .all(limit).map(toAgentDevnetSignedExecutionStorageRecord);
@@ -1386,6 +1400,61 @@ export class RuntimeDatabase {
        WHERE state IN ('proposed', 'signing')`,
     ).run(updatedAt);
     return Number(result.changes);
+  }
+
+  insertAgentDevnetBroadcastExecution(record: AgentDevnetBroadcastExecutionStorageRecord): void {
+    this.#database.prepare(
+      `INSERT INTO agent_devnet_broadcast_executions
+        (id, signed_execution_id, pre_sign_execution_id, simulation_id, evaluation_id, session_id,
+         message_hash, signature_hash, last_valid_block_height, state, failure_code, encrypted_payload,
+         payload_nonce, key_id, broadcast_attempted, execution_attempted, fixture_transfer_performed, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', NULL, ?, ?, ?, 0, 0, 0, ?, ?)`,
+    ).run(record.id, record.signedExecutionId, record.preSignExecutionId, record.simulationId,
+      record.evaluationId, record.sessionId, record.messageHash, record.signatureHash,
+      record.lastValidBlockHeight, record.encryptedPayload, record.payloadNonce, record.keyId,
+      record.createdAt, record.updatedAt);
+  }
+
+  transitionAgentDevnetBroadcastExecution(input: {
+    id: string; expectedState: AgentDevnetBroadcastExecutionStorageRecord["state"];
+    state: AgentDevnetBroadcastExecutionStorageRecord["state"]; failureCode?: string | null;
+    encryptedPayload: string; payloadNonce: string; keyId: string; broadcastAttempted: boolean;
+    executionAttempted: boolean; fixtureTransferPerformed: boolean; updatedAt: string;
+    requireCurrentAuthorization?: boolean;
+  }): AgentDevnetBroadcastExecutionStorageRecord {
+    const result = this.#database.prepare(
+      `UPDATE agent_devnet_broadcast_executions SET state = ?, failure_code = ?, encrypted_payload = ?,
+       payload_nonce = ?, key_id = ?, broadcast_attempted = ?, execution_attempted = ?,
+       fixture_transfer_performed = ?, updated_at = ? WHERE id = ? AND state = ?
+       AND (? = 0 OR EXISTS (
+         SELECT 1 FROM agent_intent_evaluations evaluation
+         JOIN agent_sessions session ON session.id = evaluation.session_id
+         WHERE evaluation.id = agent_devnet_broadcast_executions.evaluation_id
+           AND evaluation.approval_state = 'approved' AND evaluation.approval_expires_at IS NOT NULL
+           AND evaluation.approval_expires_at > ? AND session.state = 'active'
+       ))`,
+    ).run(input.state, input.failureCode ?? null, input.encryptedPayload, input.payloadNonce, input.keyId,
+      Number(input.broadcastAttempted), Number(input.executionAttempted), Number(input.fixtureTransferPerformed),
+      input.updatedAt, input.id, input.expectedState, Number(input.requireCurrentAuthorization ?? false), input.updatedAt);
+    if (Number(result.changes) !== 1) throw new Error("Agent Devnet broadcast journal transition conflict");
+    const row = this.#database.prepare("SELECT * FROM agent_devnet_broadcast_executions WHERE id = ?").get(input.id);
+    if (row === undefined) throw new Error("Agent Devnet broadcast journal does not exist");
+    return toAgentDevnetBroadcastExecutionStorageRecord(row);
+  }
+
+  getAgentDevnetBroadcastExecutionBySigned(signedExecutionId: string): AgentDevnetBroadcastExecutionStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM agent_devnet_broadcast_executions WHERE signed_execution_id = ?").get(signedExecutionId);
+    return row === undefined ? null : toAgentDevnetBroadcastExecutionStorageRecord(row);
+  }
+
+  listAgentDevnetBroadcastExecutions(limit = 20): AgentDevnetBroadcastExecutionStorageRecord[] {
+    return this.#database.prepare("SELECT * FROM agent_devnet_broadcast_executions ORDER BY updated_at DESC LIMIT ?")
+      .all(limit).map(toAgentDevnetBroadcastExecutionStorageRecord);
+  }
+
+  listPendingAgentDevnetBroadcastExecutions(): AgentDevnetBroadcastExecutionStorageRecord[] {
+    return this.#database.prepare("SELECT * FROM agent_devnet_broadcast_executions WHERE state IN ('proposed', 'broadcast', 'ambiguous') ORDER BY created_at")
+      .all().map(toAgentDevnetBroadcastExecutionStorageRecord);
   }
 
   insertAiShadowTradeEvaluation(record: AiShadowTradeEvaluationStorageRecord): void {
@@ -2432,5 +2501,26 @@ function toAgentDevnetSignedExecutionStorageRecord(row: unknown): AgentDevnetSig
     failureCode: value.failure_code, encryptedPayload: value.encrypted_payload,
     payloadNonce: value.payload_nonce, keyId: value.key_id, signingAttempted: value.signing_attempted === 1,
     broadcastAttempted: false, executionAttempted: false, createdAt: value.created_at, updatedAt: value.updated_at,
+  };
+}
+
+function toAgentDevnetBroadcastExecutionStorageRecord(row: unknown): AgentDevnetBroadcastExecutionStorageRecord {
+  const value = row as {
+    id: string; signed_execution_id: string; pre_sign_execution_id: string; simulation_id: string;
+    evaluation_id: string; session_id: string; message_hash: string; signature_hash: string;
+    last_valid_block_height: string; state: AgentDevnetBroadcastExecutionStorageRecord["state"];
+    failure_code: string | null; encrypted_payload: string; payload_nonce: string; key_id: string;
+    broadcast_attempted: number; execution_attempted: number; fixture_transfer_performed: number;
+    created_at: string; updated_at: string;
+  };
+  return {
+    id: value.id, signedExecutionId: value.signed_execution_id, preSignExecutionId: value.pre_sign_execution_id,
+    simulationId: value.simulation_id, evaluationId: value.evaluation_id, sessionId: value.session_id,
+    messageHash: value.message_hash, signatureHash: value.signature_hash,
+    lastValidBlockHeight: value.last_valid_block_height, state: value.state, failureCode: value.failure_code,
+    encryptedPayload: value.encrypted_payload, payloadNonce: value.payload_nonce, keyId: value.key_id,
+    broadcastAttempted: value.broadcast_attempted === 1, executionAttempted: value.execution_attempted === 1,
+    fixtureTransferPerformed: value.fixture_transfer_performed === 1,
+    createdAt: value.created_at, updatedAt: value.updated_at,
   };
 }

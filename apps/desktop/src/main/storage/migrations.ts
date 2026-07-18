@@ -732,4 +732,30 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
       CREATE INDEX agent_devnet_signed_execution_history ON agent_devnet_signed_executions(updated_at DESC);
     `,
   },
+  {
+    version: 24,
+    name: "agent-devnet-broadcast-journal",
+    sql: `
+      CREATE TABLE agent_devnet_broadcast_executions (
+        id TEXT PRIMARY KEY, signed_execution_id TEXT NOT NULL UNIQUE REFERENCES agent_devnet_signed_executions(id),
+        pre_sign_execution_id TEXT NOT NULL REFERENCES agent_devnet_pre_sign_executions(id),
+        simulation_id TEXT NOT NULL REFERENCES agent_devnet_simulations(id), evaluation_id TEXT NOT NULL REFERENCES agent_intent_evaluations(id),
+        session_id TEXT NOT NULL REFERENCES agent_sessions(id),
+        message_hash TEXT NOT NULL CHECK (length(message_hash) = 64 AND message_hash NOT GLOB '*[^0-9a-f]*'),
+        signature_hash TEXT NOT NULL CHECK (length(signature_hash) = 64 AND signature_hash NOT GLOB '*[^0-9a-f]*'),
+        last_valid_block_height TEXT NOT NULL CHECK (length(last_valid_block_height) BETWEEN 1 AND 32 AND last_valid_block_height NOT GLOB '*[^0-9]*'),
+        state TEXT NOT NULL CHECK (state IN ('proposed', 'broadcast', 'confirmed', 'failed', 'ambiguous')),
+        failure_code TEXT CHECK (failure_code IS NULL OR failure_code IN ('binding-changed', 'network-unhealthy', 'provenance-denied', 'blockhash-expired', 'broadcast-status-unknown', 'network-lost-after-broadcast', 'transaction-error', 'blockhash-expired-unconfirmed', 'confirmation-timeout', 'restart-before-broadcast', 'reconciliation-pending', 'reconciliation-unavailable', 'journal-integrity-error')),
+        encrypted_payload TEXT NOT NULL, payload_nonce TEXT NOT NULL, key_id TEXT NOT NULL,
+        broadcast_attempted INTEGER NOT NULL DEFAULT 0 CHECK (broadcast_attempted IN (0, 1)),
+        execution_attempted INTEGER NOT NULL DEFAULT 0 CHECK (execution_attempted IN (0, 1)),
+        fixture_transfer_performed INTEGER NOT NULL DEFAULT 0 CHECK (fixture_transfer_performed IN (0, 1)),
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        CHECK (state NOT IN ('broadcast', 'ambiguous', 'confirmed') OR (broadcast_attempted = 1 AND execution_attempted = 1)),
+        CHECK (state <> 'confirmed' OR (failure_code IS NULL AND fixture_transfer_performed = 1)),
+        CHECK (state NOT IN ('failed', 'ambiguous') OR failure_code IS NOT NULL)
+      ) STRICT;
+      CREATE INDEX agent_devnet_broadcast_history ON agent_devnet_broadcast_executions(updated_at DESC);
+    `,
+  },
 ] as const;

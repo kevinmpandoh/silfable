@@ -66,6 +66,8 @@ export const IPC_CHANNELS = {
   agentListDevnetPreSignExecutions: "agent:list-devnet-pre-sign-executions",
   agentSignDevnetExecution: "agent:sign-devnet-execution",
   agentListDevnetSignedExecutions: "agent:list-devnet-signed-executions",
+  agentBroadcastDevnetExecution: "agent:broadcast-devnet-execution",
+  agentListDevnetBroadcastExecutions: "agent:list-devnet-broadcast-executions",
   updateGetStatus: "update:get-status",
   updateCheck: "update:check",
   updateOpenReview: "update:open-review",
@@ -1701,6 +1703,50 @@ export type AgentDevnetSignedExecutionView = z.infer<typeof AgentDevnetSignedExe
 export type AgentSignDevnetExecutionRequest = z.infer<typeof AgentSignDevnetExecutionRequestSchema>;
 export type AgentSignDevnetExecutionResponse = z.infer<typeof AgentSignDevnetExecutionResponseSchema>;
 export type AgentDevnetSignedExecutionListResponse = z.infer<typeof AgentDevnetSignedExecutionListResponseSchema>;
+
+export const AgentDevnetBroadcastExecutionViewSchema = z.object({
+  schemaVersion: z.literal(1), id: z.string().uuid(), signedExecutionId: z.string().uuid(),
+  preSignExecutionId: z.string().uuid(), simulationId: z.string().uuid(), evaluationId: z.string().uuid(),
+  sessionId: z.string().uuid(), messageHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  signatureHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  state: z.enum(["proposed", "broadcast", "confirmed", "failed", "ambiguous"]),
+  failureCode: z.enum(["binding-changed", "network-unhealthy", "provenance-denied", "blockhash-expired",
+    "broadcast-status-unknown", "network-lost-after-broadcast", "transaction-error",
+    "blockhash-expired-unconfirmed", "confirmation-timeout", "restart-before-broadcast",
+    "reconciliation-pending", "reconciliation-unavailable", "journal-integrity-error"]).nullable(),
+  broadcastAttempted: z.boolean(), executionAttempted: z.boolean(), fixtureTransferPerformed: z.boolean(),
+  economicValueMapping: z.literal("none"), marketSwapPerformed: z.literal(false), mainnetEnabled: z.literal(false),
+  createdAt: z.string().datetime(), updatedAt: z.string().datetime(),
+}).strict().superRefine((value, context) => {
+  const attemptedState = value.state === "broadcast" || value.state === "confirmed" || value.state === "ambiguous";
+  if (attemptedState && (!value.broadcastAttempted || !value.executionAttempted)) {
+    context.addIssue({ code: "custom", message: "Broadcast state requires an attempt marker" });
+  }
+  if (value.state === "proposed" && (value.broadcastAttempted || value.executionAttempted)) {
+    context.addIssue({ code: "custom", message: "Proposed state cannot claim an attempt" });
+  }
+  const failureState = value.state === "failed" || value.state === "ambiguous";
+  if (value.fixtureTransferPerformed !== (value.state === "confirmed")
+    || (failureState && value.failureCode === null) || (!failureState && value.failureCode !== null)) {
+    context.addIssue({ code: "custom", message: "Confirmation evidence is inconsistent" });
+  }
+});
+export const AgentBroadcastDevnetExecutionRequestSchema = z.object({
+  schemaVersion: z.literal(1), requestId: z.string().uuid(), signedExecutionId: z.string().uuid(),
+  expectedMessageHash: z.string().regex(/^[a-f0-9]{64}$/u), expectedSignatureHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  acknowledgedDevnetFeeAndFixtureTransfer: z.literal(true), acknowledgedNoAutomaticRetry: z.literal(true),
+  acknowledgedNoMarketSwapOrMainnet: z.literal(true),
+}).strict();
+export const AgentBroadcastDevnetExecutionResponseSchema = z.object({
+  schemaVersion: z.literal(1), requestId: z.string().uuid(), execution: AgentDevnetBroadcastExecutionViewSchema,
+}).strict();
+export const AgentDevnetBroadcastExecutionListResponseSchema = z.object({
+  schemaVersion: z.literal(1), executions: z.array(AgentDevnetBroadcastExecutionViewSchema).max(20),
+}).strict();
+export type AgentDevnetBroadcastExecutionView = z.infer<typeof AgentDevnetBroadcastExecutionViewSchema>;
+export type AgentBroadcastDevnetExecutionRequest = z.infer<typeof AgentBroadcastDevnetExecutionRequestSchema>;
+export type AgentBroadcastDevnetExecutionResponse = z.infer<typeof AgentBroadcastDevnetExecutionResponseSchema>;
+export type AgentDevnetBroadcastExecutionListResponse = z.infer<typeof AgentDevnetBroadcastExecutionListResponseSchema>;
 
 export const JupiterOrderQuoteSchema = z.object({
   mode: z.string().min(1),

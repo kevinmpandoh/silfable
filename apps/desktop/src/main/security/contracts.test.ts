@@ -17,6 +17,8 @@ import {
   AgentDevnetPreSignExecutionViewSchema,
   AgentSignDevnetExecutionRequestSchema,
   AgentDevnetSignedExecutionViewSchema,
+  AgentBroadcastDevnetExecutionRequestSchema,
+  AgentDevnetBroadcastExecutionViewSchema,
   DevnetFixtureProvisionExecuteRequestSchema,
   DevnetFixtureReviewActivateRequestSchema,
   DevnetFixtureTransferExecuteRequestSchema,
@@ -251,6 +253,12 @@ test("security-sensitive requests reject unknown privilege-shaped fields", () =>
       acknowledgedConsumesReadyReceipt: true, acknowledgedNoBroadcastOrMarketSwap: true,
       privateKey: "renderer-must-not-provide-signing-material",
     }],
+    [AgentBroadcastDevnetExecutionRequestSchema, {
+      schemaVersion: 1, requestId, signedExecutionId: "00000000-0000-4000-8000-000000000002",
+      expectedMessageHash: "a".repeat(64), expectedSignatureHash: "b".repeat(64),
+      acknowledgedDevnetFeeAndFixtureTransfer: true, acknowledgedNoAutomaticRetry: true,
+      acknowledgedNoMarketSwapOrMainnet: true, signedWire: "renderer-must-not-provide-wire",
+    }],
   ] as const;
   for (const [schema, value] of cases) assert.equal(schema.safeParse(value).success, false);
 });
@@ -417,6 +425,12 @@ test("acknowledgements cannot be omitted or replaced with truthy strings", () =>
     expectedMessageHash: "a".repeat(64), acknowledgedExactFixtureSignature: true,
     acknowledgedConsumesReadyReceipt: true, acknowledgedNoBroadcastOrMarketSwap: "true",
   }).success, false);
+  assert.equal(AgentBroadcastDevnetExecutionRequestSchema.safeParse({
+    schemaVersion: 1, requestId, signedExecutionId: "00000000-0000-4000-8000-000000000002",
+    expectedMessageHash: "a".repeat(64), expectedSignatureHash: "b".repeat(64),
+    acknowledgedDevnetFeeAndFixtureTransfer: true, acknowledgedNoAutomaticRetry: true,
+    acknowledgedNoMarketSwapOrMainnet: "true",
+  }).success, false);
 });
 
 test("public agent pre-sign receipts reject wire, signatures, and execution claims", () => {
@@ -445,6 +459,20 @@ test("public signed agent receipts expose only a signature hash and reject signe
   assert.equal(AgentDevnetSignedExecutionViewSchema.safeParse(view).success, true);
   assert.equal(AgentDevnetSignedExecutionViewSchema.safeParse({ ...view, signedWire: "secret" }).success, false);
   assert.equal(AgentDevnetSignedExecutionViewSchema.safeParse({ ...view, broadcastAttempted: true }).success, false);
+});
+
+test("public agent broadcast receipts expose hashes but reject transaction material and Mainnet claims", () => {
+  const view = { schemaVersion: 1, id: requestId, signedExecutionId: "00000000-0000-4000-8000-000000000002",
+    preSignExecutionId: "00000000-0000-4000-8000-000000000003", simulationId: "00000000-0000-4000-8000-000000000004",
+    evaluationId: "00000000-0000-4000-8000-000000000005", sessionId: "00000000-0000-4000-8000-000000000006",
+    messageHash: "a".repeat(64), signatureHash: "b".repeat(64), state: "confirmed", failureCode: null,
+    broadcastAttempted: true, executionAttempted: true, fixtureTransferPerformed: true,
+    economicValueMapping: "none", marketSwapPerformed: false, mainnetEnabled: false,
+    createdAt: "2026-07-19T00:00:00.000Z", updatedAt: "2026-07-19T00:00:01.000Z" };
+  assert.equal(AgentDevnetBroadcastExecutionViewSchema.safeParse(view).success, true);
+  assert.equal(AgentDevnetBroadcastExecutionViewSchema.safeParse({ ...view, signedWire: "secret" }).success, false);
+  assert.equal(AgentDevnetBroadcastExecutionViewSchema.safeParse({ ...view, mainnetEnabled: true }).success, false);
+  assert.equal(AgentDevnetBroadcastExecutionViewSchema.safeParse({ ...view, marketSwapPerformed: true }).success, false);
 });
 
 test("public guarded execution receipts reject signatures and transaction evidence", () => {

@@ -19,6 +19,10 @@ type SigningAdapter = {
   signExact(signer: KeyPairSigner, wire: string, expectedMessageHash: string): Promise<{ signedWire: string; signature: string }>;
 };
 
+export type AgentDevnetSignedExactEvidence = {
+  view: AgentDevnetSignedExecutionView; signedWire: string; signature: string;
+};
+
 export class SolanaAgentDevnetSigningAdapter implements SigningAdapter {
   readonly #rpc: DevnetFixtureRpcPort & DevnetTransactionRpcPort;
   constructor(rpc: DevnetFixtureRpcPort & DevnetTransactionRpcPort) { this.#rpc = rpc; }
@@ -105,18 +109,39 @@ export class AgentDevnetSigningService {
   }
   async list(): Promise<AgentDevnetSignedExecutionView[]> {
     if (this.#keystore.isLocked()) throw new Error("Keystore is locked");
-    return Promise.all(this.#database.listAgentDevnetSignedExecutions().map(async (record) => {
-      const payload = JSON.parse(await this.#cipher.decryptString({ ciphertext: record.encryptedPayload, nonce: record.payloadNonce, keyId: "local-data-key-v1" })) as Record<string, unknown>;
-      const view = AgentDevnetSignedExecutionViewSchema.parse({ schemaVersion: payload.schemaVersion, id: payload.id,
-        preSignExecutionId: payload.preSignExecutionId, signingArmId: payload.signingArmId, simulationId: payload.simulationId,
-        evaluationId: payload.evaluationId, sessionId: payload.sessionId, messageHash: payload.messageHash,
-        state: record.state, signatureHash: record.signatureHash, failureCode: record.failureCode,
-        signingAttempted: record.signingAttempted, broadcastAttempted: payload.broadcastAttempted,
-        executionAttempted: payload.executionAttempted, marketSwapPerformed: payload.marketSwapPerformed,
-        mainnetEnabled: payload.mainnetEnabled, createdAt: payload.createdAt, updatedAt: payload.updatedAt });
-      if (view.id !== record.id || view.state !== record.state || view.signatureHash !== record.signatureHash) throw new Error("Agent signing journal metadata mismatch");
-      return view;
-    }));
+    return Promise.all(this.#database.listAgentDevnetSignedExecutions().map((record) => this.#toView(record)));
+  }
+  async loadExactSignedEvidence(id: string): Promise<AgentDevnetSignedExactEvidence> {
+    if (this.#keystore.isLocked()) throw new Error("Keystore is locked");
+    const record = this.#database.getAgentDevnetSignedExecution(id);
+    if (record === null || record.state !== "signed-awaiting-broadcast" || record.signatureHash === null) {
+      throw new Error("Exact signed Devnet journal is required");
+    }
+    const payload = JSON.parse(await this.#cipher.decryptString({ ciphertext: record.encryptedPayload,
+      nonce: record.payloadNonce, keyId: "local-data-key-v1" })) as Record<string, unknown>;
+    if (typeof payload.signedWire !== "string" || typeof payload.signature !== "string") throw new Error("Signed journal integrity error");
+    const transaction = getTransactionDecoder().decode(Buffer.from(payload.signedWire, "base64"));
+    const messageHash = getTransactionMessageHash(transaction);
+    const signatureValue = getSignatureFromTransaction(transaction);
+    const signatureHash = createHash("sha256").update(signatureValue).digest("hex");
+    if (messageHash !== record.messageHash || signatureValue !== payload.signature || signatureHash !== record.signatureHash) {
+      throw new Error("Signed journal integrity error");
+    }
+    const view = await this.#toView(record);
+    if (view.preSignExecutionId !== record.preSignExecutionId) throw new Error("Signed journal metadata mismatch");
+    return { view, signedWire: payload.signedWire, signature: signatureValue };
+  }
+  async #toView(record: AgentDevnetSignedExecutionStorageRecord) {
+    const payload = JSON.parse(await this.#cipher.decryptString({ ciphertext: record.encryptedPayload, nonce: record.payloadNonce, keyId: "local-data-key-v1" })) as Record<string, unknown>;
+    const view = AgentDevnetSignedExecutionViewSchema.parse({ schemaVersion: payload.schemaVersion, id: payload.id,
+      preSignExecutionId: payload.preSignExecutionId, signingArmId: payload.signingArmId, simulationId: payload.simulationId,
+      evaluationId: payload.evaluationId, sessionId: payload.sessionId, messageHash: payload.messageHash,
+      state: record.state, signatureHash: record.signatureHash, failureCode: record.failureCode,
+      signingAttempted: record.signingAttempted, broadcastAttempted: payload.broadcastAttempted,
+      executionAttempted: payload.executionAttempted, marketSwapPerformed: payload.marketSwapPerformed,
+      mainnetEnabled: payload.mainnetEnabled, createdAt: payload.createdAt, updatedAt: record.updatedAt });
+    if (view.id !== record.id || view.state !== record.state || view.signatureHash !== record.signatureHash) throw new Error("Agent signing journal metadata mismatch");
+    return view;
   }
   async #assertCurrent(preSign: AgentDevnetPreSignExecutionView, evidence: AgentDevnetSimulationExactEvidence) {
     if (!this.#health.isHealthyFresh()) throw new Error("network-unhealthy");

@@ -6,7 +6,7 @@ import test from "node:test";
 
 import { getTransferSolInstruction } from "@solana-program/system";
 import { appendTransactionMessageInstruction, blockhash, compileTransaction, createTransactionMessage, generateKeyPairSigner, getBase64EncodedWireTransaction, pipe, setTransactionMessageFeePayerSigner, setTransactionMessageLifetimeUsingBlockhash } from "@solana/kit";
-import { AgentDevnetPreSignExecutionViewSchema, AgentDevnetSignedExecutionViewSchema, AgentDevnetSimulationViewSchema, type AgentIntentEvaluationView } from "@silfable/contracts";
+import { AgentDevnetBroadcastExecutionViewSchema, AgentDevnetPreSignExecutionViewSchema, AgentDevnetSignedExecutionViewSchema, AgentDevnetSimulationViewSchema, type AgentIntentEvaluationView } from "@silfable/contracts";
 
 import { AgentDevnetSigningService, SolanaAgentDevnetSigningAdapter } from "./agent-devnet-signing";
 import { getTransactionMessageHash } from "./spl-fixture";
@@ -83,6 +83,28 @@ test("restart fails an unfinished signing journal without retrying the signer", 
     assert.equal(recovered?.failureCode, "restart-before-sign-complete");
     assert.equal(recovered?.signingAttempted, false);
     assert.equal(recovered?.broadcastAttempted, false);
+  } finally { await f.close(); }
+});
+
+test("database commits a broadcast marker only while the bound approval is current", async () => {
+  const f = await setup();
+  try {
+    const signed = await f.service().sign(f.preSign.id, f.preSign.messageHash);
+    const view = AgentDevnetBroadcastExecutionViewSchema.parse({ schemaVersion: 1,
+      id: "00000000-0000-4000-8000-000000000709", signedExecutionId: signed.id,
+      preSignExecutionId: f.preSign.id, simulationId: f.simulation.id, evaluationId: f.simulation.evaluationId,
+      sessionId: f.simulation.sessionId, messageHash: f.preSign.messageHash, signatureHash: signed.signatureHash,
+      state: "proposed", failureCode: null, broadcastAttempted: false, executionAttempted: false,
+      fixtureTransferPerformed: false, economicValueMapping: "none", marketSwapPerformed: false,
+      mainnetEnabled: false, createdAt: "2026-07-19T00:00:20.000Z", updatedAt: "2026-07-19T00:00:20.000Z" });
+    const envelope = await cipher.encryptString(JSON.stringify(view));
+    f.database.insertAgentDevnetBroadcastExecution({ ...view, lastValidBlockHeight: "1000",
+      encryptedPayload: envelope.ciphertext, payloadNonce: envelope.nonce, keyId: envelope.keyId });
+    const marked = f.database.transitionAgentDevnetBroadcastExecution({ id: view.id, expectedState: "proposed",
+      state: "broadcast", encryptedPayload: envelope.ciphertext, payloadNonce: envelope.nonce, keyId: envelope.keyId,
+      broadcastAttempted: true, executionAttempted: true, fixtureTransferPerformed: false,
+      updatedAt: "2026-07-19T00:00:21.000Z", requireCurrentAuthorization: true });
+    assert.equal(marked.state, "broadcast"); assert.equal(marked.broadcastAttempted, true);
   } finally { await f.close(); }
 });
 
