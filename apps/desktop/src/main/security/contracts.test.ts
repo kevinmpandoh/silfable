@@ -514,6 +514,9 @@ test("public Devnet swap builds expose simulation proof without executable trans
     action: "sell-sol", state: "simulated", failureCode: null, messageHash: "a".repeat(64),
     programIds: ["DRaybByLpbUL57LJARs3j8BitTxVfzBg351EaMr5UTCd", "ComputeBudget111111111111111111111111111111"],
     inputAmount: "1000000", minimumOutputAmount: "89000", feeLamports: "5000", unitsConsumed: "2000",
+    outputTokenAccount: "E7iCLAZw5ikohzbsNycEtEHFtYVguc1ByojNHL7suUPX", preOutputAmount: "0",
+    postOutputAmount: "90000", outputAmountDelta: "90000", walletLamportsDelta: "1005000",
+    preContextSlot: "100", simulationContextSlot: "101", associatedTokenAccountVerified: true, balanceDeltaVerified: true,
     exactAmountBound: true, transactionBuilt: true, simulationAttempted: true, signingAttempted: false,
     broadcastAttempted: false, marketSwapPerformed: false, mainnetEnabled: false,
     builtAt: "2026-07-19T00:00:00.000Z", expiresAt: "2026-07-19T00:00:20.000Z" };

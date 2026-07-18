@@ -47,7 +47,16 @@ export type DevnetEncodedAccount = {
   programAddress: string;
   executable: boolean;
   dataBase64: string;
+  lamportsAtomic?: string;
 } | null;
+
+export type DevnetAccountSimulationResult = {
+  error: boolean;
+  unitsConsumed: bigint | null;
+  fee: bigint | null;
+  contextSlot: bigint;
+  accounts: DevnetEncodedAccount[];
+};
 
 export type DevnetFixtureRpcPort = {
   getMultipleAccountsBase64(addressesValue: readonly string[]): Promise<{
@@ -107,6 +116,31 @@ export class SolanaDevnetRpc implements DevnetRpcPort, DevnetTransactionRpcPort,
     };
   }
 
+  async simulateTransactionWithAccounts(wireTransaction: string, addressesValue: readonly string[]): Promise<DevnetAccountSimulationResult> {
+    if (addressesValue.length === 0 || addressesValue.length > 4) throw new Error("Devnet simulation account count is invalid");
+    const response = await this.#rpc
+      .simulateTransaction(wireTransaction as Base64EncodedWireTransaction, {
+        accounts: { addresses: addressesValue.map((value) => address(value)), encoding: "base64" },
+        commitment: "confirmed",
+        encoding: "base64",
+        sigVerify: false,
+      })
+      .send({ abortSignal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    return {
+      error: response.value.err !== null,
+      unitsConsumed: response.value.unitsConsumed ?? null,
+      fee: response.value.fee,
+      contextSlot: BigInt(response.context.slot),
+      accounts: (response.value.accounts ?? []).map((accountInfo, index) => accountInfo === null ? null : {
+        address: addressesValue[index]!,
+        programAddress: accountInfo.owner,
+        executable: accountInfo.executable,
+        dataBase64: accountInfo.data[0],
+        lamportsAtomic: accountInfo.lamports.toString(),
+      }),
+    };
+  }
+
   async sendTransaction(wireTransaction: string): Promise<string> {
     return this.#rpc
       .sendTransaction(wireTransaction as Base64EncodedWireTransaction, {
@@ -157,6 +191,7 @@ export class SolanaDevnetRpc implements DevnetRpcPort, DevnetTransactionRpcPort,
         programAddress: accountInfo.owner,
         executable: accountInfo.executable,
         dataBase64: accountInfo.data[0],
+        lamportsAtomic: accountInfo.lamports.toString(),
       }),
     };
   }

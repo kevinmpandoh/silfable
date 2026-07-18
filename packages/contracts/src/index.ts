@@ -1783,15 +1783,23 @@ export type AgentDevnetSwapQuoteListResponse = z.infer<typeof AgentDevnetSwapQuo
 
 export const AgentDevnetSwapBuildViewSchema = z.object({ schemaVersion: z.literal(1), id: z.string().uuid(),
   quoteId: z.string().uuid(), evaluationId: z.string().uuid(), sessionId: z.string().uuid(), action: z.literal("sell-sol"),
-  state: z.enum(["simulated", "denied"]), failureCode: z.enum(["binding-changed", "quote-expired", "build-invalid", "program-denied", "amount-mismatch", "simulation-failed", "fee-exceeded"]).nullable(),
+  state: z.enum(["simulated", "denied"]), failureCode: z.enum(["binding-changed", "quote-expired", "build-invalid", "program-denied", "amount-mismatch", "simulation-failed", "fee-exceeded", "account-proof-failed", "balance-delta-invalid"]).nullable(),
   messageHash: z.string().regex(/^[a-f0-9]{64}$/u).nullable(), programIds: z.array(z.string().min(32).max(44)).max(4),
   inputAmount: z.string().regex(/^[1-9][0-9]*$/u), minimumOutputAmount: z.string().regex(/^[1-9][0-9]*$/u),
   feeLamports: z.string().regex(/^[0-9]+$/u).nullable(), unitsConsumed: z.string().regex(/^[0-9]+$/u).nullable(),
+  outputTokenAccount: z.string().min(32).max(44), preOutputAmount: z.string().regex(/^[0-9]+$/u).nullable(),
+  postOutputAmount: z.string().regex(/^[0-9]+$/u).nullable(), outputAmountDelta: z.string().regex(/^[0-9]+$/u).nullable(),
+  walletLamportsDelta: z.string().regex(/^[0-9]+$/u).nullable(), preContextSlot: z.string().regex(/^[0-9]+$/u).nullable(),
+  simulationContextSlot: z.string().regex(/^[0-9]+$/u).nullable(), associatedTokenAccountVerified: z.boolean(), balanceDeltaVerified: z.boolean(),
   exactAmountBound: z.boolean(), transactionBuilt: z.boolean(), simulationAttempted: z.boolean(), signingAttempted: z.literal(false),
   broadcastAttempted: z.literal(false), marketSwapPerformed: z.literal(false), mainnetEnabled: z.literal(false),
   builtAt: z.string().datetime(), expiresAt: z.string().datetime(),
 }).strict().superRefine((value, context) => {
-  if ((value.state === "simulated") !== (value.failureCode === null && value.messageHash !== null && value.exactAmountBound)) {
+  const completeProof = value.failureCode === null && value.messageHash !== null && value.exactAmountBound
+    && value.associatedTokenAccountVerified && value.balanceDeltaVerified && value.preOutputAmount !== null
+    && value.postOutputAmount !== null && value.outputAmountDelta !== null && value.walletLamportsDelta !== null
+    && value.preContextSlot !== null && value.simulationContextSlot !== null;
+  if ((value.state === "simulated") !== completeProof) {
     context.addIssue({ code: "custom", message: "Devnet swap build evidence is inconsistent" });
   }
 });

@@ -1815,11 +1815,11 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
                   && !agentDevnetSwapBuilds.some((build) => build.quoteId === quote.id) && (
                   <>
                     <div className="consentList">
-                      {["Request only the server-built transaction bound to this exact encrypted quote.", "Decode, allowlist, and simulate it only; do not sign.", "Do not broadcast, execute a swap, or enable Mainnet."].map((label, index) => (
+                      {["Request only the server-built transaction bound to this exact encrypted quote.", "Decode, allowlist, and simulate it with wallet and devUSDC balance-delta proof only; do not sign.", "Do not broadcast, execute a swap, or enable Mainnet."].map((label, index) => (
                         <label className="consent" key={label}><input type="checkbox" checked={agentSwapBuildAcks[index] ?? false} onChange={(event) => setAgentSwapBuildAcks((acks) => acks.map((value, itemIndex) => itemIndex === index ? event.target.checked : value))} /><span>{label}</span></label>
                       ))}
                     </div>
-                    <button type="button" disabled={busy || !agentSwapBuildAcks.every(Boolean)} onClick={() => void buildAgentDevnetSwap(quote)}>Build and simulate exact swap</button>
+                    <button type="button" disabled={busy || !agentSwapBuildAcks.every(Boolean)} onClick={() => void buildAgentDevnetSwap(quote)}>Build, verify balances, and simulate</button>
                   </>
                 )}
               </article>
@@ -1830,6 +1830,9 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
                 <div><span>Message</span><code>{build.messageHash ?? "denied"}</code></div>
                 <div><span>Exact amounts</span><code>{build.inputAmount} → ≥ {build.minimumOutputAmount} · bound={String(build.exactAmountBound)}</code></div>
                 <div><span>Simulation</span><code>{build.unitsConsumed ?? "n/a"} units · {build.feeLamports ?? "n/a"} lamports</code></div>
+                <div><span>Output ATA</span><code>{build.outputTokenAccount} · verified={String(build.associatedTokenAccountVerified)}</code></div>
+                <div><span>Token delta</span><code>{build.preOutputAmount ?? "n/a"} → {build.postOutputAmount ?? "n/a"} · +{build.outputAmountDelta ?? "n/a"}</code></div>
+                <div><span>Wallet delta</span><code>-{build.walletLamportsDelta ?? "n/a"} lamports · verified={String(build.balanceDeltaVerified)}</code></div>
                 <div><span>Boundary</span><code>built={String(build.transactionBuilt)} · signed=false · broadcast=false · mainnet=false</code></div>
                 <div><span>Failure</span><code>{build.failureCode ?? "none"}</code></div>
               </article>
