@@ -25,7 +25,7 @@ export function DocsContent() {
   return (
     <article className="min-w-0">
       <section id="introduction" className="scroll-mt-36 border-b border-black/15 pb-16">
-        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-electric">Start here / v1.2.0</p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-electric">Start here / v0.1.0</p>
         <h1 className="mt-7 max-w-4xl font-serif text-[clamp(3.1rem,7vw,7.5rem)] leading-[0.86] tracking-[-0.06em]">
           Silfable documentation.
         </h1>
@@ -46,7 +46,7 @@ export function DocsContent() {
         <p className="doc-lead">Install the desktop runtime, connect a supported wallet, define a Desk Rule, then start your first mission.</p>
         <ol className="mt-10 space-y-7">
           {[
-            ["Install", "Download the signed Linux AppImage or Debian package, verify its checksum, then install it using your distribution's standard workflow."],
+            ["Install", "Download the Linux AppImage or Debian package, verify its checksum, then install it using your distribution's standard workflow."],
             ["Connect", "Choose a local wallet. Silfable requests only the permissions needed by the active mission."],
             ["Define", "Create a Desk Rule with maximum exposure, loss, slippage, markets, and violation behavior."],
             ["Run", "Review the compiled policy, authorize the mission, and watch its receipt stream."],

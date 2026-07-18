@@ -47,7 +47,7 @@ export function DocsSidebar() {
           </ScrollArea>
           <div className="mt-10 border-t border-black/15 pt-6">
             <p className="font-mono text-[8px] uppercase tracking-[0.18em] text-black/30">Current docs</p>
-            <p className="mt-2 font-mono text-xs text-electric">v1.2.0</p>
+            <p className="mt-2 font-mono text-xs text-electric">v0.1.0</p>
           </div>
         </div>
       </aside>
