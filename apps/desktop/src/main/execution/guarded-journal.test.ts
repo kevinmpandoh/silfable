@@ -63,15 +63,19 @@ test("guarded journal persists encrypted append-only evidence through receipt", 
   const keyStore = new MemoryDataKeyStore();
   let database = await RuntimeDatabase.open(databasePath);
   try {
-    let journal = new GuardedDevnetJournal(database, new LocalDataCipher(keyStore));
+    const cipher = new LocalDataCipher(keyStore);
+    let journal = new GuardedDevnetJournal(database, cipher);
     const { transaction, changed } = await transactions();
     const simulation = makeSimulation(getTransactionMessageHash(transaction));
 
     assert.equal((await journal.create(proposal)).state, "proposed");
     const encryptedProposal = database.listGuardedExecutionEvents(proposal.id)[0];
     assert.ok(encryptedProposal);
-    assert.equal(encryptedProposal.encryptedPayload.includes(proposal.inputAmountAtomic), false);
-    assert.equal(encryptedProposal.encryptedPayload.includes(proposal.inputMint), false);
+    const plaintextProposal = JSON.stringify({ kind: "proposal", proposal });
+    assert.notEqual(encryptedProposal.encryptedPayload, plaintextProposal);
+    assert.notEqual(Buffer.from(encryptedProposal.encryptedPayload, "base64").toString("utf8"), plaintextProposal);
+    assert.deepEqual(JSON.parse(await cipher.decryptString({ ciphertext: encryptedProposal.encryptedPayload,
+      nonce: encryptedProposal.payloadNonce, keyId: "local-data-key-v1" })), { kind: "proposal", proposal });
 
     assert.equal((await journal.recordValidation(proposal.id, validation("pre-simulation"))).state, "validated");
     assert.equal((await journal.recordSimulation(proposal.id, simulation, transaction)).state, "simulated");
