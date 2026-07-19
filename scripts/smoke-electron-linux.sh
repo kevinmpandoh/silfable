@@ -10,10 +10,25 @@ runtime_dir="$(mktemp -d)"
 config_dir="$(mktemp -d)"
 app_pid=""
 weston_pid=""
+debug_port="$(node -e 'const net=require("node:net");const server=net.createServer();server.listen(0,"127.0.0.1",()=>{console.log(server.address().port);server.close();});')"
+[[ "$debug_port" =~ ^[0-9]+$ ]] || { echo "Could not allocate an Electron debugging port" >&2; exit 2; }
+
+stop_process() {
+  local pid="$1"
+  [[ -n "$pid" ]] || return 0
+  kill -0 "$pid" 2>/dev/null || { wait "$pid" 2>/dev/null || true; return 0; }
+  kill -TERM "$pid" 2>/dev/null || true
+  for _ in $(seq 1 50); do
+    kill -0 "$pid" 2>/dev/null || { wait "$pid" 2>/dev/null || true; return 0; }
+    sleep 0.1
+  done
+  kill -KILL "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
 
 cleanup() {
-  if [[ -n "$app_pid" ]] && kill -0 "$app_pid" 2>/dev/null; then kill -TERM "$app_pid" 2>/dev/null || true; fi
-  if [[ -n "$weston_pid" ]] && kill -0 "$weston_pid" 2>/dev/null; then kill -TERM "$weston_pid" 2>/dev/null || true; fi
+  stop_process "$app_pid"
+  stop_process "$weston_pid"
   rm -rf "$runtime_dir" "$config_dir"
 }
 trap cleanup EXIT
@@ -30,14 +45,14 @@ if [[ "$mode" == "wayland" ]]; then
   done
   [[ -S "$runtime_dir/wayland-silfable-qa" ]]
   WAYLAND_DISPLAY=wayland-silfable-qa XDG_SESSION_TYPE=wayland XDG_CONFIG_HOME="$config_dir" \
-    "$binary" --no-sandbox --remote-debugging-address=127.0.0.1 --remote-debugging-port=9333 >"$log" 2>&1 &
+    "$binary" --no-sandbox --remote-debugging-address=127.0.0.1 --remote-debugging-port="$debug_port" >"$log" 2>&1 &
 else
   XDG_RUNTIME_DIR="$runtime_dir" XDG_SESSION_TYPE=x11 XDG_CONFIG_HOME="$config_dir" \
-    "$binary" --no-sandbox --remote-debugging-address=127.0.0.1 --remote-debugging-port=9333 >"$log" 2>&1 &
+    "$binary" --no-sandbox --remote-debugging-address=127.0.0.1 --remote-debugging-port="$debug_port" >"$log" 2>&1 &
 fi
 app_pid=$!
 
-if ! node scripts/assert-electron-renderer.mjs "http://127.0.0.1:9333"; then
+if ! node scripts/assert-electron-renderer.mjs "http://127.0.0.1:${debug_port}"; then
   echo "Electron $mode renderer diagnostic failed. Process and application logs follow." >&2
   if kill -0 "$app_pid" 2>/dev/null; then
     echo "Electron process $app_pid is still running." >&2
