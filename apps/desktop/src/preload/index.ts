@@ -42,6 +42,10 @@ import {
   AgentBuildDevnetSwapRequestSchema,
   AgentBuildDevnetSwapResponseSchema,
   AgentDevnetSwapBuildListResponseSchema,
+  AgentArmDevnetSwapSigningRequestSchema,
+  AgentRevokeDevnetSwapSigningArmRequestSchema,
+  AgentDevnetSwapSigningArmMutationResponseSchema,
+  AgentDevnetSwapSigningArmListResponseSchema,
   AiShadowTradeListResponseSchema,
   AiShadowTradeMutationResponseSchema,
   DcaSimulationRequestSchema,
@@ -220,6 +224,10 @@ import {
   type AgentBuildDevnetSwapRequest,
   type AgentBuildDevnetSwapResponse,
   type AgentDevnetSwapBuildListResponse,
+  type AgentArmDevnetSwapSigningRequest,
+  type AgentRevokeDevnetSwapSigningArmRequest,
+  type AgentDevnetSwapSigningArmMutationResponse,
+  type AgentDevnetSwapSigningArmListResponse,
   type AiShadowTradeListResponse,
   type AiShadowTradeMutationResponse,
 } from "@silfable/contracts";
@@ -618,6 +626,20 @@ const api = Object.freeze({
   async listAgentDevnetSwapBuilds(): Promise<AgentDevnetSwapBuildListResponse> {
     const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListDevnetSwapBuilds);
     return AgentDevnetSwapBuildListResponseSchema.parse(response);
+  },
+  async armAgentDevnetSwapSigning(request: AgentArmDevnetSwapSigningRequest): Promise<AgentDevnetSwapSigningArmMutationResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentArmDevnetSwapSigning,
+      AgentArmDevnetSwapSigningRequestSchema.parse(request));
+    return AgentDevnetSwapSigningArmMutationResponseSchema.parse(response);
+  },
+  async revokeAgentDevnetSwapSigningArm(request: AgentRevokeDevnetSwapSigningArmRequest): Promise<AgentDevnetSwapSigningArmMutationResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentRevokeDevnetSwapSigningArm,
+      AgentRevokeDevnetSwapSigningArmRequestSchema.parse(request));
+    return AgentDevnetSwapSigningArmMutationResponseSchema.parse(response);
+  },
+  async listAgentDevnetSwapSigningArms(): Promise<AgentDevnetSwapSigningArmListResponse> {
+    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListDevnetSwapSigningArms);
+    return AgentDevnetSwapSigningArmListResponseSchema.parse(response);
   },
   async getUpdateStatus(): Promise<UpdateStatus> {
     const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.updateGetStatus);

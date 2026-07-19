@@ -14,6 +14,7 @@ import type {
   AgentDevnetBroadcastExecutionView,
   AgentDevnetSwapQuoteView,
   AgentDevnetSwapBuildView,
+  AgentDevnetSwapSigningArmView,
   AgentSessionView,
   DevnetCanaryView,
   DevnetFixtureProvisionView,
@@ -937,12 +938,14 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
   const [agentDevnetBroadcastExecutions, setAgentDevnetBroadcastExecutions] = useState<AgentDevnetBroadcastExecutionView[]>([]);
   const [agentDevnetSwapQuotes, setAgentDevnetSwapQuotes] = useState<AgentDevnetSwapQuoteView[]>([]);
   const [agentDevnetSwapBuilds, setAgentDevnetSwapBuilds] = useState<AgentDevnetSwapBuildView[]>([]);
+  const [agentDevnetSwapSigningArms, setAgentDevnetSwapSigningArms] = useState<AgentDevnetSwapSigningArmView[]>([]);
   const [agentSigningArmAcks, setAgentSigningArmAcks] = useState([false, false, false]);
   const [agentPreSignAcks, setAgentPreSignAcks] = useState([false, false, false]);
   const [agentSigningAcks, setAgentSigningAcks] = useState([false, false, false]);
   const [agentBroadcastAcks, setAgentBroadcastAcks] = useState([false, false, false]);
   const [agentSwapQuoteAcks, setAgentSwapQuoteAcks] = useState([false, false, false]);
   const [agentSwapBuildAcks, setAgentSwapBuildAcks] = useState([false, false, false]);
+  const [agentSwapSigningArmAcks, setAgentSwapSigningArmAcks] = useState([false, false, false]);
   const [agentObjective, setAgentObjective] = useState("Protect capital and propose a SOL action only when the validated observation fits conservative risk limits.");
   const [agentMaxNotional, setAgentMaxNotional] = useState("20");
   const [agentMaxImpactBps, setAgentMaxImpactBps] = useState("50");
@@ -973,6 +976,7 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
       setAgentDevnetBroadcastExecutions([]);
       setAgentDevnetSwapQuotes([]);
       setAgentDevnetSwapBuilds([]);
+      setAgentDevnetSwapSigningArms([]);
       setAiProposal(null);
       return;
     }
@@ -992,8 +996,9 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
       window.silfable.listAgentDevnetBroadcastExecutions(),
       window.silfable.listAgentDevnetSwapQuotes(),
       window.silfable.listAgentDevnetSwapBuilds(),
+      window.silfable.listAgentDevnetSwapSigningArms(),
     ])
-      .then(([settings, history, providers, evaluations, observations, watches, agents, devnetSimulations, signingArms, preSignExecutions, signedExecutions, broadcastExecutions, swapQuotes, swapBuilds]) => {
+      .then(([settings, history, providers, evaluations, observations, watches, agents, devnetSimulations, signingArms, preSignExecutions, signedExecutions, broadcastExecutions, swapQuotes, swapBuilds, swapSigningArms]) => {
         if (!active) return;
         setConfigured(settings.configured);
         setQuotes(history.quotes);
@@ -1011,6 +1016,7 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
         setAgentDevnetBroadcastExecutions(broadcastExecutions.executions);
         setAgentDevnetSwapQuotes(swapQuotes.quotes);
         setAgentDevnetSwapBuilds(swapBuilds.builds);
+        setAgentDevnetSwapSigningArms(swapSigningArms.arms);
       })
       .catch(() => active && setMessage("Jupiter shadow settings are unavailable."));
     const timer = window.setInterval(() => {
@@ -1024,7 +1030,8 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
         window.silfable.listAgentDevnetBroadcastExecutions(),
         window.silfable.listAgentDevnetSwapQuotes(),
         window.silfable.listAgentDevnetSwapBuilds(),
-      ]).then(([watches, agents, devnetSimulations, signingArms, preSignExecutions, signedExecutions, broadcastExecutions, swapQuotes, swapBuilds]) => {
+        window.silfable.listAgentDevnetSwapSigningArms(),
+      ]).then(([watches, agents, devnetSimulations, signingArms, preSignExecutions, signedExecutions, broadcastExecutions, swapQuotes, swapBuilds, swapSigningArms]) => {
         if (!active) return;
         setMarketWatches(watches.watches);
         setMarketWakeReceipts(watches.wakeReceipts);
@@ -1037,6 +1044,7 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
         setAgentDevnetBroadcastExecutions(broadcastExecutions.executions);
         setAgentDevnetSwapQuotes(swapQuotes.quotes);
         setAgentDevnetSwapBuilds(swapBuilds.builds);
+        setAgentDevnetSwapSigningArms(swapSigningArms.arms);
       }).catch(() => undefined);
     }, 5_000);
     return () => {
@@ -1466,6 +1474,30 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
     } catch { setAgentSwapBuildAcks([false, false, false]); setMessage("Raydium transaction build failed closed without signing."); }
     finally { setBusy(false); }
   }
+  async function armAgentDevnetSwapSigning(build: AgentDevnetSwapBuildView): Promise<void> {
+    if (!agentSwapSigningArmAcks.every(Boolean) || build.messageHash === null || build.outputAmountDelta === null) return;
+    setBusy(true); setMessage(null);
+    try {
+      const response = await window.silfable.armAgentDevnetSwapSigning({ schemaVersion: 1, requestId: crypto.randomUUID(),
+        buildId: build.id, expectedMessageHash: build.messageHash, expectedOutputTokenAccount: build.outputTokenAccount,
+        expectedOutputAmountDelta: build.outputAmountDelta, acknowledgedExactBalanceProof: true,
+        acknowledgedOneShotDevnetSigning: true, acknowledgedNoBroadcastOrMainnet: true });
+      setAgentDevnetSwapSigningArms((await window.silfable.listAgentDevnetSwapSigningArms()).arms);
+      setAgentSwapSigningArmAcks([false, false, false]);
+      setMessage(`One-shot Raydium Devnet signing authority armed until ${response.arm.expiresAt}. No signer is connected.`);
+    } catch { setAgentSwapSigningArmAcks([false, false, false]); setMessage("Raydium signing authority failed closed. Nothing was signed."); }
+    finally { setBusy(false); }
+  }
+  async function revokeAgentDevnetSwapSigningArm(armId: string): Promise<void> {
+    setBusy(true); setMessage(null);
+    try {
+      await window.silfable.revokeAgentDevnetSwapSigningArm({ schemaVersion: 1, requestId: crypto.randomUUID(),
+        signingArmId: armId, acknowledgedImmediateRevocation: true });
+      setAgentDevnetSwapSigningArms((await window.silfable.listAgentDevnetSwapSigningArms()).arms);
+      setMessage("Raydium Devnet signing authority revoked. No transaction was signed or broadcast.");
+    } catch { setMessage("Signing-authority revocation failed closed."); }
+    finally { setBusy(false); }
+  }
 
   async function approveShadowTrade(evaluation: AiShadowTradeEvaluationView): Promise<void> {
     if (!aiApprovalAcknowledged) return;
@@ -1835,6 +1867,34 @@ function JupiterShadowPanel({ status }: { status: RuntimeStatus | null }) {
                 <div><span>Wallet delta</span><code>-{build.walletLamportsDelta ?? "n/a"} lamports · verified={String(build.balanceDeltaVerified)}</code></div>
                 <div><span>Boundary</span><code>built={String(build.transactionBuilt)} · signed=false · broadcast=false · mainnet=false</code></div>
                 <div><span>Failure</span><code>{build.failureCode ?? "none"}</code></div>
+                {build.state === "simulated" && build.messageHash !== null && build.outputAmountDelta !== null
+                  && new Date(build.expiresAt).getTime() > Date.now()
+                  && !agentDevnetSwapSigningArms.some((arm) => arm.buildId === build.id) && (
+                  <>
+                    <div className="consentList">
+                      {["Bind one short-lived Devnet signing authority to this exact message and verified balance proof.",
+                        "Authorize at most one future signature; this release has no signing bridge and cannot consume it.",
+                        "Do not broadcast this transaction or enable Mainnet."].map((label, index) => (
+                        <label className="consent" key={label}><input type="checkbox" checked={agentSwapSigningArmAcks[index] ?? false}
+                          onChange={(event) => setAgentSwapSigningArmAcks((acks) => acks.map((value, itemIndex) => itemIndex === index ? event.target.checked : value))} />
+                          <span>{label}</span></label>
+                      ))}
+                    </div>
+                    <button type="button" disabled={busy || !agentSwapSigningArmAcks.every(Boolean)}
+                      onClick={() => void armAgentDevnetSwapSigning(build)}>Arm one future Devnet signature</button>
+                  </>
+                )}
+              </article>
+            ))}
+            {agentDevnetSwapSigningArms.map((arm) => (
+              <article className="shadowRow" key={arm.id}>
+                <div><span>Raydium signing authority</span><strong>{arm.state}</strong></div>
+                <div><span>Scope</span><code>{arm.scope}</code></div>
+                <div><span>Message / delta</span><code>{arm.messageHash} · +{arm.outputAmountDelta}</code></div>
+                <div><span>Expiry</span><code>{arm.expiresAt}</code></div>
+                <div><span>Privilege boundary</span><code>bridge=false · signed=false · broadcast=false · mainnet=false</code></div>
+                {arm.state === "active" && <button type="button" disabled={busy}
+                  onClick={() => void revokeAgentDevnetSwapSigningArm(arm.id)}>Revoke Raydium signing authority</button>}
               </article>
             ))}
           </div>

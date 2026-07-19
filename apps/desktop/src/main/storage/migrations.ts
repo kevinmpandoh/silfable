@@ -790,4 +790,41 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
       CREATE INDEX agent_devnet_swap_build_history ON agent_devnet_swap_builds(built_at DESC);
     `,
   },
+  {
+    version: 27,
+    name: "agent-raydium-devnet-signing-arms",
+    sql: `
+      CREATE TABLE agent_devnet_swap_signing_arms (
+        id TEXT PRIMARY KEY, build_id TEXT NOT NULL UNIQUE REFERENCES agent_devnet_swap_builds(id),
+        quote_id TEXT NOT NULL REFERENCES agent_devnet_swap_quotes(id), evaluation_id TEXT NOT NULL REFERENCES agent_intent_evaluations(id),
+        session_id TEXT NOT NULL REFERENCES agent_sessions(id),
+        proposal_digest TEXT NOT NULL CHECK (length(proposal_digest) = 64 AND proposal_digest NOT GLOB '*[^0-9a-f]*'),
+        message_hash TEXT NOT NULL CHECK (length(message_hash) = 64 AND message_hash NOT GLOB '*[^0-9a-f]*'),
+        output_token_account TEXT NOT NULL CHECK (length(output_token_account) BETWEEN 32 AND 44),
+        output_amount_delta TEXT NOT NULL CHECK (length(output_amount_delta) > 0 AND output_amount_delta NOT GLOB '*[^0-9]*' AND output_amount_delta <> '0'),
+        wallet_lamports_delta TEXT NOT NULL CHECK (length(wallet_lamports_delta) > 0 AND wallet_lamports_delta NOT GLOB '*[^0-9]*' AND wallet_lamports_delta <> '0'),
+        scope TEXT NOT NULL CHECK (scope = 'agent-raydium-devnet-sell-sign-once'),
+        state TEXT NOT NULL CHECK (state IN ('active', 'consumed', 'revoked', 'expired')), consumer_id TEXT,
+        encrypted_payload TEXT NOT NULL, payload_nonce TEXT NOT NULL, key_id TEXT NOT NULL,
+        signing_bridge_connected INTEGER NOT NULL DEFAULT 0 CHECK (signing_bridge_connected = 0),
+        signing_attempted INTEGER NOT NULL DEFAULT 0 CHECK (signing_attempted = 0),
+        broadcast_attempted INTEGER NOT NULL DEFAULT 0 CHECK (broadcast_attempted = 0),
+        mainnet_enabled INTEGER NOT NULL DEFAULT 0 CHECK (mainnet_enabled = 0),
+        armed_at TEXT NOT NULL, expires_at TEXT NOT NULL, consumed_at TEXT, revoked_at TEXT,
+        CHECK ((state = 'consumed') = (consumer_id IS NOT NULL AND consumed_at IS NOT NULL)),
+        CHECK (state <> 'active' OR (consumer_id IS NULL AND consumed_at IS NULL AND revoked_at IS NULL))
+      ) STRICT;
+      CREATE UNIQUE INDEX one_active_agent_devnet_swap_signing_arm
+        ON agent_devnet_swap_signing_arms((1)) WHERE state = 'active';
+      CREATE INDEX agent_devnet_swap_signing_arm_history ON agent_devnet_swap_signing_arms(armed_at DESC);
+      CREATE TRIGGER revoke_swap_signing_arm_on_intent_change AFTER UPDATE OF approval_state ON agent_intent_evaluations
+      WHEN NEW.approval_state <> 'approved' BEGIN
+        UPDATE agent_devnet_swap_signing_arms SET state = 'revoked', revoked_at = COALESCE(NEW.decided_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        WHERE evaluation_id = NEW.id AND state = 'active'; END;
+      CREATE TRIGGER revoke_swap_signing_arm_on_session_end AFTER UPDATE OF state ON agent_sessions
+      WHEN NEW.state IN ('halted', 'expired') BEGIN
+        UPDATE agent_devnet_swap_signing_arms SET state = 'revoked', revoked_at = NEW.updated_at
+        WHERE session_id = NEW.id AND state = 'active'; END;
+    `,
+  },
 ] as const;

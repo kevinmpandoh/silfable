@@ -72,6 +72,9 @@ export const IPC_CHANNELS = {
   agentListDevnetSwapQuotes: "agent:list-devnet-swap-quotes",
   agentBuildDevnetSwap: "agent:build-devnet-swap",
   agentListDevnetSwapBuilds: "agent:list-devnet-swap-builds",
+  agentArmDevnetSwapSigning: "agent:arm-devnet-swap-signing",
+  agentRevokeDevnetSwapSigningArm: "agent:revoke-devnet-swap-signing-arm",
+  agentListDevnetSwapSigningArms: "agent:list-devnet-swap-signing-arms",
   updateGetStatus: "update:get-status",
   updateCheck: "update:check",
   updateOpenReview: "update:open-review",
@@ -1811,6 +1814,39 @@ export type AgentDevnetSwapBuildView = z.infer<typeof AgentDevnetSwapBuildViewSc
 export type AgentBuildDevnetSwapRequest = z.infer<typeof AgentBuildDevnetSwapRequestSchema>;
 export type AgentBuildDevnetSwapResponse = z.infer<typeof AgentBuildDevnetSwapResponseSchema>;
 export type AgentDevnetSwapBuildListResponse = z.infer<typeof AgentDevnetSwapBuildListResponseSchema>;
+
+export const AgentDevnetSwapSigningArmViewSchema = z.object({ schemaVersion: z.literal(1), id: z.string().uuid(),
+  buildId: z.string().uuid(), quoteId: z.string().uuid(), evaluationId: z.string().uuid(), sessionId: z.string().uuid(),
+  proposalDigest: z.string().regex(/^[a-f0-9]{64}$/u), messageHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  outputTokenAccount: z.string().min(32).max(44), outputAmountDelta: z.string().regex(/^[1-9][0-9]*$/u),
+  walletLamportsDelta: z.string().regex(/^[1-9][0-9]*$/u), scope: z.literal("agent-raydium-devnet-sell-sign-once"),
+  state: z.enum(["active", "consumed", "revoked", "expired"]), consumerId: z.string().uuid().nullable(),
+  oneShotSigningAuthorized: z.literal(true), signingBridgeConnected: z.literal(false), signingAttempted: z.literal(false),
+  broadcastAttempted: z.literal(false), economicValueMapping: z.literal("direction-only-capped-devnet"),
+  marketSwapPerformed: z.literal(false), mainnetEnabled: z.literal(false), armedAt: z.string().datetime(),
+  expiresAt: z.string().datetime(), consumedAt: z.string().datetime().nullable(), revokedAt: z.string().datetime().nullable(),
+}).strict().superRefine((value, context) => {
+  if ((value.state === "consumed") !== (value.consumerId !== null && value.consumedAt !== null)
+    || (value.state === "active" && (value.revokedAt !== null || value.consumedAt !== null))) {
+    context.addIssue({ code: "custom", message: "Economic swap signing arm state is inconsistent" });
+  }
+});
+export const AgentArmDevnetSwapSigningRequestSchema = z.object({ schemaVersion: z.literal(1), requestId: z.string().uuid(),
+  buildId: z.string().uuid(), expectedMessageHash: z.string().regex(/^[a-f0-9]{64}$/u),
+  expectedOutputTokenAccount: z.string().min(32).max(44), expectedOutputAmountDelta: z.string().regex(/^[1-9][0-9]*$/u),
+  acknowledgedExactBalanceProof: z.literal(true), acknowledgedOneShotDevnetSigning: z.literal(true),
+  acknowledgedNoBroadcastOrMainnet: z.literal(true) }).strict();
+export const AgentRevokeDevnetSwapSigningArmRequestSchema = z.object({ schemaVersion: z.literal(1), requestId: z.string().uuid(),
+  signingArmId: z.string().uuid(), acknowledgedImmediateRevocation: z.literal(true) }).strict();
+export const AgentDevnetSwapSigningArmMutationResponseSchema = z.object({ schemaVersion: z.literal(1), requestId: z.string().uuid(),
+  arm: AgentDevnetSwapSigningArmViewSchema }).strict();
+export const AgentDevnetSwapSigningArmListResponseSchema = z.object({ schemaVersion: z.literal(1),
+  arms: z.array(AgentDevnetSwapSigningArmViewSchema).max(20) }).strict();
+export type AgentDevnetSwapSigningArmView = z.infer<typeof AgentDevnetSwapSigningArmViewSchema>;
+export type AgentArmDevnetSwapSigningRequest = z.infer<typeof AgentArmDevnetSwapSigningRequestSchema>;
+export type AgentRevokeDevnetSwapSigningArmRequest = z.infer<typeof AgentRevokeDevnetSwapSigningArmRequestSchema>;
+export type AgentDevnetSwapSigningArmMutationResponse = z.infer<typeof AgentDevnetSwapSigningArmMutationResponseSchema>;
+export type AgentDevnetSwapSigningArmListResponse = z.infer<typeof AgentDevnetSwapSigningArmListResponseSchema>;
 
 export const JupiterOrderQuoteSchema = z.object({
   mode: z.string().min(1),

@@ -23,6 +23,8 @@ import {
   AgentDevnetSwapQuoteViewSchema,
   AgentBuildDevnetSwapRequestSchema,
   AgentDevnetSwapBuildViewSchema,
+  AgentArmDevnetSwapSigningRequestSchema,
+  AgentDevnetSwapSigningArmViewSchema,
   DevnetFixtureProvisionExecuteRequestSchema,
   DevnetFixtureReviewActivateRequestSchema,
   DevnetFixtureTransferExecuteRequestSchema,
@@ -271,6 +273,11 @@ test("security-sensitive requests reject unknown privilege-shaped fields", () =>
       quoteId: "00000000-0000-4000-8000-000000000002", acknowledgedExactServerTransaction: true,
       acknowledgedSimulationOnly: true, acknowledgedNoSigningOrBroadcast: true,
       signedWire: "renderer-must-not-submit-a-transaction" }],
+    [AgentArmDevnetSwapSigningRequestSchema, { schemaVersion: 1, requestId,
+      buildId: "00000000-0000-4000-8000-000000000002", expectedMessageHash: "a".repeat(64),
+      expectedOutputTokenAccount: "E7iCLAZw5ikohzbsNycEtEHFtYVguc1ByojNHL7suUPX", expectedOutputAmountDelta: "90000",
+      acknowledgedExactBalanceProof: true, acknowledgedOneShotDevnetSigning: true,
+      acknowledgedNoBroadcastOrMainnet: true, privateKey: "renderer-must-not-submit-secrets" }],
   ] as const;
   for (const [schema, value] of cases) assert.equal(schema.safeParse(value).success, false);
 });
@@ -449,6 +456,11 @@ test("acknowledgements cannot be omitted or replaced with truthy strings", () =>
   assert.equal(AgentBuildDevnetSwapRequestSchema.safeParse({ schemaVersion: 1, requestId,
     quoteId: "00000000-0000-4000-8000-000000000002", acknowledgedExactServerTransaction: true,
     acknowledgedSimulationOnly: true, acknowledgedNoSigningOrBroadcast: "true" }).success, false);
+  assert.equal(AgentArmDevnetSwapSigningRequestSchema.safeParse({ schemaVersion: 1, requestId,
+    buildId: "00000000-0000-4000-8000-000000000002", expectedMessageHash: "a".repeat(64),
+    expectedOutputTokenAccount: "E7iCLAZw5ikohzbsNycEtEHFtYVguc1ByojNHL7suUPX", expectedOutputAmountDelta: "90000",
+    acknowledgedExactBalanceProof: true, acknowledgedOneShotDevnetSigning: true,
+    acknowledgedNoBroadcastOrMainnet: "true" }).success, false);
 });
 
 test("public agent pre-sign receipts reject wire, signatures, and execution claims", () => {
@@ -524,6 +536,21 @@ test("public Devnet swap builds expose simulation proof without executable trans
   assert.equal(AgentDevnetSwapBuildViewSchema.safeParse({ ...view, unsignedWire: "secret" }).success, false);
   assert.equal(AgentDevnetSwapBuildViewSchema.safeParse({ ...view, signingAttempted: true }).success, false);
   assert.equal(AgentDevnetSwapBuildViewSchema.safeParse({ ...view, broadcastAttempted: true }).success, false);
+});
+
+test("public economic signing arms expose authority without signing capability or transaction material", () => {
+  const view = { schemaVersion: 1, id: requestId, buildId: "00000000-0000-4000-8000-000000000002",
+    quoteId: "00000000-0000-4000-8000-000000000003", evaluationId: "00000000-0000-4000-8000-000000000004",
+    sessionId: "00000000-0000-4000-8000-000000000005", proposalDigest: "a".repeat(64), messageHash: "b".repeat(64),
+    outputTokenAccount: "E7iCLAZw5ikohzbsNycEtEHFtYVguc1ByojNHL7suUPX", outputAmountDelta: "90000",
+    walletLamportsDelta: "1005000", scope: "agent-raydium-devnet-sell-sign-once", state: "active", consumerId: null,
+    oneShotSigningAuthorized: true, signingBridgeConnected: false, signingAttempted: false, broadcastAttempted: false,
+    economicValueMapping: "direction-only-capped-devnet", marketSwapPerformed: false, mainnetEnabled: false,
+    armedAt: "2026-07-19T00:00:00.000Z", expiresAt: "2026-07-19T00:00:15.000Z", consumedAt: null, revokedAt: null };
+  assert.equal(AgentDevnetSwapSigningArmViewSchema.safeParse(view).success, true);
+  assert.equal(AgentDevnetSwapSigningArmViewSchema.safeParse({ ...view, signingBridgeConnected: true }).success, false);
+  assert.equal(AgentDevnetSwapSigningArmViewSchema.safeParse({ ...view, signingAttempted: true }).success, false);
+  assert.equal(AgentDevnetSwapSigningArmViewSchema.safeParse({ ...view, signedWire: "secret" }).success, false);
 });
 
 test("public guarded execution receipts reject signatures and transaction evidence", () => {

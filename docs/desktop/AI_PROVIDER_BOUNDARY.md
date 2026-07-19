@@ -21,6 +21,8 @@ The optional Devnet exact-message proof, revocable signing-arm lifecycle, pre-si
 
 Raydium Devnet economic quoting, transaction simulation, and balance-delta verification make no AI call. They consume only the locally persisted approved action and session impact cap; the provider cannot select the Devnet mints, canary amount, slippage, endpoint, pool, route, programs, accounts, lookup table, or transaction bytes. Quote responses, route IDs, unsigned transactions, and raw account snapshots remain encrypted locally and are not returned to OpenAI or Anthropic.
 
+Arming or revoking the exact Raydium Devnet signing authority also makes no AI call. The provider cannot request, extend, consume, or observe this authority; it requires explicit local operator acknowledgements and currently has no connected signing bridge.
+
 ## Supported providers
 
 | Provider | API | Default model | Structured output |

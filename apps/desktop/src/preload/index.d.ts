@@ -40,6 +40,10 @@ import type {
   AgentBuildDevnetSwapRequest,
   AgentBuildDevnetSwapResponse,
   AgentDevnetSwapBuildListResponse,
+  AgentArmDevnetSwapSigningRequest,
+  AgentRevokeDevnetSwapSigningArmRequest,
+  AgentDevnetSwapSigningArmMutationResponse,
+  AgentDevnetSwapSigningArmListResponse,
   AiShadowTradeListResponse,
   AiShadowTradeMutationResponse,
   DcaSimulationRequest,
@@ -185,6 +189,9 @@ declare global {
       listAgentDevnetSwapQuotes(): Promise<AgentDevnetSwapQuoteListResponse>;
       buildAgentDevnetSwap(request: AgentBuildDevnetSwapRequest): Promise<AgentBuildDevnetSwapResponse>;
       listAgentDevnetSwapBuilds(): Promise<AgentDevnetSwapBuildListResponse>;
+      armAgentDevnetSwapSigning(request: AgentArmDevnetSwapSigningRequest): Promise<AgentDevnetSwapSigningArmMutationResponse>;
+      revokeAgentDevnetSwapSigningArm(request: AgentRevokeDevnetSwapSigningArmRequest): Promise<AgentDevnetSwapSigningArmMutationResponse>;
+      listAgentDevnetSwapSigningArms(): Promise<AgentDevnetSwapSigningArmListResponse>;
       getUpdateStatus(): Promise<UpdateStatus>;
       checkForUpdate(request: UpdateCommandRequest): Promise<UpdateCheckResponse>;
       openUpdateReview(request: UpdateCommandRequest): Promise<UpdateOpenReviewResponse>;

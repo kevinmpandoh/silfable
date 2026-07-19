@@ -235,6 +235,13 @@ export type AgentDevnetSwapQuoteStorageRecord = {
 export type AgentDevnetSwapBuildStorageRecord = { id: string; quoteId: string; evaluationId: string; sessionId: string;
   state: "simulated" | "denied"; messageHash: string | null; encryptedPayload: string; payloadNonce: string; keyId: string;
   transactionBuilt: boolean; simulationAttempted: boolean; builtAt: string; expiresAt: string };
+export type AgentDevnetSwapSigningArmStorageRecord = {
+  id: string; buildId: string; quoteId: string; evaluationId: string; sessionId: string; proposalDigest: string;
+  messageHash: string; outputTokenAccount: string; outputAmountDelta: string; walletLamportsDelta: string;
+  scope: "agent-raydium-devnet-sell-sign-once"; state: "active" | "consumed" | "revoked" | "expired"; consumerId: string | null;
+  encryptedPayload: string; payloadNonce: string; keyId: string; signingBridgeConnected: false; signingAttempted: false;
+  broadcastAttempted: false; mainnetEnabled: false; armedAt: string; expiresAt: string; consumedAt: string | null; revokedAt: string | null;
+};
 
 export type CrashReportStorageRecord = {
   id: string;
@@ -1498,8 +1505,54 @@ export class RuntimeDatabase {
     const row = this.#database.prepare("SELECT * FROM agent_devnet_swap_builds WHERE quote_id = ?").get(quoteId);
     return row === undefined ? null : toAgentDevnetSwapBuildStorageRecord(row);
   }
+  getAgentDevnetSwapBuild(id: string): AgentDevnetSwapBuildStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM agent_devnet_swap_builds WHERE id = ?").get(id);
+    return row === undefined ? null : toAgentDevnetSwapBuildStorageRecord(row);
+  }
   listAgentDevnetSwapBuilds(limit = 20): AgentDevnetSwapBuildStorageRecord[] {
     return this.#database.prepare("SELECT * FROM agent_devnet_swap_builds ORDER BY built_at DESC LIMIT ?").all(limit).map(toAgentDevnetSwapBuildStorageRecord);
+  }
+  insertAgentDevnetSwapSigningArm(record: AgentDevnetSwapSigningArmStorageRecord): void {
+    const result = this.#database.prepare(`INSERT INTO agent_devnet_swap_signing_arms (id, build_id, quote_id, evaluation_id, session_id,
+      proposal_digest, message_hash, output_token_account, output_amount_delta, wallet_lamports_delta, scope, state, consumer_id,
+      encrypted_payload, payload_nonce, key_id, signing_bridge_connected, signing_attempted, broadcast_attempted, mainnet_enabled,
+      armed_at, expires_at, consumed_at, revoked_at)
+      SELECT ?, ?, ?, ?, ?, evaluation.proposal_digest, ?, ?, ?, ?, ?, 'active', NULL, ?, ?, ?, 0, 0, 0, 0, ?, ?, NULL, NULL
+      FROM agent_intent_evaluations AS evaluation
+      JOIN agent_sessions AS session ON session.id = evaluation.session_id
+      WHERE evaluation.id = ? AND evaluation.session_id = ? AND evaluation.proposal_digest = ?
+        AND evaluation.outcome = 'pending-approval' AND evaluation.approval_state = 'approved'
+        AND evaluation.approval_expires_at > ? AND session.state = 'active' AND session.deadline_at > ?`)
+      .run(record.id, record.buildId, record.quoteId, record.evaluationId, record.sessionId,
+        record.messageHash, record.outputTokenAccount, record.outputAmountDelta, record.walletLamportsDelta, record.scope,
+        record.encryptedPayload, record.payloadNonce, record.keyId, record.armedAt, record.expiresAt,
+        record.evaluationId, record.sessionId, record.proposalDigest, record.armedAt, record.armedAt);
+    if (result.changes !== 1) throw new Error("Economic swap approval changed before signing authority commit");
+  }
+  getActiveAgentDevnetSwapSigningArm(now: string): AgentDevnetSwapSigningArmStorageRecord | null {
+    this.#database.prepare(`UPDATE agent_devnet_swap_signing_arms SET state = 'expired', revoked_at = ?
+      WHERE state = 'active' AND expires_at <= ?`).run(now, now);
+    const row = this.#database.prepare("SELECT * FROM agent_devnet_swap_signing_arms WHERE state = 'active'").get();
+    return row === undefined ? null : toAgentDevnetSwapSigningArmStorageRecord(row);
+  }
+  getAgentDevnetSwapSigningArm(id: string): AgentDevnetSwapSigningArmStorageRecord | null {
+    const row = this.#database.prepare("SELECT * FROM agent_devnet_swap_signing_arms WHERE id = ?").get(id);
+    return row === undefined ? null : toAgentDevnetSwapSigningArmStorageRecord(row);
+  }
+  listAgentDevnetSwapSigningArms(limit = 20): AgentDevnetSwapSigningArmStorageRecord[] {
+    return this.#database.prepare("SELECT * FROM agent_devnet_swap_signing_arms ORDER BY armed_at DESC LIMIT ?")
+      .all(limit).map(toAgentDevnetSwapSigningArmStorageRecord);
+  }
+  revokeAgentDevnetSwapSigningArm(id: string, revokedAt: string): AgentDevnetSwapSigningArmStorageRecord {
+    const result = this.#database.prepare(`UPDATE agent_devnet_swap_signing_arms SET state = 'revoked', revoked_at = ?
+      WHERE id = ? AND state = 'active'`).run(revokedAt, id);
+    const record = this.getAgentDevnetSwapSigningArm(id);
+    if (result.changes !== 1 || record === null) throw new Error("Economic swap signing arm is not active");
+    return record;
+  }
+  revokeOpenAgentDevnetSwapSigningArms(revokedAt: string): number {
+    return Number(this.#database.prepare(`UPDATE agent_devnet_swap_signing_arms SET state = 'revoked', revoked_at = ?
+      WHERE state = 'active'`).run(revokedAt).changes);
   }
 
   insertAiShadowTradeEvaluation(record: AiShadowTradeEvaluationStorageRecord): void {
@@ -2590,4 +2643,23 @@ function toAgentDevnetSwapBuildStorageRecord(row: unknown): AgentDevnetSwapBuild
     messageHash: value.message_hash, encryptedPayload: value.encrypted_payload, payloadNonce: value.payload_nonce, keyId: value.key_id,
     transactionBuilt: value.transaction_built === 1, simulationAttempted: value.simulation_attempted === 1,
     builtAt: value.built_at, expiresAt: value.expires_at };
+}
+function toAgentDevnetSwapSigningArmStorageRecord(row: unknown): AgentDevnetSwapSigningArmStorageRecord {
+  const value = row as { id: string; build_id: string; quote_id: string; evaluation_id: string; session_id: string;
+    proposal_digest: string; message_hash: string; output_token_account: string; output_amount_delta: string;
+    wallet_lamports_delta: string; scope: AgentDevnetSwapSigningArmStorageRecord["scope"];
+    state: AgentDevnetSwapSigningArmStorageRecord["state"]; consumer_id: string | null; encrypted_payload: string;
+    payload_nonce: string; key_id: string; signing_bridge_connected: number; signing_attempted: number;
+    broadcast_attempted: number; mainnet_enabled: number; armed_at: string; expires_at: string;
+    consumed_at: string | null; revoked_at: string | null };
+  if (value.signing_bridge_connected !== 0 || value.signing_attempted !== 0 || value.broadcast_attempted !== 0 || value.mainnet_enabled !== 0) {
+    throw new Error("Economic swap signing arm cannot contain signing, broadcast, or Mainnet evidence");
+  }
+  return { id: value.id, buildId: value.build_id, quoteId: value.quote_id, evaluationId: value.evaluation_id,
+    sessionId: value.session_id, proposalDigest: value.proposal_digest, messageHash: value.message_hash,
+    outputTokenAccount: value.output_token_account, outputAmountDelta: value.output_amount_delta,
+    walletLamportsDelta: value.wallet_lamports_delta, scope: value.scope, state: value.state, consumerId: value.consumer_id,
+    encryptedPayload: value.encrypted_payload, payloadNonce: value.payload_nonce, keyId: value.key_id,
+    signingBridgeConnected: false, signingAttempted: false, broadcastAttempted: false, mainnetEnabled: false,
+    armedAt: value.armed_at, expiresAt: value.expires_at, consumedAt: value.consumed_at, revokedAt: value.revoked_at };
 }
