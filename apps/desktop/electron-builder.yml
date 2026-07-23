@@ -8,7 +8,7 @@ files:
   - out/**
   - package.json
 linux:
-  icon: src/assets/logo-bg.jpeg
+  icon: resources/icon.png
   category: Finance
   synopsis: Local-first AI trading runtime with enforceable limits
   syncDesktopName: true
@@ -23,7 +23,7 @@ linux:
         - x64
         - arm64
 win:
-  icon: src/assets/logo-bg.jpeg
+  icon: resources/icon.ico
   target:
     - target: nsis
       arch:
