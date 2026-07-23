@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const builds = [
-  { platform: "Linux", target: "Universal", file: "Silfable-0.1.0-x64.AppImage", size: "Pending release", checksum: "Pending", href: "#Silfable-0.1.0-x64.AppImage", available: true },
-  { platform: "Linux", target: "Debian", file: "Silfable-0.1.0-x64.deb", size: "Pending release", checksum: "Pending", href: "#Silfable-0.1.0-x64.deb", available: true },
+  { platform: "Linux", target: "Universal", file: "Silfable-0.1.0-x86_64.AppImage", size: "See GitHub", checksum: "SHA256SUMS.txt", href: "https://github.com/kevinmpandoh/silfable/releases/download/v0.1.0/Silfable-0.1.0-x86_64.AppImage", available: true },
+  { platform: "Linux", target: "Debian", file: "Silfable-0.1.0-amd64.deb", size: "See GitHub", checksum: "SHA256SUMS.txt", href: "https://github.com/kevinmpandoh/silfable/releases/download/v0.1.0/Silfable-0.1.0-amd64.deb", available: true },
   { platform: "macOS", target: "Apple Silicon & Intel", file: "Coming soon", size: "—", checksum: "—", href: null, available: false },
   { platform: "Windows", target: "Installer", file: "Coming soon", size: "—", checksum: "—", href: null, available: false },
 ] as const;
@@ -34,7 +34,7 @@ export function ReleaseDownloads() {
               <TableCell className="py-7 text-right">
                 {build.available && build.href ? (
                   <Button asChild variant="blue" className="h-10 px-4">
-                    <a href={build.href} aria-label={`Download ${build.file}`}>Download <ArrowDownToLine className="ml-3 size-3.5" /></a>
+                    <a href={build.href} aria-label={`Download ${build.file}`} download>Download <ArrowDownToLine className="ml-3 size-3.5" /></a>
                   </Button>
                 ) : (
                   <Button disabled variant="blue" className="h-10 px-4">Coming soon <Clock3 className="ml-3 size-3.5" /></Button>
