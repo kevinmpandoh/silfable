@@ -25,9 +25,9 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Silfable — AI Trading, Within Your Limits",
+  title: "Silfable - AI Trading, Within Your Limits",
   description:
-    "AI Trading runtime that executes missions against real Solana markets.",
+    "Restricted AI trading runtime for Solana Mainnet missions with local policy checks and explicit approval.",
   icons: {
     icon: "/logo.png",
   },

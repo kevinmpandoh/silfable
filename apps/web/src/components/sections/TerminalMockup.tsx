@@ -103,7 +103,7 @@ export function TerminalMockup() {
                   </div>
 
                   <div className="overflow-x-auto px-4 py-7 font-mono text-[11px] leading-8 sm:px-7 sm:text-xs sm:leading-9">
-                    <p className="mb-4 text-slate-600"># Hard limits for autonomous execution</p>
+                    <p className="mb-4 text-slate-600"># Hard limits for restricted execution</p>
                     {ruleLines.map(([number, key, value]) => (
                       <div key={number} className="grid min-w-[31rem] grid-cols-[2rem_9rem_1rem_1fr] sm:grid-cols-[2.5rem_11rem_1.5rem_1fr]">
                         <span className="select-none text-slate-700">{number}</span>
@@ -113,7 +113,7 @@ export function TerminalMockup() {
                       </div>
                     ))}
                     <div className="mt-5 flex min-w-[31rem] items-center gap-3 border-t border-white/5 pt-5 text-[10px] text-emerald-400">
-                      <Check className="size-3.5" /> Policy compiled — 7 rules active
+                      <Check className="size-3.5" /> Policy compiled - 7 rules active
                     </div>
                   </div>
                 </div>

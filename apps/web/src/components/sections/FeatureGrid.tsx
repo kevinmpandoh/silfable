@@ -14,8 +14,8 @@ const features = [
   {
     eyebrow: "02 / The objective",
     title: "Mission",
-    description: "A measurable outcome with a clear finish line—not another chat window waiting for your next prompt.",
-    detail: "Executes autonomously",
+    description: "A measurable outcome with a clear finish line. The agent can plan continuously, but supported Mainnet execution remains gated.",
+    detail: "Plans continuously",
     icon: Crosshair,
   },
   {
@@ -28,8 +28,8 @@ const features = [
   {
     eyebrow: "04 / Your decision",
     title: "Full",
-    description: "Expand authority only when the strategy earns it. You control the permissions; Silfable documents every use.",
-    detail: "Permissioned by you",
+    description: "Reserved for future policy contracts. Today, production Mainnet flows stay restricted and require explicit approval.",
+    detail: "Not live yet",
     icon: Maximize2,
   },
 ];

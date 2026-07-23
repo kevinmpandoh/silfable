@@ -6,7 +6,7 @@ const faqs = [
   {
     question: "Can Silfable move funds without me?",
     answer:
-      "Only within the authority you explicitly grant. Desk Rule can restrict markets, position size, slippage, loss limits, and signing behavior. Any action outside those limits is rejected before it reaches your wallet.",
+      "No supported production flow moves funds silently. Restricted Mainnet actions require policy checks and explicit approval before signing or broadcast.",
   },
   {
     question: "Where do my private keys live?",
@@ -16,7 +16,7 @@ const faqs = [
   {
     question: "Is Silfable a trading chatbot?",
     answer:
-      "No. It is a desktop runtime for persistent missions. Instead of waiting for another prompt, an agent can evaluate markets and pursue a defined objective continuously while remaining inside your policy envelope.",
+      "No. It is a trading workspace for agent-assisted missions. The agent can reason, draft, preview, and monitor, while production execution stays inside the policy envelope.",
   },
   {
     question: "What happens when a rule is violated?",
@@ -26,7 +26,7 @@ const faqs = [
   {
     question: "Which markets and operating systems are supported?",
     answer:
-      "The initial release targets Solana markets and ships for x86_64 Linux as AppImage and Debian packages. macOS, Windows, and additional execution environments are planned for later releases.",
+      "The current Mainnet path supports restricted Solana/Jupiter swaps. Pump.fun is preview-only on web, while bridge, EVM, Hyperliquid, autonomous signing, and Full Access remain planned.",
   },
 ];
 
@@ -41,7 +41,7 @@ export function FaqSection() {
               Read the <em className="text-electric">fine print.</em>
             </h2>
             <p className="mt-8 max-w-sm text-sm leading-7 text-black/50">
-              Autonomy should be legible. Here are the direct answers to the questions that matter before software touches a market.
+              Autonomy should be legible. These are the direct answers that matter before software touches a market.
             </p>
             <a
               href="#support"

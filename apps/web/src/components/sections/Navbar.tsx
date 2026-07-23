@@ -1,9 +1,11 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Download, X } from "lucide-react";
 
 const navLinks = [
   { label: "Home", href: "/" },
   { label: "Docs", href: "/docs" },
+  { label: "Whitepaper", href: "/whitepaper" },
   { label: "Releases", href: "/releases" },
   { label: "GitHub", href: "https://github.com/kevinmpandoh/silfable" },
 ];
@@ -24,8 +26,9 @@ export function Navbar() {
           ))}
         </nav>
 
-        <Link href="/" className="font-serif text-2xl tracking-[-0.04em]" aria-label="Silfable home">
-          Silfable
+        <Link href="/" className="flex items-center gap-3 font-serif text-2xl tracking-normal" aria-label="Silfable home">
+          <Image src="/logo.png" alt="" width={28} height={28} className="h-7 w-7 object-contain" priority />
+          <span>Silfable</span>
         </Link>
 
         <div className="flex items-center justify-end gap-3 sm:gap-5">

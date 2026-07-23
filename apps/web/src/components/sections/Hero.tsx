@@ -15,7 +15,7 @@ export function Hero() {
   return (
     <section id="top" className="relative flex min-h-screen overflow-hidden border-b border-white/15 bg-ink pt-20">
       <div className="pointer-events-none absolute inset-y-0 right-[24%] hidden w-px bg-white/10 xl:block" />
-      <div className="section-shell flex min-h-[calc(100vh-5rem)] flex-col justify-between py-12 sm:py-16 lg:py-20">
+      <div className="section-shell flex min-h-[calc(100vh-5rem)] flex-col justify-between py-14 sm:py-18 lg:py-20">
         <motion.div
           initial="hidden"
           animate="visible"
@@ -27,16 +27,16 @@ export function Hero() {
             transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
             className="mb-7 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45"
           >
-            Autonomous execution / Human-defined limits
+            Agentic planning / Human-defined limits
           </motion.p>
 
           <motion.h1
             variants={reveal}
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-            className="max-w-[1350px] font-serif text-[clamp(4.2rem,10.3vw,10.5rem)] leading-[0.78] font-normal tracking-[-0.065em] text-paper"
+            className="max-w-[1480px] font-serif text-7xl font-normal leading-[0.84] tracking-normal text-paper sm:text-8xl md:text-9xl xl:text-[8.4rem] 2xl:text-[9rem]"
           >
             STOP BABYSITTING
-            <span className="block pl-[7vw] italic text-electric">EVERY TRADE.</span>
+            <span className="block italic text-electric sm:pl-16 lg:pl-28">EVERY TRADE.</span>
           </motion.h1>
         </motion.div>
 
@@ -48,10 +48,10 @@ export function Hero() {
         >
           <div>
             <p className="max-w-md text-lg leading-relaxed text-white/65 sm:text-xl">
-              The safety gate never clocks out.
+              Mainnet actions stay gated.
             </p>
             <p className="mt-2 max-w-lg text-sm leading-6 text-white/35">
-              Give your agent a mission. Silfable enforces the rules, records the proof, and keeps execution local.
+              Give the agent a mission. Silfable checks policy, records evidence, and asks for approval before any supported transaction.
             </p>
           </div>
 

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 const footerLinks = [
   { label: "Home", href: "/" },
   { label: "Docs", href: "/docs" },
+  { label: "Whitepaper", href: "/whitepaper" },
   { label: "Releases", href: "/releases" },
   { label: "GitHub", href: "https://github.com/kevinmpandoh/silfable" },
   { label: "Privacy", href: "#privacy" },
@@ -63,7 +64,7 @@ export function Footer() {
           </nav>
 
           <p className="font-mono text-[8px] uppercase tracking-[0.16em] text-white/55 md:text-right">
-            © 2026 Silfable Labs. Markets involve risk.
+            Copyright 2026 Silfable Labs. Markets involve risk.
           </p>
         </div>
       </div>

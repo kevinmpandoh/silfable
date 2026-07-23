@@ -4,8 +4,8 @@ import { DocsContent } from "@/components/docs/DocsContent";
 import { DocsSidebar } from "@/components/docs/DocsSidebar";
 
 export const metadata: Metadata = {
-  title: "Documentation — Silfable",
-  description: "Learn how to install Silfable, define Desk Rules, run AI trading missions, and inspect execution receipts.",
+  title: "Documentation - Silfable",
+  description: "Install Silfable, configure wallets and providers, run restricted Mainnet sessions, and inspect execution receipts.",
 };
 
 export default function DocsPage() {

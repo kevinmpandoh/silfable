@@ -359,7 +359,7 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
                   <span>!</span>
                   <div>
                     <strong>Mainnet safety boundary</strong>
-                    <p>Jupiter swaps require wallet approval. Pump.fun web remains preview-only; autonomous execution and Full Access are unavailable.</p>
+                    <p>Jupiter swaps require wallet approval. Pump.fun web remains preview-only; autonomous signing and Full Access are unavailable.</p>
                   </div>
                 </div>
               </div>
