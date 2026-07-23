@@ -1486,11 +1486,19 @@ body:not(:has(.tradeDesktopShell)) {
    ========================================================================== */
 
 .wallet-adapter-modal-container {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.wallet-adapter-modal-overlay {
+  z-index: 0;
   background: rgba(5, 7, 15, 0.75) !important;
-  backdrop-filter: blur(8px) !important;
+  backdrop-filter: blur(8px);
 }
 
 .wallet-adapter-modal-wrapper {
+  pointer-events: auto;
   background: #111425 !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 16px !important;
@@ -1512,6 +1520,16 @@ body:not(:has(.tradeDesktopShell)) {
   font-weight: 600 !important;
   text-align: center !important;
   margin-bottom: 24px !important;
+}
+
+.wallet-adapter-modal-list {
+  display: grid !important;
+  gap: 12px !important;
+  margin-bottom: 20px !important;
+}
+
+.wallet-adapter-modal-list li {
+  margin: 0 !important;
 }
 
 .wallet-adapter-modal-list .wallet-adapter-button {

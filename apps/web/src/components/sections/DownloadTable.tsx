@@ -9,7 +9,7 @@ const releases = [
     build: "Universal",
     format: ".AppImage",
     architecture: "x64",
-    href: "#linux-universal",
+    href: "https://github.com/kevinmpandoh/silfable/releases/download/v0.1.0/Silfable-0.1.0-x86_64.AppImage",
     available: true,
   },
   {
@@ -17,7 +17,7 @@ const releases = [
     build: "Debian",
     format: ".deb",
     architecture: "x64",
-    href: "#linux-debian",
+    href: "https://github.com/kevinmpandoh/silfable/releases/download/v0.1.0/Silfable-0.1.0-amd64.deb",
     available: true,
   },
   {
@@ -85,7 +85,11 @@ export function DownloadTable() {
                 <TableCell className="py-7 text-right sm:py-8">
                   {release.available && release.href ? (
                     <Button asChild variant="blue" className="h-10 px-4">
-                      <a href={release.href} aria-label={`Download Silfable for ${release.os} ${release.build}`}>
+                      <a
+                        href={release.href}
+                        aria-label={`Download Silfable for ${release.os} ${release.build}`}
+                        download
+                      >
                         Download <ArrowDownToLine className="ml-3 size-3.5" />
                       </a>
                     </Button>
@@ -102,7 +106,7 @@ export function DownloadTable() {
 
         <div className="mt-6 flex flex-col gap-2 font-mono text-[9px] uppercase tracking-[0.16em] text-black/35 sm:flex-row sm:items-center sm:justify-between">
           <span>Linux requires a modern x86_64 distribution</span>
-          <a href="#releases" className="text-electric transition-colors hover:text-blue-800">
+          <a href="/releases" className="text-electric transition-colors hover:text-blue-800">
             View checksums and release notes
           </a>
         </div>
