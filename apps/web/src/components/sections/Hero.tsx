@@ -56,14 +56,14 @@ export function Hero() {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Button asChild size="lg">
+            <Button asChild size="lg" className="hover:!text-white">
               <Link href="/connect">
                 Get started
                 <ArrowDownRight className="ml-4 size-4" />
               </Link>
             </Button>
             <Button asChild size="lg">
-              <a href="#download" className="border border-white/30 bg-transparent text-white hover:bg-white hover:text-black">
+              <a href="#download" className="border border-white/30 bg-transparent text-white hover:bg-white hover:!text-black">
                 Download desktop app
                 <ArrowDownRight className="ml-4 size-4" />
               </a>

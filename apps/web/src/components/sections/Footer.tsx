@@ -1,8 +1,9 @@
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowUpRight, Download } from "lucide-react";
+import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { XLogo } from "@/components/ui/x-logo";
 
 const footerLinks = [
   { label: "Home", href: "/" },
@@ -39,7 +40,7 @@ export function Footer() {
             </Button>
             <Button asChild size="lg" variant="outline" className="border-white/55">
               <a href="https://x.com/silfable" target="_blank" rel="noreferrer">
-                Follow @silfable <ArrowUpRight className="ml-4 size-4" />
+                Follow @silfable <XLogo className="ml-4 size-3.5" />
               </a>
             </Button>
           </div>

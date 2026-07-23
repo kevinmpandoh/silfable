@@ -1,6 +1,8 @@
 import Link from "next/link";
 import Image from "next/image";
-import { Download, X } from "lucide-react";
+import { Download } from "lucide-react";
+
+import { XLogo } from "@/components/ui/x-logo";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -37,7 +39,7 @@ export function Navbar() {
             aria-label="Follow Silfable on X"
             className="hidden text-white/60 transition-colors hover:text-white sm:block"
           >
-            <X className="size-4" strokeWidth={1.5} />
+            <XLogo className="size-4" />
           </Link>
           <Link
             href="/connect"
