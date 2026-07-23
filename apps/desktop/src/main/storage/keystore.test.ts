@@ -85,3 +85,19 @@ test("concurrent secret mutations are serialized without lost records", async ()
     assert.equal(await keystore.getSecret("jupiter-api-key"), "jupiter-secret");
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test("locked vault reset moves the encrypted keystore into a backup directory", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "silfable-keystore-reset-"));
+  const path = join(directory, "secrets.json");
+  const backup = join(directory, "backup");
+  const keystore = new PortableEncryptedKeystore(path, new IntegrityStorage());
+  try {
+    keystore.unlock();
+    await keystore.setSecret("wallet-secret", "old-wallet-secret");
+    await assert.rejects(keystore.backupAndReset(backup), /Lock the keystore/u);
+    keystore.lock();
+    assert.equal(await keystore.backupAndReset(backup), true);
+    const archived = await readFile(join(backup, "secrets.v1.json"), "utf8");
+    assert.equal(archived.includes("old-wallet-secret"), false);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

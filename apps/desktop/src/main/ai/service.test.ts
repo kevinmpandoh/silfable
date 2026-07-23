@@ -1,148 +1,186 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { after, test } from "node:test";
 
+import type { MainnetReadService } from "../integrations/read-only.js";
 import type { SecretName } from "../storage/keystore.js";
-import { JupiterShadowQuoteViewSchema } from "@silfable/contracts";
-import { AiDraftService } from "./service.js";
+import { AiService } from "./service.js";
+
+const originalFetch = globalThis.fetch;
+after(() => { globalThis.fetch = originalFetch; });
 
 class MemorySecrets {
   readonly values = new Map<SecretName, string>();
-
-  async getSecret(name: SecretName): Promise<string | null> {
-    return this.values.get(name) ?? null;
-  }
-
-  async setSecret(name: SecretName, plaintext: string): Promise<void> {
-    this.values.set(name, plaintext);
-  }
-
-  async deleteSecret(name: SecretName): Promise<void> {
-    this.values.delete(name);
-  }
+  async getSecret(name: SecretName) { return this.values.get(name) ?? null; }
+  async setSecret(name: SecretName, plaintext: string) { this.values.set(name, plaintext); }
+  async deleteSecret(name: SecretName) { this.values.delete(name); }
 }
 
 class MemorySettings {
   readonly values = new Map<string, unknown>();
-
-  getSetting(key: string): unknown | null {
-    return this.values.get(key) ?? null;
-  }
-
-  setSetting(key: string, value: unknown): void {
-    this.values.set(key, value);
-  }
-
-  deleteSetting(key: string): void {
-    this.values.delete(key);
-  }
+  getSetting(key: string) { return this.values.get(key) ?? null; }
+  setSetting(key: string, value: unknown) { this.values.set(key, value); }
 }
 
-test("provider keys remain secret while settings expose configuration status only", async () => {
-  const keystore = new MemorySecrets();
-  const settings = new MemorySettings();
-  let receivedKey = "";
-  const service = new AiDraftService({
-    keystore,
-    settings,
-    transport: async (request) => {
-      receivedKey = request.apiKey;
-      return intent();
-    },
-  });
-
-  await service.saveProvider("openai", "sk-private-test-value", "gpt-5.6-luna");
-  const publicSettings = await service.listSettings();
-  assert.deepEqual(publicSettings[0], { provider: "openai", configured: true, model: "gpt-5.6-luna" });
-  assert.equal(JSON.stringify(publicSettings).includes("sk-private"), false);
-
-  const draft = await service.draftDca("openai", "Create a conservative DCA plan");
-  assert.equal(receivedKey, "sk-private-test-value");
-  assert.equal(draft.intent.intentType, "auto-dca-draft");
-
-  await service.deleteProvider("openai");
-  assert.equal((await service.listSettings())[0]?.configured, false);
+test("OpenRouter key remains secret while public settings expose status", async () => {
+  const secrets = new MemorySecrets();
+  const service = new AiService({ keystore: secrets, settings: new MemorySettings() });
+  await service.saveProvider("sk-or-private-test", "openai/gpt-4o-mini");
+  assert.deepEqual(await service.listSettings(), [{ provider: "openrouter", configured: true, model: "openai/gpt-4o-mini" }]);
+  assert.equal(JSON.stringify(await service.listSettings()).includes("sk-or-private"), false);
+  assert.equal(secrets.values.get("openrouter-api-key"), "sk-or-private-test");
 });
 
-test("invalid provider output is rejected before it reaches IPC", async () => {
-  const keystore = new MemorySecrets();
-  const settings = new MemorySettings();
-  const service = new AiDraftService({
-    keystore,
-    settings,
-    transport: async () => ({ ...intent(), intervalHours: 0 }),
-  });
-  await service.saveProvider("anthropic", "sk-ant-private-test", "claude-haiku-4-5-20251001");
-  await assert.rejects(() => service.draftDca("anthropic", "Create a conservative DCA plan"));
+test("unconfigured OpenRouter cannot start a chat", async () => {
+  const service = new AiService({ keystore: new MemorySecrets(), settings: new MemorySettings() });
+  await assert.rejects(() => service.chat({ prompt: "hello", mode: "agent", walletAddress: null }), /not configured/u);
 });
 
-test("shadow trade proposals receive only the selected sanitized quote", async () => {
-  const keystore = new MemorySecrets();
-  const settings = new MemorySettings();
-  const quote = shadowQuote();
-  let receivedQuoteId = "";
-  const service = new AiDraftService({
-    keystore,
-    settings,
-    tradeTransport: async (request) => {
-      receivedQuoteId = request.quote.id;
-      return {
-        schemaVersion: 1,
-        intentType: "shadow-trade-proposal",
-        quoteId: request.quote.id,
-        action: "hold",
-        direction: request.quote.direction,
-        inAmount: request.quote.inAmount,
-        confidenceBps: 4_000,
-        rationale: "Wait for a stronger observation.",
-        riskFlags: ["Quote expires quickly"],
-      };
-    },
-  });
-  await service.saveProvider("openai", "sk-private-test-value", "gpt-5.6-luna");
-
-  const result = await service.proposeShadowTrade("openai", "Protect capital unless the route is compelling", quote);
-  assert.equal(receivedQuoteId, quote.id);
-  assert.equal(result.proposal.action, "hold");
-});
-
-function intent() {
-  return {
-    schemaVersion: 1 as const,
-    intentType: "auto-dca-draft" as const,
-    amountPerCycleSol: "0.05",
-    intervalHours: 6,
-    maxCycles: 30,
-    dailyLimitSol: "0.2",
-    minimumWalletReserveSol: "0.5",
-    maxSlippageBps: 100,
-    maxPriceImpactBps: 50,
-    rationale: "A conservative draft for human review.",
-    assumptions: ["Devnet simulation only"],
+test("Pump watchlist sessions expose read-only scoped analysis and no contract proposal tools", { concurrency: false }, async () => {
+  const secrets = new MemorySecrets();
+  secrets.values.set("openrouter-api-key", "sk-or-test");
+  secrets.values.set("jupiter-api-key", "jup-test");
+  let requestBody = "";
+  globalThis.fetch = async (_input, init) => {
+    requestBody = String(init?.body);
+    return Response.json({ choices: [{ message: { content: "Watchlist remains read-only." } }], usage: {} });
   };
-}
-
-function shadowQuote() {
-  return JupiterShadowQuoteViewSchema.parse({
-    schemaVersion: 1,
-    id: "1b74b2c6-75d1-4fcb-8b37-bff4a95534a8",
-    profile: "mainnet-shadow",
-    direction: "sol-to-usdc",
-    inputMint: "So11111111111111111111111111111111111111112",
-    outputMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-    inAmount: "100000000",
-    outAmount: "15000000",
-    otherAmountThreshold: "14900000",
-    slippageBps: 100,
-    priceImpactBps: 20,
-    feeBps: 10,
-    router: "metis",
-    routeLabels: ["Orca"],
-    allowed: true,
-    denialCodes: [],
-    transactionReturned: false,
-    signingAttempted: false,
-    broadcastAttempted: false,
-    observedAt: "2026-07-18T00:00:00.000Z",
-    expiresAt: "2026-07-18T00:00:10.000Z",
+  const service = new AiService({
+    keystore: secrets,
+    settings: new MemorySettings(),
+    readService: { pumpTokenAnalysis: async () => ({}) } as unknown as MainnetReadService,
   });
-}
+  await service.chat({
+    prompt: "Analyze my watchlist",
+    mode: "mission",
+    walletAddress: "11111111111111111111111111111111",
+    pumpScope: { kind: "watchlist", allowedMints: ["So11111111111111111111111111111111111111112"] },
+  });
+  const body = JSON.parse(requestBody) as { tools?: Array<{ function?: { name?: string } }> };
+  const toolNames = body.tools?.map((tool) => tool.function?.name) ?? [];
+  assert.equal(toolNames.includes("pump_token_analysis"), true);
+  assert.equal(toolNames.includes("pump_trade_contract_preview"), false);
+  assert.equal(toolNames.includes("mission_contract_preview"), false);
+  assert.equal(toolNames.includes("limit_order_contract_preview"), false);
+});
+
+test("Pump analysis rejects a mint outside the encrypted session scope before RPC", { concurrency: false }, async () => {
+  const secrets = new MemorySecrets();
+  secrets.values.set("openrouter-api-key", "sk-or-test");
+  let completion = 0;
+  let readCalls = 0;
+  let secondRequestBody = "";
+  globalThis.fetch = async (_input, init) => {
+    completion += 1;
+    if (completion === 1) return Response.json({
+      choices: [{ message: { content: null, tool_calls: [{ id: "off-scope", type: "function", function: { name: "pump_token_analysis", arguments: JSON.stringify({ mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" }) } }] } }],
+      usage: {},
+    });
+    secondRequestBody = String(init?.body);
+    return Response.json({ choices: [{ message: { content: "That mint is outside this session." } }], usage: {} });
+  };
+  const service = new AiService({
+    keystore: secrets,
+    settings: new MemorySettings(),
+    readService: { pumpTokenAnalysis: async () => { readCalls += 1; return {}; } } as unknown as MainnetReadService,
+  });
+  const result = await service.chat({
+    prompt: "Analyze another token",
+    mode: "mission",
+    walletAddress: null,
+    pumpScope: { kind: "watchlist", allowedMints: ["So11111111111111111111111111111111111111112"] },
+  });
+  assert.equal(readCalls, 0);
+  assert.deepEqual(result.toolsUsed, []);
+  assert.match(secondRequestBody, /outside this session scope/u);
+});
+
+test("exact-mint Pump sessions reject an off-scope trade proposal before policy evaluation", { concurrency: false }, async () => {
+  const secrets = new MemorySecrets();
+  secrets.values.set("openrouter-api-key", "sk-or-test");
+  secrets.values.set("jupiter-api-key", "jup-test");
+  let completion = 0;
+  let secondRequestBody = "";
+  globalThis.fetch = async (_input, init) => {
+    completion += 1;
+    if (completion === 1) return Response.json({ choices: [{ message: { content: null, tool_calls: [{
+      id: "wrong-trade-mint",
+      type: "function",
+      function: { name: "pump_trade_contract_preview", arguments: JSON.stringify({
+        goal: "Buy another token", side: "buy", tokenMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        inputAmount: "1000000", maxSolExposureLamports: "1000000", minimumOutputAmount: "1", maxSlippageBps: 100,
+        deadlineAt: "2026-07-22T08:00:00.000Z", stopConditions: ["Stop on any policy failure"],
+      }) },
+    }] } }], usage: {} });
+    secondRequestBody = String(init?.body);
+    return Response.json({ choices: [{ message: { content: "The requested mint is outside this session." } }], usage: {} });
+  };
+  const service = new AiService({ keystore: secrets, settings: new MemorySettings(), readService: {} as MainnetReadService });
+  const result = await service.chat({
+    prompt: "Prepare a proposal for a different mint",
+    mode: "mission",
+    walletAddress: "11111111111111111111111111111111",
+    pumpScope: { kind: "exact-mint", allowedMints: ["So11111111111111111111111111111111111111112"] },
+  });
+  assert.deepEqual(result.toolsUsed, []);
+  assert.match(secondRequestBody, /outside this exact-mint session scope/u);
+});
+
+test("Pump discovery sessions expose only the bounded scanner from the Pump proposal surface", { concurrency: false }, async () => {
+  const secrets = new MemorySecrets();
+  secrets.values.set("openrouter-api-key", "sk-or-test");
+  secrets.values.set("jupiter-api-key", "jup-test");
+  let requestBody = "";
+  globalThis.fetch = async (_input, init) => {
+    requestBody = String(init?.body);
+    return Response.json({ choices: [{ message: { content: "Scanner is ready for an explicit manual run." } }], usage: {} });
+  };
+  const service = new AiService({
+    keystore: secrets,
+    settings: new MemorySettings(),
+    readService: { recentPumpCandidates: async () => ({}) } as unknown as MainnetReadService,
+  });
+  await service.chat({ prompt: "Review scanner boundaries", mode: "mission", walletAddress: "11111111111111111111111111111111", pumpScope: { kind: "discovery", allowedMints: [] } });
+  const body = JSON.parse(requestBody) as { tools?: Array<{ function?: { name?: string } }> };
+  const names = body.tools?.map((tool) => tool.function?.name) ?? [];
+  assert.equal(names.includes("pump_recent_candidates"), true);
+  assert.equal(names.includes("pump_token_analysis"), false);
+  assert.equal(names.includes("pump_trade_contract_preview"), false);
+  assert.equal(names.includes("mission_contract_preview"), false);
+  assert.equal(names.includes("limit_order_contract_preview"), false);
+});
+
+test("Pump discovery cursor is injected by the trusted session boundary, not the model", { concurrency: false }, async () => {
+  const secrets = new MemorySecrets();
+  secrets.values.set("openrouter-api-key", "sk-or-test");
+  const cursor = "3".repeat(64);
+  let completion = 0;
+  let scannerInput: unknown;
+  globalThis.fetch = async () => {
+    completion += 1;
+    if (completion === 1) return Response.json({ choices: [{ message: { content: null, tool_calls: [{
+      id: "scan-newer",
+      type: "function",
+      function: { name: "pump_recent_candidates", arguments: JSON.stringify({ signatureLimit: 2 }) },
+    }] } }], usage: {} });
+    return Response.json({ choices: [{ message: { content: "No newer finalized activity was observed." } }], usage: {} });
+  };
+  const service = new AiService({
+    keystore: secrets,
+    settings: new MemorySettings(),
+    readService: { recentPumpCandidates: async (input: unknown) => {
+      scannerInput = input;
+      return {
+        source: "recent-program-transactions", programId: "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P", commitment: "finalized",
+        scannedSignatures: 0, observedMints: 0, decodedEvents: 0, cursorSignature: cursor, candidates: [], executionAllowed: false,
+        disclosure: "Incremental bounded scan only.", scannedAt: "2026-07-22T00:00:00.000Z",
+      };
+    } } as unknown as MainnetReadService,
+  });
+  await service.chat({
+    prompt: "Scan finalized activity",
+    mode: "mission",
+    walletAddress: null,
+    pumpScope: { kind: "discovery", allowedMints: [], discoveryCursor: cursor },
+  });
+  assert.deepEqual(scannerInput, { signatureLimit: 2, untilSignature: cursor });
+});

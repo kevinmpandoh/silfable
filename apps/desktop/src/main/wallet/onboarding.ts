@@ -8,11 +8,12 @@ import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from "bip39";
 import HDKey from "micro-key-producer/slip10.js";
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
 
-import type { EncryptedWalletMetadata } from "../storage/database.js";
+import { MAINNET_PROFILE_ID, type EncryptedWalletMetadata } from "../storage/database.js";
 
 const DERIVATION_PATH = "m/44'/501'/0'/0'" as const;
-const PROFILE_ID = "devnet-simulation" as const;
+const PROFILE_ID = MAINNET_PROFILE_ID;
 const DATA_KEY_ID = "local-data-key-v1";
+const MAX_WALLETS = 20;
 
 type SecretStore = {
   isLocked(): boolean;
@@ -56,10 +57,38 @@ export class WalletOnboardingService {
     return { address: await this.#persistPrivateKey(parsePrivateKey(serialized)) };
   }
 
+  async listWallets(): Promise<Array<{ address: string; primary: boolean }>> {
+    if (this.#keystore.isLocked()) throw new Error("Keystore is locked");
+    const serialized = await this.#keystore.getSecret("wallet-secret");
+    if (serialized === null) return [];
+    const privateKeys = parseStoredWalletSecrets(serialized);
+    try {
+      const wallets: Array<{ address: string; primary: boolean }> = [];
+      for (const [index, privateKey] of privateKeys.entries()) {
+        const signer = privateKey.length === 32
+          ? await createKeyPairSignerFromPrivateKeyBytes(privateKey)
+          : await createKeyPairSignerFromBytes(privateKey);
+        wallets.push({ address: signer.address, primary: index === 0 });
+      }
+      const primary = wallets[0];
+      if (primary !== undefined && !this.#database.hasWallet(PROFILE_ID)) {
+        this.#database.insertWallet({
+          id: randomUUID(),
+          profileId: PROFILE_ID,
+          ...(await this.#encryptAddress(primary.address)),
+          createdAt: new Date().toISOString(),
+        });
+      }
+      return wallets;
+    } finally {
+      for (const privateKey of privateKeys) privateKey.fill(0);
+    }
+  }
+
   async getWalletAddress(): Promise<string> {
     if (this.#keystore.isLocked()) throw new Error("Keystore is locked");
     const metadata = this.#database.getWallet(PROFILE_ID);
-    if (metadata === null) throw new Error("Devnet wallet is not configured");
+    if (metadata === null) throw new Error("Mainnet wallet is not configured");
     if (metadata.keyId !== DATA_KEY_ID) throw new Error("Wallet metadata key is unsupported");
 
     const dataKey = await this.#getOrCreateDataKey();
@@ -77,28 +106,27 @@ export class WalletOnboardingService {
     }
   }
 
-  async withWalletSigner<T>(operation: (signer: KeyPairSigner) => Promise<T>): Promise<T> {
+  async withWalletSigner<T>(address: string, operation: (signer: KeyPairSigner) => Promise<T>): Promise<T> {
     if (this.#keystore.isLocked()) throw new Error("Keystore is locked");
-    if (!this.#database.hasWallet(PROFILE_ID)) throw new Error("Devnet wallet is not configured");
+    if (!this.#database.hasWallet(PROFILE_ID)) throw new Error("Mainnet wallet is not configured");
     const serialized = await this.#keystore.getSecret("wallet-secret");
     if (serialized === null) throw new Error("Wallet secret is unavailable");
-    const privateKey = parseStoredWalletSecret(serialized);
+    const privateKeys = parseStoredWalletSecrets(serialized);
     try {
-      const signer =
-        privateKey.length === 32
+      for (const privateKey of privateKeys) {
+        const signer = privateKey.length === 32
           ? await createKeyPairSignerFromPrivateKeyBytes(privateKey)
           : await createKeyPairSignerFromBytes(privateKey);
-      const storedAddress = await this.getWalletAddress();
-      if (signer.address !== storedAddress) throw new Error("Wallet secret does not match encrypted metadata");
-      return await operation(signer);
+        if (signer.address === address) return await operation(signer);
+      }
+      throw new Error("Selected wallet secret is unavailable");
     } finally {
-      privateKey.fill(0);
+      for (const storedKey of privateKeys) storedKey.fill(0);
     }
   }
 
   #assertCanOnboard(): void {
     if (this.#keystore.isLocked()) throw new Error("Keystore must be unlocked before wallet onboarding");
-    if (this.#database.hasWallet(PROFILE_ID)) throw new Error("A Devnet mission wallet already exists");
   }
 
   async #persistPrivateKey(privateKey: Uint8Array): Promise<string> {
@@ -108,13 +136,21 @@ export class WalletOnboardingService {
           ? await createKeyPairSignerFromPrivateKeyBytes(privateKey)
           : await createKeyPairSignerFromBytes(privateKey);
       const address = signer.address;
-      const encryptedAddress = await this.#encryptAddress(address);
-
-      await this.#keystore.setSecret(
-        "wallet-secret",
-        JSON.stringify({ version: 1, encoding: "base64", bytes: Buffer.from(privateKey).toString("base64") }),
-      );
+      const existingSerialized = await this.#keystore.getSecret("wallet-secret");
+      const existingKeys = existingSerialized === null ? [] : parseStoredWalletSecrets(existingSerialized);
       try {
+        if (existingKeys.length >= MAX_WALLETS) throw new Error(`A maximum of ${MAX_WALLETS} wallets is supported`);
+        for (const existingKey of existingKeys) {
+          const existingSigner = existingKey.length === 32
+            ? await createKeyPairSignerFromPrivateKeyBytes(existingKey)
+            : await createKeyPairSignerFromBytes(existingKey);
+          if (existingSigner.address === address) throw new Error("This wallet is already configured");
+        }
+        const encodedKeys = [...existingKeys.map((key) => Buffer.from(key).toString("base64")), Buffer.from(privateKey).toString("base64")];
+        await this.#keystore.setSecret("wallet-secret", JSON.stringify({ version: 2, encoding: "base64", wallets: encodedKeys }));
+        if (this.#database.hasWallet(PROFILE_ID)) return address;
+
+        const encryptedAddress = await this.#encryptAddress(address);
         this.#database.insertWallet({
           id: randomUUID(),
           profileId: PROFILE_ID,
@@ -122,8 +158,11 @@ export class WalletOnboardingService {
           createdAt: new Date().toISOString(),
         });
       } catch (error) {
-        await this.#keystore.deleteSecret("wallet-secret");
+        if (existingSerialized === null) await this.#keystore.deleteSecret("wallet-secret");
+        else await this.#keystore.setSecret("wallet-secret", existingSerialized);
         throw error;
+      } finally {
+        for (const existingKey of existingKeys) existingKey.fill(0);
       }
 
       return address;
@@ -196,17 +235,23 @@ function parsePrivateKey(serialized: string): Uint8Array {
   return bytes;
 }
 
-function parseStoredWalletSecret(serialized: string): Uint8Array {
+function parseStoredWalletSecrets(serialized: string): Uint8Array[] {
   const parsed: unknown = JSON.parse(serialized);
   if (typeof parsed !== "object" || parsed === null) throw new Error("Wallet secret is invalid");
-  const value = parsed as { version?: unknown; encoding?: unknown; bytes?: unknown };
-  if (value.version !== 1 || value.encoding !== "base64" || typeof value.bytes !== "string") {
+  const value = parsed as { version?: unknown; encoding?: unknown; bytes?: unknown; wallets?: unknown };
+  if (value.encoding !== "base64") {
     throw new Error("Wallet secret is unsupported");
   }
-  const bytes = Uint8Array.from(Buffer.from(value.bytes, "base64"));
-  if (bytes.length !== 32 && bytes.length !== 64) {
-    bytes.fill(0);
+  const encoded = value.version === 1 && typeof value.bytes === "string"
+    ? [value.bytes]
+    : value.version === 2 && Array.isArray(value.wallets) && value.wallets.every((item) => typeof item === "string")
+      ? value.wallets
+      : null;
+  if (encoded === null || encoded.length === 0 || encoded.length > MAX_WALLETS) throw new Error("Wallet secret is unsupported");
+  const keys = encoded.map((item) => Uint8Array.from(Buffer.from(item, "base64")));
+  if (keys.some((bytes) => bytes.length !== 32 && bytes.length !== 64)) {
+    for (const bytes of keys) bytes.fill(0);
     throw new Error("Wallet secret length is invalid");
   }
-  return bytes;
+  return keys;
 }

@@ -1,686 +1,234 @@
 import { contextBridge, ipcRenderer } from "electron";
-
 import {
-  AiDeleteProviderRequestSchema,
-  AiApproveShadowTradeRequestSchema,
-  AiDraftDcaRequestSchema,
-  AiDraftDcaResponseSchema,
+  AiChatRequestSchema,
+  AiChatResponseSchema,
+  AiPreviewOpenRouterModelsRequestSchema,
+  AiPreviewOpenRouterModelsResponseSchema,
   AiProviderMutationResponseSchema,
-  AiProposeShadowTradeRequestSchema,
-  AiProposeShadowTradeResponseSchema,
-  AiRejectShadowTradeRequestSchema,
   AiSaveProviderRequestSchema,
   AiSettingsResponseSchema,
-  AgentCreateSessionRequestSchema,
-  AgentHaltSessionRequestSchema,
-  AgentEvaluateObservationRequestSchema,
-  AgentApproveIntentRequestSchema,
-  AgentRejectIntentRequestSchema,
-  AgentSessionMutationResponseSchema,
-  AgentEvaluateObservationResponseSchema,
-  AgentIntentMutationResponseSchema,
-  AgentSessionListResponseSchema,
-  AgentSimulateDevnetIntentRequestSchema,
-  AgentSimulateDevnetIntentResponseSchema,
-  AgentDevnetSimulationListResponseSchema,
-  AgentArmDevnetSigningRequestSchema,
-  AgentRevokeDevnetSigningArmRequestSchema,
-  AgentDevnetSigningArmMutationResponseSchema,
-  AgentDevnetSigningArmListResponseSchema,
-  AgentPrepareDevnetExecutionRequestSchema,
-  AgentPrepareDevnetExecutionResponseSchema,
-  AgentDevnetPreSignExecutionListResponseSchema,
-  AgentSignDevnetExecutionRequestSchema,
-  AgentSignDevnetExecutionResponseSchema,
-  AgentDevnetSignedExecutionListResponseSchema,
-  AgentBroadcastDevnetExecutionRequestSchema,
-  AgentBroadcastDevnetExecutionResponseSchema,
-  AgentDevnetBroadcastExecutionListResponseSchema,
-  AgentQuoteDevnetSwapRequestSchema,
-  AgentQuoteDevnetSwapResponseSchema,
-  AgentDevnetSwapQuoteListResponseSchema,
-  AgentBuildDevnetSwapRequestSchema,
-  AgentBuildDevnetSwapResponseSchema,
-  AgentDevnetSwapBuildListResponseSchema,
-  AgentArmDevnetSwapSigningRequestSchema,
-  AgentRevokeDevnetSwapSigningArmRequestSchema,
-  AgentDevnetSwapSigningArmMutationResponseSchema,
-  AgentDevnetSwapSigningArmListResponseSchema,
-  AiShadowTradeListResponseSchema,
-  AiShadowTradeMutationResponseSchema,
-  DcaSimulationRequestSchema,
-  DcaSimulationResponseSchema,
-  DevnetAirdropRequestSchema,
-  DevnetAirdropResponseSchema,
-  DevnetCanaryExecuteRequestSchema,
-  DevnetCanaryExecuteResponseSchema,
-  DevnetCanaryListResponseSchema,
-  DevnetFixtureProvisionExecuteRequestSchema,
-  DevnetFixtureProvisionExecuteResponseSchema,
-  DevnetFixtureProvisionListResponseSchema,
-  DevnetFixtureReviewActivateRequestSchema,
-  DevnetFixtureReviewActivateResponseSchema,
-  DevnetFixtureReviewGetActiveResponseSchema,
-  DevnetFixtureTransferExecuteRequestSchema,
-  DevnetFixtureTransferExecuteResponseSchema,
-  DevnetFixtureTransferListResponseSchema,
-  DevnetFixtureTransferApproveRequestSchema,
-  DevnetFixtureTransferApproveResponseSchema,
-  DevnetFixtureTransferGetApprovalResponseSchema,
-  GuardedMissionAuthorizeRequestSchema,
-  GuardedMissionRevokeRequestSchema,
-  GuardedMissionMutationResponseSchema,
-  GuardedMissionAuthorizationListResponseSchema,
-  GuardedSchedulerArmRequestSchema,
-  GuardedSchedulerArmRevokeRequestSchema,
-  GuardedSchedulerArmMutationResponseSchema,
-  GuardedSchedulerArmListResponseSchema,
-  GuardedExecutionListResponseSchema,
+  ClipboardWriteWalletAddressRequestSchema,
+  ClipboardWriteWalletAddressResponseSchema,
+  ClipboardWriteTransactionSignatureRequestSchema,
+  ClipboardWriteTransactionSignatureResponseSchema,
+  ExternalOpenTransactionRequestSchema,
+  ExternalOpenTransactionResponseSchema,
   IPC_CHANNELS,
-  MissionAuthorizeRequestSchema,
-  MissionAuditRequestSchema,
-  MissionAuditResponseSchema,
-  MissionCommandRequestSchema,
-  MissionListResponseSchema,
-  MissionMutationResponseSchema,
-  MissionSaveDraftRequestSchema,
   JupiterKeyMutationResponseSchema,
   JupiterSaveKeyRequestSchema,
   JupiterSettingsResponseSchema,
-  JupiterShadowListResponseSchema,
-  JupiterShadowQuoteRequestSchema,
-  JupiterShadowQuoteResponseSchema,
-  MarketCreateObservationRequestSchema,
-  MarketCreateObservationResponseSchema,
-  MarketObservationListResponseSchema,
-  MarketCreateWatchRequestSchema,
-  MarketPauseWatchRequestSchema,
-  MarketWatchListResponseSchema,
-  MarketWatchMutationResponseSchema,
+  LimitOrderExecuteRequestSchema,
+  LimitOrderExecuteResponseSchema,
+  LimitOrderCancelExecuteRequestSchema,
+  LimitOrderCancelExecuteResponseSchema,
+  LimitOrderCancelSimulateRequestSchema,
+  LimitOrderCancelSimulateResponseSchema,
+  LimitOrderListRequestSchema,
+  LimitOrderListResponseSchema,
+  LimitOrderSimulateRequestSchema,
+  LimitOrderSimulateResponseSchema,
+  MissionSimulateRequestSchema,
+  MissionSimulateResponseSchema,
+  MissionExecuteRequestSchema,
+  MissionExecuteResponseSchema,
+  MissionVerifyExecutionRequestSchema,
+  MissionVerifyExecutionResponseSchema,
+  PortfolioGetRequestSchema,
+  PortfolioGetResponseSchema,
+  PumpFinalRevalidateRequestSchema,
+  PumpFinalRevalidateResponseSchema,
+  PumpExecuteRequestSchema,
+  PumpExecuteResponseSchema,
+  PumpSimulateRequestSchema,
+  PumpSimulateResponseSchema,
+  PumpRiskSettingsMutationResponseSchema,
+  PumpRiskSettingsResponseSchema,
+  PumpRiskSettingsSaveRequestSchema,
   RuntimeStatusSchema,
-  UpdateCheckResponseSchema,
-  UpdateCommandRequestSchema,
-  UpdateOpenReviewResponseSchema,
-  UpdateStatusSchema,
-  TelemetryConsentRequestSchema,
-  TelemetryMutationResponseSchema,
-  TelemetryReportsResponseSchema,
-  TelemetrySettingsSchema,
+  SecurityChangePasswordRequestSchema,
+  SecurityConfigurePasswordRequestSchema,
+  SecurityPasswordMutationResponseSchema,
+  SecurityResetVaultRequestSchema,
+  SecurityResetVaultResponseSchema,
+  SecurityUnlockRequestSchema,
+  SessionListResponseSchema,
+  SessionUpsertRequestSchema,
+  SessionUpsertResponseSchema,
+  TavilyKeyMutationResponseSchema,
+  TavilySaveKeyRequestSchema,
+  TavilySettingsResponseSchema,
+  SolanaRpcMutationResponseSchema,
+  SolanaRpcSaveUrlRequestSchema,
+  SolanaRpcSettingsResponseSchema,
+  TransactionSettingsMutationResponseSchema,
+  TransactionSettingsResponseSchema,
+  TransactionSettingsSaveRequestSchema,
   WalletCreateRequestSchema,
   WalletCreateResponseSchema,
-  WalletLockResponseSchema,
-  WalletBalanceRequestSchema,
-  WalletBalanceResponseSchema,
+  WalletActivityGetRequestSchema,
+  WalletActivityGetResponseSchema,
   WalletImportMnemonicRequestSchema,
   WalletImportPrivateKeyRequestSchema,
   WalletImportResponseSchema,
-  WalletUnlockRequestSchema,
-  WalletUnlockResponseSchema,
-  type DcaSimulationRequest,
-  type DcaSimulationResponse,
-  type DevnetAirdropRequest,
-  type DevnetAirdropResponse,
-  type DevnetCanaryExecuteRequest,
-  type DevnetCanaryExecuteResponse,
-  type DevnetCanaryListResponse,
-  type DevnetFixtureProvisionExecuteRequest,
-  type DevnetFixtureProvisionExecuteResponse,
-  type DevnetFixtureProvisionListResponse,
-  type DevnetFixtureReviewActivateRequest,
-  type DevnetFixtureReviewActivateResponse,
-  type DevnetFixtureReviewGetActiveResponse,
-  type DevnetFixtureTransferExecuteRequest,
-  type DevnetFixtureTransferExecuteResponse,
-  type DevnetFixtureTransferListResponse,
-  type DevnetFixtureTransferApproveRequest,
-  type DevnetFixtureTransferApproveResponse,
-  type DevnetFixtureTransferGetApprovalResponse,
-  type GuardedMissionAuthorizeRequest,
-  type GuardedMissionRevokeRequest,
-  type GuardedMissionMutationResponse,
-  type GuardedMissionAuthorizationListResponse,
-  type GuardedSchedulerArmRequest,
-  type GuardedSchedulerArmRevokeRequest,
-  type GuardedSchedulerArmMutationResponse,
-  type GuardedSchedulerArmListResponse,
-  type GuardedExecutionListResponse,
-  type RuntimeStatus,
-  type UpdateCheckResponse,
-  type UpdateCommandRequest,
-  type UpdateOpenReviewResponse,
-  type UpdateStatus,
-  type TelemetryConsentRequest,
-  type TelemetryMutationResponse,
-  type TelemetryReportsResponse,
-  type TelemetrySettings,
-  type MissionAuthorizeRequest,
-  type MissionAuditRequest,
-  type MissionAuditResponse,
-  type MissionCommandRequest,
-  type MissionListResponse,
-  type MissionMutationResponse,
-  type MissionSaveDraftRequest,
-  type JupiterKeyMutationResponse,
+  WalletListResponseSchema,
+  type AiChatRequest,
+  type AiPreviewOpenRouterModelsRequest,
+  type AiSaveProviderRequest,
+  type ClipboardWriteWalletAddressRequest,
+  type ClipboardWriteTransactionSignatureRequest,
+  type ExternalOpenTransactionRequest,
   type JupiterSaveKeyRequest,
-  type JupiterSettingsResponse,
-  type JupiterShadowListResponse,
-  type JupiterShadowQuoteRequest,
-  type JupiterShadowQuoteResponse,
-  type MarketCreateObservationRequest,
-  type MarketCreateObservationResponse,
-  type MarketObservationListResponse,
-  type MarketCreateWatchRequest,
-  type MarketPauseWatchRequest,
-  type MarketWatchListResponse,
-  type MarketWatchMutationResponse,
+  type LimitOrderExecuteRequest,
+  type LimitOrderSimulateRequest,
+  type LimitOrderCancelExecuteRequest,
+  type LimitOrderCancelSimulateRequest,
+  type LimitOrderListRequest,
+  type MissionSimulateRequest,
+  type MissionExecuteRequest,
+  type MissionVerifyExecutionRequest,
+  type PortfolioGetRequest,
+  type PumpFinalRevalidateRequest,
+  type PumpExecuteRequest,
+  type PumpSimulateRequest,
+  type PumpRiskSettingsSaveRequest,
+  type SolanaRpcSaveUrlRequest,
+  type TavilySaveKeyRequest,
+  type TransactionSettingsSaveRequest,
   type WalletCreateRequest,
-  type WalletCreateResponse,
-  type WalletLockResponse,
-  type WalletBalanceRequest,
-  type WalletBalanceResponse,
+  type WalletActivityGetRequest,
   type WalletImportMnemonicRequest,
   type WalletImportPrivateKeyRequest,
-  type WalletImportResponse,
-  type WalletUnlockRequest,
-  type WalletUnlockResponse,
-  type AiDeleteProviderRequest,
-  type AiApproveShadowTradeRequest,
-  type AiDraftDcaRequest,
-  type AiDraftDcaResponse,
-  type AiProviderMutationResponse,
-  type AiProposeShadowTradeRequest,
-  type AiProposeShadowTradeResponse,
-  type AiRejectShadowTradeRequest,
-  type AiSaveProviderRequest,
-  type AiSettingsResponse,
-  type AgentCreateSessionRequest,
-  type AgentHaltSessionRequest,
-  type AgentEvaluateObservationRequest,
-  type AgentApproveIntentRequest,
-  type AgentRejectIntentRequest,
-  type AgentSessionMutationResponse,
-  type AgentEvaluateObservationResponse,
-  type AgentIntentMutationResponse,
-  type AgentSessionListResponse,
-  type AgentSimulateDevnetIntentRequest,
-  type AgentSimulateDevnetIntentResponse,
-  type AgentDevnetSimulationListResponse,
-  type AgentArmDevnetSigningRequest,
-  type AgentRevokeDevnetSigningArmRequest,
-  type AgentDevnetSigningArmMutationResponse,
-  type AgentDevnetSigningArmListResponse,
-  type AgentPrepareDevnetExecutionRequest,
-  type AgentPrepareDevnetExecutionResponse,
-  type AgentDevnetPreSignExecutionListResponse,
-  type AgentSignDevnetExecutionRequest,
-  type AgentSignDevnetExecutionResponse,
-  type AgentDevnetSignedExecutionListResponse,
-  type AgentBroadcastDevnetExecutionRequest,
-  type AgentBroadcastDevnetExecutionResponse,
-  type AgentDevnetBroadcastExecutionListResponse,
-  type AgentQuoteDevnetSwapRequest,
-  type AgentQuoteDevnetSwapResponse,
-  type AgentDevnetSwapQuoteListResponse,
-  type AgentBuildDevnetSwapRequest,
-  type AgentBuildDevnetSwapResponse,
-  type AgentDevnetSwapBuildListResponse,
-  type AgentArmDevnetSwapSigningRequest,
-  type AgentRevokeDevnetSwapSigningArmRequest,
-  type AgentDevnetSwapSigningArmMutationResponse,
-  type AgentDevnetSwapSigningArmListResponse,
-  type AiShadowTradeListResponse,
-  type AiShadowTradeMutationResponse,
+  type SecurityChangePasswordRequest,
+  type SecurityConfigurePasswordRequest,
+  type SecurityUnlockRequest,
+  type SecurityResetVaultRequest,
+  type SessionUpsertRequest,
 } from "@silfable/contracts";
 
-const api = Object.freeze({
-  async getRuntimeStatus(): Promise<RuntimeStatus> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.runtimeStatus);
-    return RuntimeStatusSchema.parse(response);
-  },
-  async simulateDca(request: DcaSimulationRequest): Promise<DcaSimulationResponse> {
-    const validatedRequest = DcaSimulationRequestSchema.parse(request);
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.simulateDca, validatedRequest);
-    return DcaSimulationResponseSchema.parse(response);
-  },
-  async unlockWalletKeystore(request: WalletUnlockRequest): Promise<WalletUnlockResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.walletUnlock,
-      WalletUnlockRequestSchema.parse(request),
-    );
-    return WalletUnlockResponseSchema.parse(response);
-  },
-  async lockWalletKeystore(request: WalletUnlockRequest): Promise<WalletLockResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.walletLock,
-      WalletUnlockRequestSchema.parse(request),
-    );
-    return WalletLockResponseSchema.parse(response);
-  },
-  async createWallet(request: WalletCreateRequest): Promise<WalletCreateResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.walletCreate,
-      WalletCreateRequestSchema.parse(request),
-    );
-    return WalletCreateResponseSchema.parse(response);
-  },
-  async importWalletMnemonic(request: WalletImportMnemonicRequest): Promise<WalletImportResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.walletImportMnemonic,
-      WalletImportMnemonicRequestSchema.parse(request),
-    );
-    return WalletImportResponseSchema.parse(response);
-  },
-  async importWalletPrivateKey(request: WalletImportPrivateKeyRequest): Promise<WalletImportResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.walletImportPrivateKey,
-      WalletImportPrivateKeyRequestSchema.parse(request),
-    );
-    return WalletImportResponseSchema.parse(response);
-  },
-  async getWalletBalance(request: WalletBalanceRequest): Promise<WalletBalanceResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.walletBalance,
-      WalletBalanceRequestSchema.parse(request),
-    );
-    return WalletBalanceResponseSchema.parse(response);
-  },
-  async requestDevnetAirdrop(request: DevnetAirdropRequest): Promise<DevnetAirdropResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.devnetAirdrop,
-      DevnetAirdropRequestSchema.parse(request),
-    );
-    return DevnetAirdropResponseSchema.parse(response);
-  },
-  async executeDevnetCanary(request: DevnetCanaryExecuteRequest): Promise<DevnetCanaryExecuteResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.devnetCanaryExecute,
-      DevnetCanaryExecuteRequestSchema.parse(request),
-    );
-    return DevnetCanaryExecuteResponseSchema.parse(response);
-  },
-  async listDevnetCanaries(): Promise<DevnetCanaryListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.devnetCanaryList);
-    return DevnetCanaryListResponseSchema.parse(response);
-  },
-  async executeDevnetFixtureProvision(
-    request: DevnetFixtureProvisionExecuteRequest,
-  ): Promise<DevnetFixtureProvisionExecuteResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.devnetFixtureProvisionExecute,
-      DevnetFixtureProvisionExecuteRequestSchema.parse(request),
-    );
-    return DevnetFixtureProvisionExecuteResponseSchema.parse(response);
-  },
-  async listDevnetFixtureProvisions(): Promise<DevnetFixtureProvisionListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.devnetFixtureProvisionList);
-    return DevnetFixtureProvisionListResponseSchema.parse(response);
-  },
-  async activateDevnetFixtureReview(
-    request: DevnetFixtureReviewActivateRequest,
-  ): Promise<DevnetFixtureReviewActivateResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.devnetFixtureReviewActivate,
-      DevnetFixtureReviewActivateRequestSchema.parse(request),
-    );
-    return DevnetFixtureReviewActivateResponseSchema.parse(response);
-  },
-  async getActiveDevnetFixture(): Promise<DevnetFixtureReviewGetActiveResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.devnetFixtureReviewGetActive);
-    return DevnetFixtureReviewGetActiveResponseSchema.parse(response);
-  },
-  async executeDevnetFixtureTransfer(
-    request: DevnetFixtureTransferExecuteRequest,
-  ): Promise<DevnetFixtureTransferExecuteResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.devnetFixtureTransferExecute,
-      DevnetFixtureTransferExecuteRequestSchema.parse(request),
-    );
-    return DevnetFixtureTransferExecuteResponseSchema.parse(response);
-  },
-  async listDevnetFixtureTransfers(): Promise<DevnetFixtureTransferListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.devnetFixtureTransferList);
-    return DevnetFixtureTransferListResponseSchema.parse(response);
-  },
-  async approveDevnetFixtureTransfer(
-    request: DevnetFixtureTransferApproveRequest,
-  ): Promise<DevnetFixtureTransferApproveResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.devnetFixtureTransferApprove,
-      DevnetFixtureTransferApproveRequestSchema.parse(request),
-    );
-    return DevnetFixtureTransferApproveResponseSchema.parse(response);
-  },
-  async getDevnetFixtureTransferApproval(): Promise<DevnetFixtureTransferGetApprovalResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.devnetFixtureTransferGetApproval);
-    return DevnetFixtureTransferGetApprovalResponseSchema.parse(response);
-  },
-  async authorizeGuardedMission(request: GuardedMissionAuthorizeRequest): Promise<GuardedMissionMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.guardedMissionAuthorize,
-      GuardedMissionAuthorizeRequestSchema.parse(request),
-    );
-    return GuardedMissionMutationResponseSchema.parse(response);
-  },
-  async revokeGuardedMission(request: GuardedMissionRevokeRequest): Promise<GuardedMissionMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.guardedMissionRevoke,
-      GuardedMissionRevokeRequestSchema.parse(request),
-    );
-    return GuardedMissionMutationResponseSchema.parse(response);
-  },
-  async listGuardedMissionAuthorizations(): Promise<GuardedMissionAuthorizationListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.guardedMissionListAuthorizations);
-    return GuardedMissionAuthorizationListResponseSchema.parse(response);
-  },
-  async armGuardedScheduler(request: GuardedSchedulerArmRequest): Promise<GuardedSchedulerArmMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.guardedSchedulerArm,
-      GuardedSchedulerArmRequestSchema.parse(request),
-    );
-    return GuardedSchedulerArmMutationResponseSchema.parse(response);
-  },
-  async revokeGuardedSchedulerArm(
-    request: GuardedSchedulerArmRevokeRequest,
-  ): Promise<GuardedSchedulerArmMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.guardedSchedulerRevoke,
-      GuardedSchedulerArmRevokeRequestSchema.parse(request),
-    );
-    return GuardedSchedulerArmMutationResponseSchema.parse(response);
-  },
-  async listGuardedSchedulerArms(): Promise<GuardedSchedulerArmListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.guardedSchedulerListArms);
-    return GuardedSchedulerArmListResponseSchema.parse(response);
-  },
-  async listGuardedExecutions(): Promise<GuardedExecutionListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.guardedExecutionList);
-    return GuardedExecutionListResponseSchema.parse(response);
-  },
-  async listMissions(): Promise<MissionListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.missionList);
-    return MissionListResponseSchema.parse(response);
-  },
-  async saveMissionDraft(request: MissionSaveDraftRequest): Promise<MissionMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.missionSaveDraft,
-      MissionSaveDraftRequestSchema.parse(request),
-    );
-    return MissionMutationResponseSchema.parse(response);
-  },
-  async authorizeMission(request: MissionAuthorizeRequest): Promise<MissionMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.missionAuthorize,
-      MissionAuthorizeRequestSchema.parse(request),
-    );
-    return MissionMutationResponseSchema.parse(response);
-  },
-  async startMission(request: MissionCommandRequest): Promise<MissionMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.missionStart,
-      MissionCommandRequestSchema.parse(request),
-    );
-    return MissionMutationResponseSchema.parse(response);
-  },
-  async haltMission(request: MissionCommandRequest): Promise<MissionMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.missionHalt,
-      MissionCommandRequestSchema.parse(request),
-    );
-    return MissionMutationResponseSchema.parse(response);
-  },
-  async getMissionAudit(request: MissionAuditRequest): Promise<MissionAuditResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.missionAudit,
-      MissionAuditRequestSchema.parse(request),
-    );
-    return MissionAuditResponseSchema.parse(response);
-  },
-  async getAiSettings(): Promise<AiSettingsResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.aiGetSettings);
-    return AiSettingsResponseSchema.parse(response);
-  },
-  async saveAiProvider(request: AiSaveProviderRequest): Promise<AiProviderMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.aiSaveProvider,
-      AiSaveProviderRequestSchema.parse(request),
-    );
-    return AiProviderMutationResponseSchema.parse(response);
-  },
-  async deleteAiProvider(request: AiDeleteProviderRequest): Promise<AiProviderMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.aiDeleteProvider,
-      AiDeleteProviderRequestSchema.parse(request),
-    );
-    return AiProviderMutationResponseSchema.parse(response);
-  },
-  async draftDcaWithAi(request: AiDraftDcaRequest): Promise<AiDraftDcaResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.aiDraftDca,
-      AiDraftDcaRequestSchema.parse(request),
-    );
-    return AiDraftDcaResponseSchema.parse(response);
-  },
-  async proposeShadowTradeWithAi(request: AiProposeShadowTradeRequest): Promise<AiProposeShadowTradeResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.aiProposeShadowTrade,
-      AiProposeShadowTradeRequestSchema.parse(request),
-    );
-    return AiProposeShadowTradeResponseSchema.parse(response);
-  },
-  async listAiShadowTrades(): Promise<AiShadowTradeListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.aiListShadowTrades);
-    return AiShadowTradeListResponseSchema.parse(response);
-  },
-  async approveAiShadowTrade(request: AiApproveShadowTradeRequest): Promise<AiShadowTradeMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.aiApproveShadowTrade,
-      AiApproveShadowTradeRequestSchema.parse(request),
-    );
-    return AiShadowTradeMutationResponseSchema.parse(response);
-  },
-  async rejectAiShadowTrade(request: AiRejectShadowTradeRequest): Promise<AiShadowTradeMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.aiRejectShadowTrade,
-      AiRejectShadowTradeRequestSchema.parse(request),
-    );
-    return AiShadowTradeMutationResponseSchema.parse(response);
-  },
-  async getJupiterSettings(): Promise<JupiterSettingsResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.jupiterGetSettings);
-    return JupiterSettingsResponseSchema.parse(response);
-  },
-  async saveJupiterKey(request: JupiterSaveKeyRequest): Promise<JupiterKeyMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.jupiterSaveKey,
-      JupiterSaveKeyRequestSchema.parse(request),
-    );
-    return JupiterKeyMutationResponseSchema.parse(response);
-  },
-  async deleteJupiterKey(request: WalletUnlockRequest): Promise<JupiterKeyMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.jupiterDeleteKey,
-      WalletUnlockRequestSchema.parse(request),
-    );
-    return JupiterKeyMutationResponseSchema.parse(response);
-  },
-  async getJupiterShadowQuote(request: JupiterShadowQuoteRequest): Promise<JupiterShadowQuoteResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.jupiterShadowQuote,
-      JupiterShadowQuoteRequestSchema.parse(request),
-    );
-    return JupiterShadowQuoteResponseSchema.parse(response);
-  },
-  async listJupiterShadowQuotes(): Promise<JupiterShadowListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.jupiterShadowList);
-    return JupiterShadowListResponseSchema.parse(response);
-  },
-  async createMarketObservation(request: MarketCreateObservationRequest): Promise<MarketCreateObservationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.marketCreateObservation,
-      MarketCreateObservationRequestSchema.parse(request),
-    );
-    return MarketCreateObservationResponseSchema.parse(response);
-  },
-  async listMarketObservations(): Promise<MarketObservationListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.marketListObservations);
-    return MarketObservationListResponseSchema.parse(response);
-  },
-  async createMarketWatch(request: MarketCreateWatchRequest): Promise<MarketWatchMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.marketCreateWatch,
-      MarketCreateWatchRequestSchema.parse(request),
-    );
-    return MarketWatchMutationResponseSchema.parse(response);
-  },
-  async pauseMarketWatch(request: MarketPauseWatchRequest): Promise<MarketWatchMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.marketPauseWatch,
-      MarketPauseWatchRequestSchema.parse(request),
-    );
-    return MarketWatchMutationResponseSchema.parse(response);
-  },
-  async listMarketWatches(): Promise<MarketWatchListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.marketListWatches);
-    return MarketWatchListResponseSchema.parse(response);
-  },
-  async createAgentSession(request: AgentCreateSessionRequest): Promise<AgentSessionMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentCreateSession, AgentCreateSessionRequestSchema.parse(request));
-    return AgentSessionMutationResponseSchema.parse(response);
-  },
-  async haltAgentSession(request: AgentHaltSessionRequest): Promise<AgentSessionMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentHaltSession, AgentHaltSessionRequestSchema.parse(request));
-    return AgentSessionMutationResponseSchema.parse(response);
-  },
-  async evaluateAgentObservation(request: AgentEvaluateObservationRequest): Promise<AgentEvaluateObservationResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentEvaluateObservation, AgentEvaluateObservationRequestSchema.parse(request));
-    return AgentEvaluateObservationResponseSchema.parse(response);
-  },
-  async listAgentSessions(): Promise<AgentSessionListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListSessions);
-    return AgentSessionListResponseSchema.parse(response);
-  },
-  async approveAgentIntent(request: AgentApproveIntentRequest): Promise<AgentIntentMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentApproveIntent, AgentApproveIntentRequestSchema.parse(request));
-    return AgentIntentMutationResponseSchema.parse(response);
-  },
-  async rejectAgentIntent(request: AgentRejectIntentRequest): Promise<AgentIntentMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentRejectIntent, AgentRejectIntentRequestSchema.parse(request));
-    return AgentIntentMutationResponseSchema.parse(response);
-  },
-  async simulateAgentIntentOnDevnet(request: AgentSimulateDevnetIntentRequest): Promise<AgentSimulateDevnetIntentResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentSimulateDevnetIntent, AgentSimulateDevnetIntentRequestSchema.parse(request));
-    return AgentSimulateDevnetIntentResponseSchema.parse(response);
-  },
-  async listAgentDevnetSimulations(): Promise<AgentDevnetSimulationListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListDevnetSimulations);
-    return AgentDevnetSimulationListResponseSchema.parse(response);
-  },
-  async armAgentDevnetSigning(request: AgentArmDevnetSigningRequest): Promise<AgentDevnetSigningArmMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentArmDevnetSigning, AgentArmDevnetSigningRequestSchema.parse(request));
-    return AgentDevnetSigningArmMutationResponseSchema.parse(response);
-  },
-  async revokeAgentDevnetSigningArm(request: AgentRevokeDevnetSigningArmRequest): Promise<AgentDevnetSigningArmMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentRevokeDevnetSigningArm, AgentRevokeDevnetSigningArmRequestSchema.parse(request));
-    return AgentDevnetSigningArmMutationResponseSchema.parse(response);
-  },
-  async listAgentDevnetSigningArms(): Promise<AgentDevnetSigningArmListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListDevnetSigningArms);
-    return AgentDevnetSigningArmListResponseSchema.parse(response);
-  },
-  async prepareAgentDevnetExecution(request: AgentPrepareDevnetExecutionRequest): Promise<AgentPrepareDevnetExecutionResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentPrepareDevnetExecution, AgentPrepareDevnetExecutionRequestSchema.parse(request));
-    return AgentPrepareDevnetExecutionResponseSchema.parse(response);
-  },
-  async listAgentDevnetPreSignExecutions(): Promise<AgentDevnetPreSignExecutionListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListDevnetPreSignExecutions);
-    return AgentDevnetPreSignExecutionListResponseSchema.parse(response);
-  },
-  async signAgentDevnetExecution(request: AgentSignDevnetExecutionRequest): Promise<AgentSignDevnetExecutionResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentSignDevnetExecution, AgentSignDevnetExecutionRequestSchema.parse(request));
-    return AgentSignDevnetExecutionResponseSchema.parse(response);
-  },
-  async listAgentDevnetSignedExecutions(): Promise<AgentDevnetSignedExecutionListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListDevnetSignedExecutions);
-    return AgentDevnetSignedExecutionListResponseSchema.parse(response);
-  },
-  async broadcastAgentDevnetExecution(request: AgentBroadcastDevnetExecutionRequest): Promise<AgentBroadcastDevnetExecutionResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentBroadcastDevnetExecution, AgentBroadcastDevnetExecutionRequestSchema.parse(request));
-    return AgentBroadcastDevnetExecutionResponseSchema.parse(response);
-  },
-  async listAgentDevnetBroadcastExecutions(): Promise<AgentDevnetBroadcastExecutionListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListDevnetBroadcastExecutions);
-    return AgentDevnetBroadcastExecutionListResponseSchema.parse(response);
-  },
-  async quoteAgentDevnetSwap(request: AgentQuoteDevnetSwapRequest): Promise<AgentQuoteDevnetSwapResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentQuoteDevnetSwap, AgentQuoteDevnetSwapRequestSchema.parse(request));
-    return AgentQuoteDevnetSwapResponseSchema.parse(response);
-  },
-  async listAgentDevnetSwapQuotes(): Promise<AgentDevnetSwapQuoteListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListDevnetSwapQuotes);
-    return AgentDevnetSwapQuoteListResponseSchema.parse(response);
-  },
-  async buildAgentDevnetSwap(request: AgentBuildDevnetSwapRequest): Promise<AgentBuildDevnetSwapResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentBuildDevnetSwap, AgentBuildDevnetSwapRequestSchema.parse(request));
-    return AgentBuildDevnetSwapResponseSchema.parse(response);
-  },
-  async listAgentDevnetSwapBuilds(): Promise<AgentDevnetSwapBuildListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListDevnetSwapBuilds);
-    return AgentDevnetSwapBuildListResponseSchema.parse(response);
-  },
-  async armAgentDevnetSwapSigning(request: AgentArmDevnetSwapSigningRequest): Promise<AgentDevnetSwapSigningArmMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentArmDevnetSwapSigning,
-      AgentArmDevnetSwapSigningRequestSchema.parse(request));
-    return AgentDevnetSwapSigningArmMutationResponseSchema.parse(response);
-  },
-  async revokeAgentDevnetSwapSigningArm(request: AgentRevokeDevnetSwapSigningArmRequest): Promise<AgentDevnetSwapSigningArmMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentRevokeDevnetSwapSigningArm,
-      AgentRevokeDevnetSwapSigningArmRequestSchema.parse(request));
-    return AgentDevnetSwapSigningArmMutationResponseSchema.parse(response);
-  },
-  async listAgentDevnetSwapSigningArms(): Promise<AgentDevnetSwapSigningArmListResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.agentListDevnetSwapSigningArms);
-    return AgentDevnetSwapSigningArmListResponseSchema.parse(response);
-  },
-  async getUpdateStatus(): Promise<UpdateStatus> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.updateGetStatus);
-    return UpdateStatusSchema.parse(response);
-  },
-  async checkForUpdate(request: UpdateCommandRequest): Promise<UpdateCheckResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.updateCheck,
-      UpdateCommandRequestSchema.parse(request),
-    );
-    return UpdateCheckResponseSchema.parse(response);
-  },
-  async openUpdateReview(request: UpdateCommandRequest): Promise<UpdateOpenReviewResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.updateOpenReview,
-      UpdateCommandRequestSchema.parse(request),
-    );
-    return UpdateOpenReviewResponseSchema.parse(response);
-  },
-  async getTelemetrySettings(): Promise<TelemetrySettings> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.telemetryGetSettings);
-    return TelemetrySettingsSchema.parse(response);
-  },
-  async setTelemetryConsent(request: TelemetryConsentRequest): Promise<TelemetryMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.telemetrySetConsent,
-      TelemetryConsentRequestSchema.parse(request),
-    );
-    return TelemetryMutationResponseSchema.parse(response);
-  },
-  async listCrashReports(): Promise<TelemetryReportsResponse> {
-    const response: unknown = await ipcRenderer.invoke(IPC_CHANNELS.telemetryListReports);
-    return TelemetryReportsResponseSchema.parse(response);
-  },
-  async deleteCrashReports(request: UpdateCommandRequest): Promise<TelemetryMutationResponse> {
-    const response: unknown = await ipcRenderer.invoke(
-      IPC_CHANNELS.telemetryDeleteReports,
-      UpdateCommandRequestSchema.parse(request),
-    );
-    return TelemetryMutationResponseSchema.parse(response);
-  },
-});
+const api = {
+  async getRuntimeStatus() {
+    return RuntimeStatusSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.runtimeStatus));
+  },
+  async configureMasterPassword(request: SecurityConfigurePasswordRequest) {
+    return SecurityPasswordMutationResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.securityConfigurePassword, SecurityConfigurePasswordRequestSchema.parse(request)));
+  },
+  async unlockVault(request: SecurityUnlockRequest) {
+    return SecurityPasswordMutationResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.securityUnlock, SecurityUnlockRequestSchema.parse(request)));
+  },
+  async changeMasterPassword(request: SecurityChangePasswordRequest) {
+    return SecurityPasswordMutationResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.securityChangePassword, SecurityChangePasswordRequestSchema.parse(request)));
+  },
+  async resetVault(request: SecurityResetVaultRequest) {
+    return SecurityResetVaultResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.securityResetVault, SecurityResetVaultRequestSchema.parse(request)));
+  },
+  async listSessions() {
+    return SessionListResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.sessionList));
+  },
+  async upsertSession(request: SessionUpsertRequest) {
+    return SessionUpsertResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.sessionUpsert, SessionUpsertRequestSchema.parse(request)));
+  },
+  async copyWalletAddress(request: ClipboardWriteWalletAddressRequest) {
+    return ClipboardWriteWalletAddressResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.clipboardWriteWalletAddress, ClipboardWriteWalletAddressRequestSchema.parse(request)));
+  },
+  async copyTransactionSignature(request: ClipboardWriteTransactionSignatureRequest) {
+    return ClipboardWriteTransactionSignatureResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.clipboardWriteTransactionSignature, ClipboardWriteTransactionSignatureRequestSchema.parse(request)));
+  },
+  async openTransactionInExplorer(request: ExternalOpenTransactionRequest) {
+    return ExternalOpenTransactionResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.externalOpenTransaction, ExternalOpenTransactionRequestSchema.parse(request)));
+  },
+  async createWallet(request: WalletCreateRequest) {
+    return WalletCreateResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.walletCreate, WalletCreateRequestSchema.parse(request)));
+  },
+  async importWalletMnemonic(request: WalletImportMnemonicRequest) {
+    return WalletImportResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.walletImportMnemonic, WalletImportMnemonicRequestSchema.parse(request)));
+  },
+  async importWalletPrivateKey(request: WalletImportPrivateKeyRequest) {
+    return WalletImportResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.walletImportPrivateKey, WalletImportPrivateKeyRequestSchema.parse(request)));
+  },
+  async listWallets() {
+    return WalletListResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.walletList));
+  },
+  async getPortfolio(request: PortfolioGetRequest) {
+    return PortfolioGetResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.portfolioGet, PortfolioGetRequestSchema.parse(request)));
+  },
+  async getWalletActivity(request: WalletActivityGetRequest) {
+    return WalletActivityGetResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.walletActivityGet, WalletActivityGetRequestSchema.parse(request)));
+  },
+  async getAiSettings() {
+    return AiSettingsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.aiGetSettings));
+  },
+  async previewOpenRouterModels(request: AiPreviewOpenRouterModelsRequest) {
+    return AiPreviewOpenRouterModelsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.aiPreviewOpenRouterModels, AiPreviewOpenRouterModelsRequestSchema.parse(request)));
+  },
+  async saveAiProvider(request: AiSaveProviderRequest) {
+    return AiProviderMutationResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.aiSaveProvider, AiSaveProviderRequestSchema.parse(request)));
+  },
+  async chatWithAi(request: AiChatRequest) {
+    return AiChatResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.aiChat, AiChatRequestSchema.parse(request)));
+  },
+  async simulateMission(request: MissionSimulateRequest) {
+    return MissionSimulateResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.missionSimulate, MissionSimulateRequestSchema.parse(request)));
+  },
+  async simulatePumpTrade(request: PumpSimulateRequest) {
+    return PumpSimulateResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.pumpSimulate, PumpSimulateRequestSchema.parse(request)));
+  },
+  async finalRevalidatePumpTrade(request: PumpFinalRevalidateRequest) {
+    return PumpFinalRevalidateResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.pumpFinalRevalidate, PumpFinalRevalidateRequestSchema.parse(request)));
+  },
+  async executePumpTrade(request: PumpExecuteRequest) {
+    return PumpExecuteResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.pumpExecute, PumpExecuteRequestSchema.parse(request)));
+  },
+  async getPumpRiskSettings() {
+    return PumpRiskSettingsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.pumpRiskSettingsGet));
+  },
+  async savePumpRiskSettings(request: PumpRiskSettingsSaveRequest) {
+    return PumpRiskSettingsMutationResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.pumpRiskSettingsSave, PumpRiskSettingsSaveRequestSchema.parse(request)));
+  },
+  async executeMission(request: MissionExecuteRequest) {
+    return MissionExecuteResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.missionExecute, MissionExecuteRequestSchema.parse(request)));
+  },
+  async verifyMissionExecution(request: MissionVerifyExecutionRequest) {
+    return MissionVerifyExecutionResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.missionVerifyExecution, MissionVerifyExecutionRequestSchema.parse(request)));
+  },
+  async getTransactionSettings() {
+    return TransactionSettingsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.transactionSettingsGet));
+  },
+  async saveTransactionSettings(request: TransactionSettingsSaveRequest) {
+    return TransactionSettingsMutationResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.transactionSettingsSave, TransactionSettingsSaveRequestSchema.parse(request)));
+  },
+  async simulateLimitOrder(request: LimitOrderSimulateRequest) {
+    return LimitOrderSimulateResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.limitOrderSimulate, LimitOrderSimulateRequestSchema.parse(request)));
+  },
+  async executeLimitOrder(request: LimitOrderExecuteRequest) {
+    return LimitOrderExecuteResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.limitOrderExecute, LimitOrderExecuteRequestSchema.parse(request)));
+  },
+  async listLimitOrders(request: LimitOrderListRequest) {
+    return LimitOrderListResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.limitOrderList, LimitOrderListRequestSchema.parse(request)));
+  },
+  async simulateLimitOrderCancel(request: LimitOrderCancelSimulateRequest) {
+    return LimitOrderCancelSimulateResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.limitOrderCancelSimulate, LimitOrderCancelSimulateRequestSchema.parse(request)));
+  },
+  async executeLimitOrderCancel(request: LimitOrderCancelExecuteRequest) {
+    return LimitOrderCancelExecuteResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.limitOrderCancelExecute, LimitOrderCancelExecuteRequestSchema.parse(request)));
+  },
+  async getJupiterSettings() {
+    return JupiterSettingsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.jupiterGetSettings));
+  },
+  async saveJupiterKey(request: JupiterSaveKeyRequest) {
+    return JupiterKeyMutationResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.jupiterSaveKey, JupiterSaveKeyRequestSchema.parse(request)));
+  },
+  async getTavilySettings() {
+    return TavilySettingsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.tavilyGetSettings));
+  },
+  async saveTavilyKey(request: TavilySaveKeyRequest) {
+    return TavilyKeyMutationResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.tavilySaveKey, TavilySaveKeyRequestSchema.parse(request)));
+  },
+  async getSolanaRpcSettings() {
+    return SolanaRpcSettingsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.solanaRpcGetSettings));
+  },
+  async saveSolanaRpcUrl(request: SolanaRpcSaveUrlRequest) {
+    return SolanaRpcMutationResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.solanaRpcSaveUrl, SolanaRpcSaveUrlRequestSchema.parse(request)));
+  },
+};
 
-contextBridge.exposeInMainWorld("silfable", api);
+contextBridge.exposeInMainWorld("silfable", Object.freeze(api));

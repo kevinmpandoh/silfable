@@ -1,7 +1,17 @@
+import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const roots = ["apps/desktop/out/renderer", "apps/desktop/out/preload"];
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const roots = [
+  resolve(repositoryRoot, "apps/desktop/out/renderer"),
+  resolve(repositoryRoot, "apps/desktop/out/preload"),
+];
+const productionRoots = [
+  ...roots,
+  resolve(repositoryRoot, "apps/desktop/out/main"),
+];
 const forbidden = [
   "api.github.com/repos/",
   "child_process",
@@ -26,10 +36,75 @@ for (const root of roots) {
   }
 }
 
+const pumpHarnessOnlyDependencies = [
+  "@pump-fun/pump-sdk",
+  "@solana/spl-token",
+  "@solana/web3.js",
+  "bn.js",
+];
+const desktopPackage = JSON.parse(
+  await readFile(resolve(repositoryRoot, "apps/desktop/package.json"), "utf8"),
+);
+for (const dependency of pumpHarnessOnlyDependencies) {
+  assert.equal(
+    Object.hasOwn(desktopPackage.dependencies ?? {}, dependency),
+    false,
+    `${dependency} is restricted to the non-production Pump harness`,
+  );
+  assert.equal(
+    Object.hasOwn(desktopPackage.devDependencies ?? {}, dependency),
+    true,
+    `${dependency} must remain pinned as a development-only Pump harness dependency`,
+  );
+}
+
+const pumpProductionMarkers = [
+  "@pump-fun/pump-sdk",
+  "@pump-fun/pump-swap-sdk",
+  "@pump-fun/agent-payments-sdk",
+  "bigint-buffer",
+  "Failed to load bindings, pure JS will be used",
+];
+const productionCodecPaths = [
+  resolve(repositoryRoot, "apps/desktop/src/main/pump/codec.ts"),
+  resolve(repositoryRoot, "apps/desktop/src/main/pump/production.ts"),
+  resolve(repositoryRoot, "apps/desktop/src/main/pump/quote.ts"),
+  resolve(repositoryRoot, "apps/desktop/src/main/pump/risk-settings.ts"),
+  resolve(repositoryRoot, "apps/desktop/src/main/pump/rpc.ts"),
+  resolve(repositoryRoot, "apps/desktop/src/main/pump/simulation-kit.ts"),
+  resolve(repositoryRoot, "apps/desktop/src/main/pump/state.ts"),
+  resolve(repositoryRoot, "apps/desktop/src/main/pump/transaction-codec.ts"),
+];
+for (const productionCodecPath of productionCodecPaths) {
+  const productionCodecSource = await readFile(productionCodecPath, "utf8");
+  for (const marker of [
+    "@pump-fun/",
+    "@solana/web3.js",
+    "@solana/spl-token",
+    "bn.js",
+    "bigint-buffer",
+  ]) {
+    if (productionCodecSource.includes(marker)) {
+      violations.push(`${productionCodecPath}: quarantined dependency imported by production Pump codec: ${marker}`);
+    }
+  }
+}
+for (const root of productionRoots) {
+  for (const path of await walk(root)) {
+    if (![".cjs", ".html", ".js", ".mjs"].includes(extname(path))) continue;
+    const source = await readFile(path, "utf8");
+    for (const marker of pumpProductionMarkers) {
+      if (source.includes(marker)) {
+        violations.push(`${path}: Pump harness marker leaked into production bundle: ${marker}`);
+      }
+    }
+  }
+}
+
 if (violations.length > 0) {
   throw new Error(`Desktop privilege bundle audit failed:\n${violations.join("\n")}`);
 }
-console.log("Desktop renderer/preload privilege audit passed.");
+console.log("Desktop privilege and Pump production-boundary audit passed.");
 
 async function walk(directory) {
   const paths = [];

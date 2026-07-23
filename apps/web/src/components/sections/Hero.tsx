@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { ArrowDownRight } from "lucide-react";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 
@@ -14,7 +15,7 @@ export function Hero() {
   return (
     <section id="top" className="relative flex min-h-screen overflow-hidden border-b border-white/15 bg-ink pt-20">
       <div className="pointer-events-none absolute inset-y-0 right-[24%] hidden w-px bg-white/10 xl:block" />
-      <div className="section-shell flex flex-1 flex-col justify-between py-12 sm:py-16 lg:py-20">
+      <div className="section-shell flex min-h-[calc(100vh-5rem)] flex-col justify-between py-12 sm:py-16 lg:py-20">
         <motion.div
           initial="hidden"
           animate="visible"
@@ -54,10 +55,16 @@ export function Hero() {
             </p>
           </div>
 
-          <div>
+          <div className="flex flex-wrap gap-3">
             <Button asChild size="lg">
-              <a href="#download">
-                Download for Linux
+              <Link href="/connect">
+                Get started
+                <ArrowDownRight className="ml-4 size-4" />
+              </Link>
+            </Button>
+            <Button asChild size="lg">
+              <a href="#download" className="border border-white/30 bg-transparent text-white hover:bg-white hover:text-black">
+                Download desktop app
                 <ArrowDownRight className="ml-4 size-4" />
               </a>
             </Button>

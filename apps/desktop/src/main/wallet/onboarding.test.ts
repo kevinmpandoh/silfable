@@ -84,6 +84,24 @@ test("base58 and JSON private-key imports resolve to the same address", async ()
   assert.equal(fromBase58.address, fromJson.address);
 });
 
+test("multiple wallets can be added and the first wallet remains primary", async () => {
+  const keystore = new MemoryKeystore();
+  const database = new MemoryDatabase();
+  const service = new WalletOnboardingService(keystore, database);
+  const first = await service.importPrivateKey(JSON.stringify([...Uint8Array.from({ length: 32 }, (_, index) => index + 1)]));
+  const second = await service.importPrivateKey(JSON.stringify([...Uint8Array.from({ length: 32 }, (_, index) => index + 33)]));
+  const wallets = await service.listWallets();
+
+  assert.deepEqual(wallets, [
+    { address: first.address, primary: true },
+    { address: second.address, primary: false },
+  ]);
+  assert.equal(await service.getWalletAddress(), first.address);
+  const selected = await service.withWalletSigner(second.address, async (signer) => signer.address);
+  assert.equal(selected, second.address);
+  await assert.rejects(() => service.withWalletSigner("11111111111111111111111111111111", async (signer) => signer.address), /unavailable/u);
+});
+
 test("a locked keystore blocks wallet onboarding", async () => {
   const keystore = new MemoryKeystore();
   keystore.locked = true;

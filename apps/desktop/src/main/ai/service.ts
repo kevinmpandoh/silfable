@@ -1,29 +1,9 @@
-import {
-  AiDcaIntentV1Schema,
-  AiProviderSchema,
-  AiProviderSettingSchema,
-  AiShadowTradeProposalV1Schema,
-  AgentIntentProposalV1Schema,
-  type AiDcaIntentV1,
-  type AiProvider,
-  type AiProviderSetting,
-  type AiShadowTradeProposalV1,
-  type AgentIntentProposalV1,
-  type AgentSessionView,
-  type JupiterShadowQuoteView,
-  type MarketObservationView,
-} from "@silfable/contracts";
+import { AiProviderSettingSchema, type AiProviderSetting } from "@silfable/contracts";
 
 import type { SecretName } from "../storage/keystore.js";
-import {
-  callAiProvider,
-  callAiShadowTradeProvider,
-  callAgentIntentProvider,
-  DEFAULT_AI_MODELS,
-  type AiProviderTransport,
-  type AiShadowTradeProviderTransport,
-  type AgentIntentProviderTransport,
-} from "./providers.js";
+import type { MainnetReadService } from "../integrations/read-only.js";
+import { MissionPolicyService } from "../mission/policy.js";
+import { callOpenRouterChat, DEFAULT_OPENROUTER_MODEL, type ReadOnlyAiTool } from "./providers.js";
 
 type AiSecretStore = {
   getSecret(name: SecretName): Promise<string | null>;
@@ -34,121 +14,315 @@ type AiSecretStore = {
 type AiSettingsStore = {
   getSetting(key: string): unknown | null;
   setSetting(key: string, value: unknown): void;
-  deleteSetting(key: string): void;
 };
 
-export class AiDraftService {
+const SETTING_KEY = "ai.provider.openrouter";
+
+export type PumpAiScope = {
+  kind: "exact-mint" | "watchlist" | "discovery";
+  allowedMints: string[];
+  discoveryCursor?: string | null;
+};
+
+export class AiService {
   readonly #keystore: AiSecretStore;
   readonly #settings: AiSettingsStore;
-  readonly #transport: AiProviderTransport;
-  readonly #tradeTransport: AiShadowTradeProviderTransport;
-  readonly #agentTransport: AgentIntentProviderTransport;
+  readonly #readService: MainnetReadService | null;
+  readonly #missionPolicy: MissionPolicyService | null;
 
-  constructor(input: {
-    keystore: AiSecretStore;
-    settings: AiSettingsStore;
-    transport?: AiProviderTransport;
-    tradeTransport?: AiShadowTradeProviderTransport;
-    agentTransport?: AgentIntentProviderTransport;
-  }) {
+  constructor(input: { keystore: AiSecretStore; settings: AiSettingsStore; readService?: MainnetReadService }) {
     this.#keystore = input.keystore;
     this.#settings = input.settings;
-    this.#transport = input.transport ?? callAiProvider;
-    this.#tradeTransport = input.tradeTransport ?? callAiShadowTradeProvider;
-    this.#agentTransport = input.agentTransport ?? callAgentIntentProvider;
+    this.#readService = input.readService ?? null;
+    this.#missionPolicy = this.#readService === null ? null : new MissionPolicyService(this.#readService);
   }
 
   async listSettings(): Promise<AiProviderSetting[]> {
-    return Promise.all((["openai", "anthropic"] as const).map((provider) => this.#setting(provider)));
+    const configured = (await this.#keystore.getSecret("openrouter-api-key")) !== null;
+    return [AiProviderSettingSchema.parse({ provider: "openrouter", configured, model: this.#model() })];
   }
 
-  async saveProvider(providerInput: AiProvider, apiKey: string, model: string): Promise<AiProviderSetting> {
-    const provider = AiProviderSchema.parse(providerInput);
-    const setting = AiProviderSettingSchema.parse({ provider, configured: true, model });
-    await this.#keystore.setSecret(secretName(provider), apiKey);
+  async saveProvider(apiKey: string, model: string): Promise<AiProviderSetting> {
+    const setting = AiProviderSettingSchema.parse({ provider: "openrouter", configured: true, model });
+    await this.#keystore.setSecret("openrouter-api-key", apiKey);
     try {
-      this.#settings.setSetting(settingKey(provider), { model: setting.model });
+      this.#settings.setSetting(SETTING_KEY, { model: setting.model });
     } catch (error) {
-      await this.#keystore.deleteSecret(secretName(provider));
+      await this.#keystore.deleteSecret("openrouter-api-key");
       throw error;
     }
     return setting;
   }
 
-  async deleteProvider(providerInput: AiProvider): Promise<AiProviderSetting> {
-    const provider = AiProviderSchema.parse(providerInput);
-    await this.#keystore.deleteSecret(secretName(provider));
-    this.#settings.deleteSetting(settingKey(provider));
-    return AiProviderSettingSchema.parse({ provider, configured: false, model: DEFAULT_AI_MODELS[provider] });
+  async chat(input: { prompt: string; mode: "agent" | "mission"; walletAddress: string | null; sessionContext?: string; history?: Array<{ role: "user" | "assistant"; text: string }>; pumpScope?: PumpAiScope }) {
+    const apiKey = await this.#keystore.getSecret("openrouter-api-key");
+    if (apiKey === null) throw new Error("OpenRouter is not configured");
+    const { pumpScope, ...providerInput } = input;
+    return { model: this.#model(), ...(await callOpenRouterChat({ apiKey, model: this.#model(), ...providerInput, tools: await this.#tools(input.walletAddress, input.mode, pumpScope) })) };
   }
 
-  async draftDca(providerInput: AiProvider, prompt: string): Promise<{ model: string; intent: AiDcaIntentV1 }> {
-    const provider = AiProviderSchema.parse(providerInput);
-    const key = await this.#keystore.getSecret(secretName(provider));
-    if (key === null) throw new Error(`${provider} is not configured`);
-    const model = readModel(this.#settings.getSetting(settingKey(provider))) ?? DEFAULT_AI_MODELS[provider];
-    const intent = AiDcaIntentV1Schema.parse(
-      await this.#transport({ provider, apiKey: key, model, prompt }),
-    );
-    return { model, intent };
-  }
-
-  async proposeShadowTrade(
-    providerInput: AiProvider,
-    objective: string,
-    quote: JupiterShadowQuoteView,
-  ): Promise<{ model: string; proposal: AiShadowTradeProposalV1 }> {
-    const provider = AiProviderSchema.parse(providerInput);
-    const key = await this.#keystore.getSecret(secretName(provider));
-    if (key === null) throw new Error(`${provider} is not configured`);
-    const model = readModel(this.#settings.getSetting(settingKey(provider))) ?? DEFAULT_AI_MODELS[provider];
-    const proposal = AiShadowTradeProposalV1Schema.parse(
-      await this.#tradeTransport({ provider, apiKey: key, model, objective, quote }),
-    );
-    return { model, proposal };
-  }
-
-  async proposeAgentIntent(input: {
-    provider: AiProvider;
-    session: AgentSessionView;
-    observation: MarketObservationView;
-    quote: JupiterShadowQuoteView;
-  }): Promise<{ model: string; proposal: AgentIntentProposalV1 }> {
-    const provider = AiProviderSchema.parse(input.provider);
-    const key = await this.#keystore.getSecret(secretName(provider));
-    if (key === null) throw new Error(`${provider} is not configured`);
-    const model = readModel(this.#settings.getSetting(settingKey(provider))) ?? DEFAULT_AI_MODELS[provider];
-    const proposal = AgentIntentProposalV1Schema.parse(await this.#agentTransport({
-      provider,
-      apiKey: key,
-      model,
-      session: input.session,
-      observation: input.observation,
-      quote: input.quote,
-    }));
-    return { model, proposal };
-  }
-
-  async #setting(provider: AiProvider): Promise<AiProviderSetting> {
-    const configured = (await this.#keystore.getSecret(secretName(provider))) !== null;
-    return AiProviderSettingSchema.parse({
-      provider,
-      configured,
-      model: readModel(this.#settings.getSetting(settingKey(provider))) ?? DEFAULT_AI_MODELS[provider],
+  async #tools(walletAddress: string | null, mode: "agent" | "mission", pumpScope?: PumpAiScope): Promise<ReadOnlyAiTool[]> {
+    if (this.#readService === null) return [];
+    const tools: ReadOnlyAiTool[] = [];
+    if (walletAddress !== null) tools.push({
+      name: "wallet_portfolio",
+      description: "Read the selected registered Solana Mainnet wallet's finalized SOL and SPL-token balances. This never signs or sends a transaction.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+      execute: async () => this.#readService!.portfolio(walletAddress),
     });
+    if (walletAddress !== null) tools.push({
+      name: "wallet_activity",
+      description: "Read up to 10 recent finalized transaction signatures for the selected registered Solana Mainnet wallet, including success status, slot, time, memo, and explorer URL. This never signs or sends a transaction.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+      execute: async () => this.#readService!.activity(walletAddress, 10),
+    });
+    if (await this.#keystore.getSecret("jupiter-api-key") !== null) tools.push({
+      name: "jupiter_prices",
+      description: "Read current USD price evidence for up to 20 Solana token mint addresses from Jupiter Price API V3.",
+      parameters: { type: "object", properties: { mints: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 20 } }, required: ["mints"], additionalProperties: false },
+      execute: async (argumentsValue) => {
+        const mints = toolMints(argumentsValue);
+        return Object.fromEntries(await this.#readService!.prices(mints));
+      },
+    });
+    if (mode === "mission" && pumpScope === undefined && walletAddress !== null && this.#missionPolicy !== null && await this.#keystore.getSecret("jupiter-api-key") !== null) tools.push({
+      name: "mission_contract_preview",
+      description: "Create a deterministic, non-executable Mainnet swap mission preview for the selected wallet. Call only when every required field came explicitly from the user. Convert a user-supplied relative deadline using the exact current UTC timestamp in the system message; deadlineAt must be the resulting absolute ISO-8601 UTC timestamp. The runtime checks wallet registration, token pair, uint64 raw amount, maximum 300 bps guarded slippage, deadline, finalized balance, and a transaction-free Jupiter quote.",
+      parameters: {
+        type: "object",
+        properties: {
+          goal: { type: "string", minLength: 1, maxLength: 400 },
+          inputMint: { type: "string", minLength: 32, maxLength: 44 },
+          outputMint: { type: "string", minLength: 32, maxLength: 44 },
+          inputAmount: { type: "string", pattern: "^[1-9][0-9]*$" },
+          maxSlippageBps: { type: "integer", minimum: 0, maximum: 10000 },
+          deadlineAt: { type: "string", format: "date-time", description: "Absolute ISO-8601 UTC timestamp calculated from the exact current UTC time in the system message when the user supplied a relative deadline." },
+          stopConditions: { type: "array", items: { type: "string", minLength: 1, maxLength: 160 }, minItems: 1, maxItems: 8 },
+        },
+        required: ["goal", "inputMint", "outputMint", "inputAmount", "maxSlippageBps", "deadlineAt", "stopConditions"],
+        additionalProperties: false,
+      },
+      execute: async (argumentsValue) => this.#missionPolicy!.preview({ walletAddress, ...toolMissionDraft(argumentsValue) }),
+    });
+    if (mode === "mission" && (pumpScope === undefined || pumpScope.kind === "exact-mint") && walletAddress !== null && this.#missionPolicy !== null && await this.#keystore.getSecret("jupiter-api-key") !== null) tools.push({
+      name: "pump_trade_contract_preview",
+      description: "Create a deterministic proposal-only Pump.fun/PumpSwap Mainnet buy or sell contract for one exact mint. Requires every explicit field from the user. The runtime verifies the registered wallet, official active Pump curve or canonical PumpSwap pool, mint/freeze authorities, top-ten concentration, finalized reserves, balance, maximum SOL exposure, guarded slippage, deadline, and a transaction-free route quote. This never builds, signs, or broadcasts.",
+      parameters: { type: "object", properties: {
+        goal: { type: "string", minLength: 1, maxLength: 400 }, side: { type: "string", enum: ["buy", "sell"] }, tokenMint: { type: "string", minLength: 32, maxLength: 44 },
+        inputAmount: { type: "string", pattern: "^[1-9][0-9]*$" }, maxSolExposureLamports: { type: "string", pattern: "^[0-9]+$" }, minimumOutputAmount: { type: "string", pattern: "^[1-9][0-9]*$" },
+        maxSlippageBps: { type: "integer", minimum: 0, maximum: 300 }, deadlineAt: { type: "string", format: "date-time" },
+        stopConditions: { type: "array", items: { type: "string", minLength: 1, maxLength: 160 }, minItems: 1, maxItems: 8 },
+      }, required: ["goal", "side", "tokenMint", "inputAmount", "maxSolExposureLamports", "minimumOutputAmount", "maxSlippageBps", "deadlineAt", "stopConditions"], additionalProperties: false },
+      execute: async (argumentsValue) => {
+        const draft = toolPumpTradeDraft(argumentsValue);
+        if (pumpScope?.kind === "exact-mint" && !pumpScope.allowedMints.includes(draft.tokenMint)) {
+          throw new Error("Pump trade mint is outside this exact-mint session scope");
+        }
+        return this.#missionPolicy!.pumpTradePreview({ walletAddress, ...draft });
+      },
+    });
+    if (mode === "mission" && pumpScope === undefined && walletAddress !== null && this.#missionPolicy !== null && await this.#keystore.getSecret("jupiter-api-key") !== null) tools.push({
+      name: "limit_order_contract_preview",
+      description: "Create a deterministic, non-executable Jupiter Trigger V2 single limit-order preview for the selected Solana Mainnet wallet. Call only when the user explicitly supplied both mints, raw input amount, trigger mint, above/below condition, USD trigger price, slippage, and expiry. The runtime verifies the registered wallet, finalized balance, guarded 300 bps slippage, expiry, pair, and Jupiter's current $10 minimum. This tool never authenticates a Jupiter vault, deposits, signs, or creates an order.",
+      parameters: {
+        type: "object",
+        properties: {
+          goal: { type: "string", minLength: 1, maxLength: 400 }, inputMint: { type: "string", minLength: 32, maxLength: 44 }, outputMint: { type: "string", minLength: 32, maxLength: 44 },
+          inputAmount: { type: "string", pattern: "^[1-9][0-9]*$" }, triggerMint: { type: "string", minLength: 32, maxLength: 44 }, triggerCondition: { type: "string", enum: ["above", "below"] },
+          triggerPriceUsd: { type: "number", exclusiveMinimum: 0 }, maxSlippageBps: { type: "integer", minimum: 0, maximum: 10000 }, expiresAt: { type: "string", format: "date-time" },
+        },
+        required: ["goal", "inputMint", "outputMint", "inputAmount", "triggerMint", "triggerCondition", "triggerPriceUsd", "maxSlippageBps", "expiresAt"], additionalProperties: false,
+      },
+      execute: async (argumentsValue) => this.#missionPolicy!.limitOrderPreview({ walletAddress, ...toolLimitOrderDraft(argumentsValue) }),
+    });
+    if (await this.#keystore.getSecret("jupiter-api-key") !== null) tools.push({
+      name: "jupiter_token_search",
+      description: "Search Jupiter Tokens V2 by Solana mint, symbol, or name. Returns bounded token metadata, verification status, organic score, price, market cap, holder count, and tags as read-only evidence. Verification is not a guarantee of safety.",
+      parameters: { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: 100 } }, required: ["query"], additionalProperties: false },
+      execute: async (argumentsValue) => this.#readService!.tokenSearch(toolTokenQuery(argumentsValue)),
+    });
+    if (pumpScope === undefined || pumpScope.allowedMints.length > 0) tools.push({
+      name: "pump_token_analysis",
+      description: "Verify read-only Pump.fun and canonical PumpSwap evidence for one exact Solana mint using finalized RPC, official program ownership, deterministic PDAs, mint authorities, largest-account concentration, and a size-specific reserve-only buy/sell-back path. referenceBuyLamports is a SOL analysis amount, not authorization. This tool cannot buy, sell, sign, or broadcast.",
+      parameters: {
+        type: "object",
+        properties: {
+          mint: { type: "string", minLength: 32, maxLength: 44 },
+          referenceBuyLamports: { type: "string", pattern: "^[1-9][0-9]*$" },
+        },
+        required: ["mint"],
+        additionalProperties: false,
+      },
+      execute: async (argumentsValue) => {
+        const analysis = toolPumpAnalysis(argumentsValue);
+        if (pumpScope !== undefined && !pumpScope.allowedMints.includes(analysis.mint)) {
+          throw new Error("Pump token mint is outside this session scope");
+        }
+        return this.#readService!.pumpTokenAnalysis(analysis.mint, analysis.referenceBuyLamports);
+      },
+    });
+    if (pumpScope?.kind === "discovery") tools.push({
+      name: "pump_recent_candidates",
+      description: "Run one bounded manual scan of recent finalized transactions touching the official Pump program, then independently verify up to five exact mints with canonical Pump/PumpSwap state and deterministic research eligibility. This is incomplete read-only evidence, not a real-time index, ranking, recommendation, or authorization.",
+      parameters: {
+        type: "object",
+        properties: {
+          signatureLimit: { type: "integer", minimum: 1, maximum: 10 },
+          candidateLimit: { type: "integer", minimum: 1, maximum: 5 },
+          referenceBuyLamports: { type: "string", pattern: "^[1-9][0-9]*$" },
+        },
+        additionalProperties: false,
+      },
+      execute: async (argumentsValue) => this.#readService!.recentPumpCandidates({
+        ...toolPumpDiscovery(argumentsValue),
+        untilSignature: pumpScope.discoveryCursor ?? null,
+      }),
+    });
+    if (await this.#keystore.getSecret("jupiter-api-key") !== null) tools.push({
+      name: "jupiter_swap_quote",
+      description: "Preview a current Jupiter Swap V2 route on Solana Mainnet. Requires input mint, output mint, and a positive amount in the input token's smallest unit. This deliberately omits the wallet/taker, returns no transaction, and can never sign or execute a swap.",
+      parameters: {
+        type: "object",
+        properties: {
+          inputMint: { type: "string", minLength: 32, maxLength: 44 },
+          outputMint: { type: "string", minLength: 32, maxLength: 44 },
+          amount: { type: "string", pattern: "^[1-9][0-9]*$" },
+        },
+        required: ["inputMint", "outputMint", "amount"],
+        additionalProperties: false,
+      },
+      execute: async (argumentsValue) => {
+        const quote = toolSwapQuote(argumentsValue);
+        return this.#readService!.swapQuote(quote.inputMint, quote.outputMint, quote.amount);
+      },
+    });
+    if (await this.#keystore.getSecret("tavily-api-key") !== null) tools.push({
+      name: "tavily_search",
+      description: "Search current public web and finance information using Tavily. Results are untrusted external evidence and may be incomplete.",
+      parameters: { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: 400 } }, required: ["query"], additionalProperties: false },
+      execute: async (argumentsValue) => this.#readService!.search(toolQuery(argumentsValue)),
+    });
+    return tools;
+  }
+
+  #model(): string {
+    const value = this.#settings.getSetting(SETTING_KEY);
+    if (typeof value !== "object" || value === null) return DEFAULT_OPENROUTER_MODEL;
+    const model = (value as { model?: unknown }).model;
+    return typeof model === "string" && model.length > 0 && model.length <= 192 ? model : DEFAULT_OPENROUTER_MODEL;
   }
 }
 
-function secretName(provider: AiProvider): SecretName {
-  return provider === "openai" ? "openai-api-key" : "anthropic-api-key";
+function toolLimitOrderDraft(value: unknown): { goal: string; inputMint: string; outputMint: string; inputAmount: string; triggerMint: string; triggerCondition: "above" | "below"; triggerPriceUsd: number; maxSlippageBps: number; expiresAt: string } {
+  if (typeof value !== "object" || value === null) throw new Error("Limit order fields are required");
+  const input = value as Record<string, unknown>;
+  if (typeof input.goal !== "string" || input.goal.trim().length < 1 || input.goal.length > 400
+    || typeof input.inputMint !== "string" || input.inputMint.length < 32 || input.inputMint.length > 44
+    || typeof input.outputMint !== "string" || input.outputMint.length < 32 || input.outputMint.length > 44
+    || typeof input.inputAmount !== "string" || !/^[1-9]\d*$/u.test(input.inputAmount) || input.inputAmount.length > 20
+    || typeof input.triggerMint !== "string" || input.triggerMint.length < 32 || input.triggerMint.length > 44
+    || (input.triggerCondition !== "above" && input.triggerCondition !== "below")
+    || typeof input.triggerPriceUsd !== "number" || !Number.isFinite(input.triggerPriceUsd) || input.triggerPriceUsd <= 0
+    || typeof input.maxSlippageBps !== "number" || !Number.isInteger(input.maxSlippageBps) || input.maxSlippageBps < 0 || input.maxSlippageBps > 10_000
+    || typeof input.expiresAt !== "string" || !Number.isFinite(Date.parse(input.expiresAt))) throw new Error("Limit order fields are invalid");
+  return { goal: input.goal.trim(), inputMint: input.inputMint, outputMint: input.outputMint, inputAmount: input.inputAmount, triggerMint: input.triggerMint, triggerCondition: input.triggerCondition, triggerPriceUsd: input.triggerPriceUsd, maxSlippageBps: input.maxSlippageBps, expiresAt: input.expiresAt };
 }
 
-function settingKey(provider: AiProvider): string {
-  return `ai.provider.${provider}`;
+function toolMints(value: unknown): string[] {
+  if (typeof value !== "object" || value === null || !Array.isArray((value as { mints?: unknown }).mints)) throw new Error("Token mints are required");
+  const mints = (value as { mints: unknown[] }).mints;
+  if (mints.length < 1 || mints.length > 20 || mints.some((mint) => typeof mint !== "string" || mint.length < 32 || mint.length > 44)) throw new Error("Token mints are invalid");
+  return mints as string[];
 }
 
-function readModel(value: unknown): string | null {
-  if (typeof value !== "object" || value === null) return null;
-  const model = (value as { model?: unknown }).model;
-  return typeof model === "string" && model.length > 0 && model.length <= 128 ? model : null;
+function toolQuery(value: unknown): string {
+  if (typeof value !== "object" || value === null) throw new Error("Search query is required");
+  const query = (value as { query?: unknown }).query;
+  if (typeof query !== "string" || query.trim().length < 1 || query.length > 400) throw new Error("Search query is invalid");
+  return query.trim();
+}
+
+function toolTokenQuery(value: unknown): string {
+  if (typeof value !== "object" || value === null) throw new Error("Token search query is required");
+  const query = (value as { query?: unknown }).query;
+  if (typeof query !== "string" || query.trim().length < 1 || query.length > 100) throw new Error("Token search query is invalid");
+  return query.trim();
+}
+
+function toolPumpAnalysis(value: unknown): { mint: string; referenceBuyLamports: string } {
+  if (typeof value !== "object" || value === null) throw new Error("Pump token mint is required");
+  const { mint, referenceBuyLamports } = value as { mint?: unknown; referenceBuyLamports?: unknown };
+  if (typeof mint !== "string" || mint.length < 32 || mint.length > 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/u.test(mint)) {
+    throw new Error("Pump token mint is invalid");
+  }
+  const normalizedReference = referenceBuyLamports === undefined ? "1000000" : referenceBuyLamports;
+  if (typeof normalizedReference !== "string" || !/^[1-9]\d*$/u.test(normalizedReference)) {
+    throw new Error("Pump reference buy amount must be a positive lamport value");
+  }
+  return { mint, referenceBuyLamports: normalizedReference };
+}
+
+function toolPumpDiscovery(value: unknown): { signatureLimit?: number; candidateLimit?: number; referenceBuyLamports?: string } {
+  if (typeof value !== "object" || value === null) throw new Error("Pump scanner parameters are invalid");
+  const input = value as { signatureLimit?: unknown; candidateLimit?: unknown; referenceBuyLamports?: unknown };
+  if (input.signatureLimit !== undefined && (typeof input.signatureLimit !== "number" || !Number.isInteger(input.signatureLimit) || input.signatureLimit < 1 || input.signatureLimit > 10)) {
+    throw new Error("Pump scanner signature limit must be between 1 and 10");
+  }
+  if (input.candidateLimit !== undefined && (typeof input.candidateLimit !== "number" || !Number.isInteger(input.candidateLimit) || input.candidateLimit < 1 || input.candidateLimit > 5)) {
+    throw new Error("Pump scanner candidate limit must be between 1 and 5");
+  }
+  if (input.referenceBuyLamports !== undefined && (typeof input.referenceBuyLamports !== "string" || !/^[1-9]\d*$/u.test(input.referenceBuyLamports))) {
+    throw new Error("Pump scanner reference buy amount is invalid");
+  }
+  return {
+    ...(input.signatureLimit === undefined ? {} : { signatureLimit: input.signatureLimit }),
+    ...(input.candidateLimit === undefined ? {} : { candidateLimit: input.candidateLimit }),
+    ...(input.referenceBuyLamports === undefined ? {} : { referenceBuyLamports: input.referenceBuyLamports }),
+  };
+}
+
+function toolPumpTradeDraft(value: unknown): { goal: string; side: "buy" | "sell"; tokenMint: string; inputAmount: string; maxSolExposureLamports: string; minimumOutputAmount: string; maxSlippageBps: number; deadlineAt: string; stopConditions: string[] } {
+  if (typeof value !== "object" || value === null) throw new Error("Pump trade proposal fields are required");
+  const input = value as Record<string, unknown>;
+  const stopConditions = input.stopConditions;
+  if (typeof input.goal !== "string" || input.goal.trim().length < 1 || input.goal.length > 400
+    || (input.side !== "buy" && input.side !== "sell")
+    || typeof input.tokenMint !== "string" || input.tokenMint.length < 32 || input.tokenMint.length > 44 || !/^[1-9A-HJ-NP-Za-km-z]+$/u.test(input.tokenMint)
+    || typeof input.inputAmount !== "string" || !/^[1-9]\d*$/u.test(input.inputAmount) || input.inputAmount.length > 20
+    || typeof input.maxSolExposureLamports !== "string" || !/^\d+$/u.test(input.maxSolExposureLamports) || input.maxSolExposureLamports.length > 20
+    || typeof input.minimumOutputAmount !== "string" || !/^[1-9]\d*$/u.test(input.minimumOutputAmount) || input.minimumOutputAmount.length > 20
+    || typeof input.maxSlippageBps !== "number" || !Number.isInteger(input.maxSlippageBps) || input.maxSlippageBps < 0 || input.maxSlippageBps > 300
+    || typeof input.deadlineAt !== "string" || !Number.isFinite(Date.parse(input.deadlineAt))
+    || !Array.isArray(stopConditions) || stopConditions.length < 1 || stopConditions.length > 8 || stopConditions.some((condition) => typeof condition !== "string" || condition.trim().length < 1 || condition.length > 160)) {
+    throw new Error("Pump trade proposal fields are invalid");
+  }
+  return { goal: input.goal.trim(), side: input.side, tokenMint: input.tokenMint, inputAmount: input.inputAmount, maxSolExposureLamports: input.maxSolExposureLamports, minimumOutputAmount: input.minimumOutputAmount, maxSlippageBps: input.maxSlippageBps, deadlineAt: input.deadlineAt, stopConditions: stopConditions as string[] };
+}
+
+function toolSwapQuote(value: unknown): { inputMint: string; outputMint: string; amount: string } {
+  if (typeof value !== "object" || value === null) throw new Error("Swap quote parameters are required");
+  const input = value as { inputMint?: unknown; outputMint?: unknown; amount?: unknown };
+  if (typeof input.inputMint !== "string" || input.inputMint.length < 32 || input.inputMint.length > 44
+    || typeof input.outputMint !== "string" || input.outputMint.length < 32 || input.outputMint.length > 44
+    || typeof input.amount !== "string" || !/^[1-9]\d*$/u.test(input.amount) || input.amount.length > 20) {
+    throw new Error("Swap quote parameters are invalid");
+  }
+  return { inputMint: input.inputMint, outputMint: input.outputMint, amount: input.amount };
+}
+
+function toolMissionDraft(value: unknown): { goal: string; inputMint: string; outputMint: string; inputAmount: string; maxSlippageBps: number; deadlineAt: string; stopConditions: string[] } {
+  if (typeof value !== "object" || value === null) throw new Error("Mission contract fields are required");
+  const input = value as Record<string, unknown>;
+  const stopConditions = input.stopConditions;
+  if (typeof input.goal !== "string" || input.goal.trim().length < 1 || input.goal.length > 400
+    || typeof input.inputMint !== "string" || input.inputMint.length < 32 || input.inputMint.length > 44
+    || typeof input.outputMint !== "string" || input.outputMint.length < 32 || input.outputMint.length > 44
+    || typeof input.inputAmount !== "string" || !/^[1-9]\d*$/u.test(input.inputAmount) || input.inputAmount.length > 20
+    || typeof input.maxSlippageBps !== "number" || !Number.isInteger(input.maxSlippageBps) || input.maxSlippageBps < 0 || input.maxSlippageBps > 10_000
+    || typeof input.deadlineAt !== "string" || !Number.isFinite(Date.parse(input.deadlineAt))
+    || !Array.isArray(stopConditions) || stopConditions.length < 1 || stopConditions.length > 8
+    || stopConditions.some((condition) => typeof condition !== "string" || condition.trim().length < 1 || condition.length > 160)) {
+    throw new Error("Mission contract fields are invalid");
+  }
+  return { goal: input.goal.trim(), inputMint: input.inputMint, outputMint: input.outputMint, inputAmount: input.inputAmount, maxSlippageBps: input.maxSlippageBps, deadlineAt: input.deadlineAt, stopConditions: stopConditions as string[] };
 }

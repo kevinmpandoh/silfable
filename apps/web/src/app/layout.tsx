@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Playfair_Display } from "next/font/google";
 
-import { Footer } from "@/components/sections/Footer";
-import { Navbar } from "@/components/sections/Navbar";
+import { ConditionalFooter } from "@/components/sections/ConditionalFooter";
+import { ConditionalNavbar } from "@/components/sections/ConditionalNavbar";
+import { SolanaProvider } from "@/components/providers/SolanaProvider";
 import "./globals.css";
 
 const serif = Playfair_Display({
@@ -26,7 +27,10 @@ const mono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Silfable — AI Trading, Within Your Limits",
   description:
-    "A local-first desktop runtime that executes trading missions against real markets, inside rules you control.",
+    "AI Trading runtime that executes missions against real Solana markets.",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -37,9 +41,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${serif.variable} ${sans.variable} ${mono.variable}`}>
       <body>
-        <Navbar />
-        {children}
-        <Footer />
+        <SolanaProvider>
+          <ConditionalNavbar />
+          {children}
+          <ConditionalFooter />
+        </SolanaProvider>
       </body>
     </html>
   );

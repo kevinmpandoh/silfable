@@ -1,204 +1,117 @@
 import type {
-  AiDeleteProviderRequest,
-  AiApproveShadowTradeRequest,
-  AiDraftDcaRequest,
-  AiDraftDcaResponse,
+  AiChatRequest,
+  AiChatResponse,
+  AiPreviewOpenRouterModelsRequest,
+  AiPreviewOpenRouterModelsResponse,
   AiProviderMutationResponse,
-  AiProposeShadowTradeRequest,
-  AiProposeShadowTradeResponse,
-  AiRejectShadowTradeRequest,
   AiSaveProviderRequest,
   AiSettingsResponse,
-  AgentCreateSessionRequest,
-  AgentHaltSessionRequest,
-  AgentEvaluateObservationRequest,
-  AgentApproveIntentRequest,
-  AgentRejectIntentRequest,
-  AgentSessionMutationResponse,
-  AgentEvaluateObservationResponse,
-  AgentIntentMutationResponse,
-  AgentSessionListResponse,
-  AgentSimulateDevnetIntentRequest,
-  AgentSimulateDevnetIntentResponse,
-  AgentDevnetSimulationListResponse,
-  AgentArmDevnetSigningRequest,
-  AgentRevokeDevnetSigningArmRequest,
-  AgentDevnetSigningArmMutationResponse,
-  AgentDevnetSigningArmListResponse,
-  AgentPrepareDevnetExecutionRequest,
-  AgentPrepareDevnetExecutionResponse,
-  AgentDevnetPreSignExecutionListResponse,
-  AgentSignDevnetExecutionRequest,
-  AgentSignDevnetExecutionResponse,
-  AgentDevnetSignedExecutionListResponse,
-  AgentBroadcastDevnetExecutionRequest,
-  AgentBroadcastDevnetExecutionResponse,
-  AgentDevnetBroadcastExecutionListResponse,
-  AgentQuoteDevnetSwapRequest,
-  AgentQuoteDevnetSwapResponse,
-  AgentDevnetSwapQuoteListResponse,
-  AgentBuildDevnetSwapRequest,
-  AgentBuildDevnetSwapResponse,
-  AgentDevnetSwapBuildListResponse,
-  AgentArmDevnetSwapSigningRequest,
-  AgentRevokeDevnetSwapSigningArmRequest,
-  AgentDevnetSwapSigningArmMutationResponse,
-  AgentDevnetSwapSigningArmListResponse,
-  AiShadowTradeListResponse,
-  AiShadowTradeMutationResponse,
-  DcaSimulationRequest,
-  DcaSimulationResponse,
-  DevnetAirdropRequest,
-  DevnetAirdropResponse,
-  DevnetCanaryExecuteRequest,
-  DevnetCanaryExecuteResponse,
-  DevnetCanaryListResponse,
-  DevnetFixtureProvisionExecuteRequest,
-  DevnetFixtureProvisionExecuteResponse,
-  DevnetFixtureProvisionListResponse,
-  DevnetFixtureReviewActivateRequest,
-  DevnetFixtureReviewActivateResponse,
-  DevnetFixtureReviewGetActiveResponse,
-  DevnetFixtureTransferExecuteRequest,
-  DevnetFixtureTransferExecuteResponse,
-  DevnetFixtureTransferListResponse,
-  DevnetFixtureTransferApproveRequest,
-  DevnetFixtureTransferApproveResponse,
-  DevnetFixtureTransferGetApprovalResponse,
-  GuardedMissionAuthorizeRequest,
-  GuardedMissionRevokeRequest,
-  GuardedMissionMutationResponse,
-  GuardedMissionAuthorizationListResponse,
-  GuardedSchedulerArmRequest,
-  GuardedSchedulerArmRevokeRequest,
-  GuardedSchedulerArmMutationResponse,
-  GuardedSchedulerArmListResponse,
-  GuardedExecutionListResponse,
-  MissionAuthorizeRequest,
-  MissionAuditRequest,
-  MissionAuditResponse,
-  MissionCommandRequest,
-  MissionListResponse,
-  MissionMutationResponse,
-  MissionSaveDraftRequest,
+  ClipboardWriteWalletAddressRequest,
+  ClipboardWriteWalletAddressResponse,
+  ClipboardWriteTransactionSignatureRequest,
+  ClipboardWriteTransactionSignatureResponse,
+  ExternalOpenTransactionRequest,
+  ExternalOpenTransactionResponse,
   JupiterKeyMutationResponse,
   JupiterSaveKeyRequest,
   JupiterSettingsResponse,
-  JupiterShadowListResponse,
-  JupiterShadowQuoteRequest,
-  JupiterShadowQuoteResponse,
-  MarketCreateObservationRequest,
-  MarketCreateObservationResponse,
-  MarketObservationListResponse,
-  MarketCreateWatchRequest,
-  MarketPauseWatchRequest,
-  MarketWatchListResponse,
-  MarketWatchMutationResponse,
+  LimitOrderExecuteRequest,
+  LimitOrderExecuteResponse,
+  LimitOrderSimulateRequest,
+  LimitOrderSimulateResponse,
+  LimitOrderCancelExecuteRequest,
+  LimitOrderCancelExecuteResponse,
+  LimitOrderCancelSimulateRequest,
+  LimitOrderCancelSimulateResponse,
+  LimitOrderListRequest,
+  LimitOrderListResponse,
+  MissionSimulateRequest,
+  MissionSimulateResponse,
+  MissionExecuteRequest,
+  MissionExecuteResponse,
+  MissionVerifyExecutionRequest,
+  MissionVerifyExecutionResponse,
+  PortfolioGetRequest,
+  PortfolioGetResponse,
+  PumpFinalRevalidateRequest,
+  PumpFinalRevalidateResponse,
+  PumpExecuteRequest,
+  PumpExecuteResponse,
+  PumpSimulateRequest,
+  PumpSimulateResponse,
+  PumpRiskSettingsMutationResponse,
+  PumpRiskSettingsResponse,
+  PumpRiskSettingsSaveRequest,
   RuntimeStatus,
-  UpdateCheckResponse,
-  UpdateCommandRequest,
-  UpdateOpenReviewResponse,
-  UpdateStatus,
-  TelemetryConsentRequest,
-  TelemetryMutationResponse,
-  TelemetryReportsResponse,
-  TelemetrySettings,
+  SecurityChangePasswordRequest,
+  SecurityConfigurePasswordRequest,
+  SecurityPasswordMutationResponse,
+  SecurityResetVaultRequest,
+  SecurityResetVaultResponse,
+  SecurityUnlockRequest,
+  SessionListResponse,
+  SessionUpsertRequest,
+  SessionUpsertResponse,
+  TavilyKeyMutationResponse,
+  TavilySaveKeyRequest,
+  TavilySettingsResponse,
+  TransactionSettingsMutationResponse,
+  TransactionSettingsResponse,
+  TransactionSettingsSaveRequest,
   WalletCreateRequest,
   WalletCreateResponse,
-  WalletLockResponse,
-  WalletBalanceRequest,
-  WalletBalanceResponse,
+  WalletActivityGetRequest,
+  WalletActivityGetResponse,
   WalletImportMnemonicRequest,
   WalletImportPrivateKeyRequest,
   WalletImportResponse,
-  WalletUnlockRequest,
-  WalletUnlockResponse,
+  WalletListResponse,
 } from "@silfable/contracts";
 
 declare global {
   interface Window {
     silfable: {
       getRuntimeStatus(): Promise<RuntimeStatus>;
-      simulateDca(request: DcaSimulationRequest): Promise<DcaSimulationResponse>;
-      unlockWalletKeystore(request: WalletUnlockRequest): Promise<WalletUnlockResponse>;
-      lockWalletKeystore(request: WalletUnlockRequest): Promise<WalletLockResponse>;
+      configureMasterPassword(request: SecurityConfigurePasswordRequest): Promise<SecurityPasswordMutationResponse>;
+      unlockVault(request: SecurityUnlockRequest): Promise<SecurityPasswordMutationResponse>;
+      changeMasterPassword(request: SecurityChangePasswordRequest): Promise<SecurityPasswordMutationResponse>;
+      resetVault(request: SecurityResetVaultRequest): Promise<SecurityResetVaultResponse>;
+      listSessions(): Promise<SessionListResponse>;
+      upsertSession(request: SessionUpsertRequest): Promise<SessionUpsertResponse>;
+      copyWalletAddress(request: ClipboardWriteWalletAddressRequest): Promise<ClipboardWriteWalletAddressResponse>;
+      copyTransactionSignature(request: ClipboardWriteTransactionSignatureRequest): Promise<ClipboardWriteTransactionSignatureResponse>;
+      openTransactionInExplorer(request: ExternalOpenTransactionRequest): Promise<ExternalOpenTransactionResponse>;
       createWallet(request: WalletCreateRequest): Promise<WalletCreateResponse>;
       importWalletMnemonic(request: WalletImportMnemonicRequest): Promise<WalletImportResponse>;
       importWalletPrivateKey(request: WalletImportPrivateKeyRequest): Promise<WalletImportResponse>;
-      getWalletBalance(request: WalletBalanceRequest): Promise<WalletBalanceResponse>;
-      requestDevnetAirdrop(request: DevnetAirdropRequest): Promise<DevnetAirdropResponse>;
-      executeDevnetCanary(request: DevnetCanaryExecuteRequest): Promise<DevnetCanaryExecuteResponse>;
-      listDevnetCanaries(): Promise<DevnetCanaryListResponse>;
-      executeDevnetFixtureProvision(request: DevnetFixtureProvisionExecuteRequest): Promise<DevnetFixtureProvisionExecuteResponse>;
-      listDevnetFixtureProvisions(): Promise<DevnetFixtureProvisionListResponse>;
-      activateDevnetFixtureReview(request: DevnetFixtureReviewActivateRequest): Promise<DevnetFixtureReviewActivateResponse>;
-      getActiveDevnetFixture(): Promise<DevnetFixtureReviewGetActiveResponse>;
-      executeDevnetFixtureTransfer(request: DevnetFixtureTransferExecuteRequest): Promise<DevnetFixtureTransferExecuteResponse>;
-      listDevnetFixtureTransfers(): Promise<DevnetFixtureTransferListResponse>;
-      approveDevnetFixtureTransfer(request: DevnetFixtureTransferApproveRequest): Promise<DevnetFixtureTransferApproveResponse>;
-      getDevnetFixtureTransferApproval(): Promise<DevnetFixtureTransferGetApprovalResponse>;
-      authorizeGuardedMission(request: GuardedMissionAuthorizeRequest): Promise<GuardedMissionMutationResponse>;
-      revokeGuardedMission(request: GuardedMissionRevokeRequest): Promise<GuardedMissionMutationResponse>;
-      listGuardedMissionAuthorizations(): Promise<GuardedMissionAuthorizationListResponse>;
-      armGuardedScheduler(request: GuardedSchedulerArmRequest): Promise<GuardedSchedulerArmMutationResponse>;
-      revokeGuardedSchedulerArm(request: GuardedSchedulerArmRevokeRequest): Promise<GuardedSchedulerArmMutationResponse>;
-      listGuardedSchedulerArms(): Promise<GuardedSchedulerArmListResponse>;
-      listGuardedExecutions(): Promise<GuardedExecutionListResponse>;
-      listMissions(): Promise<MissionListResponse>;
-      saveMissionDraft(request: MissionSaveDraftRequest): Promise<MissionMutationResponse>;
-      authorizeMission(request: MissionAuthorizeRequest): Promise<MissionMutationResponse>;
-      startMission(request: MissionCommandRequest): Promise<MissionMutationResponse>;
-      haltMission(request: MissionCommandRequest): Promise<MissionMutationResponse>;
-      getMissionAudit(request: MissionAuditRequest): Promise<MissionAuditResponse>;
+      listWallets(): Promise<WalletListResponse>;
+      getPortfolio(request: PortfolioGetRequest): Promise<PortfolioGetResponse>;
+      getWalletActivity(request: WalletActivityGetRequest): Promise<WalletActivityGetResponse>;
       getAiSettings(): Promise<AiSettingsResponse>;
+      previewOpenRouterModels(request: AiPreviewOpenRouterModelsRequest): Promise<AiPreviewOpenRouterModelsResponse>;
       saveAiProvider(request: AiSaveProviderRequest): Promise<AiProviderMutationResponse>;
-      deleteAiProvider(request: AiDeleteProviderRequest): Promise<AiProviderMutationResponse>;
-      draftDcaWithAi(request: AiDraftDcaRequest): Promise<AiDraftDcaResponse>;
-      proposeShadowTradeWithAi(request: AiProposeShadowTradeRequest): Promise<AiProposeShadowTradeResponse>;
-      listAiShadowTrades(): Promise<AiShadowTradeListResponse>;
-      approveAiShadowTrade(request: AiApproveShadowTradeRequest): Promise<AiShadowTradeMutationResponse>;
-      rejectAiShadowTrade(request: AiRejectShadowTradeRequest): Promise<AiShadowTradeMutationResponse>;
+      chatWithAi(request: AiChatRequest): Promise<AiChatResponse>;
+      simulateMission(request: MissionSimulateRequest): Promise<MissionSimulateResponse>;
+      simulatePumpTrade(request: PumpSimulateRequest): Promise<PumpSimulateResponse>;
+      finalRevalidatePumpTrade(request: PumpFinalRevalidateRequest): Promise<PumpFinalRevalidateResponse>;
+      executePumpTrade(request: PumpExecuteRequest): Promise<PumpExecuteResponse>;
+      getPumpRiskSettings(): Promise<PumpRiskSettingsResponse>;
+      savePumpRiskSettings(request: PumpRiskSettingsSaveRequest): Promise<PumpRiskSettingsMutationResponse>;
+      executeMission(request: MissionExecuteRequest): Promise<MissionExecuteResponse>;
+      verifyMissionExecution(request: MissionVerifyExecutionRequest): Promise<MissionVerifyExecutionResponse>;
+      getTransactionSettings(): Promise<TransactionSettingsResponse>;
+      saveTransactionSettings(request: TransactionSettingsSaveRequest): Promise<TransactionSettingsMutationResponse>;
+      simulateLimitOrder(request: LimitOrderSimulateRequest): Promise<LimitOrderSimulateResponse>;
+      executeLimitOrder(request: LimitOrderExecuteRequest): Promise<LimitOrderExecuteResponse>;
+      listLimitOrders(request: LimitOrderListRequest): Promise<LimitOrderListResponse>;
+      simulateLimitOrderCancel(request: LimitOrderCancelSimulateRequest): Promise<LimitOrderCancelSimulateResponse>;
+      executeLimitOrderCancel(request: LimitOrderCancelExecuteRequest): Promise<LimitOrderCancelExecuteResponse>;
       getJupiterSettings(): Promise<JupiterSettingsResponse>;
       saveJupiterKey(request: JupiterSaveKeyRequest): Promise<JupiterKeyMutationResponse>;
-      deleteJupiterKey(request: WalletUnlockRequest): Promise<JupiterKeyMutationResponse>;
-      getJupiterShadowQuote(request: JupiterShadowQuoteRequest): Promise<JupiterShadowQuoteResponse>;
-      listJupiterShadowQuotes(): Promise<JupiterShadowListResponse>;
-      createMarketObservation(request: MarketCreateObservationRequest): Promise<MarketCreateObservationResponse>;
-      listMarketObservations(): Promise<MarketObservationListResponse>;
-      createMarketWatch(request: MarketCreateWatchRequest): Promise<MarketWatchMutationResponse>;
-      pauseMarketWatch(request: MarketPauseWatchRequest): Promise<MarketWatchMutationResponse>;
-      listMarketWatches(): Promise<MarketWatchListResponse>;
-      createAgentSession(request: AgentCreateSessionRequest): Promise<AgentSessionMutationResponse>;
-      haltAgentSession(request: AgentHaltSessionRequest): Promise<AgentSessionMutationResponse>;
-      evaluateAgentObservation(request: AgentEvaluateObservationRequest): Promise<AgentEvaluateObservationResponse>;
-      listAgentSessions(): Promise<AgentSessionListResponse>;
-      approveAgentIntent(request: AgentApproveIntentRequest): Promise<AgentIntentMutationResponse>;
-      rejectAgentIntent(request: AgentRejectIntentRequest): Promise<AgentIntentMutationResponse>;
-      simulateAgentIntentOnDevnet(request: AgentSimulateDevnetIntentRequest): Promise<AgentSimulateDevnetIntentResponse>;
-      listAgentDevnetSimulations(): Promise<AgentDevnetSimulationListResponse>;
-      armAgentDevnetSigning(request: AgentArmDevnetSigningRequest): Promise<AgentDevnetSigningArmMutationResponse>;
-      revokeAgentDevnetSigningArm(request: AgentRevokeDevnetSigningArmRequest): Promise<AgentDevnetSigningArmMutationResponse>;
-      listAgentDevnetSigningArms(): Promise<AgentDevnetSigningArmListResponse>;
-      prepareAgentDevnetExecution(request: AgentPrepareDevnetExecutionRequest): Promise<AgentPrepareDevnetExecutionResponse>;
-      listAgentDevnetPreSignExecutions(): Promise<AgentDevnetPreSignExecutionListResponse>;
-      signAgentDevnetExecution(request: AgentSignDevnetExecutionRequest): Promise<AgentSignDevnetExecutionResponse>;
-      listAgentDevnetSignedExecutions(): Promise<AgentDevnetSignedExecutionListResponse>;
-      broadcastAgentDevnetExecution(request: AgentBroadcastDevnetExecutionRequest): Promise<AgentBroadcastDevnetExecutionResponse>;
-      listAgentDevnetBroadcastExecutions(): Promise<AgentDevnetBroadcastExecutionListResponse>;
-      quoteAgentDevnetSwap(request: AgentQuoteDevnetSwapRequest): Promise<AgentQuoteDevnetSwapResponse>;
-      listAgentDevnetSwapQuotes(): Promise<AgentDevnetSwapQuoteListResponse>;
-      buildAgentDevnetSwap(request: AgentBuildDevnetSwapRequest): Promise<AgentBuildDevnetSwapResponse>;
-      listAgentDevnetSwapBuilds(): Promise<AgentDevnetSwapBuildListResponse>;
-      armAgentDevnetSwapSigning(request: AgentArmDevnetSwapSigningRequest): Promise<AgentDevnetSwapSigningArmMutationResponse>;
-      revokeAgentDevnetSwapSigningArm(request: AgentRevokeDevnetSwapSigningArmRequest): Promise<AgentDevnetSwapSigningArmMutationResponse>;
-      listAgentDevnetSwapSigningArms(): Promise<AgentDevnetSwapSigningArmListResponse>;
-      getUpdateStatus(): Promise<UpdateStatus>;
-      checkForUpdate(request: UpdateCommandRequest): Promise<UpdateCheckResponse>;
-      openUpdateReview(request: UpdateCommandRequest): Promise<UpdateOpenReviewResponse>;
-      getTelemetrySettings(): Promise<TelemetrySettings>;
-      setTelemetryConsent(request: TelemetryConsentRequest): Promise<TelemetryMutationResponse>;
-      listCrashReports(): Promise<TelemetryReportsResponse>;
-      deleteCrashReports(request: UpdateCommandRequest): Promise<TelemetryMutationResponse>;
+      getTavilySettings(): Promise<TavilySettingsResponse>;
+      saveTavilyKey(request: TavilySaveKeyRequest): Promise<TavilyKeyMutationResponse>;
+      getSolanaRpcSettings(): Promise<SolanaRpcSettingsResponse>;
+      saveSolanaRpcUrl(request: SolanaRpcSaveUrlRequest): Promise<SolanaRpcMutationResponse>;
     };
   }
 }

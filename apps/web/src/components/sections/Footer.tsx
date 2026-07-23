@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowUpRight, Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,8 @@ export function Footer() {
         </div>
 
         <div className="grid gap-8 border-t border-white/30 pt-7 md:grid-cols-[1fr_auto_1fr] md:items-center">
-          <Link href="/" className="font-serif text-2xl tracking-[-0.04em]" aria-label="Silfable home">
+          <Link href="/" className="flex items-center gap-3 font-serif text-2xl tracking-[-0.04em]" aria-label="Silfable home">
+            <Image src="/logo.png" alt="Silfable Logo" width={28} height={28} className="h-7 w-7 rounded-md" />
             Silfable
           </Link>
 

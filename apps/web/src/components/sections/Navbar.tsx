@@ -37,6 +37,12 @@ export function Navbar() {
             <X className="size-4" strokeWidth={1.5} />
           </Link>
           <Link
+            href="/connect"
+            className="hidden h-10 items-center bg-electric px-5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white transition-colors hover:bg-blue-500 md:inline-flex"
+          >
+            Get started
+          </Link>
+          <Link
             href="/#download"
             className="inline-flex h-10 items-center gap-2 border border-white/35 px-3 text-[10px] font-semibold uppercase tracking-[0.15em] transition-colors hover:bg-paper hover:text-ink sm:px-5"
           >
