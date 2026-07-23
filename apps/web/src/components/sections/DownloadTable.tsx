@@ -103,7 +103,7 @@ export function DownloadTable() {
         <div className="mt-6 flex flex-col gap-2 font-mono text-[9px] uppercase tracking-[0.16em] text-black/35 sm:flex-row sm:items-center sm:justify-between">
           <span>Linux requires a modern x86_64 distribution</span>
           <a href="#releases" className="text-electric transition-colors hover:text-blue-800">
-            View checksums and release notes →
+            View checksums and release notes
           </a>
         </div>
       </div>

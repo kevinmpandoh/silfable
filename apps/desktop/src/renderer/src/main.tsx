@@ -1,8 +1,8 @@
 import { Component, StrictMode, type ErrorInfo, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { App } from "./App";
-import "./styles.css";
+import { WorkspaceApp } from "./WorkspaceApp";
+import "./workspace.css";
 
 const root = document.getElementById("root");
 
@@ -45,7 +45,7 @@ createRoot(root).render(
   <StrictMode>
     {bridgeAvailable ? (
       <RendererErrorBoundary>
-        <App />
+        <WorkspaceApp />
       </RendererErrorBoundary>
     ) : (
       <StartupFailure message="The secure desktop bridge did not load." />

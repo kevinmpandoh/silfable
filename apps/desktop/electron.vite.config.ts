@@ -5,7 +5,7 @@ export default defineConfig({
   main: {
     build: {
       externalizeDeps: {
-        exclude: ["@silfable/contracts", "@silfable/core"],
+        exclude: ["@silfable/contracts"],
       },
     },
   },
@@ -18,7 +18,7 @@ export default defineConfig({
         },
       },
       externalizeDeps: {
-        exclude: ["@silfable/contracts", "@silfable/core"],
+        exclude: ["@silfable/contracts"],
       },
     },
   },

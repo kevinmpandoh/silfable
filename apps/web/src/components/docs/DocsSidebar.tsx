@@ -3,11 +3,9 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 const chapters = [
   { label: "Introduction", href: "#introduction" },
   { label: "Installation", href: "#quick-start" },
-  { label: "Writing Missions", href: "#mission-lifecycle" },
-  { label: "Security", href: "#security" },
   { label: "Core concepts", href: "#core-concepts" },
-  { label: "Desk Rule", href: "#desk-rule" },
-  { label: "Mission lifecycle", href: "#mission-lifecycle" },
+  { label: "Policy rules", href: "#desk-rule" },
+  { label: "Session lifecycle", href: "#mission-lifecycle" },
   { label: "Security model", href: "#security" },
   { label: "Receipts", href: "#receipts" },
   { label: "CLI reference", href: "#cli" },

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowUpRight, Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -6,6 +7,7 @@ import { Button } from "@/components/ui/button";
 const footerLinks = [
   { label: "Home", href: "/" },
   { label: "Docs", href: "/docs" },
+  { label: "Whitepaper", href: "/whitepaper" },
   { label: "Releases", href: "/releases" },
   { label: "GitHub", href: "https://github.com/kevinmpandoh/silfable" },
   { label: "Privacy", href: "#privacy" },
@@ -44,7 +46,8 @@ export function Footer() {
         </div>
 
         <div className="grid gap-8 border-t border-white/30 pt-7 md:grid-cols-[1fr_auto_1fr] md:items-center">
-          <Link href="/" className="font-serif text-2xl tracking-[-0.04em]" aria-label="Silfable home">
+          <Link href="/" className="flex items-center gap-3 font-serif text-2xl tracking-[-0.04em]" aria-label="Silfable home">
+            <Image src="/logo.png" alt="Silfable Logo" width={28} height={28} className="h-7 w-7 rounded-md" />
             Silfable
           </Link>
 
@@ -61,7 +64,7 @@ export function Footer() {
           </nav>
 
           <p className="font-mono text-[8px] uppercase tracking-[0.16em] text-white/55 md:text-right">
-            © 2026 Silfable Labs. Markets involve risk.
+            Copyright 2026 Silfable Labs. Markets involve risk.
           </p>
         </div>
       </div>

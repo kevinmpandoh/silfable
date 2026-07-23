@@ -63,7 +63,7 @@ export function ValueProps() {
             transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
             className="max-w-[1320px] font-serif text-[clamp(3.1rem,7.1vw,7.6rem)] leading-[0.96] font-normal tracking-[-0.055em]"
           >
-            Not a chatbot. A desktop runtime that runs missions against real markets, inside boundaries you define.
+            Not a blind bot. A guarded trading workspace where the agent can reason, preview, and execute only through boundaries you define.
           </motion.h2>
         </motion.div>
 

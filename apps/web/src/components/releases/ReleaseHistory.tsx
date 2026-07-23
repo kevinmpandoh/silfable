@@ -9,9 +9,9 @@ const releases = [
     version: "0.1.0",
     date: "Release pending",
     status: "Preview",
-    summary: "Linux-first local runtime foundation",
-    added: ["Linux AppImage and Debian builds", "Devnet wallet onboarding", "Encrypted local mission storage"],
-    changed: ["Desk Rules fail closed", "Mission signing remains explicitly scoped", "Updates require manual review"],
+    summary: "Restricted Mainnet foundation",
+    added: ["Linux AppImage and Debian builds", "Solana Mainnet wallet onboarding", "Encrypted local mission storage"],
+    changed: ["Restricted execution fails closed", "Jupiter swaps require explicit approval", "Pump.fun remains preview-only on web"],
     fixed: ["QA coverage for Ubuntu 22.04 and 24.04", "Desktop privilege-boundary audits", "Linux package compatibility checks"],
   },
 ] as const;

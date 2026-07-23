@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 
-export type SecretName = "wallet-secret" | "openai-api-key" | "anthropic-api-key" | "jupiter-api-key" | "database-data-key";
+export type SecretName = "wallet-secret" | "openai-api-key" | "anthropic-api-key" | "openrouter-api-key" | "jupiter-api-key" | "tavily-api-key" | "database-data-key" | "session-data-key" | "pump-risk-ledger-key" | "pump-receipt-store-key";
 
 type KeystoreFileV1 = {
   version: 1;
@@ -19,8 +19,13 @@ const SECRET_NAMES = new Set<SecretName>([
   "wallet-secret",
   "openai-api-key",
   "anthropic-api-key",
+  "openrouter-api-key",
   "jupiter-api-key",
+  "tavily-api-key",
   "database-data-key",
+  "session-data-key",
+  "pump-risk-ledger-key",
+  "pump-receipt-store-key",
 ]);
 const MAX_KEYSTORE_BYTES = 1024 * 1024;
 
@@ -46,6 +51,20 @@ export class PortableEncryptedKeystore {
 
   lock(): void {
     this.#locked = true;
+  }
+
+  async backupAndReset(directory: string): Promise<boolean> {
+    if (!this.#locked) throw new Error("Lock the keystore before resetting it");
+    await this.#mutationTail;
+    try {
+      await stat(this.#path);
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+      await rename(this.#path, join(directory, "secrets.v1.json"));
+      return true;
+    } catch (error) {
+      if (isNodeError(error) && error.code === "ENOENT") return false;
+      throw error;
+    }
   }
 
   async setSecret(name: SecretName, plaintext: string): Promise<void> {

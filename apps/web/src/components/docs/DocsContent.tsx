@@ -27,13 +27,13 @@ export function DocsContent() {
       <section id="introduction" className="scroll-mt-36 border-b border-black/15 pb-16">
         <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-electric">Start here / v0.1.0</p>
         <h1 className="mt-7 max-w-4xl font-serif text-[clamp(3.1rem,7vw,7.5rem)] leading-[0.86] tracking-[-0.06em]">
-          Silfable documentation.
+          Silfable documentation
         </h1>
         <p className="mt-9 max-w-2xl text-lg leading-8 text-black/55">
-          Silfable is a local-first desktop runtime for AI trading missions. It separates autonomous reasoning from execution authority, so agents can work continuously without receiving unlimited control.
+          Silfable is a guarded AI trading workspace for Solana Mainnet. It separates reasoning from execution authority, so the agent can plan and preview actions without receiving unlimited control.
         </p>
         <div className="mt-10 grid border-t border-l border-black/15 sm:grid-cols-3">
-          {["Local signing", "Policy enforced", "Receipt recorded"].map((item) => (
+          {["Mainnet only", "Policy enforced", "Receipt recorded"].map((item) => (
             <div key={item} className="flex items-center gap-3 border-r border-b border-black/15 p-5 text-xs font-medium">
               <Check className="size-4 text-electric" /> {item}
             </div>
@@ -43,13 +43,13 @@ export function DocsContent() {
 
       <section id="quick-start" className="scroll-mt-36 border-b border-black/15 py-16">
         <DocHeading number="01" title="Quick start" />
-        <p className="doc-lead">Install the desktop runtime, connect a supported wallet, define a Desk Rule, then start your first mission.</p>
+        <p className="doc-lead">Open the desktop app or web workspace, connect a Solana wallet, configure providers, then start a restricted Mainnet session.</p>
         <ol className="mt-10 space-y-7">
           {[
-            ["Install", "Download the Linux AppImage or Debian package, verify its checksum, then install it using your distribution's standard workflow."],
-            ["Connect", "Choose a local wallet. Silfable requests only the permissions needed by the active mission."],
-            ["Define", "Create a Desk Rule with maximum exposure, loss, slippage, markets, and violation behavior."],
-            ["Run", "Review the compiled policy, authorize the mission, and watch its receipt stream."],
+            ["Install", "Use the desktop build for local vault workflows, or open the web trade workspace for browser-wallet approval."],
+            ["Connect", "Connect one Solana Mainnet wallet. Web sessions use the connected wallet as the only visible wallet."],
+            ["Configure", "Add RPC, Jupiter, Tavily, and OpenRouter settings as needed. Pump.fun settings are saved for preview and future guards."],
+            ["Run", "Create a restricted session, review the proposal, approve supported actions, and inspect the receipt stream."],
           ].map(([title, text], index) => (
             <li key={title} className="grid gap-3 border-t border-black/10 pt-6 sm:grid-cols-[3rem_8rem_1fr]">
               <span className="font-mono text-[9px] text-electric">{String(index + 1).padStart(2, "0")}</span>
@@ -62,7 +62,7 @@ export function DocsContent() {
 
       <section id="core-concepts" className="scroll-mt-36 border-b border-black/15 py-16">
         <DocHeading number="02" title="Core concepts" />
-        <p className="doc-lead">Three objects define how work moves from an objective to a market action.</p>
+        <p className="doc-lead">Three objects define how work moves from a user instruction to a supported market action.</p>
         <div className="mt-10 grid border-t border-l border-black/15 md:grid-cols-3">
           {concepts.map((concept) => {
             const Icon = concept.icon;
@@ -79,23 +79,23 @@ export function DocsContent() {
 
       <section id="desk-rule" className="scroll-mt-36 border-b border-black/15 py-16">
         <DocHeading number="03" title="Desk Rule" />
-        <p className="doc-lead">Desk Rule is evaluated locally before signing. A mission may reason freely, but it cannot negotiate or rewrite these limits.</p>
+        <p className="doc-lead">Policy is evaluated before signing. A mission may reason freely, but it cannot negotiate or rewrite these limits.</p>
         <CodeBlock label="desk-rule.silf" code={deskRuleExample} />
         <div className="border-l-2 border-electric bg-blue-50 p-5 text-sm leading-7 text-blue-950">
-          Rules use deny-by-default semantics. If a proposed action cannot be proven compliant, Silfable rejects it.
+          Rules use deny-by-default semantics. If a proposed action cannot be proven compliant, Silfable rejects it before signing.
         </div>
       </section>
 
       <section id="mission-lifecycle" className="scroll-mt-36 border-b border-black/15 py-16">
-        <DocHeading number="04" title="Mission lifecycle" />
-        <p className="doc-lead">Every mission moves through five explicit states. State changes are written to its receipt stream.</p>
+        <DocHeading number="04" title="Session lifecycle" />
+        <p className="doc-lead">Every session moves through explicit states. State changes are written to its receipt stream.</p>
         <div className="mt-10 space-y-0 border-t border-black/15">
           {[
             ["Draft", "Objective and policy are editable."],
             ["Compiled", "The runtime validates dependencies and Desk Rule syntax."],
-            ["Authorized", "A local signer grants scoped execution authority."],
-            ["Running", "The agent observes, proposes, checks, and executes."],
-            ["Halted", "A stop condition, policy violation, or user action ends execution."],
+            ["Previewed", "The agent prepares a quote, plan, or Pump.fun preview."],
+            ["Approved", "A supported transaction receives explicit user approval."],
+            ["Recorded", "Success, rejection, or failure is saved with evidence."],
           ].map(([state, description], index) => (
             <div key={state} className="grid grid-cols-[2.5rem_7rem_1fr] gap-3 border-b border-black/15 py-5 sm:grid-cols-[4rem_10rem_1fr]">
               <span className="font-mono text-[9px] text-black/25">0{index + 1}</span>
@@ -111,8 +111,8 @@ export function DocsContent() {
         <p className="doc-lead">Silfable is designed so that custody, policy, and execution evidence remain separable.</p>
         <div className="mt-10 grid gap-5 sm:grid-cols-2">
           {[
-            { icon: KeyRound, title: "Keys stay local", text: "Private keys remain in your wallet or local signer. They are never uploaded to Silfable services." },
-            { icon: ShieldCheck, title: "Least authority", text: "Each mission receives only the markets, sizes, and actions explicitly allowed by its policy." },
+            { icon: KeyRound, title: "Keys stay local", text: "Private keys remain in the connected wallet or encrypted local vault. They are never sent to Silfable services." },
+            { icon: ShieldCheck, title: "Least authority", text: "Each session receives only the markets, sizes, and actions explicitly allowed by its policy." },
             { icon: Monitor, title: "Local enforcement", text: "Policy evaluation happens before signing, on the machine where the runtime is installed." },
             { icon: AlertTriangle, title: "Fail closed", text: "Unavailable price data, invalid routes, or policy ambiguity halt the action instead of bypassing checks." },
           ].map((item) => {
@@ -156,8 +156,8 @@ export function DocsContent() {
         <div className="mt-10 divide-y divide-black/15 border-t border-black/15">
           {[
             ["Mission will not compile", "Validate Desk Rule field names, numeric formats, and that every required market adapter is installed."],
-            ["Wallet signature is not requested", "Confirm the mission reached Authorized state and the proposed action passed every policy check."],
-            ["Runtime shows stale market data", "Pause the mission, verify network connectivity, then restart the relevant market adapter."],
+            ["Wallet signature is not requested", "Confirm the session reached approval state and the proposed action passed every policy check."],
+            ["Runtime shows stale market data", "Refresh the wallet, verify RPC connectivity, then retry the relevant provider."],
             ["A receipt is missing", "Check the local workspace path and available disk space. Silfable fails closed when receipt storage is unavailable."],
           ].map(([problem, answer]) => (
             <div key={problem} className="grid gap-3 py-6 sm:grid-cols-[14rem_1fr]">

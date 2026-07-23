@@ -8,9 +8,11 @@ files:
   - out/**
   - package.json
 linux:
+  icon: src/assets/logo-bg.jpeg
   category: Finance
   synopsis: Local-first AI trading runtime with enforceable limits
   syncDesktopName: true
+  artifactName: ${productName}-${version}-${arch}.${ext}
   target:
     - target: AppImage
       arch:
@@ -20,4 +22,18 @@ linux:
       arch:
         - x64
         - arm64
-artifactName: ${productName}-${version}-${arch}.${ext}
+win:
+  icon: src/assets/logo-bg.jpeg
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-windows-${arch}-setup.${ext}
+  verifyUpdateCodeSignature: true
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Silfable
