@@ -62,13 +62,11 @@ The current Silfable platform is designed to demonstrate live, production-grade 
 ### 2.1 Live Capabilities
 - **Restricted Jupiter Swap:** Solana Mainnet swap preview, deterministic simulation, wallet approval, broadcast, and verified receipt generation.
 - **24/7 Autonomous Cloud Worker:** Background AI trading via BullMQ/Redis with zero-click Mainnet signing within bounded risk limits.
+- **Pump.fun Guarded Trading:** Autonomous and manual Pump.fun bonding-curve trading guarded by live Fee Guards, Slippage Validation, and Receipt Reconciliation.
 - **Centralized State Sync:** User settings, active sessions, and trading histories synced across MongoDB Cloud for persistent cross-platform access.
 - **Portfolio Snapshots:** Connected-wallet SOL balance and token activity snapshots from configured Mainnet RPC providers.
 
-### 2.2 Preview Capabilities
-- **Pump.fun Research:** Research and proposal flows for bonding-curve tokens. Active discovery and watchlist capabilities are operational, but live Pump.fun signing and broadcast remain in preview while security models are hardened.
-
-### 2.3 Planned Capabilities
+### 2.2 Planned Capabilities
 - **Cross-Chain EVM:** Layer-2 EVM bridging, execution, and Hyperliquid integrations remain in the planning phase.
 
 ---
