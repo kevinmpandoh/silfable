@@ -20,6 +20,14 @@ async function main() {
   startTradingWorker();
   console.log("[BullMQ Worker] Ready and listening on 'trading-queue'");
 
+  // Start dummy HTTP Server for Railway Health Checks
+  import("http").then((http) => {
+    const port = process.env.PORT || 8080;
+    http.createServer((_, res) => res.end("Silfable Cloud Worker is running 24/7")).listen(port, () => {
+      console.log(`[Health Check] HTTP Server listening on port ${port}`);
+    });
+  });
+
   // Graceful Shutdown
   process.on("SIGINT", async () => {
     console.log("Shutting down worker...");
