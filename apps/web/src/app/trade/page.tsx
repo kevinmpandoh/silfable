@@ -656,9 +656,12 @@ export default function TradePage() {
       <main className="workspace">
         {/* LEFT RAIL: DESKTOP WORKSPACE SESSIONS & FILTERS */}
         <aside className="leftRail">
-          <div className="railBrand">
-            <span>WORKSPACES</span>
-          </div>
+          <Link href="/" className="railBrand" title="Return to Landing Page">
+            <div className="railBrandLogo">
+              <Image src="/logo.png" alt="Silfable Logo" width={26} height={26} className="h-6 w-6 object-contain" />
+            </div>
+            <span className="railBrandTitle">SILFABLE</span>
+          </Link>
 
           <button onClick={() => setShowSessionModal(true)} className="newSession">
             + NEW SESSION
