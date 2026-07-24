@@ -29,7 +29,9 @@ export const metadata: Metadata = {
   description:
     "Restricted AI trading runtime for Solana Mainnet missions with local policy checks and explicit approval.",
   icons: {
-    icon: "/logo.png",
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/logo.png",
   },
 };
 
