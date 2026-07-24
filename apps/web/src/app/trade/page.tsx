@@ -612,6 +612,25 @@ export default function TradePage() {
         onSaveSettings={handleSaveSettings}
         onReturnToWorkspace={() => setEditingSetup(false)}
       />
+    );
+  }
+
+  return (
+    <div className="layout">
+      <CloudWorkerSetupModal
+        walletAddress={publicKey.toBase58()}
+        isOpen={showSessionModal}
+        onClose={() => setShowSessionModal(false)}
+        onSessionStarted={(sessionId, agentPubKey) => {
+          setActiveSessionId(sessionId);
+          setNav("sessions");
+        }}
+      />
+
+      {/* 3-Column Desktop Workspace Shell */}
+      <main className="workspace">
+        {/* LEFT RAIL: DESKTOP WORKSPACE SESSIONS & FILTERS */}
+        <aside className="leftRail">
           <div className="railBrand">
             <span>WORKSPACES</span>
           </div>
