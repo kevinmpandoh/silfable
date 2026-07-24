@@ -17,8 +17,8 @@ Current safe description:
 - Desktop has a guarded Mainnet Jupiter swap execution path with local encrypted wallet, master-password approval, simulation, signing, broadcast, receipt, and verification.
 - Desktop has extensive Pump.fun/PumpSwap research, proposal, unsigned simulation, and final revalidation foundations.
 - Pump.fun/PumpSwap live signing and broadcast are still unavailable.
-- Web `/trade` is being aligned with desktop UX, but should not be treated as equivalent to the desktop local-vault execution boundary.
-- Full Access, autonomous trading, bridge, EVM live trading, Hyperliquid live trading, scheduled unattended execution, Auto-DCA execution, and live stop-loss/take-profit execution remain blocked or incomplete unless explicitly stated otherwise below.
+- Web `/trade` has **Full Access 24/7 Autonomous Trading** via Node.js Cloud Worker, BullMQ/Redis, MongoDB, and AES-256-GCM Ephemeral Vaults. Web supports full autonomous execution for Jupiter Swaps.
+- Scheduled unattended execution, Auto-DCA, and take-profit live execution are now structurally possible on Web via the Cloud Worker, but still require UX scaffolding. Bridge, EVM live trading, and Hyperliquid live trading remain blocked.
 
 If a future task asks to "make it production", do not claim production-ready until the P1 release/security gates and P2 signed-build validation matrix are complete.
 
