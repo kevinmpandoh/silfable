@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { decryptAgentKey, encryptAgentKey } from "./crypto.js";
 
 describe("Cloud Worker Cryptography Service", () => {
@@ -6,11 +7,11 @@ describe("Cloud Worker Cryptography Service", () => {
     const rawSecret = "5K8...solana_private_key_base58_or_hex_string";
     const { ciphertext, iv } = encryptAgentKey(rawSecret);
 
-    expect(ciphertext).toBeDefined();
-    expect(iv).toHaveLength(24); // 12 bytes hex
+    assert.ok(ciphertext);
+    assert.equal(iv.length, 24); // 12 bytes hex = 24 chars
 
     const decrypted = decryptAgentKey(ciphertext, iv);
-    expect(decrypted).toBe(rawSecret);
+    assert.equal(decrypted, rawSecret);
   });
 
   it("throws error when attempting to decrypt tampered ciphertext", () => {
@@ -18,6 +19,6 @@ describe("Cloud Worker Cryptography Service", () => {
     const { ciphertext, iv } = encryptAgentKey(rawSecret);
     const tampered = "bad" + ciphertext.slice(3);
 
-    expect(() => decryptAgentKey(tampered, iv)).toThrow();
+    assert.throws(() => decryptAgentKey(tampered, iv));
   });
 });
