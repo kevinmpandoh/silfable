@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cloudDb } from "@/lib/cloud-db";
+import { cloudDb, isDbConfigured } from "@/lib/cloud-db";
 
 function isValidObjectId(id?: string): boolean {
   return typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id);
 }
 
 export async function GET(req: NextRequest) {
+  if (!isDbConfigured) {
+    return NextResponse.json({ sessions: [] });
+  }
+
   try {
     const { searchParams } = new URL(req.url);
     const walletAddress = searchParams.get("walletAddress");

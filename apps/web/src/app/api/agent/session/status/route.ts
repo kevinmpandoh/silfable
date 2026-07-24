@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
-import { cloudDb } from "@/lib/cloud-db";
+import { cloudDb, isDbConfigured } from "@/lib/cloud-db";
 
 export async function GET(req: Request) {
+  if (!isDbConfigured) {
+    return NextResponse.json({ active: false, session: null, message: "DATABASE_URL not configured" });
+  }
+
   try {
     const { searchParams } = new URL(req.url);
     const walletAddress = searchParams.get("walletAddress");
@@ -65,10 +69,10 @@ export async function GET(req: Request) {
       },
     });
   } catch (err: any) {
-    console.error("Failed to get agent session status:", err);
+    console.warn("Agent session status query skipped/failed:", err.message);
     return NextResponse.json(
-      { error: err.message || "Internal server error" },
-      { status: 500 }
+      { active: false, session: null, error: err.message },
+      { status: 200 }
     );
   }
 }
