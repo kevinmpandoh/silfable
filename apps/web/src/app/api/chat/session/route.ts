@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cloudDb } from "@/lib/cloud-db";
 
+function isValidObjectId(id?: string): boolean {
+  return typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id);
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -56,9 +60,10 @@ export async function POST(req: NextRequest) {
       if (!sessionId) {
         return NextResponse.json({ error: "sessionId is required for delete" }, { status: 400 });
       }
-      // Delete messages first, then session
-      await cloudDb.chatMessage.deleteMany({ where: { sessionId } });
-      await cloudDb.chatSession.delete({ where: { id: sessionId } });
+      if (isValidObjectId(sessionId)) {
+        await cloudDb.chatMessage.deleteMany({ where: { sessionId } });
+        await cloudDb.chatSession.delete({ where: { id: sessionId } }).catch(() => null);
+      }
       return NextResponse.json({ success: true });
     }
 
@@ -77,27 +82,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "session data is required" }, { status: 400 });
     }
 
-    const upserted = await cloudDb.chatSession.upsert({
-      where: { id: session.id || "000000000000000000000000" },
-      create: {
-        userId: user.id,
-        title: session.title || "New Chat",
-        filter: session.filter || "all",
-      },
-      update: {
-        title: session.title,
-        filter: session.filter,
-      },
-    });
+    let savedSession;
+
+    if (isValidObjectId(session.id)) {
+      savedSession = await cloudDb.chatSession.upsert({
+        where: { id: session.id },
+        create: {
+          userId: user.id,
+          title: session.title || "New Chat",
+          filter: session.filter || "all",
+        },
+        update: {
+          title: session.title,
+          filter: session.filter,
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      savedSession = await cloudDb.chatSession.create({
+        data: {
+          userId: user.id,
+          title: session.title || "New Chat",
+          filter: session.filter || "all",
+        },
+      });
+    }
 
     return NextResponse.json({
       success: true,
       session: {
-        id: upserted.id,
-        title: upserted.title,
-        filter: upserted.filter,
-        createdAt: upserted.createdAt.getTime(),
-        updatedAt: upserted.updatedAt.getTime(),
+        id: savedSession.id,
+        title: savedSession.title,
+        filter: savedSession.filter,
+        createdAt: savedSession.createdAt.getTime(),
+        updatedAt: savedSession.updatedAt.getTime(),
       },
     });
   } catch (error) {

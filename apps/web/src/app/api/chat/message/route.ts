@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cloudDb } from "@/lib/cloud-db";
 
+function isValidObjectId(id?: string): boolean {
+  return typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id);
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const sessionId = searchParams.get("sessionId");
 
-    if (!sessionId) {
-      return NextResponse.json({ error: "sessionId parameter is required" }, { status: 400 });
+    if (!sessionId || !isValidObjectId(sessionId)) {
+      return NextResponse.json({ messages: [] });
     }
 
     const messages = await cloudDb.chatMessage.findMany({
@@ -37,8 +41,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { message } = body;
 
-    if (!message || !message.sessionId || !message.role || !message.content) {
-      return NextResponse.json({ error: "Invalid message payload" }, { status: 400 });
+    if (!message || !message.sessionId || !isValidObjectId(message.sessionId) || !message.role || !message.content) {
+      return NextResponse.json({ error: "Invalid message payload or sessionId" }, { status: 400 });
     }
 
     const created = await cloudDb.chatMessage.create({

@@ -624,16 +624,18 @@ export default function TradePage() {
         onCreateRestrictedSession={async ({ title, workspace, mode }) => {
           if (!walletAddress) return;
           const filterType = workspace === "pump" ? "pump" : mode;
-          const newSession: SessionItem = {
-            id: `session_${Date.now()}`,
+          const draftSession: SessionItem = {
+            id: "",
             title,
             filter: filterType,
             createdAt: Date.now(),
             updatedAt: Date.now(),
           };
-          await saveSession(walletAddress, newSession);
-          setSessions((prev) => [newSession, ...prev]);
-          setActiveSessionId(newSession.id);
+          const saved = await saveSession(walletAddress, draftSession);
+          if (saved) {
+            setSessions((prev) => [saved, ...prev.filter((s) => s.id !== saved.id)]);
+            setActiveSessionId(saved.id);
+          }
         }}
         onSelectFullAccess={() => {
           setShowCloudWorkerModal(true);
