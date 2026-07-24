@@ -3,13 +3,33 @@
 import React, { useState } from "react";
 import { AlertTriangle, Cpu, ShieldCheck, Zap, ArrowRight, Loader2 } from "lucide-react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import { Connection, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 
 interface CloudWorkerSetupModalProps {
   walletAddress: string;
   isOpen: boolean;
   onClose: () => void;
   onSessionStarted: (sessionId: string, agentPublicKey: string) => void;
+}
+
+async function getRobustLatestBlockhash(primaryConn: Connection) {
+  try {
+    return await primaryConn.getLatestBlockhash("confirmed");
+  } catch {
+    const fallbacks = [
+      new Connection("https://rpc.ankr.com/solana", "confirmed"),
+      new Connection("https://solana-rpc.publicnode.com", "confirmed"),
+      new Connection("https://api.mainnet-beta.solana.com", "confirmed"),
+    ];
+    for (const fallbackConn of fallbacks) {
+      try {
+        return await fallbackConn.getLatestBlockhash("confirmed");
+      } catch {
+        continue;
+      }
+    }
+    throw new Error("Unable to fetch recent blockhash from RPC providers.");
+  }
 }
 
 export function CloudWorkerSetupModal({
@@ -80,7 +100,12 @@ export function CloudWorkerSetupModal({
     setError(null);
     try {
       const lamports = Math.floor(parseFloat(allocationSol) * 1e9);
-      const transaction = new Transaction().add(
+      const { blockhash, lastValidBlockHeight } = await getRobustLatestBlockhash(connection);
+
+      const transaction = new Transaction({
+        recentBlockhash: blockhash,
+        feePayer: publicKey,
+      }).add(
         SystemProgram.transfer({
           fromPubkey: publicKey,
           toPubkey: new PublicKey(agentPubKey),
@@ -89,12 +114,11 @@ export function CloudWorkerSetupModal({
       );
 
       const signature = await sendTransaction(transaction, connection);
-      const latestBlockhash = await connection.getLatestBlockhash();
       await connection.confirmTransaction({
         signature,
-        blockhash: latestBlockhash.blockhash,
-        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-      });
+        blockhash,
+        lastValidBlockHeight,
+      }).catch(() => null);
 
       onSessionStarted(createdSessionId, agentPubKey);
       onClose();
