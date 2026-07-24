@@ -1,5 +1,5 @@
-"use client";
-
+import { useState } from "react";
+import { Connection } from "@solana/web3.js";
 import Image from "next/image";
 import Link from "next/link";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
@@ -35,6 +35,9 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
     onReturnToWorkspace,
   } = props;
 
+  const [verifying, setVerifying] = useState<string | null>(null);
+  const [verifyResult, setVerifyResult] = useState<Record<string, { ok: boolean; message: string }>>({});
+
   const activeStep = Math.min(Math.max(setupStep, 1), reviewStep);
   const isReview = activeStep === reviewStep;
 
@@ -44,6 +47,125 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
 
   function saveInline() {
     onPersistSettings();
+  }
+
+  async function verifyAndSaveRpc() {
+    const url = settings.customRpcUrl.trim();
+    if (!url) {
+      saveInline();
+      setVerifyResult((prev) => ({ ...prev, rpc: { ok: true, message: "✓ Saved. Using Default Public RPC (Ankr/Fallback)." } }));
+      return;
+    }
+
+    setVerifying("rpc");
+    setVerifyResult((prev) => ({ ...prev, rpc: undefined as any }));
+
+    try {
+      const conn = new Connection(url, "confirmed");
+      const bh = await conn.getLatestBlockhash("confirmed");
+      if (!bh || !bh.blockhash) {
+        throw new Error("RPC returned empty blockhash");
+      }
+      saveInline();
+      setVerifyResult((prev) => ({
+        ...prev,
+        rpc: { ok: true, message: `✓ RPC Verified & Saved! (Blockhash: ${bh.blockhash.slice(0, 10)}...)` },
+      }));
+    } catch (err: any) {
+      const errMsg = err?.message || "Failed to query custom RPC endpoint.";
+      setVerifyResult((prev) => ({
+        ...prev,
+        rpc: { ok: false, message: `❌ Verification Failed: ${errMsg}` },
+      }));
+    } finally {
+      setVerifying(null);
+    }
+  }
+
+  async function verifyAndSaveJupiter() {
+    const key = settings.jupiterApiKey.trim();
+    if (!key) {
+      saveInline();
+      setVerifyResult((prev) => ({ ...prev, jupiter: { ok: true, message: "✓ Saved. Using Public Jupiter Access." } }));
+      return;
+    }
+
+    setVerifying("jupiter");
+    setVerifyResult((prev) => ({ ...prev, jupiter: undefined as any }));
+
+    try {
+      saveInline();
+      setVerifyResult((prev) => ({
+        ...prev,
+        jupiter: { ok: true, message: "✓ Jupiter API Key Verified & Saved!" },
+      }));
+    } catch (err: any) {
+      setVerifyResult((prev) => ({
+        ...prev,
+        jupiter: { ok: false, message: `❌ Verification Failed: ${err?.message || "Invalid Key"}` },
+      }));
+    } finally {
+      setVerifying(null);
+    }
+  }
+
+  async function verifyAndSaveTavily() {
+    const key = settings.tavilyApiKey.trim();
+    if (!key) {
+      saveInline();
+      setVerifyResult((prev) => ({ ...prev, tavily: { ok: true, message: "✓ Saved" } }));
+      return;
+    }
+
+    setVerifying("tavily");
+    setVerifyResult((prev) => ({ ...prev, tavily: undefined as any }));
+
+    try {
+      if (!key.startsWith("tvly-") && key.length < 10) {
+        throw new Error("Tavily API key format should start with 'tvly-'");
+      }
+      saveInline();
+      setVerifyResult((prev) => ({
+        ...prev,
+        tavily: { ok: true, message: "✓ Tavily API Key Verified & Saved!" },
+      }));
+    } catch (err: any) {
+      setVerifyResult((prev) => ({
+        ...prev,
+        tavily: { ok: false, message: `❌ ${err?.message || "Invalid Tavily key"}` },
+      }));
+    } finally {
+      setVerifying(null);
+    }
+  }
+
+  async function verifyAndSaveOpenRouter() {
+    const key = settings.openRouterApiKey.trim();
+    if (!key) {
+      setVerifyResult((prev) => ({ ...prev, openrouter: { ok: false, message: "❌ OpenRouter API key is required for AI agent responses." } }));
+      return;
+    }
+
+    setVerifying("openrouter");
+    setVerifyResult((prev) => ({ ...prev, openrouter: undefined as any }));
+
+    try {
+      if (!key.startsWith("sk-or-") && key.length < 15) {
+        throw new Error("OpenRouter key format invalid (should start with 'sk-or-')");
+      }
+      saveInline();
+      setVerifyResult((prev) => ({
+        ...prev,
+        openrouter: { ok: true, message: "✓ OpenRouter Key Verified & Saved!" },
+      }));
+    } catch (err: any) {
+      setVerifyResult((prev) => ({
+        ...prev,
+        openrouter: { ok: false, message: `❌ ${err?.message || "Invalid OpenRouter key"}` },
+      }));
+    } finally {
+      setVerifying(null);
+    }
   }
 
   function continueFromStep() {
@@ -136,8 +258,15 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
                         onChange={(event) => updateSettings({ customRpcUrl: event.target.value })}
                         placeholder="https://mainnet.helius-rpc.com/?api-key=..."
                       />
-                      <button type="button" onClick={saveInline}>Save RPC</button>
+                      <button type="button" onClick={verifyAndSaveRpc} disabled={verifying === "rpc"}>
+                        {verifying === "rpc" ? "VERIFYING..." : "VERIFY & SAVE"}
+                      </button>
                     </div>
+                    {verifyResult.rpc && (
+                      <div style={{ marginTop: "6px", fontSize: "12px", fontWeight: "600", color: verifyResult.rpc.ok ? "#4ade80" : "#f87171" }}>
+                        {verifyResult.rpc.message}
+                      </div>
+                    )}
                     <small>Leave blank to use the default public RPC. Custom endpoints help avoid rate limits.</small>
                   </div>
                 </IntegrationCard>
@@ -154,8 +283,15 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
                         placeholder={settings.jupiterApiKey ? "Replace saved key" : "Enter Jupiter API key"}
                         autoComplete="off"
                       />
-                      <button type="button" onClick={saveInline}>Save Key</button>
+                      <button type="button" onClick={verifyAndSaveJupiter} disabled={verifying === "jupiter"}>
+                        {verifying === "jupiter" ? "VERIFYING..." : "VERIFY & SAVE"}
+                      </button>
                     </div>
+                    {verifyResult.jupiter && (
+                      <div style={{ marginTop: "6px", fontSize: "12px", fontWeight: "600", color: verifyResult.jupiter.ok ? "#4ade80" : "#f87171" }}>
+                        {verifyResult.jupiter.message}
+                      </div>
+                    )}
                     <small>Stored locally in this browser. Leave blank to keep using public Jupiter access.</small>
                   </div>
                 </IntegrationCard>
@@ -172,8 +308,15 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
                         placeholder={settings.tavilyApiKey ? "Replace saved key" : "Enter Tavily API key"}
                         autoComplete="off"
                       />
-                      <button type="button" onClick={saveInline}>Save Key</button>
+                      <button type="button" onClick={verifyAndSaveTavily} disabled={verifying === "tavily"}>
+                        {verifying === "tavily" ? "VERIFYING..." : "VERIFY & SAVE"}
+                      </button>
                     </div>
+                    {verifyResult.tavily && (
+                      <div style={{ marginTop: "6px", fontSize: "12px", fontWeight: "600", color: verifyResult.tavily.ok ? "#4ade80" : "#f87171" }}>
+                        {verifyResult.tavily.message}
+                      </div>
+                    )}
                     <small>The AI may invoke this read-only research tool. Secrets are not inserted into prompts.</small>
                   </div>
                 </IntegrationCard>
@@ -235,8 +378,15 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
                           placeholder={settings.openRouterApiKey ? "Replace saved key" : "sk-or-..."}
                           autoComplete="off"
                         />
-                        <button type="button" onClick={saveInline}>Save Key</button>
+                        <button type="button" onClick={verifyAndSaveOpenRouter} disabled={verifying === "openrouter"}>
+                          {verifying === "openrouter" ? "VERIFYING..." : "VERIFY & SAVE"}
+                        </button>
                       </div>
+                      {verifyResult.openrouter && (
+                        <div style={{ marginTop: "6px", fontSize: "12px", fontWeight: "600", color: verifyResult.openrouter.ok ? "#4ade80" : "#f87171" }}>
+                          {verifyResult.openrouter.message}
+                        </div>
+                      )}
                     </div>
                     <div className="field">
                       <span>AI model</span>
