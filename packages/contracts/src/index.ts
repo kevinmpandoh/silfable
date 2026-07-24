@@ -33,9 +33,11 @@ export const IPC_CHANNELS = {
   pumpRiskSettingsSave: "pump:save-risk-settings",
   limitOrderSimulate: "trigger:simulate-order",
   limitOrderExecute: "trigger:execute-order",
+  limitOrderVerifyExecution: "trigger:verify-execution",
   limitOrderList: "trigger:list-orders",
   limitOrderCancelSimulate: "trigger:simulate-cancel",
   limitOrderCancelExecute: "trigger:execute-cancel",
+  limitOrderVerifyCancel: "trigger:verify-cancel",
   jupiterGetSettings: "jupiter:get-settings",
   jupiterSaveKey: "jupiter:save-key",
   tavilyGetSettings: "tavily:get-settings",
@@ -303,12 +305,27 @@ export const LimitOrderSimulationPreviewSchema = z.object({
   id: z.string().uuid(), orderId: z.string().uuid(), status: z.enum(["passed", "failed", "blocked"]),
   vaultAddress: z.string().min(32).max(44).nullable(), programIds: z.array(z.string().min(32).max(44)).max(12),
   unitsConsumed: z.number().int().nonnegative().nullable(), feeLamports: z.number().int().nonnegative().nullable(),
+  accountFundingLamports: z.number().int().nonnegative().nullable().optional(),
+  estimatedWalletOutflowLamports: z.string().regex(/^\d+$/u).nullable().optional(),
+  feeSol: z.string().min(1).max(64).nullable().optional(),
+  feeUsd: z.number().finite().nonnegative().nullable().optional(),
+  feePercent: z.number().finite().nonnegative().nullable().optional(),
+  feeRisk: z.enum(["reasonable", "high", "extreme", "unavailable"]).optional(),
+  feeGuardPassed: z.boolean().optional(),
+  feeGuardMessage: z.string().min(1).max(500).nullable().optional(),
   error: z.string().min(1).max(500).nullable(), transactionSigned: z.literal(false), broadcastAttempted: z.literal(false), simulatedAt: z.string().datetime(),
 }).strict();
 export type LimitOrderSimulationPreview = z.infer<typeof LimitOrderSimulationPreviewSchema>;
 export const LimitOrderExecutionReceiptSchema = z.object({
   id: z.string().uuid(), previewId: z.string().uuid(), simulationId: z.string().uuid(), orderId: z.string().min(8).max(128).nullable(),
   status: z.enum(["active", "failed", "unknown"]), depositSignature: z.string().min(32).max(128).nullable(), vaultAddress: z.string().min(32).max(44),
+  inputAmount: z.string().regex(/^\d+$/u).nullable().optional(),
+  networkFeeLamports: z.number().int().nonnegative().nullable().optional(),
+  feeSol: z.string().min(1).max(64).nullable().optional(),
+  feeUsd: z.number().finite().nonnegative().nullable().optional(),
+  feePercent: z.number().finite().nonnegative().nullable().optional(),
+  feeRisk: z.enum(["reasonable", "high", "extreme", "unavailable"]).optional(),
+  feeGuardMessage: z.string().min(1).max(500).nullable().optional(),
   explorerUrl: z.string().url().nullable(), depositConfirmed: z.boolean(), chainVerification: z.enum(["finalized", "confirmed", "processed", "not-found", "failed", "unavailable"]),
   chainSlot: z.number().int().nonnegative().nullable(), error: z.string().min(1).max(500).nullable(), verifiedAt: z.string().datetime().nullable(), createdAt: z.string().datetime(),
 }).strict();
@@ -353,6 +370,14 @@ export type LimitOrderCancelSimulateRequest = z.infer<typeof LimitOrderCancelSim
 export type LimitOrderCancelSimulateResponse = z.infer<typeof LimitOrderCancelSimulateResponseSchema>;
 export type LimitOrderCancelExecuteRequest = z.infer<typeof LimitOrderCancelExecuteRequestSchema>;
 export type LimitOrderCancelExecuteResponse = z.infer<typeof LimitOrderCancelExecuteResponseSchema>;
+export const LimitOrderVerifyExecutionRequestSchema = RequestBaseSchema.extend({ sessionId: z.string().uuid(), previewId: z.string().uuid(), receiptId: z.string().uuid() }).strict();
+export const LimitOrderVerifyExecutionResponseSchema = RequestBaseSchema.extend({ receipt: LimitOrderExecutionReceiptSchema }).strict();
+export const LimitOrderVerifyCancelRequestSchema = RequestBaseSchema.extend({ sessionId: z.string().uuid(), orderId: z.string().min(8).max(128), receiptId: z.string().uuid() }).strict();
+export const LimitOrderVerifyCancelResponseSchema = RequestBaseSchema.extend({ receipt: LimitOrderCancelReceiptSchema }).strict();
+export type LimitOrderVerifyExecutionRequest = z.infer<typeof LimitOrderVerifyExecutionRequestSchema>;
+export type LimitOrderVerifyExecutionResponse = z.infer<typeof LimitOrderVerifyExecutionResponseSchema>;
+export type LimitOrderVerifyCancelRequest = z.infer<typeof LimitOrderVerifyCancelRequestSchema>;
+export type LimitOrderVerifyCancelResponse = z.infer<typeof LimitOrderVerifyCancelResponseSchema>;
 export const MissionSimulationPreviewSchema = z.object({
   id: z.string().uuid(),
   missionId: z.string().uuid(),
@@ -362,6 +387,8 @@ export const MissionSimulationPreviewSchema = z.object({
   programIds: z.array(z.string().min(32).max(44)).max(16),
   unitsConsumed: z.number().int().nonnegative().nullable(),
   feeLamports: z.number().int().nonnegative().nullable(),
+  accountFundingLamports: z.number().int().nonnegative().nullable().optional(),
+  estimatedWalletOutflowLamports: z.string().regex(/^\d+$/u).nullable().optional(),
   feeSol: z.string().min(1).max(64).nullable().optional(),
   feeUsd: z.number().finite().nonnegative().nullable().optional(),
   feePercent: z.number().finite().nonnegative().nullable().optional(),
@@ -432,6 +459,7 @@ export const MissionExecutionReceiptSchema = z.object({
   outputAmount: z.string().regex(/^\d+$/u).nullable(),
   expectedOutputAmount: z.string().regex(/^\d+$/u).nullable().optional(),
   actualSlippageBps: z.number().finite().nullable().optional(),
+  actualSlippageRawAmount: z.string().nullable().optional(),
   networkFeeLamports: z.number().int().nonnegative().nullable().optional(),
   actualNetworkFeeLamports: z.number().int().nonnegative().nullable().optional(),
   walletPreLamports: z.string().regex(/^\d+$/u).nullable().optional(),

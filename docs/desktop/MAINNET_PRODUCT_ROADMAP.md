@@ -20,9 +20,12 @@ These items are required before another round of routine Mainnet execution testi
 ### P0.1 Fee guard — Partial
 
 - [x] Show network fee in lamports, SOL, USD, and as a percentage of trade value when pricing evidence is available.
+- [x] Apply the same configured network-fee and percentage guard to Jupiter limit-order vault deposits before simulation approval and again immediately before signing.
 - [x] Reconcile and show actual account/rent funding separately from the actual network fee after confirmation.
 - [x] Show actual total wallet outflow from confirmed pre/post wallet balances.
-- [ ] Estimate account/rent funding and total wallet outflow before signing.
+- [x] Estimate simulated account/rent funding before signing for Jupiter swap orders and limit-order vault deposits when RPC account evidence is available.
+- [x] Estimate known wallet SOL outflow before signing, including SOL input when applicable, network fee, and account/rent funding.
+- [x] Present the pre-sign SOL-balance impact in one review sentence with token-input/deposit shown separately.
 - [x] Classify the result as `Reasonable`, `High`, or `Extreme`; thresholds are explicit and configurable.
 - [x] Add persisted user settings for maximum network fee and maximum fee percentage.
 - [x] Fail closed before signing when either configured limit is exceeded.
@@ -39,14 +42,14 @@ These items are required before another round of routine Mainnet execution testi
 
 ### P0.3 Complete execution receipts — Partial
 
-Already present: encrypted receipt persistence, signature, router status, independent Solana status, slot, Explorer action, and success/failure state.
+Already present: encrypted receipt persistence, signature, router status, independent Solana status, slot, Explorer action, success/failure state, and limit-order fee/risk evidence for vault-deposit simulation plus order creation receipts.
 
 Still required:
 
 - [x] Compare quoted/expected output with settled output.
-- [ ] Show actual slippage in both raw amount and basis points (basis points are implemented).
+- [x] Show actual slippage in both raw amount and basis points.
 - [x] Show estimated fee, actual network fee, account/rent funding, and total wallet outflow separately.
-- Convert known router/program failures into human-readable explanations; retain bounded raw evidence only behind a details view.
+- [x] Convert known router/program failures into human-readable explanations; retain bounded raw evidence only behind the attached bounded logs/details.
 - Ensure every successful, failed, and unknown receipt can be reopened from session history.
 - [x] Hold portfolio refresh until its finalized snapshot slot reaches the confirmed receipt slot.
 
@@ -54,8 +57,8 @@ Still required:
 
 - [x] Persist and enforce a maximum network fee in lamports; add SOL/USD entry modes later.
 - [x] Persist and enforce maximum fee as a percentage of trade value when pricing evidence is available.
-- [x] Persist a default slippage limit; apply it automatically to AI-created mission drafts later.
-- [x] Persist a default mission deadline; apply it automatically to AI-created mission drafts later.
+- [x] Persist a default slippage limit and apply it automatically to AI-created swap and limit-order drafts when the user did not provide an explicit value.
+- [x] Persist a default mission deadline and apply it automatically to AI-created swap deadlines and limit-order expiry defaults when the user did not provide an explicit value.
 - [ ] Apply priority presets `Economy`, `Standard`, and `Fast` during Jupiter transaction construction and show their estimated cost (the preference is persisted but not yet sent to Jupiter).
 - Per-session overrides that can only become stricter than the configured safety ceiling.
 - Restricted execution and explicit final approval remain mandatory.
@@ -154,20 +157,11 @@ Preview and policy foundations exist, but production order creation and the full
 
 Required work:
 
-- Complete deposit simulation and fee/rent review.
-- Explicit approval for create, cancel, and withdraw operations.
-- Durable order reconciliation after restart.
-- Independent on-chain verification for every lifecycle transition.
-- Recovery handling for expired, partially processed, or provider-missing orders.
-
-### P3.6 Full Access and unattended execution — Blocked indefinitely
-
-`Full Access` must not be treated as a UI toggle. It requires a separate threat model, limited signing capability, revocable on-chain/local policy, capital isolation, loss limits, emergency stop, incident recovery, and external security review. Until those controls exist, every mutating Mainnet action remains restricted and explicitly approved.
-
-## Priority track — Pump.fun and PumpSwap guarded trading
-
-Priority has been raised at product direction. This track now proceeds alongside P0/P1 hardening, but it does not bypass those Mainnet release and signing gates.
-
+- [x] Complete unsigned vault-deposit simulation with sole-signer/program inspection and configured fee guard.
+- [x] Re-run vault-deposit simulation and fee guard immediately before signing.
+- [x] Complete pre-sign account/rent funding review for vault deposits when simulation account evidence is available.
+- [x] Complete known SOL-balance outflow review for vault deposits.
+- [x] Add human-readable vault-deposit wording that separates deposited token amount from SOL fee/rent impact.
 Current status: **In progress**
 
 For a concise implementation audit, current user flow, and explicit completed/partial/blocked matrix, see [Pump.fun implementation status](PUMPFUN_IMPLEMENTATION_STATUS.md).

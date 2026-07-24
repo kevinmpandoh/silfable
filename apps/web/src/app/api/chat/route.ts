@@ -37,6 +37,10 @@ function findPumpMint(text: string): string | null {
   return matches?.find((value) => value.toLowerCase().endsWith("pump")) ?? null;
 }
 
+function isLimitOrder(text: string): boolean {
+  return /\blimit\b|\border\b|\bdip buy\b|\btake profit\b/i.test(text);
+}
+
 async function getJupiterQuote(inputAmountLamports: number, slippageBps: number, apiKey?: string) {
   const url = new URL("https://lite-api.jup.ag/swap/v1/quote");
   url.searchParams.set("inputMint", SOL_MINT);
@@ -212,6 +216,28 @@ export async function POST(req: Request) {
           venue: "Pump.fun",
           explanation:
             "Pump.fun web trading belum live. Gunakan proposal ini untuk review, bukan eksekusi.",
+        },
+      });
+    }
+
+    if (isLimitOrder(lastUserMessage)) {
+      const solAmount = parseSolAmount(lastUserMessage) ?? 0.001;
+      return NextResponse.json({
+        role: "assistant",
+        content:
+          `Saya telah meninjau instruksi Limit Order untuk ${solAmount} SOL dan membuat proposal preview restricted.\n\n` +
+          "Untuk web saat ini Limit Order Jupiter v2 berada dalam tahap preview-only. Eksekusi deposit dan rekonsiliasi headless membutuhkan keystore terenkripsi lokal (tersedia pada Silfable Desktop).",
+        proposal: {
+          id: `limit_${Date.now()}`,
+          type: "limit_order",
+          mint: USDC_MINT,
+          solAmount: String(solAmount),
+          estimatedTokens: `${(solAmount * 150).toFixed(2)} USDC`,
+          status: "preview_only",
+          mode: "restricted_preview_only",
+          venue: "Jupiter Trigger V2",
+          explanation:
+            "Limit order web trading berada dalam mode preview-only.",
         },
       });
     }

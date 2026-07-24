@@ -36,7 +36,8 @@ test("restricted Mainnet chat exposes no tool surface when none is configured", 
   assert.match(bodyText, /Pump.fun analysis is read-only/u);
   assert.match(bodyText, /You cannot sign, execute, broadcast, approve, or bypass/u);
   assert.match(bodyText, /explicitly asks to create a swap mission/u);
-  assert.match(bodyText, /Do not invent any missing field/u);
+  assert.match(bodyText, /Do not invent missing token, wallet, amount, trigger, or Pump fields/u);
+  assert.match(bodyText, /only slippage and deadline\/expiry may be omitted/u);
 });
 
 test("restricted Mainnet chat executes an allowlisted read-only tool once", { concurrency: false }, async () => {

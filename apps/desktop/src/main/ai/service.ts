@@ -3,6 +3,7 @@ import { AiProviderSettingSchema, type AiProviderSetting } from "@silfable/contr
 import type { SecretName } from "../storage/keystore.js";
 import type { MainnetReadService } from "../integrations/read-only.js";
 import { MissionPolicyService } from "../mission/policy.js";
+import { DEFAULT_TRANSACTION_SETTINGS, type TransactionSettingsService } from "../mission/transaction-settings.js";
 import { callOpenRouterChat, DEFAULT_OPENROUTER_MODEL, type ReadOnlyAiTool } from "./providers.js";
 
 type AiSecretStore = {
@@ -29,11 +30,13 @@ export class AiService {
   readonly #settings: AiSettingsStore;
   readonly #readService: MainnetReadService | null;
   readonly #missionPolicy: MissionPolicyService | null;
+  readonly #transactionSettings: Pick<TransactionSettingsService, "get">;
 
-  constructor(input: { keystore: AiSecretStore; settings: AiSettingsStore; readService?: MainnetReadService }) {
+  constructor(input: { keystore: AiSecretStore; settings: AiSettingsStore; readService?: MainnetReadService; transactionSettings?: Pick<TransactionSettingsService, "get"> }) {
     this.#keystore = input.keystore;
     this.#settings = input.settings;
     this.#readService = input.readService ?? null;
+    this.#transactionSettings = input.transactionSettings ?? { get: () => ({ ...DEFAULT_TRANSACTION_SETTINGS }) };
     this.#missionPolicy = this.#readService === null ? null : new MissionPolicyService(this.#readService);
   }
 
@@ -87,7 +90,7 @@ export class AiService {
     });
     if (mode === "mission" && pumpScope === undefined && walletAddress !== null && this.#missionPolicy !== null && await this.#keystore.getSecret("jupiter-api-key") !== null) tools.push({
       name: "mission_contract_preview",
-      description: "Create a deterministic, non-executable Mainnet swap mission preview for the selected wallet. Call only when every required field came explicitly from the user. Convert a user-supplied relative deadline using the exact current UTC timestamp in the system message; deadlineAt must be the resulting absolute ISO-8601 UTC timestamp. The runtime checks wallet registration, token pair, uint64 raw amount, maximum 300 bps guarded slippage, deadline, finalized balance, and a transaction-free Jupiter quote.",
+      description: "Create a deterministic, non-executable Mainnet swap mission preview for the selected wallet. Call only when token mints, raw amount, and intent came explicitly from the user. maxSlippageBps and deadlineAt may be omitted to use the user's local Transaction Settings defaults. Convert any user-supplied relative deadline using the exact current UTC timestamp in the system message; deadlineAt must be the resulting absolute ISO-8601 UTC timestamp. The runtime checks wallet registration, token pair, uint64 raw amount, maximum 300 bps guarded slippage, deadline, finalized balance, and a transaction-free Jupiter quote.",
       parameters: {
         type: "object",
         properties: {
@@ -99,10 +102,10 @@ export class AiService {
           deadlineAt: { type: "string", format: "date-time", description: "Absolute ISO-8601 UTC timestamp calculated from the exact current UTC time in the system message when the user supplied a relative deadline." },
           stopConditions: { type: "array", items: { type: "string", minLength: 1, maxLength: 160 }, minItems: 1, maxItems: 8 },
         },
-        required: ["goal", "inputMint", "outputMint", "inputAmount", "maxSlippageBps", "deadlineAt", "stopConditions"],
+        required: ["goal", "inputMint", "outputMint", "inputAmount", "stopConditions"],
         additionalProperties: false,
       },
-      execute: async (argumentsValue) => this.#missionPolicy!.preview({ walletAddress, ...toolMissionDraft(argumentsValue) }),
+      execute: async (argumentsValue) => this.#missionPolicy!.preview({ walletAddress, ...toolMissionDraft(argumentsValue, this.#transactionSettings.get()) }),
     });
     if (mode === "mission" && (pumpScope === undefined || pumpScope.kind === "exact-mint") && walletAddress !== null && this.#missionPolicy !== null && await this.#keystore.getSecret("jupiter-api-key") !== null) tools.push({
       name: "pump_trade_contract_preview",
@@ -123,7 +126,7 @@ export class AiService {
     });
     if (mode === "mission" && pumpScope === undefined && walletAddress !== null && this.#missionPolicy !== null && await this.#keystore.getSecret("jupiter-api-key") !== null) tools.push({
       name: "limit_order_contract_preview",
-      description: "Create a deterministic, non-executable Jupiter Trigger V2 single limit-order preview for the selected Solana Mainnet wallet. Call only when the user explicitly supplied both mints, raw input amount, trigger mint, above/below condition, USD trigger price, slippage, and expiry. The runtime verifies the registered wallet, finalized balance, guarded 300 bps slippage, expiry, pair, and Jupiter's current $10 minimum. This tool never authenticates a Jupiter vault, deposits, signs, or creates an order.",
+      description: "Create a deterministic, non-executable Jupiter Trigger V2 single limit-order preview for the selected Solana Mainnet wallet. Call only when the user explicitly supplied both mints, raw input amount, trigger mint, above/below condition, and USD trigger price. maxSlippageBps and expiresAt may be omitted to use the user's local Transaction Settings defaults. The runtime verifies the registered wallet, finalized balance, guarded 300 bps slippage, expiry, pair, and Jupiter's current $10 minimum. This tool never authenticates a Jupiter vault, deposits, signs, or creates an order.",
       parameters: {
         type: "object",
         properties: {
@@ -131,9 +134,9 @@ export class AiService {
           inputAmount: { type: "string", pattern: "^[1-9][0-9]*$" }, triggerMint: { type: "string", minLength: 32, maxLength: 44 }, triggerCondition: { type: "string", enum: ["above", "below"] },
           triggerPriceUsd: { type: "number", exclusiveMinimum: 0 }, maxSlippageBps: { type: "integer", minimum: 0, maximum: 10000 }, expiresAt: { type: "string", format: "date-time" },
         },
-        required: ["goal", "inputMint", "outputMint", "inputAmount", "triggerMint", "triggerCondition", "triggerPriceUsd", "maxSlippageBps", "expiresAt"], additionalProperties: false,
+        required: ["goal", "inputMint", "outputMint", "inputAmount", "triggerMint", "triggerCondition", "triggerPriceUsd"], additionalProperties: false,
       },
-      execute: async (argumentsValue) => this.#missionPolicy!.limitOrderPreview({ walletAddress, ...toolLimitOrderDraft(argumentsValue) }),
+      execute: async (argumentsValue) => this.#missionPolicy!.limitOrderPreview({ walletAddress, ...toolLimitOrderDraft(argumentsValue, this.#transactionSettings.get()) }),
     });
     if (await this.#keystore.getSecret("jupiter-api-key") !== null) tools.push({
       name: "jupiter_token_search",
@@ -213,9 +216,11 @@ export class AiService {
   }
 }
 
-function toolLimitOrderDraft(value: unknown): { goal: string; inputMint: string; outputMint: string; inputAmount: string; triggerMint: string; triggerCondition: "above" | "below"; triggerPriceUsd: number; maxSlippageBps: number; expiresAt: string } {
+function toolLimitOrderDraft(value: unknown, settings = DEFAULT_TRANSACTION_SETTINGS): { goal: string; inputMint: string; outputMint: string; inputAmount: string; triggerMint: string; triggerCondition: "above" | "below"; triggerPriceUsd: number; maxSlippageBps: number; expiresAt: string } {
   if (typeof value !== "object" || value === null) throw new Error("Limit order fields are required");
   const input = value as Record<string, unknown>;
+  const maxSlippageBps = input.maxSlippageBps === undefined ? settings.defaultSlippageBps : input.maxSlippageBps;
+  const expiresAt = input.expiresAt === undefined ? new Date(Date.now() + Math.max(settings.defaultDeadlineMinutes, 15) * 60_000).toISOString() : input.expiresAt;
   if (typeof input.goal !== "string" || input.goal.trim().length < 1 || input.goal.length > 400
     || typeof input.inputMint !== "string" || input.inputMint.length < 32 || input.inputMint.length > 44
     || typeof input.outputMint !== "string" || input.outputMint.length < 32 || input.outputMint.length > 44
@@ -223,9 +228,9 @@ function toolLimitOrderDraft(value: unknown): { goal: string; inputMint: string;
     || typeof input.triggerMint !== "string" || input.triggerMint.length < 32 || input.triggerMint.length > 44
     || (input.triggerCondition !== "above" && input.triggerCondition !== "below")
     || typeof input.triggerPriceUsd !== "number" || !Number.isFinite(input.triggerPriceUsd) || input.triggerPriceUsd <= 0
-    || typeof input.maxSlippageBps !== "number" || !Number.isInteger(input.maxSlippageBps) || input.maxSlippageBps < 0 || input.maxSlippageBps > 10_000
-    || typeof input.expiresAt !== "string" || !Number.isFinite(Date.parse(input.expiresAt))) throw new Error("Limit order fields are invalid");
-  return { goal: input.goal.trim(), inputMint: input.inputMint, outputMint: input.outputMint, inputAmount: input.inputAmount, triggerMint: input.triggerMint, triggerCondition: input.triggerCondition, triggerPriceUsd: input.triggerPriceUsd, maxSlippageBps: input.maxSlippageBps, expiresAt: input.expiresAt };
+    || typeof maxSlippageBps !== "number" || !Number.isInteger(maxSlippageBps) || maxSlippageBps < 0 || maxSlippageBps > 10_000
+    || typeof expiresAt !== "string" || !Number.isFinite(Date.parse(expiresAt))) throw new Error("Limit order fields are invalid");
+  return { goal: input.goal.trim(), inputMint: input.inputMint, outputMint: input.outputMint, inputAmount: input.inputAmount, triggerMint: input.triggerMint, triggerCondition: input.triggerCondition, triggerPriceUsd: input.triggerPriceUsd, maxSlippageBps, expiresAt };
 }
 
 function toolMints(value: unknown): string[] {
@@ -310,19 +315,21 @@ function toolSwapQuote(value: unknown): { inputMint: string; outputMint: string;
   return { inputMint: input.inputMint, outputMint: input.outputMint, amount: input.amount };
 }
 
-function toolMissionDraft(value: unknown): { goal: string; inputMint: string; outputMint: string; inputAmount: string; maxSlippageBps: number; deadlineAt: string; stopConditions: string[] } {
+function toolMissionDraft(value: unknown, settings = DEFAULT_TRANSACTION_SETTINGS): { goal: string; inputMint: string; outputMint: string; inputAmount: string; maxSlippageBps: number; deadlineAt: string; stopConditions: string[] } {
   if (typeof value !== "object" || value === null) throw new Error("Mission contract fields are required");
   const input = value as Record<string, unknown>;
   const stopConditions = input.stopConditions;
+  const maxSlippageBps = input.maxSlippageBps === undefined ? settings.defaultSlippageBps : input.maxSlippageBps;
+  const deadlineAt = input.deadlineAt === undefined ? new Date(Date.now() + settings.defaultDeadlineMinutes * 60_000).toISOString() : input.deadlineAt;
   if (typeof input.goal !== "string" || input.goal.trim().length < 1 || input.goal.length > 400
     || typeof input.inputMint !== "string" || input.inputMint.length < 32 || input.inputMint.length > 44
     || typeof input.outputMint !== "string" || input.outputMint.length < 32 || input.outputMint.length > 44
     || typeof input.inputAmount !== "string" || !/^[1-9]\d*$/u.test(input.inputAmount) || input.inputAmount.length > 20
-    || typeof input.maxSlippageBps !== "number" || !Number.isInteger(input.maxSlippageBps) || input.maxSlippageBps < 0 || input.maxSlippageBps > 10_000
-    || typeof input.deadlineAt !== "string" || !Number.isFinite(Date.parse(input.deadlineAt))
+    || typeof maxSlippageBps !== "number" || !Number.isInteger(maxSlippageBps) || maxSlippageBps < 0 || maxSlippageBps > 10_000
+    || typeof deadlineAt !== "string" || !Number.isFinite(Date.parse(deadlineAt))
     || !Array.isArray(stopConditions) || stopConditions.length < 1 || stopConditions.length > 8
     || stopConditions.some((condition) => typeof condition !== "string" || condition.trim().length < 1 || condition.length > 160)) {
     throw new Error("Mission contract fields are invalid");
   }
-  return { goal: input.goal.trim(), inputMint: input.inputMint, outputMint: input.outputMint, inputAmount: input.inputAmount, maxSlippageBps: input.maxSlippageBps, deadlineAt: input.deadlineAt, stopConditions: stopConditions as string[] };
+  return { goal: input.goal.trim(), inputMint: input.inputMint, outputMint: input.outputMint, inputAmount: input.inputAmount, maxSlippageBps, deadlineAt, stopConditions: stopConditions as string[] };
 }

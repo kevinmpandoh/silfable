@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String         @id @default(auto()) @map("_id") @db.ObjectId
+  walletAddress  String         @unique
+  createdAt      DateTime       @default(now())
+  settings       UserSettings?
+  agentSessions  AgentSession[]
+  chatSessions   ChatSession[]
+}
+
+model UserSettings {
+  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId                String   @unique @db.ObjectId
+  user                  User     @relation(fields: [userId], references: [id])
+
+  // Encrypted API Keys (AES-256-GCM)
+  encryptedOpenRouterKey String?
+  openRouterIv           String?
+  encryptedJupiterKey    String?
+  jupiterIv              String?
+  encryptedTavilyKey     String?
+  tavilyIv               String?
+
+  // Network & Trade Preferences
+  customRpcUrl          String?
+  slippageBps           Int      @default(100) // 100 = 1%
+  priorityFeeLevel      String   @default("medium") // low, medium, high, ultra
+  selectedModel         String   @default("google/gemini-2.5-flash")
+
+  updatedAt             DateTime @updatedAt
+}
+
+model AgentSession {
+  id                     String     @id @default(auto()) @map("_id") @db.ObjectId
+  userId                 String     @db.ObjectId
+  user                   User       @relation(fields: [userId], references: [id])
+
+  // Session Status: ACTIVE, PAUSED, REVOKED
+  status                 String     @default("ACTIVE")
+  revokeReason           String?
+
+  // AES-256 Encrypted Agent Keypair
+  encryptedAgentKey      String
+  iv                     String
+
+  // Capital Isolation Limits (Lamports as String for MongoDB 64-bit safety)
+  maxAllocationLamports  String
+  maxSingleTxLamports    String
+  maxDrawdownBps         Int        // 1000 = 10%
+  maxTxPerHour           Int
+
+  // Real-time Stats
+  peakBalanceLamports    String     @default("0")
+  currentBalanceLamports String     @default("0")
+
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  tradeLogs              TradeLog[]
+}
+
+model TradeLog {
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId    String       @db.ObjectId
+  session      AgentSession @relation(fields: [sessionId], references: [id])
+
+  txHash       String?      @unique
+  actionType   String       // BUY, SELL, LONG, SHORT, BRIDGE
+  tokenIn      String
+  tokenOut     String
+  amountIn     String
+  pnlLamports  String       @default("0")
+
+  status       String       // PENDING, SUCCESS, FAILED
+  errorMessage String?
+
+  createdAt    DateTime     @default(now())
+}
+
+model ChatSession {
+  id        String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String        @db.ObjectId
+  user      User          @relation(fields: [userId], references: [id])
+  title     String
+  filter    String        @default("all") // all, agent, mission, pump, active, limit, custom
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
+}
+
+model ChatMessage {
+  id           String      @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId    String      @db.ObjectId
+  session      ChatSession @relation(fields: [sessionId], references: [id])
+  role         String      // user, assistant
+  content      String
+  proposalJson String?     // Stored JSON string of WebProposal
+  usageJson    String?     // Stored JSON string of WebUsage
+  createdAt    DateTime    @default(now())
+}
+

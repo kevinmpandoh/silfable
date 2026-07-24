@@ -17,10 +17,14 @@ import type {
   JupiterSettingsResponse,
   LimitOrderExecuteRequest,
   LimitOrderExecuteResponse,
+  LimitOrderVerifyExecutionRequest,
+  LimitOrderVerifyExecutionResponse,
   LimitOrderSimulateRequest,
   LimitOrderSimulateResponse,
   LimitOrderCancelExecuteRequest,
   LimitOrderCancelExecuteResponse,
+  LimitOrderVerifyCancelRequest,
+  LimitOrderVerifyCancelResponse,
   LimitOrderCancelSimulateRequest,
   LimitOrderCancelSimulateResponse,
   LimitOrderListRequest,
@@ -103,9 +107,11 @@ declare global {
       saveTransactionSettings(request: TransactionSettingsSaveRequest): Promise<TransactionSettingsMutationResponse>;
       simulateLimitOrder(request: LimitOrderSimulateRequest): Promise<LimitOrderSimulateResponse>;
       executeLimitOrder(request: LimitOrderExecuteRequest): Promise<LimitOrderExecuteResponse>;
+      verifyLimitOrderExecution(request: LimitOrderVerifyExecutionRequest): Promise<LimitOrderVerifyExecutionResponse>;
       listLimitOrders(request: LimitOrderListRequest): Promise<LimitOrderListResponse>;
       simulateLimitOrderCancel(request: LimitOrderCancelSimulateRequest): Promise<LimitOrderCancelSimulateResponse>;
       executeLimitOrderCancel(request: LimitOrderCancelExecuteRequest): Promise<LimitOrderCancelExecuteResponse>;
+      verifyLimitOrderCancel(request: LimitOrderVerifyCancelRequest): Promise<LimitOrderVerifyCancelResponse>;
       getJupiterSettings(): Promise<JupiterSettingsResponse>;
       saveJupiterKey(request: JupiterSaveKeyRequest): Promise<JupiterKeyMutationResponse>;
       getTavilySettings(): Promise<TavilySettingsResponse>;

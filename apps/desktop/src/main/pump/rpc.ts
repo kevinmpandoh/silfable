@@ -115,17 +115,40 @@ export class PumpMainnetRpc {
   }
 
   async #rpc(method: string, params: unknown[]): Promise<unknown> {
-    const response = await this.#fetch(this.#url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: crypto.randomUUID(), method, params }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    const body: unknown = await response.json();
-    if (!response.ok || typeof body !== "object" || body === null) throw new Error(`Pump Mainnet RPC failed (${response.status})`);
-    const envelope = body as { result?: unknown; error?: unknown };
-    if (envelope.error !== undefined || envelope.result === undefined) throw new Error("Pump Mainnet RPC returned an error");
-    return envelope.result;
+    const isBroadcast = method === "sendTransaction";
+    const maxRetries = isBroadcast ? 0 : 3;
+    let delayMs = 500;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        const response = await this.#fetch(this.#url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: crypto.randomUUID(), method, params }),
+          signal: AbortSignal.timeout(15_000),
+        });
+        const body: unknown = await response.json();
+        if (!response.ok || typeof body !== "object" || body === null) {
+          if (attempt < maxRetries && (response.status === 429 || response.status >= 500)) {
+            await new Promise((res) => setTimeout(res, delayMs));
+            delayMs *= 2;
+            continue;
+          }
+          throw new Error(`Pump Mainnet RPC failed (${response.status})`);
+        }
+        const envelope = body as { result?: unknown; error?: unknown };
+        if (envelope.error !== undefined || envelope.result === undefined) throw new Error("Pump Mainnet RPC returned an error");
+        return envelope.result;
+      } catch (err) {
+        if (attempt < maxRetries && err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError" || err.message.includes("fetch failed"))) {
+          await new Promise((res) => setTimeout(res, delayMs));
+          delayMs *= 2;
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new Error("Pump Mainnet RPC failed after retries");
   }
 
   async sendTransaction(

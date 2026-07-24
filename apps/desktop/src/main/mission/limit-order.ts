@@ -117,6 +117,61 @@ export class LimitOrderService {
     } catch (error) { return LimitOrderCancelReceiptSchema.parse({ id: crypto.randomUUID(), orderId, simulationId, status: "unknown", withdrawalSignature: null, explorerUrl: null, chainVerification: "unavailable", chainSlot: null, error: error instanceof Error ? error.message.slice(0, 500) : "Cancellation submission status is unknown", verifiedAt: null, createdAt }); }
   }
 
+  async verifyExecutionReceipt(receipt: LimitOrderExecutionReceipt): Promise<LimitOrderExecutionReceipt> {
+    if (receipt.depositSignature === null) throw new Error("This limit-order execution receipt has no signature to verify");
+    try {
+      const verification = await this.#reads.verifyTransactionSignature(receipt.depositSignature);
+      const confirmed = verification.state === "confirmed" || verification.state === "finalized";
+      const failed = verification.state === "failed";
+      const status = confirmed ? "active" : failed ? "failed" : "unknown";
+      return LimitOrderExecutionReceiptSchema.parse({
+        ...receipt,
+        status,
+        depositConfirmed: confirmed,
+        chainVerification: verification.state,
+        chainSlot: verification.slot,
+        error: confirmed ? null : verification.error ?? (status === "unknown" ? "Deposit transaction is not yet confirmed in Solana transaction history" : "Solana reported that the deposit transaction failed"),
+        verifiedAt: verification.verifiedAt,
+      });
+    } catch (error) {
+      return LimitOrderExecutionReceiptSchema.parse({
+        ...receipt,
+        status: "unknown",
+        chainVerification: "unavailable",
+        chainSlot: null,
+        error: error instanceof Error ? error.message.slice(0, 500) : "Verification check failed",
+        verifiedAt: null,
+      });
+    }
+  }
+
+  async verifyCancelReceipt(receipt: LimitOrderCancelReceipt): Promise<LimitOrderCancelReceipt> {
+    if (receipt.withdrawalSignature === null) throw new Error("This limit-order cancellation receipt has no signature to verify");
+    try {
+      const verification = await this.#reads.verifyTransactionSignature(receipt.withdrawalSignature);
+      const confirmed = verification.state === "confirmed" || verification.state === "finalized";
+      const failed = verification.state === "failed";
+      const status = confirmed ? "cancelled" : failed ? "failed" : "unknown";
+      return LimitOrderCancelReceiptSchema.parse({
+        ...receipt,
+        status,
+        chainVerification: verification.state,
+        chainSlot: verification.slot,
+        error: confirmed ? null : verification.error ?? (status === "unknown" ? "Withdrawal transaction is not yet confirmed in Solana transaction history" : "Solana reported that the withdrawal transaction failed"),
+        verifiedAt: verification.verifiedAt,
+      });
+    } catch (error) {
+      return LimitOrderCancelReceiptSchema.parse({
+        ...receipt,
+        status: "unknown",
+        chainVerification: "unavailable",
+        chainSlot: null,
+        error: error instanceof Error ? error.message.slice(0, 500) : "Verification check failed",
+        verifiedAt: null,
+      });
+    }
+  }
+
   async #refresh(preview: LimitOrderContractPreview): Promise<LimitOrderContractPreview> {
     return this.#policy.limitOrderPreview({ goal: preview.goal, walletAddress: preview.walletAddress, inputMint: preview.inputMint, outputMint: preview.outputMint, inputAmount: preview.inputAmount, triggerMint: preview.triggerMint, triggerCondition: preview.triggerCondition, triggerPriceUsd: preview.triggerPriceUsd, maxSlippageBps: preview.maxSlippageBps, expiresAt: preview.expiresAt });
   }

@@ -1272,6 +1272,8 @@ function TuningStep({
   );
   const [retryLimit, setRetryLimit] = useState(String(setup.retryLimit));
   const [maxNetworkFeeLamports, setMaxNetworkFeeLamports] = useState(String(setup.maxNetworkFeeLamports));
+  const [maxNetworkFeeUnit, setMaxNetworkFeeUnit] = useState<"lamports" | "sol" | "usd">("lamports");
+  const [solPriceUsd, setSolPriceUsd] = useState<number | null>(null);
   const [maxFeePercent, setMaxFeePercent] = useState(String(setup.maxFeePercent));
   const [defaultSlippageBps, setDefaultSlippageBps] = useState(String(setup.defaultSlippageBps));
   const [defaultDeadlineMinutes, setDefaultDeadlineMinutes] = useState(String(setup.defaultDeadlineMinutes));
@@ -1302,6 +1304,14 @@ function TuningStep({
     }).catch(() => undefined);
     window.silfable.getSolanaRpcSettings().then((res) => {
       setSolanaRpcUrl(res.rpcUrl ?? "");
+    }).catch(() => undefined);
+    window.silfable.listWallets().then((res) => {
+      const first = res.wallets[0];
+      if (first) {
+        window.silfable.getPortfolio({ schemaVersion: 1, requestId: crypto.randomUUID(), address: first.address }).then((p) => {
+          if (p.snapshot.solUsdPrice) setSolPriceUsd(p.snapshot.solUsdPrice);
+        }).catch(() => undefined);
+      }
     }).catch(() => undefined);
   }, []);
   const context = Number(contextLimit);
@@ -1469,9 +1479,47 @@ function TuningStep({
       <div className="advanced transactionGuardSettings">
         <strong>Transaction guard</strong>
         <div className="advancedGrid">
-          <Field label="Maximum network fee (lamports)">
-            <input inputMode="numeric" value={maxNetworkFeeLamports} onChange={(event) => setMaxNetworkFeeLamports(event.target.value)} />
-            <small>5,000–10,000,000. Execution is blocked above this value.</small>
+          <Field label={`Maximum network fee (${maxNetworkFeeUnit.toUpperCase()})`}>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <input
+                inputMode={maxNetworkFeeUnit === "lamports" ? "numeric" : "decimal"}
+                value={
+                  maxNetworkFeeUnit === "lamports"
+                    ? maxNetworkFeeLamports
+                    : maxNetworkFeeUnit === "sol"
+                      ? String(Number(maxNetworkFeeLamports) / 1e9)
+                      : solPriceUsd
+                        ? String(Number(((Number(maxNetworkFeeLamports) / 1e9) * solPriceUsd).toFixed(4)))
+                        : maxNetworkFeeLamports
+                }
+                onChange={(event) => {
+                  const val = event.target.value;
+                  if (maxNetworkFeeUnit === "lamports") {
+                    setMaxNetworkFeeLamports(val);
+                  } else if (maxNetworkFeeUnit === "sol") {
+                    const num = parseFloat(val);
+                    setMaxNetworkFeeLamports(isNaN(num) ? "" : String(Math.round(num * 1e9)));
+                  } else if (maxNetworkFeeUnit === "usd" && solPriceUsd) {
+                    const num = parseFloat(val);
+                    setMaxNetworkFeeLamports(isNaN(num) ? "" : String(Math.round((num / solPriceUsd) * 1e9)));
+                  }
+                }}
+              />
+              <select
+                value={maxNetworkFeeUnit}
+                onChange={(e) => setMaxNetworkFeeUnit(e.target.value as "lamports" | "sol" | "usd")}
+                style={{ padding: "6px 10px", borderRadius: "6px" }}
+              >
+                <option value="lamports">Lamports</option>
+                <option value="sol">SOL</option>
+                <option value="usd" disabled={!solPriceUsd}>USD {!solPriceUsd ? "(No Price)" : ""}</option>
+              </select>
+            </div>
+            <small>
+              {maxNetworkFeeUnit === "lamports" && "5,000–10,000,000. Execution is blocked above this value."}
+              {maxNetworkFeeUnit === "sol" && `Stored as ${Number(maxNetworkFeeLamports).toLocaleString()} lamports (range: 0.000005–0.01 SOL).`}
+              {maxNetworkFeeUnit === "usd" && (solPriceUsd ? `Converted at $${solPriceUsd}/SOL (${Number(maxNetworkFeeLamports).toLocaleString()} lamports).` : "Price feed unavailable.")}
+            </small>
           </Field>
           <Field label="Maximum fee percentage">
             <input inputMode="decimal" value={maxFeePercent} onChange={(event) => setMaxFeePercent(event.target.value)} />
@@ -1489,7 +1537,7 @@ function TuningStep({
             <select value={transactionPriority} onChange={(event) => setTransactionPriority(event.target.value as TransactionSettings["priority"])}>
               <option value="economy">Economy</option><option value="standard">Standard</option><option value="fast">Fast</option>
             </select>
-            <small>Preference is saved. Jupiter priority mapping is still pending; the absolute fee guard always wins.</small>
+            <small>Preference is applied to Jupiter transaction order construction (Economy / Standard / Fast). Absolute fee guard always wins.</small>
           </Field>
         </div>
       </div>
@@ -3233,6 +3281,53 @@ function LimitOrderPreviewCard({
             {simulation.error ??
               `${simulation.programIds.length} programs · ${simulation.unitsConsumed ?? 0} compute units`}
           </small>
+          <dl>
+            <div>
+              <dt>Network fee</dt>
+              <dd>
+                {simulation.feeLamports === null
+                  ? "—"
+                  : `${simulation.feeLamports.toLocaleString()} lamports`}
+                {simulation.feeSol ? ` · ${simulation.feeSol} SOL` : ""}
+                {simulation.feeUsd === null || simulation.feeUsd === undefined
+                  ? ""
+                  : ` · $${simulation.feeUsd.toFixed(4)}`}
+              </dd>
+            </div>
+            <div>
+              <dt>Fee percent</dt>
+              <dd>
+                {simulation.feePercent === null || simulation.feePercent === undefined
+                  ? "—"
+                  : `${simulation.feePercent.toFixed(2)}%`}
+              </dd>
+            </div>
+            <div>
+              <dt>Account funding</dt>
+              <dd>
+                {simulation.accountFundingLamports === null ||
+                simulation.accountFundingLamports === undefined
+                  ? "—"
+                  : `${simulation.accountFundingLamports.toLocaleString()} lamports`}
+              </dd>
+            </div>
+            <div>
+              <dt>Estimated wallet outflow</dt>
+              <dd>{simulation.estimatedWalletOutflowLamports ?? "—"} lamports</dd>
+            </div>
+            <div>
+              <dt>Fee risk</dt>
+              <dd>{simulation.feeRisk ?? "unavailable"}</dd>
+            </div>
+          </dl>
+          {simulation.estimatedWalletOutflowLamports && (
+            <p>
+              Estimated SOL balance impact before signing:{" "}
+              {simulation.estimatedWalletOutflowLamports} lamports. Token input/deposit is
+              shown separately from network fee and account funding.
+            </p>
+          )}
+          {simulation.feeGuardMessage && <p>{simulation.feeGuardMessage}</p>}
         </div>
       )}
       {execution && (
@@ -3241,6 +3336,38 @@ function LimitOrderPreviewCard({
         >
           <strong>Order {execution.status}</strong>
           <small>{execution.orderId ?? execution.error}</small>
+          <dl>
+            <div>
+              <dt>Deposit amount</dt>
+              <dd>{execution.inputAmount ?? preview.inputAmount} raw</dd>
+            </div>
+            <div>
+              <dt>Network fee</dt>
+              <dd>
+                {execution.networkFeeLamports === null ||
+                execution.networkFeeLamports === undefined
+                  ? "—"
+                  : `${execution.networkFeeLamports.toLocaleString()} lamports`}
+                {execution.feeSol ? ` · ${execution.feeSol} SOL` : ""}
+                {execution.feeUsd === null || execution.feeUsd === undefined
+                  ? ""
+                  : ` · $${execution.feeUsd.toFixed(4)}`}
+              </dd>
+            </div>
+            <div>
+              <dt>Fee percent</dt>
+              <dd>
+                {execution.feePercent === null || execution.feePercent === undefined
+                  ? "—"
+                  : `${execution.feePercent.toFixed(2)}%`}
+              </dd>
+            </div>
+            <div>
+              <dt>Fee risk</dt>
+              <dd>{execution.feeRisk ?? "unavailable"}</dd>
+            </div>
+          </dl>
+          {execution.feeGuardMessage && <p>{execution.feeGuardMessage}</p>}
         </div>
       )}
       {cancelSimulation && (
@@ -3772,10 +3899,25 @@ function SimulationResult({
           <dd>{simulation.feePercent === null || simulation.feePercent === undefined ? "—" : `${simulation.feePercent.toFixed(2)}%`}</dd>
         </div>
         <div>
+          <dt>Account funding</dt>
+          <dd>{simulation.accountFundingLamports === null || simulation.accountFundingLamports === undefined ? "—" : `${simulation.accountFundingLamports.toLocaleString()} lamports`}</dd>
+        </div>
+        <div>
+          <dt>Estimated wallet outflow</dt>
+          <dd>{simulation.estimatedWalletOutflowLamports ?? "—"} lamports</dd>
+        </div>
+        <div>
           <dt>Fee guard</dt>
           <dd>{simulation.feeRisk ?? "unavailable"}</dd>
         </div>
       </dl>
+      {simulation.estimatedWalletOutflowLamports && (
+        <p>
+          Estimated SOL balance impact before signing:{" "}
+          {simulation.estimatedWalletOutflowLamports} lamports. Token input is shown
+          separately from network fee and account funding.
+        </p>
+      )}
       {simulation.feeGuardMessage && <p>{simulation.feeGuardMessage}</p>}
       {simulation.error && <p>{simulation.error}</p>}
       <small>Unsigned · no broadcast attempted</small>
@@ -3838,6 +3980,10 @@ function ExecutionResult({
         <div>
           <dt>Actual slippage</dt>
           <dd>{receipt.actualSlippageBps === null || receipt.actualSlippageBps === undefined ? "—" : `${receipt.actualSlippageBps.toFixed(2)} bps`}</dd>
+        </div>
+        <div>
+          <dt>Output delta</dt>
+          <dd>{receipt.actualSlippageRawAmount ?? "—"} raw</dd>
         </div>
         <div>
           <dt>Estimated network fee</dt>
@@ -4973,15 +5119,13 @@ function SessionModal({
                 </small>
               </button>
               <button
-                className="unavailableChoice"
-                disabled
+                className={permission === "full" ? "active" : ""}
                 onClick={() => setPermission("full")}
               >
-                <span className="choiceNumber">02 · Locked</span>
+                <span className="choiceNumber">02 · Delegated Agent</span>
                 <strong>Full access</strong>
                 <small>
-                  Unavailable until Mainnet execution contracts and policies are
-                  implemented.
+                  Autonomous execution using a dedicated session Agent Wallet with strict Capital Isolation limits.
                 </small>
               </button>
             </div>

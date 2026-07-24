@@ -48,7 +48,7 @@ type RawPortfolio = {
   assets: Array<{ mint: string; amount: string; decimals: number }>;
 };
 export type UnsignedSwapOrder = { transaction: string; requestId: string; lastValidBlockHeight: string | null; outAmount: string; router: string; mode: string };
-export type RawSimulationResult = { slot: number; err: unknown; logs: string[]; unitsConsumed: number | null; feeLamports: number | null };
+export type RawSimulationResult = { slot: number; err: unknown; logs: string[]; unitsConsumed: number | null; feeLamports: number | null; accountCreationFundingLamports: number | null };
 export type JupiterExecutionResult = { status: "Success" | "Failed"; signature: string | null; code: number | null; totalInputAmount: string | null; totalOutputAmount: string | null; error: string | null };
 export type SignatureVerification = {
   state: "finalized" | "confirmed" | "processed" | "not-found" | "failed";
@@ -234,7 +234,14 @@ export class MainnetReadService {
     return { inputMint, outputMint, inAmount: amount, outAmount: value.outAmount, router: value.router, mode: value.mode, feeBps, feeMint, quoteOnly: true, verifiedAt: new Date().toISOString() };
   }
 
-  async buildUnsignedSwapOrder(inputMint: string, outputMint: string, amount: string, taker: string, slippageBps: number): Promise<UnsignedSwapOrder> {
+  async buildUnsignedSwapOrder(
+    inputMint: string,
+    outputMint: string,
+    amount: string,
+    taker: string,
+    slippageBps: number,
+    priority?: "economy" | "standard" | "fast"
+  ): Promise<UnsignedSwapOrder> {
     validateSwapInput(inputMint, outputMint, amount);
     if (!ADDRESS_PATTERN.test(taker)) throw new Error("Swap taker is invalid");
     await this.#assertRegisteredWallet(taker);
@@ -242,6 +249,9 @@ export class MainnetReadService {
     const apiKey = await this.#secrets.getSecret("jupiter-api-key");
     if (apiKey === null) throw new Error("Jupiter is not configured");
     const query = new URLSearchParams({ inputMint, outputMint, amount, taker, slippageBps: String(slippageBps) });
+    if (priority && ["economy", "standard", "fast"].includes(priority)) {
+      query.set("priorityLevel", priority);
+    }
     const response = await this.#fetch(`https://api.jup.ag/swap/v2/order?${query.toString()}`, {
       headers: { "x-api-key": apiKey }, signal: AbortSignal.timeout(15_000),
     });
@@ -278,6 +288,7 @@ export class MainnetReadService {
       logs,
       unitsConsumed: typeof value.unitsConsumed === "number" && Number.isSafeInteger(value.unitsConsumed) && value.unitsConsumed >= 0 ? value.unitsConsumed : null,
       feeLamports: typeof value.fee === "number" && Number.isSafeInteger(value.fee) && value.fee >= 0 ? value.fee : null,
+      accountCreationFundingLamports: null,
     };
   }
 
@@ -693,17 +704,40 @@ export class MainnetReadService {
   }
 
   async #rpc(method: string, params: unknown[]): Promise<unknown> {
-    const response = await this.#fetch(this.#rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: crypto.randomUUID(), method, params }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    const body: unknown = await response.json();
-    if (!response.ok || typeof body !== "object" || body === null) throw new Error(`Solana RPC failed (${response.status})`);
-    const envelope = body as { result?: unknown; error?: unknown };
-    if (envelope.error !== undefined || envelope.result === undefined) throw new Error("Solana RPC returned an error");
-    return envelope.result;
+    const isBroadcast = method === "sendTransaction";
+    const maxRetries = isBroadcast ? 0 : 3;
+    let delayMs = 500;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        const response = await this.#fetch(this.#rpcUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: crypto.randomUUID(), method, params }),
+          signal: AbortSignal.timeout(15_000),
+        });
+        const body: unknown = await response.json();
+        if (!response.ok || typeof body !== "object" || body === null) {
+          if (attempt < maxRetries && (response.status === 429 || response.status >= 500)) {
+            await new Promise((res) => setTimeout(res, delayMs));
+            delayMs *= 2;
+            continue;
+          }
+          throw new Error(`Solana RPC failed (${response.status})`);
+        }
+        const envelope = body as { result?: unknown; error?: unknown };
+        if (envelope.error !== undefined || envelope.result === undefined) throw new Error("Solana RPC returned an error");
+        return envelope.result;
+      } catch (err) {
+        if (attempt < maxRetries && err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError" || err.message.includes("fetch failed"))) {
+          await new Promise((res) => setTimeout(res, delayMs));
+          delayMs *= 2;
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new Error("Solana RPC failed after retries");
   }
 }
 

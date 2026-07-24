@@ -23,8 +23,8 @@ const principles = [
   },
   {
     icon: LockKeyhole,
-    title: "Keys stay local",
-    text: "Desktop uses local vault flows. Web can encrypt a same-address signer locally, but Pump.fun broadcast remains disabled until guards are complete.",
+    title: "Wallet approval stays external",
+    text: "Desktop uses local vault flows. Web uses only the currently connected browser wallet, so final authority stays inside Phantom, Solflare, or another wallet adapter.",
   },
   {
     icon: CheckCircle2,
@@ -104,13 +104,13 @@ export default function WhitepaperPage() {
           <SectionLabel number="03" title="Pump.fun Roadmap" />
           <div>
             <p className="max-w-3xl text-lg leading-8 text-black/60">
-              Pump.fun is intentionally not marked live yet. The next production path is preview, simulation, fee guard, final revalidation, password or wallet approval, broadcast, receipt, and automatic position refresh.
+              Pump.fun is intentionally not marked live yet. The next production path is preview, simulation, fee guard, final revalidation, browser-wallet approval, broadcast, receipt, and automatic position refresh.
             </p>
             <div className="mt-10 grid gap-4 md:grid-cols-3">
               {[
                 ["Preview", "Token discovery, mint validation, spend limits, take profit, stop loss, and DCA settings."],
                 ["Guard", "Program allowlist, transaction inspection, fee ceiling, slippage bounds, rent visibility, and route freshness."],
-                ["Execute", "Explicit final approval, local signing, broadcast reconciliation, and persisted success or failure receipt."],
+                ["Execute", "Explicit final approval, wallet-adapter signing, broadcast reconciliation, and persisted success or failure receipt."],
               ].map(([title, text]) => (
                 <div key={title} className="border-t border-black/20 pt-5">
                   <h3 className="font-serif text-2xl font-normal tracking-normal">{title}</h3>

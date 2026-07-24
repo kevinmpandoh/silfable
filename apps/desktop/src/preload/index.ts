@@ -23,6 +23,10 @@ import {
   LimitOrderCancelExecuteResponseSchema,
   LimitOrderCancelSimulateRequestSchema,
   LimitOrderCancelSimulateResponseSchema,
+  LimitOrderVerifyExecutionRequestSchema,
+  LimitOrderVerifyExecutionResponseSchema,
+  LimitOrderVerifyCancelRequestSchema,
+  LimitOrderVerifyCancelResponseSchema,
   LimitOrderListRequestSchema,
   LimitOrderListResponseSchema,
   LimitOrderSimulateRequestSchema,
@@ -79,8 +83,10 @@ import {
   type ExternalOpenTransactionRequest,
   type JupiterSaveKeyRequest,
   type LimitOrderExecuteRequest,
+  type LimitOrderVerifyExecutionRequest,
   type LimitOrderSimulateRequest,
   type LimitOrderCancelExecuteRequest,
+  type LimitOrderVerifyCancelRequest,
   type LimitOrderCancelSimulateRequest,
   type LimitOrderListRequest,
   type MissionSimulateRequest,
@@ -202,6 +208,9 @@ const api = {
   async executeLimitOrder(request: LimitOrderExecuteRequest) {
     return LimitOrderExecuteResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.limitOrderExecute, LimitOrderExecuteRequestSchema.parse(request)));
   },
+  async verifyLimitOrderExecution(request: LimitOrderVerifyExecutionRequest) {
+    return LimitOrderVerifyExecutionResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.limitOrderVerifyExecution, LimitOrderVerifyExecutionRequestSchema.parse(request)));
+  },
   async listLimitOrders(request: LimitOrderListRequest) {
     return LimitOrderListResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.limitOrderList, LimitOrderListRequestSchema.parse(request)));
   },
@@ -210,6 +219,9 @@ const api = {
   },
   async executeLimitOrderCancel(request: LimitOrderCancelExecuteRequest) {
     return LimitOrderCancelExecuteResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.limitOrderCancelExecute, LimitOrderCancelExecuteRequestSchema.parse(request)));
+  },
+  async verifyLimitOrderCancel(request: LimitOrderVerifyCancelRequest) {
+    return LimitOrderVerifyCancelResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.limitOrderVerifyCancel, LimitOrderVerifyCancelRequestSchema.parse(request)));
   },
   async getJupiterSettings() {
     return JupiterSettingsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.jupiterGetSettings));

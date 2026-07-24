@@ -229,6 +229,25 @@ test("Jupiter unsigned swap order binds the registered taker and guarded slippag
   assert.equal(order.lastValidBlockHeight, "12345");
 });
 
+test("buildUnsignedSwapOrder passes priorityLevel query parameter when priority preference is supplied", async () => {
+  const secrets = new Secrets();
+  secrets.values.set("jupiter-api-key", "jupiter-private-key");
+  const outputMint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const transaction = Buffer.from([1, 2, 3]).toString("base64");
+  let requestedUrl = "";
+  const service = new MainnetReadService({
+    secrets,
+    wallets: { listWallets: async () => [{ address: WALLET, primary: true }] },
+    fetch: async (input) => {
+      requestedUrl = String(input);
+      return Response.json({ transaction, outAmount: "987654", router: "metis", mode: "ultra", requestId: "private-order-id", lastValidBlockHeight: "12345" });
+    },
+  });
+  await service.buildUnsignedSwapOrder(MINT, outputMint, "100000000", WALLET, 100, "fast");
+  const url = new URL(requestedUrl);
+  assert.equal(url.searchParams.get("priorityLevel"), "fast");
+});
+
 test("unsigned simulation uses replaceable blockhash without signature verification or broadcast", async () => {
   const transaction = Buffer.from([1, 2, 3]).toString("base64");
   let request: { method?: string; params?: unknown[] } = {};

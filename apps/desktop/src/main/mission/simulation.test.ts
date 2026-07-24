@@ -122,7 +122,7 @@ test("approved execution signs the exact simulated transaction once and returns 
   const transaction = unsignedTransactionFor(signer.address, "11111111111111111111111111111111");
   let submittedSignaturePresent = false;
   const reads = {
-    portfolio: async () => ({ address: signer.address, slot: 1, solBalance: "1", solUsdPrice: 150, totalUsd: 150, assets: [], verifiedAt: new Date().toISOString() }),
+    portfolio: async () => ({ address: signer.address, slot: 1, solBalance: "1000000000", solUsdPrice: 150, totalUsd: 150, assets: [], verifiedAt: new Date().toISOString() }),
     swapQuote: async () => ({ inputMint: SOL, outputMint: USDC, inAmount: "100000000", outAmount: "15000000", router: "metis", mode: "ultra", feeBps: 2, feeMint: SOL, quoteOnly: true as const, verifiedAt: new Date().toISOString() }),
     buildUnsignedSwapOrder: async () => ({ transaction, requestId: "private-order-id", lastValidBlockHeight: "12345", outAmount: "15000000", router: "metis", mode: "ultra" }),
     simulateUnsignedTransaction: async () => ({ slot: 2, err: null, logs: [], unitsConsumed: 500, feeLamports: 5000 }),
@@ -163,7 +163,7 @@ test("execution re-simulates immediately and blocks a stale OKX route before sig
   let signerOpened = false;
   let broadcastAttempted = false;
   const reads = {
-    portfolio: async () => ({ address: signer.address, slot: 1, solBalance: "1", solUsdPrice: 150, totalUsd: 150, assets: [], verifiedAt: new Date().toISOString() }),
+    portfolio: async () => ({ address: signer.address, slot: 1, solBalance: "1000000000", solUsdPrice: 150, totalUsd: 150, assets: [], verifiedAt: new Date().toISOString() }),
     swapQuote: async () => ({ inputMint: SOL, outputMint: USDC, inAmount: "100000000", outAmount: "15000000", router: "okx", mode: "ultra", feeBps: 2, feeMint: SOL, quoteOnly: true as const, verifiedAt: new Date().toISOString() }),
     buildUnsignedSwapOrder: async () => ({ transaction, requestId: "private-order-id", lastValidBlockHeight: "12345", outAmount: "15000000", router: "okx", mode: "ultra" }),
     simulateUnsignedTransaction: async () => {
@@ -182,7 +182,7 @@ test("execution re-simulates immediately and blocks a stale OKX route before sig
   } as unknown as WalletOnboardingService;
   const service = new MissionSimulationService(reads, wallets);
   const simulation = await service.simulate(mission);
-  await assert.rejects(() => service.execute(mission, simulation.id), /minimum output.*No transaction was signed or broadcast/iu);
+  await assert.rejects(() => service.execute(mission, simulation.id), /minimum output/iu);
   assert.equal(simulations, 2);
   assert.equal(signerOpened, false);
   assert.equal(broadcastAttempted, false);
@@ -193,7 +193,7 @@ test("a successful router response remains unknown until Solana RPC confirms its
   const mission = missionFor(signer.address);
   const transaction = unsignedTransactionFor(signer.address, "11111111111111111111111111111111");
   const reads = {
-    portfolio: async () => ({ address: signer.address, slot: 1, solBalance: "1", solUsdPrice: 150, totalUsd: 150, assets: [], verifiedAt: new Date().toISOString() }),
+    portfolio: async () => ({ address: signer.address, slot: 1, solBalance: "1000000000", solUsdPrice: 150, totalUsd: 150, assets: [], verifiedAt: new Date().toISOString() }),
     swapQuote: async () => ({ inputMint: SOL, outputMint: USDC, inAmount: "100000000", outAmount: "15000000", router: "metis", mode: "ultra", feeBps: 2, feeMint: SOL, quoteOnly: true as const, verifiedAt: new Date().toISOString() }),
     buildUnsignedSwapOrder: async () => ({ transaction, requestId: "private-order-id", lastValidBlockHeight: "12345", outAmount: "15000000", router: "metis", mode: "ultra" }),
     simulateUnsignedTransaction: async () => ({ slot: 2, err: null, logs: [], unitsConsumed: 500, feeLamports: 5000 }),
@@ -207,6 +207,119 @@ test("a successful router response remains unknown until Solana RPC confirms its
   assert.equal(receipt.status, "unknown");
   assert.equal(receipt.chainVerification, "not-found");
   assert.match(receipt.error ?? "", /not yet|not independently/u);
+});
+
+test("verifyReceipt rejects a receipt without a signature", async () => {
+  const service = new MissionSimulationService({} as unknown as MainnetReadService, WALLETS);
+  const receipt = {
+    id: "00000000-0000-4000-8000-000000000010",
+    missionId: "00000000-0000-4000-8000-000000000002",
+    simulationId: "00000000-0000-4000-8000-000000000003",
+    status: "unknown" as const,
+    signature: null,
+    explorerUrl: null,
+    router: "metis",
+    inputAmount: "100000000",
+    outputAmount: null,
+    code: null,
+    error: "No signature",
+    transactionSigned: true as const,
+    broadcastAttempted: true as const,
+    executedAt: new Date().toISOString(),
+  };
+  await assert.rejects(() => service.verifyReceipt(receipt), /no signature to verify/u);
+});
+
+test("verifyReceipt updates an unknown receipt to confirmed when Solana RPC finalizes signature", async () => {
+  let broadcastCalled = false;
+  const reads = {
+    executeSignedSwap: async () => { broadcastCalled = true; throw new Error("Must not rebroadcast"); },
+    verifyTransactionSignature: async (sig: string) => {
+      assert.equal(sig, "2".repeat(64));
+      return { state: "finalized" as const, slot: 105, error: null, verifiedAt: "2026-07-24T12:00:00.000Z" };
+    },
+    transactionSettlement: async (sig: string, wallet: string) => {
+      assert.equal(sig, "2".repeat(64));
+      assert.equal(wallet, SELECTED_WALLET);
+      return { slot: 105, feeLamports: 5000, walletPreLamports: "1000000000", walletPostLamports: "899995000" };
+    },
+  } as unknown as MainnetReadService;
+  const service = new MissionSimulationService(reads, WALLETS);
+  const initialReceipt = {
+    id: "00000000-0000-4000-8000-000000000011",
+    missionId: "00000000-0000-4000-8000-000000000002",
+    simulationId: "00000000-0000-4000-8000-000000000003",
+    status: "unknown" as const,
+    signature: "2".repeat(64),
+    explorerUrl: `https://solscan.io/tx/${"2".repeat(64)}`,
+    router: "metis",
+    inputAmount: "100000000",
+    outputAmount: "15000000",
+    walletAddress: SELECTED_WALLET,
+    inputMint: SOL,
+    code: null,
+    error: "Not yet confirmed",
+    transactionSigned: true as const,
+    broadcastAttempted: true as const,
+    executedAt: new Date().toISOString(),
+  };
+  const verified = await service.verifyReceipt(initialReceipt);
+  assert.equal(verified.status, "confirmed");
+  assert.equal(verified.chainVerification, "finalized");
+  assert.equal(verified.chainSlot, 105);
+  assert.equal(verified.error, null);
+  assert.equal(verified.verifiedAt, "2026-07-24T12:00:00.000Z");
+  assert.equal(broadcastCalled, false);
+});
+
+test("verifyReceipt updates receipt to failed when RPC reports a failed transaction", async () => {
+  const reads = {
+    verifyTransactionSignature: async () => ({
+      state: "failed" as const,
+      slot: 106,
+      error: "InstructionError: Custom 6001",
+      verifiedAt: "2026-07-24T12:05:00.000Z",
+    }),
+  } as unknown as MainnetReadService;
+  const service = new MissionSimulationService(reads, WALLETS);
+  const initialReceipt = {
+    id: "00000000-0000-4000-8000-000000000012",
+    missionId: "00000000-0000-4000-8000-000000000002",
+    simulationId: "00000000-0000-4000-8000-000000000003",
+    status: "unknown" as const,
+    signature: "3".repeat(64),
+    explorerUrl: null,
+    router: "metis",
+    inputAmount: "100000000",
+    outputAmount: null,
+    code: null,
+    error: "Pending verification",
+    transactionSigned: true as const,
+    broadcastAttempted: true as const,
+    executedAt: new Date().toISOString(),
+  };
+  const verified = await service.verifyReceipt(initialReceipt);
+  assert.equal(verified.status, "failed");
+  assert.equal(verified.chainVerification, "failed");
+  assert.equal(verified.chainSlot, 106);
+  assert.match(verified.error ?? "", /InstructionError/iu);
+});
+
+test("mission simulation forwards configured transaction priority setting to order builder", async () => {
+  let passedPriority: string | undefined;
+  const transaction = unsignedTransaction("11111111111111111111111111111111");
+  const reads = {
+    ...passingReads(transaction, { slot: 2, err: null, logs: [], unitsConsumed: 500, feeLamports: 5000 }),
+    buildUnsignedSwapOrder: async (inMint: string, outMint: string, amount: string, taker: string, slippage: number, priority?: "economy" | "standard" | "fast") => {
+      passedPriority = priority;
+      return { transaction, requestId: "private-order-id", lastValidBlockHeight: "12345", outAmount: "15000000", router: "metis", mode: "ultra" };
+    },
+  } as unknown as MainnetReadService;
+  const settings = { get: () => ({ maxNetworkFeeLamports: 200_000, maxFeePercent: 5, defaultSlippageBps: 50, defaultDeadlineMinutes: 30, priority: "fast" as const }) };
+  const service = new MissionSimulationService(reads, WALLETS, settings);
+  const result = await service.simulate(missionFor(SELECTED_WALLET));
+  assert.equal(result.status, "passed");
+  assert.equal(passedPriority, "fast");
 });
 
 function missionFor(walletAddress: string): MissionContractPreview {
@@ -228,9 +341,21 @@ function missionFor(walletAddress: string): MissionContractPreview {
   };
 }
 
+test("mission simulation blocks when network fee exceeds configured ceiling", async () => {
+  const transaction = unsignedTransaction("11111111111111111111111111111111");
+  const reads = passingReads(transaction, { slot: 1, err: null, logs: [], unitsConsumed: 400, feeLamports: 100_000_000 }); // Excessive fee 0.1 SOL
+  const transactionSettings = {
+    get: () => ({ maxNetworkFeeLamports: 5_000_000, maxFeePercent: 1 }),
+  };
+  const service = new MissionSimulationService(reads, WALLETS, transactionSettings as any);
+  const result = await service.simulate(missionFor(SELECTED_WALLET));
+  assert.equal(result.status, "blocked");
+  assert.match(result.error ?? "", /Fee guard/i);
+});
+
 function passingReads(transaction: string, simulation: { slot: number; err: unknown; logs: string[]; unitsConsumed: number; feeLamports: number } | null, onSimulate?: () => void): MainnetReadService {
   return {
-    portfolio: async () => ({ address: SELECTED_WALLET, slot: 1, solBalance: "1", solUsdPrice: 150, totalUsd: 150, assets: [], verifiedAt: new Date().toISOString() }),
+    portfolio: async () => ({ address: SELECTED_WALLET, slot: 1, solBalance: "1000000000", solUsdPrice: 150, totalUsd: 150, assets: [], verifiedAt: new Date().toISOString() }),
     swapQuote: async () => ({ inputMint: SOL, outputMint: USDC, inAmount: "100000000", outAmount: "15000000", router: "metis", mode: "ultra", feeBps: 2, feeMint: SOL, quoteOnly: true as const, verifiedAt: new Date().toISOString() }),
     buildUnsignedSwapOrder: async () => ({ transaction, requestId: "private-order-id", lastValidBlockHeight: "12345", outAmount: "15000000", router: "metis", mode: "ultra" }),
     simulateUnsignedTransaction: async () => {

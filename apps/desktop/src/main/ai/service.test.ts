@@ -35,6 +35,42 @@ test("unconfigured OpenRouter cannot start a chat", async () => {
   await assert.rejects(() => service.chat({ prompt: "hello", mode: "agent", walletAddress: null }), /not configured/u);
 });
 
+test("swap mission preview uses Transaction Settings defaults for omitted slippage and deadline", { concurrency: false }, async () => {
+  const secrets = new MemorySecrets();
+  secrets.values.set("openrouter-api-key", "sk-or-test");
+  secrets.values.set("jupiter-api-key", "jup-test");
+  const wallet = "11111111111111111111111111111111";
+  const sol = "So11111111111111111111111111111111111111112";
+  const usdc = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  let completion = 0;
+  globalThis.fetch = async () => {
+    completion += 1;
+    if (completion === 1) return Response.json({ choices: [{ message: { content: null, tool_calls: [{
+      id: "swap-preview",
+      type: "function",
+      function: { name: "mission_contract_preview", arguments: JSON.stringify({
+        goal: "Swap SOL to USDC with local defaults", inputMint: sol, outputMint: usdc, inputAmount: "1000000",
+        stopConditions: ["Stop if quote changes"],
+      }) },
+    }] } }], usage: {} });
+    return Response.json({ choices: [{ message: { content: "Preview prepared." } }], usage: {} });
+  };
+  const service = new AiService({
+    keystore: secrets,
+    settings: new MemorySettings(),
+    transactionSettings: { get: () => ({ maxNetworkFeeLamports: 200_000, maxFeePercent: 5, defaultSlippageBps: 40, defaultDeadlineMinutes: 45, priority: "economy" }) },
+    readService: {
+      portfolio: async () => ({ address: wallet, slot: 1, solBalance: "1", solUsdPrice: 150, totalUsd: 150, assets: [], verifiedAt: new Date().toISOString() }),
+      swapQuote: async () => ({ inputMint: sol, outputMint: usdc, inAmount: "1000000", outAmount: "80000", router: "metis", mode: "ultra", feeBps: 2, feeMint: sol, quoteOnly: true, verifiedAt: new Date().toISOString() }),
+    } as unknown as MainnetReadService,
+  });
+  const started = Date.now();
+  const result = await service.chat({ prompt: "Swap 0.001 SOL to USDC", mode: "mission", walletAddress: wallet });
+  assert.equal(result.missionPreview?.maxSlippageBps, 40);
+  assert.equal(result.missionPreview?.status, "ready-for-review");
+  assert.ok(Date.parse(result.missionPreview!.deadlineAt) >= started + 44 * 60_000);
+});
+
 test("Pump watchlist sessions expose read-only scoped analysis and no contract proposal tools", { concurrency: false }, async () => {
   const secrets = new MemorySecrets();
   secrets.values.set("openrouter-api-key", "sk-or-test");

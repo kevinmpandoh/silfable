@@ -1,14 +1,17 @@
 "use client";
 
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { VersionedTransaction } from "@solana/web3.js";
 import {
+  Cpu,
   Settings,
+  ShieldAlert,
   Trash2,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -27,14 +30,7 @@ import { PumpTradePreviewCard } from "@/components/cards/PumpTradePreviewCard";
 import { LimitOrderPreviewCard } from "@/components/cards/LimitOrderPreviewCard";
 import { JupiterSwapPreviewCard } from "@/components/cards/JupiterSwapPreviewCard";
 import { WebSetupWizard } from "@/components/trade/WebSetupWizard";
-import {
-  createWebVault,
-  importWalletIntoVault,
-  loadWebVault,
-  removeWalletFromVault,
-  StoredWebVault,
-  verifyWebVaultPassword,
-} from "@/lib/cryptoVault";
+import { CloudWorkerSetupModal } from "@/components/trade/CloudWorkerSetupModal";
 
 // Dynamically import WalletMultiButton to prevent SSR hydration errors
 const WalletMultiButton = dynamic<React.HTMLAttributes<HTMLButtonElement>>(
@@ -124,8 +120,15 @@ const DEFAULT_SETTINGS: WebSetupSettings = {
   pumpMaxOpenPositions: "3",
 };
 
+function setupStorageKey(walletAddress: string): string {
+  return `silfable_web_setup_v1:${walletAddress}`;
+}
+
 export default function TradePage() {
   const { publicKey, sendTransaction, connected } = useWallet();
+  const walletAddress = publicKey?.toBase58() ?? null;
+  const activeWalletAddressRef = useRef<string | null>(walletAddress);
+  activeWalletAddressRef.current = walletAddress;
   const { connection } = useConnection();
   const router = useRouter();
 
@@ -144,26 +147,19 @@ export default function TradePage() {
   const [editingSetup, setEditingSetup] = useState<boolean>(false);
   const [settings, setSettings] = useState<WebSetupSettings>(DEFAULT_SETTINGS);
   const [setupStep, setSetupStep] = useState<number>(1);
-  const [webVault, setWebVault] = useState<StoredWebVault | null>(null);
-  const [vaultPassword, setVaultPassword] = useState("");
-  const [vaultConfirm, setVaultConfirm] = useState("");
-  const [vaultUnlocked, setVaultUnlocked] = useState(false);
-  const [walletSecretInput, setWalletSecretInput] = useState("");
-  const [vaultMessage, setVaultMessage] = useState<string | null>(null);
 
   // IndexedDB Sessions & Messages State
   const [sessions, setSessions] = useState<SessionItem[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string>("session_default");
+  const [activeSessionId, setActiveSessionId] = useState<string>("");
   const [sessionFilter, setSessionFilter] = useState<"all" | "agent" | "mission" | "pump">("all");
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [sessionDraft, setSessionDraft] = useState<{
     title: string;
     mode: "agent" | "mission" | "pump";
     prompt: string;
-    walletScope: "connected" | "chat_only";
     pumpScope: "exact_mint" | "watchlist" | "discovery";
     pumpMint: string;
-  }>({ title: "", mode: "agent", prompt: "", walletScope: "connected", pumpScope: "exact_mint", pumpMint: "" });
+  }>({ title: "", mode: "agent", prompt: "", pumpScope: "exact_mint", pumpMint: "" });
   const [messages, setMessages] = useState<WebMessage[]>([]);
   const [nav, setNav] = useState("sessions");
   const [input, setInput] = useState("");
@@ -172,6 +168,55 @@ export default function TradePage() {
 
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [portfolioStatus, setPortfolioStatus] = useState("Refreshing Mainnet balance...");
+
+  // Cloud Worker 24/7 State
+  const [showCloudWorkerModal, setShowCloudWorkerModal] = useState(false);
+  const [cloudSessionState, setCloudSessionState] = useState<{
+    active: boolean;
+    session: any | null;
+  }>({ active: false, session: null });
+
+  // Poll Cloud Worker Session Status every 5 seconds when wallet is connected
+  useEffect(() => {
+    if (!walletAddress) return;
+    let timer: NodeJS.Timeout;
+
+    async function checkCloudStatus() {
+      try {
+        const res = await fetch(`/api/agent/session/status?walletAddress=${walletAddress}`);
+        if (res.ok) {
+          const data = await res.json();
+          setCloudSessionState({ active: data.active, session: data.session });
+        }
+      } catch (err) {
+        console.error("Failed to fetch cloud worker status:", err);
+      }
+    }
+
+    void checkCloudStatus();
+    timer = setInterval(() => {
+      void checkCloudStatus();
+    }, 5000);
+
+    return () => clearInterval(timer);
+  }, [walletAddress]);
+
+  async function handleKillCloudSession() {
+    if (!walletAddress || !cloudSessionState.session?.id) return;
+    if (!window.confirm("Are you sure you want to stop the 24/7 Cloud Worker agent?")) return;
+
+    try {
+      await fetch("/api/agent/session/kill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: cloudSessionState.session.id }),
+      });
+      setCloudSessionState({ active: false, session: null });
+    } catch (err) {
+      alert("Failed to stop cloud session.");
+    }
+  }
+
   const runtimeUsage = messages.reduce(
     (total, message) => {
       if (!message.usage) return total;
@@ -192,36 +237,54 @@ export default function TradePage() {
   // INITIALIZATION: Load Setup & Sessions
   // --------------------------------------------------------------------------
   useEffect(() => {
+    let cancelled = false;
+
     async function initWorkspace() {
+      if (!walletAddress) return;
       try {
+        setSetupCompleted(false);
+        setEditingSetup(false);
+        setSettings(DEFAULT_SETTINGS);
+        setSetupStep(1);
+        setSessions([]);
+        setMessages([]);
+        setActiveSessionId("");
+        setLoading(false);
+        setTxStatus(null);
+
         // Load Settings
-        const savedSetup = localStorage.getItem("silfable_web_setup_v1");
+        const savedSetup = localStorage.getItem(setupStorageKey(walletAddress));
         if (savedSetup) {
           setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(savedSetup) });
           setSetupCompleted(true);
         }
-        setWebVault(loadWebVault());
 
         // Load IndexedDB Sessions
-        const storedSessions = await getAllSessions();
+        const storedSessions = await getAllSessions(walletAddress);
+        if (cancelled) return;
+        const legacyPlaceholder = storedSessions.length === 1
+          && ["Default Trading Workspace", "New trading workspace"].includes(storedSessions[0].title);
+        if (legacyPlaceholder) {
+          const placeholderMessages = await getSessionMessages(walletAddress, storedSessions[0].id);
+          if (cancelled) return;
+          if (placeholderMessages.length === 0) {
+            await deleteSession(walletAddress, storedSessions[0].id);
+            if (cancelled) return;
+            setSessions([]);
+            setActiveSessionId("");
+            setMessages([]);
+            return;
+          }
+        }
         if (storedSessions.length === 0) {
-          const initSession: SessionItem = {
-            id: "session_default",
-            title: "Default Trading Workspace",
-            filter: "all",
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          };
-          await saveSession(initSession);
-          setSessions([initSession]);
-          setActiveSessionId(initSession.id);
-
-          // Empty session, no welcome message so HomeComposer is shown
+          setSessions([]);
+          setActiveSessionId("");
           setMessages([]);
         } else {
           setSessions(storedSessions);
           setActiveSessionId(storedSessions[0].id);
-          const initialMsgs = await getSessionMessages(storedSessions[0].id);
+          const initialMsgs = await getSessionMessages(walletAddress, storedSessions[0].id);
+          if (cancelled) return;
           setMessages(initialMsgs);
         }
       } catch (err) {
@@ -229,20 +292,30 @@ export default function TradePage() {
       }
     }
 
-    if (connected && publicKey) {
-      initWorkspace();
+    if (connected && walletAddress) {
+      void initWorkspace();
     }
-  }, [connected, publicKey]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connected, walletAddress]);
 
   // Load Messages when Active Session changes
   useEffect(() => {
+    let cancelled = false;
+
     async function loadActiveMessages() {
-      if (!activeSessionId) return;
-      const msgs = await getSessionMessages(activeSessionId);
-      setMessages(msgs);
+      if (!walletAddress || !activeSessionId) return;
+      const msgs = await getSessionMessages(walletAddress, activeSessionId);
+      if (!cancelled) setMessages(msgs);
     }
-    loadActiveMessages();
-  }, [activeSessionId]);
+    void loadActiveMessages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionId, walletAddress]);
 
   // Fetch the single connected Mainnet wallet through the configured RPC.
   const fetchWalletBalance = useCallback(async () => {
@@ -263,7 +336,7 @@ export default function TradePage() {
       }
       setWalletBalance(result.sol);
       const source = result.source === "custom" ? "Custom RPC" : "Default Mainnet RPC";
-      setPortfolioStatus(`${source}${typeof result.slot === "number" ? ` · slot ${result.slot.toLocaleString()}` : ""}`);
+      setPortfolioStatus(`${source}${typeof result.slot === "number" ? ` - slot ${result.slot.toLocaleString()}` : ""}`);
     } catch (error) {
       setWalletBalance(null);
       setPortfolioStatus(error instanceof Error ? error.message : "Saldo Mainnet tidak dapat dimuat.");
@@ -281,6 +354,7 @@ export default function TradePage() {
   // SESSION HANDLERS (IndexedDB CRUD)
   // --------------------------------------------------------------------------
   async function handleCreateNewSession() {
+    if (!walletAddress) return;
     const newId = `session_${Date.now()}`;
     const now = Date.now();
     const fallbackTitle =
@@ -297,12 +371,12 @@ export default function TradePage() {
       updatedAt: now,
     };
 
-    await saveSession(newSession);
-    const updatedSessions = await getAllSessions();
+    await saveSession(walletAddress, newSession);
+    const updatedSessions = await getAllSessions(walletAddress);
     setSessions(updatedSessions);
     setActiveSessionId(newId);
     setShowSessionModal(false);
-    setSessionDraft({ title: "", mode: "agent", prompt: "", walletScope: "connected", pumpScope: "exact_mint", pumpMint: "" });
+    setSessionDraft({ title: "", mode: "agent", prompt: "", pumpScope: "exact_mint", pumpMint: "" });
 
     // Empty session, no init message so HomeComposer is shown
     setMessages([]);
@@ -310,42 +384,31 @@ export default function TradePage() {
   }
 
   async function handleDeleteSession(id: string, e: React.MouseEvent) {
+    if (!walletAddress) return;
     e.stopPropagation();
-    if (sessions.length <= 1) {
-      alert("At least one trading workspace session must remain active.");
-      return;
-    }
     const target = sessions.find((session) => session.id === id);
     if (!window.confirm(`Delete "${target?.title ?? "this session"}" and all of its messages?`)) {
       return;
     }
-    await deleteSession(id);
-    const updated = await getAllSessions();
+    await deleteSession(walletAddress, id);
+    const updated = await getAllSessions(walletAddress);
     setSessions(updated);
     if (activeSessionId === id) {
-      setActiveSessionId(updated[0].id);
-      const msgs = await getSessionMessages(updated[0].id);
-      setMessages(msgs);
+      const nextSession = updated[0];
+      setActiveSessionId(nextSession?.id ?? "");
+      setMessages(nextSession ? await getSessionMessages(walletAddress, nextSession.id) : []);
     }
   }
 
   async function handleDeleteAllSessions() {
+    if (!walletAddress) return;
     if (!window.confirm("Delete every web session and its messages? Wallet settings and API configuration will be kept.")) {
       return;
     }
 
-    await deleteAllSessions();
-    const now = Date.now();
-    const freshSession: SessionItem = {
-      id: `session_${now}`,
-      title: "New trading workspace",
-      filter: "agent",
-      createdAt: now,
-      updatedAt: now,
-    };
-    await saveSession(freshSession);
-    setSessions([freshSession]);
-    setActiveSessionId(freshSession.id);
+    await deleteAllSessions(walletAddress);
+    setSessions([]);
+    setActiveSessionId("");
     setMessages([]);
     setInput("");
     setNav("sessions");
@@ -354,71 +417,24 @@ export default function TradePage() {
   // --------------------------------------------------------------------------
   // SETTINGS HANDLERS
   // --------------------------------------------------------------------------
-  async function handleSaveSettings() {
+  function persistSettings() {
+    if (!walletAddress) return;
     try {
-      localStorage.setItem("silfable_web_setup_v1", JSON.stringify(settings));
+      localStorage.setItem(setupStorageKey(walletAddress), JSON.stringify(settings));
       setSetupCompleted(true);
-      setEditingSetup(false);
     } catch {
       alert("Failed to save settings.");
     }
   }
 
+  function handleSaveSettings() {
+    persistSettings();
+    setEditingSetup(false);
+  }
+
   function openSettings() {
-    setSetupStep(6);
+    setSetupStep(4);
     setEditingSetup(true);
-  }
-
-  async function handleCreateOrUnlockVault() {
-    setVaultMessage(null);
-    if (vaultPassword.length < 8) {
-      setVaultMessage("Use at least 8 characters for the local web vault password.");
-      return;
-    }
-    if (!webVault) {
-      if (vaultPassword !== vaultConfirm) {
-        setVaultMessage("The password confirmation does not match.");
-        return;
-      }
-      try {
-        const created = await createWebVault(vaultPassword);
-        setWebVault(created);
-        setVaultUnlocked(true);
-        setVaultMessage("Encrypted web vault created and unlocked for this browser session.");
-      } catch (error) {
-        setVaultMessage(error instanceof Error ? error.message : "The web vault could not be created.");
-      }
-      return;
-    }
-
-    if (await verifyWebVaultPassword(webVault, vaultPassword)) {
-      setVaultUnlocked(true);
-      setVaultMessage("Web vault unlocked for this browser session.");
-    } else {
-      setVaultUnlocked(false);
-      setVaultMessage("The web vault password is incorrect.");
-    }
-  }
-
-  async function handleImportWallet() {
-    if (!webVault || !vaultUnlocked || !publicKey) {
-      setVaultMessage("Unlock the web vault before importing a wallet.");
-      return;
-    }
-    try {
-      const next = await importWalletIntoVault(webVault, walletSecretInput, vaultPassword, publicKey.toBase58());
-      setWebVault(next);
-      setWalletSecretInput("");
-      setVaultMessage("Wallet imported. Its secret key remains encrypted in this browser.");
-    } catch (error) {
-      setVaultMessage(error instanceof Error ? error.message : "The wallet could not be imported.");
-    }
-  }
-
-  function handleRemoveImportedWallet(walletId: string) {
-    if (!webVault || !window.confirm("Remove this encrypted wallet from this browser vault?")) return;
-    setWebVault(removeWalletFromVault(webVault, walletId));
-    setVaultMessage("Wallet removed from this browser vault.");
   }
 
   // --------------------------------------------------------------------------
@@ -426,7 +442,8 @@ export default function TradePage() {
   // --------------------------------------------------------------------------
   async function handleSendMessage(promptText?: string) {
     const text = promptText || input;
-    if (!text.trim() || loading) return;
+    if (!walletAddress || !activeSessionId || !text.trim() || loading) return;
+    const requestWalletAddress = walletAddress;
 
     const userMsg: WebMessage = {
       id: `user_${Date.now()}`,
@@ -437,7 +454,7 @@ export default function TradePage() {
     };
 
     setMessages((prev) => [...prev, userMsg]);
-    await saveMessage(userMsg);
+    await saveMessage(walletAddress, userMsg);
     if (!promptText) setInput("");
     setLoading(true);
 
@@ -455,6 +472,7 @@ export default function TradePage() {
         }),
       });
       const data = await res.json();
+      if (activeWalletAddressRef.current !== requestWalletAddress) return;
 
       const assistantMsg: WebMessage = {
         id: `asst_${Date.now()}`,
@@ -469,17 +487,18 @@ export default function TradePage() {
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
-      await saveMessage(assistantMsg);
+      await saveMessage(walletAddress, assistantMsg);
 
       // Update session timestamp in IndexedDB
       const activeSess = sessions.find((s) => s.id === activeSessionId);
       if (activeSess) {
         const updated = { ...activeSess, updatedAt: Date.now() };
-        await saveSession(updated);
-        const reloaded = await getAllSessions();
+        await saveSession(walletAddress, updated);
+        const reloaded = await getAllSessions(walletAddress);
         setSessions(reloaded);
       }
     } catch {
+      if (activeWalletAddressRef.current !== requestWalletAddress) return;
       const errMsg: WebMessage = {
         id: `err_${Date.now()}`,
         sessionId: activeSessionId,
@@ -488,17 +507,20 @@ export default function TradePage() {
         createdAt: Date.now(),
       };
       setMessages((prev) => [...prev, errMsg]);
-      await saveMessage(errMsg);
+      await saveMessage(walletAddress, errMsg);
     } finally {
-      setLoading(false);
+      if (activeWalletAddressRef.current === requestWalletAddress) {
+        setLoading(false);
+      }
     }
   }
 
   async function handleExecuteJupiterSwap(proposal: WebProposal, msgId: string) {
-    if (!connected || !publicKey) {
+    if (!connected || !publicKey || !walletAddress) {
       alert("Please connect your Solana wallet (Phantom / Solflare) first!");
       return;
     }
+    const activeWalletAddress = walletAddress;
 
     if (!proposal.quoteResponse) {
       setTxStatus("Swap quote is missing. Ask the AI to refresh the proposal first.");
@@ -529,7 +551,6 @@ export default function TradePage() {
       if (!swapRes.ok || typeof swapData.swapTransaction !== "string") {
         throw new Error(swapData.error || "Jupiter did not return a transaction.");
       }
-
       const transaction = VersionedTransaction.deserialize(base64ToBytes(swapData.swapTransaction));
       const signature = await sendTransaction(transaction, connection);
       setTxStatus(`Mainnet swap submitted. Signature: ${signature.slice(0, 12)}...`);
@@ -540,7 +561,7 @@ export default function TradePage() {
         prev.map((m) => {
           if (m.id === msgId && m.proposal) {
             const updated = { ...m, proposal: { ...m.proposal, status: "signed" as const } };
-            saveMessage(updated);
+            void saveMessage(activeWalletAddress, updated);
             return updated;
           }
           return m;
@@ -554,7 +575,7 @@ export default function TradePage() {
         prev.map((m) => {
           if (m.id === msgId && m.proposal) {
             const updated = { ...m, proposal: { ...m.proposal, status: "failed" as const } };
-            saveMessage(updated);
+            void saveMessage(activeWalletAddress, updated);
             return updated;
           }
           return m;
@@ -587,503 +608,10 @@ export default function TradePage() {
         setSetupStep={setSetupStep}
         settings={settings}
         setSettings={setSettings}
-        webVault={webVault}
-        vaultPassword={vaultPassword}
-        setVaultPassword={setVaultPassword}
-        vaultConfirm={vaultConfirm}
-        setVaultConfirm={setVaultConfirm}
-        vaultUnlocked={vaultUnlocked}
-        walletSecretInput={walletSecretInput}
-        setWalletSecretInput={setWalletSecretInput}
-        vaultMessage={vaultMessage}
-        onCreateOrUnlockVault={handleCreateOrUnlockVault}
-        onImportWallet={handleImportWallet}
-        onRemoveWallet={handleRemoveImportedWallet}
+        onPersistSettings={persistSettings}
         onSaveSettings={handleSaveSettings}
         onReturnToWorkspace={() => setEditingSetup(false)}
       />
-    );
-  }
-
-  if (false && publicKey) {
-    return (
-      <div className="tradeDesktopShell setupScreenLayout">
-        <header className="tradeHeader">
-          <div className="tradeBrand">
-            <Link href="/" className="brandLink">
-              <span className="brandMark">
-                <Image src="/logo.png" alt="Silfable Logo" width={20} height={20} className="logoImg" />
-              </span>
-              <strong>SILFABLE</strong>
-            </Link>
-            <span className="versionBadge">WORKSPACE SETUP</span>
-          </div>
-          <div className="headerActions">
-            <div className="networkBadge">
-              <span className="statusDot" />
-              <span>{publicKey!.toBase58().slice(0, 4)}...{publicKey!.toBase58().slice(-4)}</span>
-            </div>
-            {setupCompleted && (
-              <button onClick={() => setEditingSetup(false)} className="modeButton">
-                Return to Workspace
-              </button>
-            )}
-          </div>
-        </header>
-
-        <div className="setupContainer">
-          <div className="setupCard">
-            <header>
-              <div className="setupIcon">⚙</div>
-              <div>
-                <h1>INITIALIZE RUNTIME SETTINGS</h1>
-                <p>Configure wallet credentials, custom RPC endpoints, API keys, and risk boundaries before entering the workspace.</p>
-              </div>
-            </header>
-
-            <div className="setupBody">
-              {/* Stepper Tabs */}
-              <div className="setupTabRow">
-                <button onClick={() => setSetupStep(1)} className={`setupTab ${setupStep === 1 ? "active" : ""}`}>
-                  1. Wallet
-                </button>
-                <button onClick={() => setSetupStep(2)} className={`setupTab ${setupStep === 2 ? "active" : ""}`}>
-                  2. API Keys
-                </button>
-                <button onClick={() => setSetupStep(3)} className={`setupTab ${setupStep === 3 ? "active" : ""}`}>
-                  3. Provider
-                </button>
-                <button onClick={() => setSetupStep(4)} className={`setupTab ${setupStep === 4 ? "active" : ""}`}>
-                  4. Agent Core
-                </button>
-                <button onClick={() => setSetupStep(5)} className={`setupTab ${setupStep === 5 ? "active" : ""}`}>
-                  5. Risk
-                </button>
-              </div>
-
-              {/* STEP 1: WALLET & SECRET KEY */}
-              {setupStep === 1 && (
-                <div className="setupStepContent">
-                  <div className="field">
-                    <span>Active Wallet Address (Connected via Browser)</span>
-                    <input type="text" disabled value={publicKey!.toBase58()} />
-                    <small>Primary wallet used for restricted web approvals. Private keys are never imported.</small>
-                  </div>
-
-                  <div className="notice info">
-                    <span>ⓘ</span>
-                    <div>
-                      <strong>Browser wallet approval only</strong>
-                      <p>Web trading uses your connected Phantom/Solflare wallet. Private keys are never imported into the web app.</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 2: API & RPC INTEGRATIONS */}
-              {setupStep === 2 && (
-                <div className="setupStepContent">
-                  <div className="field">
-                    <span>Custom Solana RPC Endpoint URL (Helius, QuickNode, Triton, etc.)</span>
-                    <input
-                      type="url"
-                      value={settings.customRpcUrl}
-                      onChange={(e) => setSettings({ ...settings, customRpcUrl: e.target.value })}
-                      placeholder="https://mainnet.helius-rpc.com/?api-key=YOUR_KEY"
-                    />
-                    <small>Optional. Custom RPC endpoints bypass rate-limiting during Pump.fun scans.</small>
-                  </div>
-
-                  <div className="field">
-                    <span>Jupiter API Key</span>
-                    <input
-                      type="password"
-                      value={settings.jupiterApiKey}
-                      onChange={(e) => setSettings({ ...settings, jupiterApiKey: e.target.value })}
-                      placeholder="Jupiter API key (Optional)"
-                    />
-                    <small>Used for Solana Mainnet quote routing and swap metadata.</small>
-                  </div>
-
-                  <div className="field">
-                    <span>Tavily Research API Key</span>
-                    <input
-                      type="password"
-                      value={settings.tavilyApiKey}
-                      onChange={(e) => setSettings({ ...settings, tavilyApiKey: e.target.value })}
-                      placeholder="Tavily API key (Optional)"
-                    />
-                    <small>Enables read-only financial news research for the AI agent.</small>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 3: INFERENCE PROVIDER */}
-              {setupStep === 3 && (
-                <div className="setupStepContent">
-                  <div className="fieldGrid">
-                    <div className="field">
-                      <span>OpenRouter API Key</span>
-                      <input
-                        type="password"
-                        value={settings.openRouterApiKey}
-                        onChange={(e) => setSettings({ ...settings, openRouterApiKey: e.target.value })}
-                        placeholder="sk-or-..."
-                      />
-                      <small>Stored in browser local storage for web mode. Desktop uses local vault.</small>
-                    </div>
-                    <div className="field">
-                      <span>AI Model</span>
-                      <select
-                        value={settings.aiModel}
-                        onChange={(e) => setSettings({ ...settings, aiModel: e.target.value })}
-                      >
-                        <option value="openai/gpt-4o-mini">openai/gpt-4o-mini</option>
-                        <option value="openai/gpt-4.1-mini">openai/gpt-4.1-mini</option>
-                        <option value="anthropic/claude-3.5-sonnet">anthropic/claude-3.5-sonnet</option>
-                        <option value="google/gemini-2.0-flash-001">google/gemini-2.0-flash-001</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 4: AGENT CORE TUNING */}
-              {setupStep === 4 && (
-                <div className="setupStepContent">
-                  <div className="fieldGrid">
-                    <div className="field">
-                      <span>Context Budget (Tokens)</span>
-                      <input
-                        type="number"
-                        value={settings.contextBudget}
-                        onChange={(e) => setSettings({ ...settings, contextBudget: e.target.value })}
-                      />
-                    </div>
-                    <div className="field">
-                      <span>Max Output Tokens</span>
-                      <input
-                        type="number"
-                        value={settings.outputLimit}
-                        onChange={(e) => setSettings({ ...settings, outputLimit: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="fieldGrid">
-                    <div className="field">
-                      <span>Agent Temperature</span>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={settings.temperature}
-                        onChange={(e) => setSettings({ ...settings, temperature: e.target.value })}
-                      />
-                      <small>Leave around 0.7 for normal planning; lower for deterministic policy explanations.</small>
-                    </div>
-                    <div className="field">
-                      <span>Default Deadline (Minutes)</span>
-                      <input
-                        type="number"
-                        value={settings.defaultDeadlineMinutes}
-                        onChange={(e) => setSettings({ ...settings, defaultDeadlineMinutes: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 5: TRANSACTION & PUMP RISK */}
-              {setupStep === 5 && (
-                <div className="setupStepContent">
-                  <div className="fieldGrid">
-                    <div className="field">
-                      <span>Max Network Fee (Lamports)</span>
-                      <input
-                        type="number"
-                        value={settings.maxNetworkFee}
-                        onChange={(e) => setSettings({ ...settings, maxNetworkFee: e.target.value })}
-                      />
-                    </div>
-                    <div className="field">
-                      <span>Max Slippage Ceiling (BPS)</span>
-                      <input
-                        type="number"
-                        value={settings.maxSlippageBps}
-                        onChange={(e) => setSettings({ ...settings, maxSlippageBps: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="fieldGrid">
-                    <div className="field">
-                      <span>Priority</span>
-                      <select
-                        value={settings.priority}
-                        onChange={(e) => setSettings({ ...settings, priority: e.target.value as WebSetupSettings["priority"] })}
-                      >
-                        <option value="economy">Economy</option>
-                        <option value="standard">Standard</option>
-                        <option value="fast">Fast</option>
-                      </select>
-                    </div>
-                    <div className="field">
-                      <span>Pump Max Spend (Lamports)</span>
-                      <input
-                        type="number"
-                        value={settings.pumpMaxSpendLamports}
-                        onChange={(e) => setSettings({ ...settings, pumpMaxSpendLamports: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="fieldGrid">
-                    <div className="field">
-                      <span>Pump Take Profit (BPS)</span>
-                      <input
-                        type="number"
-                        value={settings.pumpTakeProfitBps}
-                        onChange={(e) => setSettings({ ...settings, pumpTakeProfitBps: e.target.value })}
-                      />
-                    </div>
-                    <div className="field">
-                      <span>Pump Stop Loss (BPS)</span>
-                      <input
-                        type="number"
-                        value={settings.pumpStopLossBps}
-                        onChange={(e) => setSettings({ ...settings, pumpStopLossBps: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="field">
-                    <span>Pump Max Open Positions</span>
-                    <input
-                      type="number"
-                      value={settings.pumpMaxOpenPositions}
-                      onChange={(e) => setSettings({ ...settings, pumpMaxOpenPositions: e.target.value })}
-                    />
-                    <small>Web Pump.fun execution is still preview-only; these limits are persisted for parity and future guards.</small>
-                  </div>
-                </div>
-              )}
-
-              <div className="setupActionsRow">
-                {setupStep > 1 && (
-                  <button onClick={() => setSetupStep(setupStep - 1)} className="railBtn">
-                    Back
-                  </button>
-                )}
-                {setupStep < 5 ? (
-                  <button onClick={() => setSetupStep(setupStep + 1)} className="primaryButton">
-                    Continue to Step {setupStep + 1}
-                  </button>
-                ) : (
-                  <button onClick={handleSaveSettings} className="primaryButton executeButton">
-                    ✓ Save & Enter Workspace
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // --------------------------------------------------------------------------
-  // GATE 3: MAIN TRADING WORKSPACE (EXACT DESKTOP WORKSPACE LAYOUT)
-  // --------------------------------------------------------------------------
-  return (
-    <div className="tradeDesktopShell flex flex-col h-screen overflow-hidden bg-[#070914] text-[#eef2ff]">
-      {/* Top Desktop Navigation Bar */}
-      <header className="tradeHeader">
-        <div className="tradeBrand">
-          <Link href="/" className="brandLink">
-            <span className="brandMark">
-              <Image src="/logo.png" alt="Silfable Logo" width={20} height={20} className="logoImg" />
-            </span>
-            <strong>SILFABLE</strong>
-          </Link>
-          <span className="versionBadge">WEB WORKSPACE</span>
-        </div>
-
-        {/* Restricted Mode Badge */}
-        <div className="modeSwitcher">
-          <button className="modeButton active">Restricted Mainnet</button>
-          <button className="modeButton" disabled>Wallet approval required</button>
-        </div>
-
-        {/* Right Header Status & Wallet */}
-        <div className="headerActions">
-          <button onClick={openSettings} className="iconBtn" title="Edit Settings">
-            <Settings className="size-4" /> <span>Settings</span>
-          </button>
-          <div className="networkBadge">
-            <span className="statusDot" />
-            <span>MAINNET</span>
-          </div>
-          <WalletMultiButton className="walletBtnOverride" />
-        </div>
-      </header>
-
-      {showSessionModal && (
-        <div className="sessionModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="new-session-title">
-          <div className="sessionModal">
-            <header>
-              <div>
-                <span className="modalKicker">New session</span>
-                <h2 id="new-session-title">Your goal. Your rules.</h2>
-                <p>Define how the web AI agent may reason, plan, and use your Mainnet context.</p>
-              </div>
-              <button className="modalClose" onClick={() => setShowSessionModal(false)} aria-label="Close new session">
-                ×
-              </button>
-            </header>
-
-            <div className="sessionModalBody">
-              <section className="modalSection">
-                <div className="modalSectionLabel">
-                  01 Session name
-                  <small>Used in your session history.</small>
-                </div>
-                <div className="modalFieldStack">
-                  <input
-                    className="sessionNameInput"
-                    value={sessionDraft.title}
-                    onChange={(event) => setSessionDraft({ ...sessionDraft, title: event.target.value.slice(0, 80) })}
-                    placeholder="Review wallet, plan a swap, or monitor Pump.fun..."
-                  />
-                  <textarea
-                    className="sessionTextArea"
-                    value={sessionDraft.prompt}
-                    onChange={(event) => setSessionDraft({ ...sessionDraft, prompt: event.target.value.slice(0, 500) })}
-                    placeholder="Optional first instruction. It will be placed in the composer after the session is created."
-                  />
-                </div>
-              </section>
-
-              <section className="modalSection">
-                <div className="modalSectionLabel">
-                  02 Mode
-                  <small>Choose the agent lifecycle.</small>
-                </div>
-                <div className="choiceGrid">
-                  {[
-                    ["agent", "Agent", "Interactive conversation for analysis, planning, and one task at a time."],
-                    ["mission", "Mission", "Goal-driven workflow with explicit limits, checkpoints, and stop conditions."],
-                    ["pump", "Pump.fun", "Pump.fun research workspace. Preview only on web until execution guards are complete."],
-                  ].map(([value, label, description], index) => (
-                    <button
-                      key={value}
-                      className={`choiceCard ${sessionDraft.mode === value ? "active" : ""}`}
-                      onClick={() => setSessionDraft({ ...sessionDraft, mode: value as "agent" | "mission" | "pump" })}
-                    >
-                      <span>{String(index + 1).padStart(2, "0")}</span>
-                      <strong>{label}</strong>
-                      <small>{description}</small>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <section className="modalSection">
-                <div className="modalSectionLabel">
-                  03 Permission
-                  <small>Controls mutating operations.</small>
-                </div>
-                <div className="choiceGrid">
-                  <button className="choiceCard active">
-                    <span>01</span>
-                    <strong>Restricted</strong>
-                    <small>Every future transaction requires deterministic checks and wallet approval.</small>
-                  </button>
-                  <button className="choiceCard" disabled>
-                    <span>02 · Locked</span>
-                    <strong>Full access</strong>
-                    <small>Unavailable on web. No autonomous signing or silent broadcast.</small>
-                  </button>
-                </div>
-              </section>
-
-              {false && (
-              <section className="modalSection">
-                <div className="modalSectionLabel">
-                  04 Wallet scope
-                  <small>Locked once session starts.</small>
-                </div>
-                <div className="choiceGrid">
-                  <button
-                    className={`choiceCard ${sessionDraft.walletScope === "connected" ? "active" : ""}`}
-                    onClick={() => setSessionDraft({ ...sessionDraft, walletScope: "connected" })}
-                  >
-                    <span>01</span>
-                    <strong>Connected wallet</strong>
-                    <small>{publicKey!.toBase58().slice(0, 6)}...{publicKey!.toBase58().slice(-6)} may be referenced. Approval still required.</small>
-                  </button>
-                  <button
-                    className={`choiceCard ${sessionDraft.walletScope === "chat_only" ? "active" : ""}`}
-                    onClick={() => setSessionDraft({ ...sessionDraft, walletScope: "chat_only" })}
-                  >
-                    <span>02</span>
-                    <strong>No wallet · chat only</strong>
-                    <small>Research, planning, and policy explanations with no wallet context.</small>
-                  </button>
-                </div>
-              </section>
-              )}
-
-              {sessionDraft.mode === "pump" && (
-                <section className="modalSection">
-                  <div className="modalSectionLabel">
-                    04 Pump.fun scope
-                    <small>Web remains preview-only.</small>
-                  </div>
-                  <div className="modalFieldStack">
-                    <div className="choiceGrid">
-                      {[
-                        ["exact_mint", "Exact mint", "Analyze one token mint only."],
-                        ["watchlist", "Watchlist", "Bounded list monitoring; no auto-buy."],
-                        ["discovery", "Discovery", "Candidate scanning only; execution locked."],
-                      ].map(([value, label, description]) => (
-                        <button
-                          key={value}
-                          className={`choiceCard ${sessionDraft.pumpScope === value ? "active" : ""}`}
-                          onClick={() => setSessionDraft({ ...sessionDraft, pumpScope: value as "exact_mint" | "watchlist" | "discovery" })}
-                        >
-                          <span>PUMP</span>
-                          <strong>{label}</strong>
-                          <small>{description}</small>
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      className="sessionNameInput"
-                      value={sessionDraft.pumpMint}
-                      disabled={sessionDraft.pumpScope === "discovery"}
-                      onChange={(event) => setSessionDraft({ ...sessionDraft, pumpMint: event.target.value.trim() })}
-                      placeholder="Pump.fun mint or comma-separated watchlist mints"
-                    />
-                  </div>
-                </section>
-              )}
-            </div>
-
-            <footer className="modalFooter">
-              <span className="modalFooterNote">Mainnet · restricted · no transaction is authorized</span>
-              <div className="flex items-center gap-3">
-                <button className="railBtn" onClick={() => setShowSessionModal(false)}>Cancel</button>
-                <button className="primaryButton" onClick={handleCreateNewSession}>Create session</button>
-              </div>
-            </footer>
-          </div>
-        </div>
-      )}
-
-      {/* 3-Column Desktop Workspace Shell */}
-      <main className="workspace">
-        {/* LEFT RAIL: DESKTOP WORKSPACE SESSIONS & FILTERS */}
-        <aside className="leftRail">
           <div className="railBrand">
             <span>WORKSPACES</span>
           </div>
@@ -1131,14 +659,14 @@ export default function TradePage() {
                     <strong>{s.title}</strong>
                     <small>{new Date(s.updatedAt).toLocaleTimeString()}</small>
                   </div>
-                  {sessions.length > 1 && (
-                    <span
-                      onClick={(e) => handleDeleteSession(s.id, e)}
-                      className="ml-auto text-slate-500 hover:text-rose-400 p-1"
-                    >
-                      <Trash2 className="size-3" />
-                    </span>
-                  )}
+                  <span
+                    onClick={(e) => handleDeleteSession(s.id, e)}
+                    className="ml-auto p-1 text-slate-500 hover:text-rose-400"
+                    role="button"
+                    aria-label={`Delete ${s.title}`}
+                  >
+                    <Trash2 className="size-3" />
+                  </span>
                 </button>
               ))}
           </div>
@@ -1208,12 +736,30 @@ export default function TradePage() {
                       <article key={session.id} className="panelCard">
                         <span>{session.filter}</span>
                         <strong>{session.title}</strong>
-                        <p>Restricted · wallet approval required · updated {new Date(session.updatedAt).toLocaleString()}</p>
+                        <p>Restricted - wallet approval required - updated {new Date(session.updatedAt).toLocaleString()}</p>
                         <button onClick={() => { setActiveSessionId(session.id); setNav("sessions"); }} className="railBtn">Open session</button>
                       </article>
                     ))
                 )}
               </div>
+            </div>
+          ) : sessions.length === 0 ? (
+            <div className="homeState flex h-full flex-col items-center justify-center px-6 text-center">
+              <span className="brandMark large mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#3157ff]/50 bg-[rgba(49,87,255,0.1)]">
+                <Image src="/logo.png" alt="Silfable Logo" width={32} height={32} className="h-8 w-8 object-contain" />
+              </span>
+              <p className="mb-4 font-mono text-[9px] uppercase tracking-[0.22em] text-[#3157ff]">
+                Your workspace is empty
+              </p>
+              <h1 className="mb-5 font-serif text-4xl font-bold leading-tight tracking-tight text-white md:text-5xl">
+                Create a session to begin.
+              </h1>
+              <p className="mb-8 max-w-lg text-sm leading-6 text-[#7f8aa7]">
+                Sessions keep each conversation, mission, and execution plan organized under this wallet.
+              </p>
+              <button type="button" onClick={() => setShowSessionModal(true)} className="newSession max-w-64 px-8">
+                + NEW SESSION
+              </button>
             </div>
           ) : messages.length === 0 ? (
             <div className="homeState flex flex-col justify-center items-center h-full px-6 text-center">

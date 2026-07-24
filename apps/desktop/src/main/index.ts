@@ -28,6 +28,10 @@ import {
   LimitOrderCancelExecuteResponseSchema,
   LimitOrderCancelSimulateRequestSchema,
   LimitOrderCancelSimulateResponseSchema,
+  LimitOrderVerifyExecutionRequestSchema,
+  LimitOrderVerifyExecutionResponseSchema,
+  LimitOrderVerifyCancelRequestSchema,
+  LimitOrderVerifyCancelResponseSchema,
   LimitOrderListRequestSchema,
   LimitOrderListResponseSchema,
   LimitOrderSimulateRequestSchema,
@@ -85,6 +89,11 @@ import { JupiterTriggerV2Client } from "./integrations/trigger-v2.js";
 import { LimitOrderService } from "./mission/limit-order.js";
 import { MissionSimulationService } from "./mission/simulation.js";
 import { TransactionSettingsService } from "./mission/transaction-settings.js";
+import { DurableBackgroundObservationService } from "./execution/background-loop.js";
+import { PositionStrategyManager } from "./execution/strategy-manager.js";
+import { MissionProposalService } from "./mission/proposals.js";
+import { TokenAllowlistService } from "./mission/token-allowlist.js";
+import { ReconciliationService } from "./execution/reconciliation.js";
 import { buildAndSimulatePumpV2ProductionTransaction, type PumpV2ProductionSimulationInput } from "./pump/production.js";
 import { evaluatePumpTradeEligibility } from "./pump/eligibility.js";
 import { evaluatePumpExecutionReadiness } from "./pump/execution-readiness.js";
@@ -112,6 +121,7 @@ let tray: Tray | null = null;
 let isQuitting = false;
 let keystore: LocalEncryptedKeystore | null = null;
 let runtimeDatabase: RuntimeDatabase | null = null;
+let observationService: DurableBackgroundObservationService | null = null;
 
 app.enableSandbox();
 if (process.platform === "win32") app.setAppUserModelId("ai.silfable.desktop");
@@ -634,6 +644,32 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     return LimitOrderCancelExecuteResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt });
   });
 
+  ipcMain.handle(IPC_CHANNELS.limitOrderVerifyExecution, async (event, raw: unknown) => {
+    assertTrustedSender(event); const request = LimitOrderVerifyExecutionRequestSchema.parse(raw); requireUnlocked();
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (sessionRecord === null) throw new Error("Encrypted session context is unavailable");
+    const messageIndex = sessionRecord.messages.findIndex((message) => message.limitOrderPreview?.id === request.previewId && message.limitOrderExecution?.id === request.receiptId);
+    const message = messageIndex < 0 ? undefined : sessionRecord.messages[messageIndex];
+    if (message?.limitOrderExecution === undefined) throw new Error("Execution receipt is unavailable in encrypted session history");
+    const receipt = await limitOrders.verifyExecutionReceipt(message.limitOrderExecution);
+    const messages = sessionRecord.messages.map((entry, index) => index === messageIndex ? { ...entry, limitOrderExecution: receipt } : entry);
+    await sessions.upsert({ ...sessionRecord, messages });
+    return LimitOrderVerifyExecutionResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.limitOrderVerifyCancel, async (event, raw: unknown) => {
+    assertTrustedSender(event); const request = LimitOrderVerifyCancelRequestSchema.parse(raw); requireUnlocked();
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (sessionRecord === null) throw new Error("Encrypted session context is unavailable");
+    const messageIndex = sessionRecord.messages.findIndex((message) => message.limitOrderCancelReceipt?.orderId === request.orderId && message.limitOrderCancelReceipt?.id === request.receiptId);
+    const message = messageIndex < 0 ? undefined : sessionRecord.messages[messageIndex];
+    if (message?.limitOrderCancelReceipt === undefined) throw new Error("Cancellation receipt is unavailable in encrypted session history");
+    const receipt = await limitOrders.verifyCancelReceipt(message.limitOrderCancelReceipt);
+    const messages = sessionRecord.messages.map((entry, index) => index === messageIndex ? { ...entry, limitOrderCancelReceipt: receipt } : entry);
+    await sessions.upsert({ ...sessionRecord, messages });
+    return LimitOrderVerifyCancelResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt });
+  });
+
   ipcMain.handle(IPC_CHANNELS.missionExecute, async (event, raw: unknown) => {
     assertTrustedSender(event);
     const request = MissionExecuteRequestSchema.parse(raw);
@@ -750,16 +786,45 @@ app.whenReady().then(async () => {
   const transactionSettings = new TransactionSettingsService(runtimeDatabase);
   const pumpRiskSettings = new PumpRiskSettingsService(runtimeDatabase);
   const pumpRiskLedger = new PumpRiskLedgerService(runtimeDatabase, keystore);
-  const pumpReceipts = new EncryptedPumpReceiptService(runtimeDatabase, keystore);
+  const pumpReceipts = new EncryptedPumpReceiptService(runtimeDatabase, keystore, pumpRiskLedger);
   const simulations = new MissionSimulationService(reads, wallets, transactionSettings);
   const trigger = new JupiterTriggerV2Client({ secrets: keystore, wallets });
   const limitOrders = new LimitOrderService({ reads, wallets, trigger });
   const pumpRpc = new PumpMainnetRpc(rpcConfig);
   const preparedPump = new PumpPreparedExecutionService();
+
+  const strategyManager = new PositionStrategyManager(runtimeDatabase);
+  observationService = new DurableBackgroundObservationService(strategyManager, 15000);
+  const missionProposals = new MissionProposalService(reads, observationService);
+  const tokenAllowlist = new TokenAllowlistService(runtimeDatabase, reads);
+
+  // P3.5 Durable order reconciliation
+  const reconciliation = new ReconciliationService(sessions, limitOrders);
+  reconciliation.reconcilePendingOrders().catch(() => {});
+
+  observationService.startObservationLoop(async (mints) => {
+    const pricePoints = await reads.prices(mints);
+    const map = new Map<string, number>();
+    for (const [mint, pp] of pricePoints) {
+      map.set(mint, pp.usdPrice);
+    }
+    return map;
+  });
+
   registerIpc(keystore, runtimeDatabase, passwords, wallets, reads, ai, sessions, simulations, limitOrders, transactionSettings, pumpRiskSettings, pumpRiskLedger, pumpReceipts, pumpRpc, preparedPump);
   mainWindow = createMainWindow();
   tray = createTray();
-  powerMonitor.on("suspend", () => { preparedPump.clear(); keystore?.lock(); });
+  powerMonitor.on("suspend", () => { preparedPump.clear(); keystore?.lock(); observationService?.stopObservationLoop(); });
+  powerMonitor.on("resume", () => {
+    observationService?.startObservationLoop(async (mints) => {
+      const pricePoints = await reads.prices(mints);
+      const map = new Map<string, number>();
+      for (const [mint, pp] of pricePoints) {
+        map.set(mint, pp.usdPrice);
+      }
+      return map;
+    });
+  });
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createMainWindow();
   });
@@ -767,6 +832,7 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", () => {
   isQuitting = true;
+  observationService?.stopObservationLoop();
   keystore?.lock();
   runtimeDatabase?.close();
   runtimeDatabase = null;

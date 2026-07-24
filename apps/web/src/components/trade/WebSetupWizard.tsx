@@ -2,8 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import type { Dispatch, SetStateAction } from "react";
-import type { StoredWebVault } from "@/lib/cryptoVault";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { WebSetupSettings } from "@/app/trade/page";
 
 interface WebSetupWizardProps {
@@ -14,23 +13,13 @@ interface WebSetupWizardProps {
   setSetupStep: Dispatch<SetStateAction<number>>;
   settings: WebSetupSettings;
   setSettings: Dispatch<SetStateAction<WebSetupSettings>>;
-  webVault: StoredWebVault | null;
-  vaultPassword: string;
-  setVaultPassword: Dispatch<SetStateAction<string>>;
-  vaultConfirm: string;
-  setVaultConfirm: Dispatch<SetStateAction<string>>;
-  vaultUnlocked: boolean;
-  walletSecretInput: string;
-  setWalletSecretInput: Dispatch<SetStateAction<string>>;
-  vaultMessage: string | null;
-  onCreateOrUnlockVault: () => void;
-  onImportWallet: () => void;
-  onRemoveWallet: (walletId: string) => void;
+  onPersistSettings: () => void;
   onSaveSettings: () => void;
   onReturnToWorkspace: () => void;
 }
 
-const steps = ["Security", "Wallets", "API Keys", "Agent Core", "Provider", "Review"];
+const steps = ["API Keys", "Agent Core", "Provider", "Review"];
+const reviewStep = steps.length;
 
 export function WebSetupWizard(props: WebSetupWizardProps) {
   const {
@@ -41,24 +30,30 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
     setSetupStep,
     settings,
     setSettings,
-    webVault,
-    vaultPassword,
-    setVaultPassword,
-    vaultConfirm,
-    setVaultConfirm,
-    vaultUnlocked,
-    walletSecretInput,
-    setWalletSecretInput,
-    vaultMessage,
-    onCreateOrUnlockVault,
-    onImportWallet,
-    onRemoveWallet,
+    onPersistSettings,
     onSaveSettings,
     onReturnToWorkspace,
   } = props;
 
+  const activeStep = Math.min(Math.max(setupStep, 1), reviewStep);
+  const isReview = activeStep === reviewStep;
+
+  function updateSettings(patch: Partial<WebSetupSettings>) {
+    setSettings({ ...settings, ...patch });
+  }
+
+  function saveInline() {
+    onPersistSettings();
+  }
+
   function continueFromStep() {
-    setSetupStep(editingSetup ? 6 : Math.min(6, setupStep + 1));
+    if (editingSetup) {
+      onPersistSettings();
+      setSetupStep(reviewStep);
+      return;
+    }
+
+    setSetupStep(Math.min(reviewStep, activeStep + 1));
   }
 
   return (
@@ -71,16 +66,16 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
             </span>
             <strong>SILFABLE</strong>
           </Link>
-          <span className="versionBadge">WEB SETUP</span>
+          <span className="versionBadge">{editingSetup ? "WEB SETTINGS" : "WEB SETUP"}</span>
         </div>
         <div className="headerActions">
           <div className="networkBadge">
             <span className="statusDot" />
-            <span>MAINNET · {publicAddress.slice(0, 4)}...{publicAddress.slice(-4)}</span>
+            <span>MAINNET - {shortAddress(publicAddress)}</span>
           </div>
           {setupCompleted && (
             <button type="button" onClick={onReturnToWorkspace} className="modeButton">
-              Return to Sessions
+              Back to Sessions
             </button>
           )}
         </div>
@@ -94,284 +89,225 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
               <button
                 type="button"
                 key={label}
-                className={`setupProgressItem ${setupStep === step ? "active" : ""} ${setupStep > step ? "complete" : ""}`}
-                onClick={() => setSetupStep(step)}
+                className={`setupProgressItem ${activeStep === step ? "active" : ""} ${activeStep > step ? "complete" : ""}`}
+                disabled
+                aria-current={activeStep === step ? "step" : undefined}
               >
-                <span>{setupStep > step ? "✓" : String(step).padStart(2, "0")}</span>
+                <span>{activeStep > step ? "OK" : String(step).padStart(2, "0")}</span>
                 {label}
               </button>
             );
           })}
         </nav>
 
-        {editingSetup && setupStep !== 6 && (
+        {editingSetup && !isReview && (
           <div className="editingBar">
-            <span>EDITING · {steps[setupStep - 1]?.toUpperCase()}</span>
-            <button type="button" onClick={() => setSetupStep(6)}>← Return to Review</button>
+            <span>EDITING - {steps[activeStep - 1]?.toUpperCase()}</span>
+            <button type="button" onClick={() => setSetupStep(reviewStep)}>
+              Return to Review
+            </button>
           </div>
         )}
 
         <section className="setupCard">
           <header>
-            <div className="setupIcon">{setupStep === 6 ? "✓" : String(setupStep).padStart(2, "0")}</div>
+            <div className="setupIcon">{isReview ? "OK" : String(activeStep).padStart(2, "0")}</div>
             <div>
-              <h1>{setupStep === 6 ? "REVIEW YOUR WEB WORKSPACE" : `${steps[setupStep - 1]?.toUpperCase()} CONFIGURATION`}</h1>
+              <h1>{isReview ? (editingSetup ? "EDIT INFRASTRUCTURE" : "REVIEW WEB WORKSPACE") : `${steps[activeStep - 1]?.toUpperCase()} CONFIGURATION`}</h1>
               <p>
-                {setupStep === 6
-                  ? "Review the current configuration and edit only the section you need."
-                  : "Mainnet only. Restricted approvals and explicit user confirmation remain mandatory."}
+                {isReview
+                  ? "Review current web settings and edit only the section you need."
+                  : "Web uses the connected browser wallet only. Mainnet actions still require wallet approval."}
               </p>
             </div>
           </header>
 
           <div className="setupBody">
-            {setupStep === 1 && (
+            {activeStep === 1 && (
               <div className="setupStepContent">
-                <div className={`notice ${webVault ? "success" : "info"}`}>
-                  <span>{webVault ? "✓" : "i"}</span>
-                  <div>
-                    <strong>{webVault ? "Encrypted web vault found" : "Create an encrypted web vault"}</strong>
-                    <p>
-                      {webVault
-                        ? "Enter its password to unlock wallet management for this browser session."
-                        : "This password encrypts imported wallet keys locally and cannot be recovered by Silfable."}
-                    </p>
-                  </div>
-                </div>
-                <div className="field">
-                  <span>Web vault password</span>
-                  <input
-                    type="password"
-                    value={vaultPassword}
-                    onChange={(event) => setVaultPassword(event.target.value)}
-                    placeholder="At least 8 characters"
-                    autoComplete="new-password"
-                  />
-                </div>
-                {!webVault && (
+                <IntegrationCard title="Solana RPC Node" badge="CUSTOM RPC">
+                  <p>Custom HTTPS RPC URL for fast Mainnet balance checks, Jupiter routing, and Pump.fun scanning.</p>
                   <div className="field">
-                    <span>Confirm password</span>
-                    <input
-                      type="password"
-                      value={vaultConfirm}
-                      onChange={(event) => setVaultConfirm(event.target.value)}
-                      placeholder="Repeat the vault password"
-                      autoComplete="new-password"
-                    />
-                  </div>
-                )}
-                <button type="button" className="primaryButton" onClick={onCreateOrUnlockVault}>
-                  {webVault ? "Unlock Web Vault" : "Create Web Vault"}
-                </button>
-                {vaultMessage && <p className="setupFeedback">{vaultMessage}</p>}
-                <p className="securityBoundary">
-                  Browser encryption is weaker than the desktop OS-backed vault because scripts from this web origin share the browser runtime.
-                </p>
-              </div>
-            )}
-
-            {setupStep === 2 && (
-              <div className="setupStepContent">
-                <div className="field">
-                  <span>Connected browser wallet</span>
-                  <input type="text" disabled value={publicAddress} />
-                  <small>Jupiter execution continues to request approval from this wallet extension.</small>
-                </div>
-
-                <div className="walletRegistry">
-                  <div className="walletRegistryHeader">
-                    <div>
-                      <strong>Primary Mainnet wallet signer</strong>
-                      <small>{webVault?.wallets.length ? "Secret key encrypted locally" : "Secret key not imported"}</small>
+                    <span>Custom RPC endpoint URL</span>
+                    <div className="inlineInputAction">
+                      <input
+                        type="url"
+                        value={settings.customRpcUrl}
+                        onChange={(event) => updateSettings({ customRpcUrl: event.target.value })}
+                        placeholder="https://mainnet.helius-rpc.com/?api-key=..."
+                      />
+                      <button type="button" onClick={saveInline}>Save RPC</button>
                     </div>
-                    <span className={`setupStatus ${vaultUnlocked ? "ok" : "warn"}`}>
-                      {vaultUnlocked ? "UNLOCKED" : "LOCKED"}
-                    </span>
+                    <small>Leave blank to use the default public RPC. Custom endpoints help avoid rate limits.</small>
                   </div>
-                  {webVault?.wallets.map((wallet) => (
-                    <div className="walletRegistryRow" key={wallet.id}>
-                      <div>
-                        <strong>{wallet.label}</strong>
-                        <code>{wallet.address}</code>
-                      </div>
-                      <button type="button" className="dangerTextButton" onClick={() => onRemoveWallet(wallet.id)}>
-                        Remove
-                      </button>
+                </IntegrationCard>
+
+                <IntegrationCard title="Jupiter" badge={settings.jupiterApiKey ? "CONFIGURED" : "OPTIONAL"} ok={Boolean(settings.jupiterApiKey)}>
+                  <p>Mainnet Solana quotes, swap routes, and portfolio routing metadata.</p>
+                  <div className="field">
+                    <span>Jupiter API key</span>
+                    <div className="inlineInputAction">
+                      <input
+                        type="password"
+                        value={settings.jupiterApiKey}
+                        onChange={(event) => updateSettings({ jupiterApiKey: event.target.value })}
+                        placeholder={settings.jupiterApiKey ? "Replace saved key" : "Enter Jupiter API key"}
+                        autoComplete="off"
+                      />
+                      <button type="button" onClick={saveInline}>Save Key</button>
                     </div>
-                  ))}
-                  {!webVault?.wallets.length && <p className="emptyRegistry">No encrypted wallet has been imported.</p>}
-                </div>
+                    <small>Stored locally in this browser. Leave blank to keep using public Jupiter access.</small>
+                  </div>
+                </IntegrationCard>
 
-                <div className="field">
-                  <span>Secret key for {publicAddress.slice(0, 6)}...{publicAddress.slice(-6)}</span>
-                  <input
-                    type="password"
-                    value={walletSecretInput}
-                    onChange={(event) => setWalletSecretInput(event.target.value)}
-                    placeholder="Base58 or [12,34,...]"
-                    disabled={!vaultUnlocked || Boolean(webVault?.wallets.length)}
-                    autoComplete="off"
-                  />
-                  <small>The derived address must match the wallet currently connected in Phantom or Solflare.</small>
-                </div>
-                <button type="button" className="railBtn" disabled={!vaultUnlocked || !walletSecretInput.trim() || Boolean(webVault?.wallets.length)} onClick={onImportWallet}>
-                  Import and Encrypt Wallet
-                </button>
-                <div className="notice warning">
-                  <span>!</span>
+                <IntegrationCard title="Tavily" badge={settings.tavilyApiKey ? "CONFIGURED" : "OPTIONAL"} ok={Boolean(settings.tavilyApiKey)}>
+                  <p>Read-only web and finance research for Agent or Mission sessions.</p>
+                  <div className="field">
+                    <span>Tavily API key</span>
+                    <div className="inlineInputAction">
+                      <input
+                        type="password"
+                        value={settings.tavilyApiKey}
+                        onChange={(event) => updateSettings({ tavilyApiKey: event.target.value })}
+                        placeholder={settings.tavilyApiKey ? "Replace saved key" : "Enter Tavily API key"}
+                        autoComplete="off"
+                      />
+                      <button type="button" onClick={saveInline}>Save Key</button>
+                    </div>
+                    <small>The AI may invoke this read-only research tool. Secrets are not inserted into prompts.</small>
+                  </div>
+                </IntegrationCard>
+              </div>
+            )}
+
+            {activeStep === 2 && (
+              <div className="setupStepContent">
+                <div className="notice info">
+                  <span>i</span>
                   <div>
-                    <strong>Imported keys do not enable automatic trading</strong>
-                    <p>Pump.fun web remains preview-only. Imported keys are not sent to APIs and are not used for broadcast.</p>
+                    <strong>Restricted Mainnet policy</strong>
+                    <p>Every transaction must pass policy checks and then be confirmed in the connected wallet extension.</p>
                   </div>
                 </div>
-                {vaultMessage && <p className="setupFeedback">{vaultMessage}</p>}
-              </div>
-            )}
 
-            {setupStep === 3 && (
-              <div className="setupStepContent">
-                <div className="field">
-                  <span>Custom Solana RPC Endpoint</span>
-                  <input
-                    type="url"
-                    value={settings.customRpcUrl}
-                    onChange={(event) => setSettings({ ...settings, customRpcUrl: event.target.value })}
-                    placeholder="https://mainnet.helius-rpc.com/?api-key=..."
-                  />
-                </div>
                 <div className="fieldGrid">
-                  <div className="field">
-                    <span>Jupiter API Key</span>
-                    <input
-                      type="password"
-                      value={settings.jupiterApiKey}
-                      onChange={(event) => setSettings({ ...settings, jupiterApiKey: event.target.value })}
-                      placeholder="Optional"
-                    />
-                  </div>
-                  <div className="field">
-                    <span>Tavily API Key</span>
-                    <input
-                      type="password"
-                      value={settings.tavilyApiKey}
-                      onChange={(event) => setSettings({ ...settings, tavilyApiKey: event.target.value })}
-                      placeholder="Optional"
-                    />
-                  </div>
+                  <NumberField label="Context Budget" value={settings.contextBudget} onChange={(value) => updateSettings({ contextBudget: value })} />
+                  <NumberField label="Max Output Tokens" value={settings.outputLimit} onChange={(value) => updateSettings({ outputLimit: value })} />
+                  <NumberField label="Temperature" value={settings.temperature} step="0.1" onChange={(value) => updateSettings({ temperature: value })} />
+                  <NumberField label="Default Deadline (Minutes)" value={settings.defaultDeadlineMinutes} onChange={(value) => updateSettings({ defaultDeadlineMinutes: value })} />
+                  <NumberField label="Max Network Fee (Lamports)" value={settings.maxNetworkFee} onChange={(value) => updateSettings({ maxNetworkFee: value })} />
+                  <NumberField label="Max Slippage (BPS)" value={settings.maxSlippageBps} onChange={(value) => updateSettings({ maxSlippageBps: value })} />
                 </div>
-              </div>
-            )}
 
-            {setupStep === 4 && (
-              <div className="setupStepContent">
-                <div className="fieldGrid">
-                  <NumberField label="Context Budget" value={settings.contextBudget} onChange={(value) => setSettings({ ...settings, contextBudget: value })} />
-                  <NumberField label="Max Output Tokens" value={settings.outputLimit} onChange={(value) => setSettings({ ...settings, outputLimit: value })} />
-                  <NumberField label="Temperature" value={settings.temperature} step="0.1" onChange={(value) => setSettings({ ...settings, temperature: value })} />
-                  <NumberField label="Default Deadline (Minutes)" value={settings.defaultDeadlineMinutes} onChange={(value) => setSettings({ ...settings, defaultDeadlineMinutes: value })} />
-                  <NumberField label="Max Network Fee (Lamports)" value={settings.maxNetworkFee} onChange={(value) => setSettings({ ...settings, maxNetworkFee: value })} />
-                  <NumberField label="Max Slippage (BPS)" value={settings.maxSlippageBps} onChange={(value) => setSettings({ ...settings, maxSlippageBps: value })} />
-                </div>
                 <div className="fieldGrid">
                   <div className="field">
                     <span>Priority</span>
                     <select
                       value={settings.priority}
-                      onChange={(event) => setSettings({ ...settings, priority: event.target.value as WebSetupSettings["priority"] })}
+                      onChange={(event) => updateSettings({ priority: event.target.value as WebSetupSettings["priority"] })}
                     >
                       <option value="economy">Economy</option>
                       <option value="standard">Standard</option>
                       <option value="fast">Fast</option>
                     </select>
                   </div>
-                  <NumberField label="Pump Max Spend (Lamports)" value={settings.pumpMaxSpendLamports} onChange={(value) => setSettings({ ...settings, pumpMaxSpendLamports: value })} />
-                  <NumberField label="Pump Take Profit (BPS)" value={settings.pumpTakeProfitBps} onChange={(value) => setSettings({ ...settings, pumpTakeProfitBps: value })} />
-                  <NumberField label="Pump Stop Loss (BPS)" value={settings.pumpStopLossBps} onChange={(value) => setSettings({ ...settings, pumpStopLossBps: value })} />
-                  <NumberField label="Pump Max Open Positions" value={settings.pumpMaxOpenPositions} onChange={(value) => setSettings({ ...settings, pumpMaxOpenPositions: value })} />
+                  <NumberField label="Pump Max Spend (Lamports)" value={settings.pumpMaxSpendLamports} onChange={(value) => updateSettings({ pumpMaxSpendLamports: value })} />
+                  <NumberField label="Pump Take Profit (BPS)" value={settings.pumpTakeProfitBps} onChange={(value) => updateSettings({ pumpTakeProfitBps: value })} />
+                  <NumberField label="Pump Stop Loss (BPS)" value={settings.pumpStopLossBps} onChange={(value) => updateSettings({ pumpStopLossBps: value })} />
+                  <NumberField label="Pump Max Open Positions" value={settings.pumpMaxOpenPositions} onChange={(value) => updateSettings({ pumpMaxOpenPositions: value })} />
                 </div>
-                <small className="securityBoundary">Pump.fun web execution is preview-only; these values are retained for future policy guards.</small>
+                <small className="securityBoundary">Pump.fun web execution is preview-only until wallet-approved Pump.fun broadcast is implemented.</small>
               </div>
             )}
 
-            {setupStep === 5 && (
+            {activeStep === 3 && (
               <div className="setupStepContent">
-                <div className="fieldGrid">
-                  <div className="field">
-                    <span>OpenRouter API Key</span>
-                    <input
-                      type="password"
-                      value={settings.openRouterApiKey}
-                      onChange={(event) => setSettings({ ...settings, openRouterApiKey: event.target.value })}
-                      placeholder="sk-or-..."
-                    />
+                <IntegrationCard title="OpenRouter" badge={settings.openRouterApiKey ? "CONFIGURED" : "REQUIRED FOR AI"} ok={Boolean(settings.openRouterApiKey)}>
+                  <p>Inference provider for the web AI trading agent. Settings apply to the next agent response.</p>
+                  <div className="fieldGrid">
+                    <div className="field">
+                      <span>OpenRouter API key</span>
+                      <div className="inlineInputAction">
+                        <input
+                          type="password"
+                          value={settings.openRouterApiKey}
+                          onChange={(event) => updateSettings({ openRouterApiKey: event.target.value })}
+                          placeholder={settings.openRouterApiKey ? "Replace saved key" : "sk-or-..."}
+                          autoComplete="off"
+                        />
+                        <button type="button" onClick={saveInline}>Save Key</button>
+                      </div>
+                    </div>
+                    <div className="field">
+                      <span>AI model</span>
+                      <select value={settings.aiModel} onChange={(event) => updateSettings({ aiModel: event.target.value })}>
+                        <option value="openai/gpt-4o-mini">openai/gpt-4o-mini</option>
+                        <option value="openai/gpt-4.1-mini">openai/gpt-4.1-mini</option>
+                        <option value="anthropic/claude-3.5-sonnet">anthropic/claude-3.5-sonnet</option>
+                        <option value="google/gemini-2.0-flash-001">google/gemini-2.0-flash-001</option>
+                      </select>
+                    </div>
                   </div>
-                  <div className="field">
-                    <span>AI Model</span>
-                    <select value={settings.aiModel} onChange={(event) => setSettings({ ...settings, aiModel: event.target.value })}>
-                      <option value="openai/gpt-4o-mini">openai/gpt-4o-mini</option>
-                      <option value="openai/gpt-4.1-mini">openai/gpt-4.1-mini</option>
-                      <option value="anthropic/claude-3.5-sonnet">anthropic/claude-3.5-sonnet</option>
-                      <option value="google/gemini-2.0-flash-001">google/gemini-2.0-flash-001</option>
-                    </select>
+                </IntegrationCard>
+
+                <div className="notice warning">
+                  <span>!</span>
+                  <div>
+                    <strong>Wallet approval remains external</strong>
+                    <p>The AI can prepare a checked transaction, but the browser wallet must display and approve the final transaction.</p>
                   </div>
                 </div>
               </div>
             )}
 
-            {setupStep === 6 && (
+            {isReview && (
               <div className="reviewList">
                 <ReviewRow
-                  title="Local security"
-                  detail={webVault ? `Encrypted browser vault · ${vaultUnlocked ? "unlocked" : "locked"}` : "Web vault has not been created"}
-                  status={webVault ? "CONFIGURED" : "REQUIRED"}
-                  ok={Boolean(webVault)}
-                  onEdit={() => setSetupStep(1)}
-                />
-                <ReviewRow
-                  title="Wallets"
-                  detail={webVault?.wallets.length ? "Connected wallet and encrypted signer address match" : "Connected wallet · signer secret not imported"}
-                  status="CONFIGURED"
+                  title="Connected wallet"
+                  detail={`${shortAddress(publicAddress)} - browser wallet only. Disconnect to use another wallet.`}
+                  status="WALLET APPROVAL"
                   ok
-                  onEdit={() => setSetupStep(2)}
                 />
                 <ReviewRow
                   title="API keys"
-                  detail={`Jupiter ${settings.jupiterApiKey ? "configured" : "not set"} · Tavily ${settings.tavilyApiKey ? "configured" : "not set"}`}
-                  status={settings.jupiterApiKey || settings.tavilyApiKey ? "PARTIAL" : "OPTIONAL"}
+                  detail={`RPC ${settings.customRpcUrl ? "custom" : "default"} - Jupiter ${settings.jupiterApiKey ? "configured" : "not set"} - Tavily ${settings.tavilyApiKey ? "configured" : "not set"}`}
+                  status={settings.jupiterApiKey || settings.tavilyApiKey || settings.customRpcUrl ? "CONFIGURED" : "OPTIONAL"}
                   ok
-                  onEdit={() => setSetupStep(3)}
+                  onEdit={() => setSetupStep(1)}
                 />
                 <ReviewRow
                   title="Agent core"
-                  detail={`${settings.contextBudget} context · ${settings.outputLimit} output · ${settings.priority} priority`}
+                  detail={`${settings.contextBudget} context - ${settings.outputLimit} output - ${settings.priority} priority`}
                   status="SAVED"
                   ok
-                  onEdit={() => setSetupStep(4)}
+                  onEdit={() => setSetupStep(2)}
                 />
                 <ReviewRow
                   title="Inference provider"
                   detail={settings.openRouterApiKey ? settings.aiModel : "OpenRouter is not configured"}
                   status={settings.openRouterApiKey ? "CONFIGURED" : "REQUIRED FOR AI"}
                   ok={Boolean(settings.openRouterApiKey)}
-                  onEdit={() => setSetupStep(5)}
+                  onEdit={() => setSetupStep(3)}
                 />
                 <div className="notice warning">
                   <span>!</span>
                   <div>
-                    <strong>Mainnet safety boundary</strong>
-                    <p>Jupiter swaps require wallet approval. Pump.fun web remains preview-only; autonomous signing and Full Access are unavailable.</p>
+                    <strong>Mainnet safety status</strong>
+                    <p>Restricted Jupiter swaps are available after quote, simulation, and wallet confirmation. Pump.fun web remains preview-only. Full Access and autonomous signing are disabled.</p>
                   </div>
                 </div>
               </div>
             )}
 
             <footer className="setupActionsRow">
-              {setupStep > 1 && setupStep < 6 && (
-                <button type="button" onClick={() => setSetupStep(setupStep - 1)} className="railBtn">Back</button>
+              {activeStep > 1 && activeStep < reviewStep && !editingSetup && (
+                <button type="button" onClick={() => setSetupStep(activeStep - 1)} className="railBtn">
+                  Back
+                </button>
               )}
-              {setupStep === 1 && !webVault ? null : setupStep < 6 ? (
+              {activeStep < reviewStep ? (
                 <button type="button" onClick={continueFromStep} className="primaryButton">
-                  {editingSetup ? "Save & Return to Review" : `Continue to Step ${setupStep + 1}`}
+                  {editingSetup ? "Save and Return to Review" : `Continue to Step ${activeStep + 1}`}
                 </button>
               ) : (
                 <button type="button" onClick={onSaveSettings} className="primaryButton">
@@ -386,6 +322,18 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
   );
 }
 
+function IntegrationCard(props: { title: string; badge: string; ok?: boolean; children: ReactNode }) {
+  return (
+    <section className="integrationCard">
+      <div className="integrationCardHeader">
+        <h2>{props.title}</h2>
+        <span className={`setupStatus ${props.ok ? "ok" : ""}`}>{props.badge}</span>
+      </div>
+      {props.children}
+    </section>
+  );
+}
+
 function NumberField(props: { label: string; value: string; step?: string; onChange: (value: string) => void }) {
   return (
     <div className="field">
@@ -395,7 +343,7 @@ function NumberField(props: { label: string; value: string; step?: string; onCha
   );
 }
 
-function ReviewRow(props: { title: string; detail: string; status: string; ok: boolean; onEdit: () => void }) {
+function ReviewRow(props: { title: string; detail: string; status: string; ok: boolean; onEdit?: () => void }) {
   return (
     <div className="reviewRow">
       <span className={`reviewDot ${props.ok ? "ok" : "warn"}`} />
@@ -404,7 +352,15 @@ function ReviewRow(props: { title: string; detail: string; status: string; ok: b
         <small>{props.detail}</small>
       </div>
       <span className={`setupStatus ${props.ok ? "ok" : "warn"}`}>{props.status}</span>
-      <button type="button" className="reviewEdit" onClick={props.onEdit}>Edit</button>
+      {props.onEdit && (
+        <button type="button" className="reviewEdit" onClick={props.onEdit}>
+          Edit
+        </button>
+      )}
     </div>
   );
+}
+
+function shortAddress(address: string) {
+  return `${address.slice(0, 5)}...${address.slice(-5)}`;
 }

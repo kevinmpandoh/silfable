@@ -42,7 +42,8 @@ export class MissionSimulationService {
         inputAmount: mission.inputAmount, maxSlippageBps: mission.maxSlippageBps, deadlineAt: mission.deadlineAt, stopConditions: mission.stopConditions,
       });
       if (refreshed.status !== "ready-for-review" || refreshed.quote === null) return result(base, "blocked", null, null, [], null, null, [], "Mission policy no longer passes against current Mainnet evidence.");
-      const order = await this.#reads.buildUnsignedSwapOrder(mission.inputMint, mission.outputMint, mission.inputAmount, mission.walletAddress, mission.maxSlippageBps);
+      const priority = this.#settings.get().priority;
+      const order = await this.#reads.buildUnsignedSwapOrder(mission.inputMint, mission.outputMint, mission.inputAmount, mission.walletAddress, mission.maxSlippageBps, priority);
       const minimumOut = BigInt(refreshed.quote.outAmount) * BigInt(10_000 - mission.maxSlippageBps) / 10_000n;
       if (BigInt(order.outAmount) < minimumOut) return result(base, "blocked", order.router, order.outAmount, [], null, null, [], "Unsigned order output fell below the mission slippage floor.");
       const programIds = inspectUnsignedTransaction(order.transaction, mission.walletAddress);

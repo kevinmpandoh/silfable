@@ -1,4 +1,4 @@
-// Client-side IndexedDB helper for Web App Chat History & Sessions
+// Backend API helper for Web App Chat History & Sessions (backed by MongoDB)
 
 export interface SessionItem {
   id: string;
@@ -46,152 +46,84 @@ export interface WebUsage {
   model: string;
 }
 
-const DB_NAME = "silfable_web_db_v1";
-const DB_VERSION = 1;
-
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === "undefined") {
-      reject(new Error("IndexedDB is only available in browser environments."));
-      return;
-    }
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains("sessions")) {
-        const sessionStore = db.createObjectStore("sessions", { keyPath: "id" });
-        sessionStore.createIndex("filter", "filter", { unique: false });
-        sessionStore.createIndex("updatedAt", "updatedAt", { unique: false });
-      }
-      if (!db.objectStoreNames.contains("messages")) {
-        const messageStore = db.createObjectStore("messages", { keyPath: "id" });
-        messageStore.createIndex("sessionId", "sessionId", { unique: false });
-        messageStore.createIndex("createdAt", "createdAt", { unique: false });
-      }
-    };
-
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-export async function getAllSessions(): Promise<SessionItem[]> {
+export async function getAllSessions(walletAddress: string): Promise<SessionItem[]> {
   try {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("sessions", "readonly");
-      const store = tx.objectStore("sessions");
-      const index = store.index("updatedAt");
-      const request = index.getAll();
-
-      request.onsuccess = () => {
-        // Return sorted descending (newest first)
-        const items: SessionItem[] = request.result || [];
-        resolve(items.reverse());
-      };
-      request.onerror = () => reject(request.error);
-    });
+    if (!walletAddress) return [];
+    const res = await fetch(`/api/chat/session?walletAddress=${encodeURIComponent(walletAddress)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.sessions || [];
   } catch (err) {
-    console.error("IndexedDB getAllSessions error:", err);
+    console.error("Backend getAllSessions error:", err);
     return [];
   }
 }
 
-export async function saveSession(session: SessionItem): Promise<void> {
+export async function saveSession(walletAddress: string, session: SessionItem): Promise<SessionItem | null> {
   try {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("sessions", "readwrite");
-      const store = tx.objectStore("sessions");
-      const request = store.put(session);
-
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+    if (!walletAddress) return null;
+    const res = await fetch("/api/chat/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walletAddress, session }),
     });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.session || null;
   } catch (err) {
-    console.error("IndexedDB saveSession error:", err);
+    console.error("Backend saveSession error:", err);
+    return null;
   }
 }
 
-export async function deleteSession(sessionId: string): Promise<void> {
+export async function deleteSession(walletAddress: string, sessionId: string): Promise<void> {
   try {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(["sessions", "messages"], "readwrite");
-      tx.objectStore("sessions").delete(sessionId);
-
-      const messageStore = tx.objectStore("messages");
-      const index = messageStore.index("sessionId");
-      const range = IDBKeyRange.only(sessionId);
-      const req = index.openCursor(range);
-
-      req.onsuccess = (e) => {
-        const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
-        if (cursor) {
-          cursor.delete();
-          cursor.continue();
-        }
-      };
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error);
+    if (!walletAddress || !sessionId) return;
+    await fetch("/api/chat/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walletAddress, action: "delete", sessionId }),
     });
   } catch (err) {
-    console.error("IndexedDB deleteSession error:", err);
+    console.error("Backend deleteSession error:", err);
   }
 }
 
-export async function deleteAllSessions(): Promise<void> {
+export async function deleteAllSessions(walletAddress: string): Promise<void> {
   try {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(["sessions", "messages"], "readwrite");
-      tx.objectStore("sessions").clear();
-      tx.objectStore("messages").clear();
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error);
+    if (!walletAddress) return;
+    await fetch("/api/chat/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walletAddress, action: "delete_all" }),
     });
   } catch (err) {
-    console.error("IndexedDB deleteAllSessions error:", err);
+    console.error("Backend deleteAllSessions error:", err);
   }
 }
 
-export async function getSessionMessages(sessionId: string): Promise<WebMessage[]> {
+export async function getSessionMessages(walletAddress: string, sessionId: string): Promise<WebMessage[]> {
   try {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("messages", "readonly");
-      const store = tx.objectStore("messages");
-      const index = store.index("sessionId");
-      const request = index.getAll(IDBKeyRange.only(sessionId));
-
-      request.onsuccess = () => {
-        const items: WebMessage[] = request.result || [];
-        // Sort ascending by createdAt
-        resolve(items.sort((a, b) => a.createdAt - b.createdAt));
-      };
-      request.onerror = () => reject(request.error);
-    });
+    if (!sessionId) return [];
+    const res = await fetch(`/api/chat/message?sessionId=${encodeURIComponent(sessionId)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.messages || [];
   } catch (err) {
-    console.error("IndexedDB getSessionMessages error:", err);
+    console.error("Backend getSessionMessages error:", err);
     return [];
   }
 }
 
-export async function saveMessage(msg: WebMessage): Promise<void> {
+export async function saveMessage(walletAddress: string, msg: WebMessage): Promise<void> {
   try {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction("messages", "readwrite");
-      const store = tx.objectStore("messages");
-      const request = store.put(msg);
-
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+    if (!msg || !msg.sessionId) return;
+    await fetch("/api/chat/message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: msg }),
     });
   } catch (err) {
-    console.error("IndexedDB saveMessage error:", err);
+    console.error("Backend saveMessage error:", err);
   }
 }

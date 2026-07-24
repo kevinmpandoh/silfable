@@ -46,5 +46,82 @@ test("limit-order simulation blocks a deposit whose receiver is not the authenti
   assert.equal(simulation.status, "blocked"); assert.match(simulation.error ?? "", /not bound/u);
 });
 
+test("limit-order verifyExecutionReceipt updates status based on signature verification", async () => {
+  const goodSig = "1".repeat(64);
+  const badSig = "2".repeat(64);
+  const reads = {
+    verifyTransactionSignature: async (sig: string) => ({
+      state: sig === goodSig ? ("finalized" as const) : ("failed" as const),
+      slot: 100,
+      error: sig === goodSig ? null : "Transaction failed on chain",
+      verifiedAt: "2026-07-24T12:00:00.000Z",
+    }),
+  } as unknown as MainnetReadService;
+  const service = new LimitOrderService({ reads, wallets: {} as WalletOnboardingService, trigger: {} as JupiterTriggerV2Client });
+  const pendingReceipt = {
+    id: "00000000-0000-4000-8000-000000000001", previewId: "00000000-0000-4000-8000-000000000002", simulationId: "00000000-0000-4000-8000-000000000003",
+    orderId: "order-123456", status: "unknown" as const, depositSignature: goodSig, vaultAddress: SOL, explorerUrl: `https://explorer.solana.com/tx/${goodSig}`,
+    depositConfirmed: false, chainVerification: "unavailable" as const, chainSlot: null, error: "Pending", verifiedAt: null, createdAt: "2026-07-24T10:00:00.000Z",
+  };
+  const verified = await service.verifyExecutionReceipt(pendingReceipt);
+  assert.equal(verified.status, "active");
+  assert.equal(verified.depositConfirmed, true);
+  assert.equal(verified.chainSlot, 100);
+
+  const failedReceipt = await service.verifyExecutionReceipt({ ...pendingReceipt, depositSignature: badSig });
+  assert.equal(failedReceipt.status, "failed");
+  assert.equal(failedReceipt.depositConfirmed, false);
+});
+
+test("limit-order verifyCancelReceipt updates status based on signature verification", async () => {
+  const goodSig = "1".repeat(64);
+  const badSig = "2".repeat(64);
+  const reads = {
+    verifyTransactionSignature: async (sig: string) => ({
+      state: sig === goodSig ? ("finalized" as const) : ("failed" as const),
+      slot: 105,
+      error: sig === goodSig ? null : "Withdrawal failed on chain",
+      verifiedAt: "2026-07-24T12:05:00.000Z",
+    }),
+  } as unknown as MainnetReadService;
+  const service = new LimitOrderService({ reads, wallets: {} as WalletOnboardingService, trigger: {} as JupiterTriggerV2Client });
+  const pendingCancel = {
+    id: "00000000-0000-4000-8000-000000000010", orderId: "order-123456", simulationId: "00000000-0000-4000-8000-000000000011",
+    status: "unknown" as const, withdrawalSignature: goodSig, explorerUrl: `https://explorer.solana.com/tx/${goodSig}`,
+    chainVerification: "unavailable" as const, chainSlot: null, error: "Pending", verifiedAt: null, createdAt: "2026-07-24T10:00:00.000Z",
+  };
+  const verified = await service.verifyCancelReceipt(pendingCancel);
+  assert.equal(verified.status, "cancelled");
+  assert.equal(verified.chainSlot, 105);
+
+  const failedCancel = await service.verifyCancelReceipt({ ...pendingCancel, withdrawalSignature: badSig });
+  assert.equal(failedCancel.status, "failed");
+});
+
+test("limit-order simulation handles USDC to SOL swap preview", async () => {
+  const signer = await createKeyPairSignerFromPrivateKeyBytes(Uint8Array.from({ length: 32 }, (_, index) => index + 1));
+  const transaction = unsignedTransaction(signer.address, "11111111111111111111111111111111");
+  const preview: LimitOrderContractPreview = {
+    ...previewFor(signer.address),
+    inputMint: USDC,
+    outputMint: SOL,
+    triggerMint: SOL,
+    goal: "Buy SOL when price drops below $140",
+  };
+  const reads = {
+    portfolio: async () => ({ address: signer.address, slot: 1, solBalance: "1", solUsdPrice: 150, totalUsd: 250, assets: [{ mint: USDC, symbol: "USDC", amount: "1000000000", balance: "1000", decimals: 6, usdPrice: 1, usdValue: 1000, logoUri: null }], verifiedAt: new Date().toISOString() }),
+    prices: async () => new Map([[USDC, { usdPrice: 1, createdAt: null, blockId: 1 }], [SOL, { usdPrice: 150, createdAt: null, blockId: 1 }]]),
+    simulateUnsignedTransaction: async () => ({ slot: 2, err: null, logs: [], unitsConsumed: 400, feeLamports: 5000 }),
+  } as unknown as MainnetReadService;
+  const trigger = {
+    getOrRegisterVault: async () => ({ userPubkey: signer.address, vaultPubkey: SOL, privyVaultId: "vault-id" }),
+    craftSingleDeposit: async () => ({ transaction, requestId: "deposit-usdc-req", receiverAddress: SOL, mint: USDC, amount: "100000000", tokenDecimals: 6, inputTokenAccount: USDC }),
+  } as unknown as JupiterTriggerV2Client;
+  const service = new LimitOrderService({ reads, wallets: {} as WalletOnboardingService, trigger });
+  const simulation = await service.simulate(preview);
+  assert.equal(simulation.status, "passed");
+  assert.equal(simulation.transactionSigned, false);
+});
+
 function previewFor(walletAddress: string): LimitOrderContractPreview { return { id: "00000000-0000-4000-8000-000000000020", status: "ready-for-review", goal: "Sell 0.1 SOL above $200", walletAddress, inputMint: SOL, outputMint: USDC, inputAmount: "100000000", triggerMint: SOL, triggerCondition: "above", triggerPriceUsd: 200, maxSlippageBps: 100, expiresAt: new Date(Date.now() + 24 * 60 * 60_000).toISOString(), estimatedInputValueUsd: 15, checks: [{ code: "minimum_order_value", status: "pass", message: "Minimum met" }], executionAllowed: false, lifecycle: "preview-only", createdAt: new Date().toISOString() }; }
 function unsignedTransaction(walletValue: string, program: string): string { const wallet = address(walletValue); const message = pipe(createTransactionMessage({ version: 0 }), (value) => setTransactionMessageFeePayer(wallet, value), (value) => setTransactionMessageLifetimeUsingBlockhash({ blockhash: blockhash("11111111111111111111111111111111"), lastValidBlockHeight: 1n }, value), (value) => appendTransactionMessageInstruction({ programAddress: address(program) }, value)); return Buffer.from(getTransactionEncoder().encode(compileTransaction(message))).toString("base64"); }

@@ -65,6 +65,37 @@ test("Pump Mainnet RPC sends signed transaction base64 and returns valid signatu
 });
 
 
+test("Pump Mainnet RPC retries read operations on 429 status and succeeds", async () => {
+  let attempts = 0;
+  const rpc = new PumpMainnetRpc({
+    rpcUrl: "https://rpc.example.test",
+    fetch: async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        return { ok: false, status: 429, json: async () => ({ error: "Rate limit" }) } as Response;
+      }
+      return response({ result: { context: { slot: 42 }, value: [{ lamports: 7, owner: OWNER, data: [Buffer.from([1]).toString("base64"), "base64"] }] } });
+    },
+  });
+  const result = await rpc.getMultipleAccountsInfoAndContext([GLOBAL], { commitment: "finalized" });
+  assert.equal(attempts, 2);
+  assert.equal(result.context.slot, 42);
+});
+
+test("Pump Mainnet RPC never retries sendTransaction on 429 or failure", async () => {
+  let attempts = 0;
+  const dummyTxBase64 = Buffer.from(new Uint8Array(100)).toString("base64");
+  const rpc = new PumpMainnetRpc({
+    rpcUrl: "https://rpc.example.test",
+    fetch: async () => {
+      attempts += 1;
+      return { ok: false, status: 429, json: async () => ({ error: "Rate limit" }) } as Response;
+    },
+  });
+  await assert.rejects(() => rpc.sendTransaction(dummyTxBase64), /Pump Mainnet RPC failed \(429\)/u);
+  assert.equal(attempts, 1);
+});
+
 function response(body: unknown): Response {
   return { ok: true, status: 200, json: async () => body } as Response;
 }

@@ -6,6 +6,7 @@ import {
 } from "@silfable/contracts";
 
 import type { RuntimeDatabase } from "../storage/database.js";
+import type { PumpRiskLedgerService } from "./risk-ledger.js";
 
 type ReceiptSecretStore = {
   getSecret(name: "pump-receipt-store-key"): Promise<string | null>;
@@ -18,11 +19,13 @@ const AAD = Buffer.from("silfable-pump-receipt-store-v1", "utf8");
 export class EncryptedPumpReceiptService {
   readonly #database: RuntimeDatabase;
   readonly #keystore: ReceiptSecretStore;
+  readonly #riskLedger: PumpRiskLedgerService | undefined;
   #keyTail: Promise<void> = Promise.resolve();
 
-  constructor(database: RuntimeDatabase, keystore: ReceiptSecretStore) {
+  constructor(database: RuntimeDatabase, keystore: ReceiptSecretStore, riskLedger?: PumpRiskLedgerService) {
     this.#database = database;
     this.#keystore = keystore;
+    this.#riskLedger = riskLedger;
   }
 
   async saveReceipt(receipt: PumpExecutionReceipt): Promise<void> {
@@ -39,6 +42,9 @@ export class EncryptedPumpReceiptService {
       tag: cipher.getAuthTag().toString("base64"),
       updatedAt: parsed.reconciledAt,
     });
+    if (this.#riskLedger !== undefined) {
+      await this.#riskLedger.recordReceipt(parsed);
+    }
   }
 
   async getReceipt(id: string): Promise<PumpExecutionReceipt | null> {
