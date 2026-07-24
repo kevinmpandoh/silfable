@@ -9,32 +9,33 @@ export const metadata: Metadata = {
 };
 
 const statusRows = [
-  ["Live", "Restricted Jupiter swap", "Solana Mainnet swap preview, simulation, wallet approval, broadcast receipt."],
-  ["Live", "Portfolio reads", "Connected-wallet SOL balance and activity snapshots from configured Mainnet RPC."],
+  ["Live", "24/7 Autonomous Cloud Worker", "Background AI trading via BullMQ/Redis with autonomous Mainnet signing."],
+  ["Live", "Restricted & Full Access", "Supports both wallet-approval workflows and zero-click autonomous execution via ephemeral vaults."],
+  ["Live", "Centralized State Sync", "User settings, sessions, and histories synced across MongoDB Cloud for persistent access."],
   ["Preview", "Pump.fun", "Research and proposal flow only on web. No Pump.fun signing or broadcast yet."],
-  ["Planned", "Full Access", "No silent signing, autonomous broadcast, EVM, bridge, Hyperliquid, or limit orders in production today."],
+  ["Planned", "Cross-Chain EVM", "EVM, bridge, and Hyperliquid execution remain in planning phase."],
 ] as const;
 
 const principles = [
   {
     icon: ShieldCheck,
-    title: "Reasoning is not authority",
-    text: "The AI may analyze markets and draft actions, but supported transactions still pass policy checks and user approval.",
+    title: "Secure Ephemeral Vaults",
+    text: "Web autonomous trading uses strictly isolated, AES-256 encrypted keypairs per session. Your main wallet's seed phrase is never requested.",
   },
   {
     icon: LockKeyhole,
-    title: "Wallet approval stays external",
-    text: "Desktop uses local vault flows. Web uses only the currently connected browser wallet, so final authority stays inside Phantom, Solflare, or another wallet adapter.",
+    title: "Dual-Mode Execution",
+    text: "Choose between 'Restricted Mode' (Phantom wallet pop-up approval) or 'Full Access 24/7 Mode' (Autonomous server execution with drawdown limits).",
   },
   {
     icon: CheckCircle2,
-    title: "Receipts matter",
-    text: "Every quote, simulation, confirmation, rejection, and failure should be readable after restart.",
+    title: "Persistent Memory",
+    text: "With MongoDB and Redis integration, your AI agents never sleep. They remember past context and operate 24/7 even when your browser is closed.",
   },
   {
     icon: TriangleAlert,
-    title: "Fail closed",
-    text: "Unknown RPC state, fee spikes, missing route evidence, stale quote data, or policy ambiguity blocks execution.",
+    title: "Automated Kill Switch",
+    text: "Full access sessions run with hard-coded max drawdown limits. If breached, the AI revokes its own keys to fail safely.",
   },
 ] as const;
 
