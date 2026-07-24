@@ -31,6 +31,7 @@ import { LimitOrderPreviewCard } from "@/components/cards/LimitOrderPreviewCard"
 import { JupiterSwapPreviewCard } from "@/components/cards/JupiterSwapPreviewCard";
 import { WebSetupWizard } from "@/components/trade/WebSetupWizard";
 import { CloudWorkerSetupModal } from "@/components/trade/CloudWorkerSetupModal";
+import { WebNewSessionModal } from "@/components/trade/WebNewSessionModal";
 
 // Dynamically import WalletMultiButton to prevent SSR hydration errors
 const WalletMultiButton = dynamic<React.HTMLAttributes<HTMLButtonElement>>(
@@ -617,10 +618,32 @@ export default function TradePage() {
 
   return (
     <div className="layout">
-      <CloudWorkerSetupModal
-        walletAddress={publicKey.toBase58()}
+      <WebNewSessionModal
         isOpen={showSessionModal}
         onClose={() => setShowSessionModal(false)}
+        onCreateRestrictedSession={async ({ title, workspace, mode }) => {
+          if (!walletAddress) return;
+          const filterType = workspace === "pump" ? "pump" : mode;
+          const newSession: SessionItem = {
+            id: `session_${Date.now()}`,
+            title,
+            filter: filterType,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+          await saveSession(walletAddress, newSession);
+          setSessions((prev) => [newSession, ...prev]);
+          setActiveSessionId(newSession.id);
+        }}
+        onSelectFullAccess={() => {
+          setShowCloudWorkerModal(true);
+        }}
+      />
+
+      <CloudWorkerSetupModal
+        walletAddress={publicKey.toBase58()}
+        isOpen={showCloudWorkerModal}
+        onClose={() => setShowCloudWorkerModal(false)}
         onSessionStarted={(sessionId, agentPubKey) => {
           setActiveSessionId(sessionId);
           setNav("sessions");
