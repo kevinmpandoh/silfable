@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cloudDb, isDbConfigured } from "@/lib/cloud-db";
+import { cloudDb, isDbConfigured, safeDbQuery } from "@/lib/cloud-db";
 
 function isValidObjectId(id?: string): boolean {
   return typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id);
@@ -18,14 +18,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "walletAddress parameter is required" }, { status: 400 });
     }
 
-    const user = await cloudDb.user.findUnique({
-      where: { walletAddress },
-      include: {
-        chatSessions: {
-          orderBy: { updatedAt: "desc" },
-        },
-      },
-    });
+    const user = await safeDbQuery(
+      () =>
+        cloudDb.user.findUnique({
+          where: { walletAddress },
+          include: {
+            chatSessions: {
+              orderBy: { updatedAt: "desc" },
+            },
+          },
+        }),
+      null
+    );
 
     if (!user) {
       return NextResponse.json({ sessions: [] });
@@ -41,12 +45,16 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ sessions });
   } catch (error) {
-    console.error("GET /api/chat/session error:", error);
-    return NextResponse.json({ error: "Failed to fetch chat sessions" }, { status: 500 });
+    console.warn("GET /api/chat/session error:", error);
+    return NextResponse.json({ sessions: [] }, { status: 200 });
   }
 }
 
 export async function POST(req: NextRequest) {
+  if (!isDbConfigured) {
+    return NextResponse.json({ error: "DATABASE_URL is not configured" }, { status: 400 });
+  }
+
   try {
     const body = await req.json();
     const { walletAddress, session, action, sessionId } = body;
@@ -55,9 +63,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "walletAddress is required" }, { status: 400 });
     }
 
-    let user = await cloudDb.user.findUnique({ where: { walletAddress } });
+    let user = await safeDbQuery(() => cloudDb.user.findUnique({ where: { walletAddress } }), null);
     if (!user) {
-      user = await cloudDb.user.create({ data: { walletAddress } });
+      user = await safeDbQuery(() => cloudDb.user.create({ data: { walletAddress } }), null);
+    }
+
+    if (!user) {
+      return NextResponse.json({ error: "Failed to connect to user database" }, { status: 500 });
     }
 
     if (action === "delete") {
@@ -65,20 +77,24 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "sessionId is required for delete" }, { status: 400 });
       }
       if (isValidObjectId(sessionId)) {
-        await cloudDb.chatMessage.deleteMany({ where: { sessionId } });
-        await cloudDb.chatSession.delete({ where: { id: sessionId } }).catch(() => null);
+        await safeDbQuery(() => cloudDb.chatMessage.deleteMany({ where: { sessionId } }), null);
+        await safeDbQuery(() => cloudDb.chatSession.delete({ where: { id: sessionId } }), null);
       }
       return NextResponse.json({ success: true });
     }
 
     if (action === "delete_all") {
-      const userSessions = await cloudDb.chatSession.findMany({
-        where: { userId: user.id },
-        select: { id: true },
-      });
+      const userSessions = await safeDbQuery(
+        () =>
+          cloudDb.chatSession.findMany({
+            where: { userId: user.id },
+            select: { id: true },
+          }),
+        []
+      );
       const sessionIds = userSessions.map((s) => s.id);
-      await cloudDb.chatMessage.deleteMany({ where: { sessionId: { in: sessionIds } } });
-      await cloudDb.chatSession.deleteMany({ where: { userId: user.id } });
+      await safeDbQuery(() => cloudDb.chatMessage.deleteMany({ where: { sessionId: { in: sessionIds } } }), null);
+      await safeDbQuery(() => cloudDb.chatSession.deleteMany({ where: { userId: user.id } }), null);
       return NextResponse.json({ success: true });
     }
 
@@ -89,27 +105,39 @@ export async function POST(req: NextRequest) {
     let savedSession;
 
     if (isValidObjectId(session.id)) {
-      savedSession = await cloudDb.chatSession.upsert({
-        where: { id: session.id },
-        create: {
-          userId: user.id,
-          title: session.title || "New Chat",
-          filter: session.filter || "all",
-        },
-        update: {
-          title: session.title,
-          filter: session.filter,
-          updatedAt: new Date(),
-        },
-      });
+      savedSession = await safeDbQuery(
+        () =>
+          cloudDb.chatSession.upsert({
+            where: { id: session.id },
+            create: {
+              userId: user.id,
+              title: session.title || "New Chat",
+              filter: session.filter || "all",
+            },
+            update: {
+              title: session.title,
+              filter: session.filter,
+              updatedAt: new Date(),
+            },
+          }),
+        null
+      );
     } else {
-      savedSession = await cloudDb.chatSession.create({
-        data: {
-          userId: user.id,
-          title: session.title || "New Chat",
-          filter: session.filter || "all",
-        },
-      });
+      savedSession = await safeDbQuery(
+        () =>
+          cloudDb.chatSession.create({
+            data: {
+              userId: user.id,
+              title: session.title || "New Chat",
+              filter: session.filter || "all",
+            },
+          }),
+        null
+      );
+    }
+
+    if (!savedSession) {
+      return NextResponse.json({ error: "Database unavailable" }, { status: 500 });
     }
 
     return NextResponse.json({

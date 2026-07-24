@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cloudDb, isDbConfigured } from "@/lib/cloud-db";
+import { cloudDb, isDbConfigured, safeDbQuery } from "@/lib/cloud-db";
 
 export async function GET(req: Request) {
   if (!isDbConfigured) {
@@ -18,34 +18,46 @@ export async function GET(req: Request) {
       );
     }
 
-    let session = null;
+    let session: any = null;
 
     if (sessionId) {
-      session = await cloudDb.agentSession.findUnique({
-        where: { id: sessionId },
-        include: {
-          tradeLogs: {
-            take: 20,
-            orderBy: { createdAt: "desc" },
-          },
-        },
-      });
+      session = await safeDbQuery(
+        () =>
+          cloudDb.agentSession.findUnique({
+            where: { id: sessionId },
+            include: {
+              tradeLogs: {
+                take: 20,
+                orderBy: { createdAt: "desc" },
+              },
+            },
+          }),
+        null
+      );
     } else if (walletAddress) {
-      const user = await cloudDb.user.findUnique({
-        where: { walletAddress },
-      });
+      const user = await safeDbQuery(
+        () =>
+          cloudDb.user.findUnique({
+            where: { walletAddress },
+          }),
+        null
+      );
 
       if (user) {
-        session = await cloudDb.agentSession.findFirst({
-          where: { userId: user.id },
-          orderBy: { createdAt: "desc" },
-          include: {
-            tradeLogs: {
-              take: 20,
+        session = await safeDbQuery(
+          () =>
+            cloudDb.agentSession.findFirst({
+              where: { userId: user.id },
               orderBy: { createdAt: "desc" },
-            },
-          },
-        });
+              include: {
+                tradeLogs: {
+                  take: 20,
+                  orderBy: { createdAt: "desc" },
+                },
+              },
+            }),
+          null
+        );
       }
     }
 
@@ -69,9 +81,9 @@ export async function GET(req: Request) {
       },
     });
   } catch (err: any) {
-    console.warn("Agent session status query skipped/failed:", err.message);
+    console.warn("Agent session status query skipped:", err?.message || err);
     return NextResponse.json(
-      { active: false, session: null, error: err.message },
+      { active: false, session: null },
       { status: 200 }
     );
   }
