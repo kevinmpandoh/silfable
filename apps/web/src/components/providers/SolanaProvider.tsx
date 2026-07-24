@@ -6,13 +6,17 @@ import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
 import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 import { WalletError } from "@solana/wallet-adapter-base";
-import { clusterApiUrl } from "@solana/web3.js";
 
 import "@solana/wallet-adapter-react-ui/styles.css";
 
+const DEFAULT_RPC = "https://rpc.ankr.com/solana";
+
 export function SolanaProvider({ children }: { children: React.ReactNode }) {
-  const endpoint = useMemo(() => process.env.NEXT_PUBLIC_SOLANA_RPC_URL || clusterApiUrl("mainnet-beta"), []);
-  
+  const endpoint = useMemo(
+    () => process.env.NEXT_PUBLIC_SOLANA_RPC_URL || DEFAULT_RPC,
+    []
+  );
+
   const wallets = useMemo(
     () => [
       new PhantomWalletAdapter(),
@@ -26,7 +30,7 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <ConnectionProvider endpoint={endpoint}>
+    <ConnectionProvider endpoint={endpoint} config={{ commitment: "confirmed" }}>
       <WalletProvider wallets={wallets} onError={onError} autoConnect>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
