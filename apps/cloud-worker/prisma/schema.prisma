@@ -61,6 +61,12 @@ model AgentSession {
   peakBalanceLamports    String     @default("0")
   currentBalanceLamports String     @default("0")
 
+  // Degen Autonomous Discovery Settings
+  allowAutonomousDiscovery Boolean   @default(false)
+  maxSpendPerDiscovery     String    @default("10000000") // 0.01 SOL default
+  maxDailyDiscoverySpend   String    @default("100000000") // 0.1 SOL default
+  dailyDiscoverySpent      String    @default("0")
+
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
   tradeLogs              TradeLog[]

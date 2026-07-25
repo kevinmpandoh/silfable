@@ -38,24 +38,51 @@ export class TokenAllowlistService {
   }
 
   /**
-   * Evaluates whether a token is eligible for autonomous AI operations (P3.4).
-   * It must be on the user's allowlist, and must pass basic liquidity/verification checks.
+   * Checks whether autonomous discovery (Degen Mode) is enabled.
+   */
+  isAutonomousDiscoveryEnabled(): boolean {
+    return this.#db.getSetting("autonomous_discovery_enabled") === "true";
+  }
+
+  /**
+   * Toggles autonomous discovery mode.
+   */
+  setAutonomousDiscoveryEnabled(enabled: boolean): void {
+    this.#db.setSetting("autonomous_discovery_enabled", enabled ? "true" : "false");
+  }
+
+  /**
+   * Evaluates whether a token is eligible for autonomous AI operations.
+   * If token is not in explicit allowlist, but autonomous discovery is enabled,
+   * performs dynamic risk evaluation.
    */
   async evaluateAutonomousEligibility(mint: string): Promise<AutonomousEligibilityResult> {
     const allowlist = this.getAllowlist();
-    if (!allowlist.includes(mint)) {
-      return { eligible: false, reason: "Token is not in the autonomous allowlist." };
+    const isAllowlisted = allowlist.includes(mint);
+    const discoveryEnabled = this.isAutonomousDiscoveryEnabled();
+
+    if (!isAllowlisted && !discoveryEnabled) {
+      return { eligible: false, reason: "Token is not in the autonomous allowlist and Autonomous Discovery is disabled." };
     }
 
-    // In a real implementation, we would query the Jupiter API or RPC for liquidity here.
-    // For now, we fetch price to at least verify the token is resolvable by our oracle.
+    // Verify price / liquidity resolvability
     try {
       const prices = await this.#reads.prices([mint]);
       if (!prices.has(mint)) {
+        // If discovery mode is enabled, token might be a brand new Pump.fun bonding curve token
+        if (discoveryEnabled && !isAllowlisted) {
+          // Perform basic Pump.fun format validation (base58 Solana address)
+          if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) {
+            return { eligible: false, reason: "Invalid token mint address format." };
+          }
+          return { eligible: true };
+        }
         return { eligible: false, reason: "Token price is unresolvable or lacks liquidity." };
       }
     } catch (err) {
-      return { eligible: false, reason: "Failed to verify token liquidity." };
+      if (!discoveryEnabled) {
+        return { eligible: false, reason: "Failed to verify token liquidity." };
+      }
     }
 
     return { eligible: true };

@@ -4,6 +4,7 @@ import { redisConnection } from "./services/queue.js";
 import { startTradingWorker } from "./worker/trade-worker.js";
 import { startDcaWorker } from "./worker/dca-worker.js";
 import { startTpSlWorker } from "./worker/tpsl-worker.js";
+import { startDiscoveryWorker } from "./worker/discovery-worker.js";
 
 async function main() {
   console.log("==================================================");
@@ -18,7 +19,7 @@ async function main() {
     console.error(`[Redis Cloud] Connection failed: ${err.message}`);
   }
 
-  // Start BullMQ Trading Worker, DCA Scheduler Worker & TP/SL Strategy Worker
+  // Start BullMQ Trading Worker, DCA Scheduler Worker, TP/SL Worker & Autonomous Discovery Worker
   startTradingWorker();
   console.log("[BullMQ Worker] Ready and listening on 'trading-queue'");
 
@@ -27,6 +28,9 @@ async function main() {
 
   startTpSlWorker();
   console.log("[TP/SL Worker] 24/7 TP/SL Strategy Ticker started.");
+
+  startDiscoveryWorker();
+  console.log("[Discovery Worker] 24/7 Autonomous Token Discovery Ticker started.");
 
   // Start dummy HTTP Server for Railway Health Checks
   import("http").then((http) => {
