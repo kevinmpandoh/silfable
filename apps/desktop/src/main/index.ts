@@ -89,8 +89,9 @@ import { JupiterTriggerV2Client } from "./integrations/trigger-v2.js";
 import { LimitOrderService } from "./mission/limit-order.js";
 import { MissionSimulationService } from "./mission/simulation.js";
 import { TransactionSettingsService } from "./mission/transaction-settings.js";
+import { AutonomousExecutorService } from "./execution/autonomous-executor.js";
 import { DurableBackgroundObservationService } from "./execution/background-loop.js";
-import { PositionStrategyManager } from "./execution/strategy-manager.js";
+import { PositionStrategyManager, type ExitTriggerEvent } from "./execution/strategy-manager.js";
 import { MissionProposalService } from "./mission/proposals.js";
 import { TokenAllowlistService } from "./mission/token-allowlist.js";
 import { ReconciliationService } from "./execution/reconciliation.js";
@@ -200,7 +201,7 @@ function createTray(): Tray {
   return appTray;
 }
 
-function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, wallets: WalletOnboardingService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService): void {
+function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, wallets: WalletOnboardingService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService, strategyManager: PositionStrategyManager, observationService: DurableBackgroundObservationService): void {
   const requireUnlocked = (): void => { if (secretStore.isLocked()) throw new Error("Vault is locked"); };
 
   ipcMain.handle(IPC_CHANNELS.runtimeStatus, async (event) => {
@@ -765,6 +766,44 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     pumpRpc.updateRpcUrl(nextUrl);
     return SolanaRpcMutationResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, rpcUrl: request.rpcUrl });
   });
+
+  ipcMain.handle("strategy:getPositions", async (event) => {
+    assertTrustedSender(event);
+    requireUnlocked();
+    return { positions: strategyManager.getActivePositions() };
+  });
+
+  ipcMain.handle("strategy:upsertPosition", async (event, config) => {
+    assertTrustedSender(event);
+    requireUnlocked();
+    strategyManager.registerPosition(config);
+    return { success: true };
+  });
+
+  ipcMain.handle("strategy:closePosition", async (event, id) => {
+    assertTrustedSender(event);
+    requireUnlocked();
+    strategyManager.closePosition(id);
+    return { success: true };
+  });
+
+  ipcMain.handle("runtime:toggleBackgroundLoop", async (event, enabled) => {
+    assertTrustedSender(event);
+    requireUnlocked();
+    if (enabled) {
+      observationService?.startObservationLoop(async (mints) => {
+        const pricePoints = await reads.prices(mints);
+        const map = new Map<string, number>();
+        for (const [mint, pp] of pricePoints) {
+          map.set(mint, pp.usdPrice);
+        }
+        return map;
+      });
+    } else {
+      observationService?.stopObservationLoop();
+    }
+    return { success: true };
+  });
 }
 
 function assertTrustedSender(event: Electron.IpcMainInvokeEvent): void {
@@ -795,6 +834,22 @@ app.whenReady().then(async () => {
 
   const strategyManager = new PositionStrategyManager(runtimeDatabase);
   observationService = new DurableBackgroundObservationService(strategyManager, 15000);
+  
+  const autonomousExecutor = new AutonomousExecutorService({
+    strategyManager,
+    pumpRpc,
+    transactionSettings,
+    pumpRiskSettings,
+    pumpRiskLedger,
+    keystore,
+    receiptStore: pumpReceipts,
+    wallets,
+  });
+
+  observationService.on("auto_execution_triggered", (event: ExitTriggerEvent) => {
+    autonomousExecutor.executeTrigger(event).catch(console.error);
+  });
+
   const missionProposals = new MissionProposalService(reads, observationService);
   const tokenAllowlist = new TokenAllowlistService(runtimeDatabase, reads);
 
@@ -811,7 +866,7 @@ app.whenReady().then(async () => {
     return map;
   });
 
-  registerIpc(keystore, runtimeDatabase, passwords, wallets, reads, ai, sessions, simulations, limitOrders, transactionSettings, pumpRiskSettings, pumpRiskLedger, pumpReceipts, pumpRpc, preparedPump);
+  registerIpc(keystore, runtimeDatabase, passwords, wallets, reads, ai, sessions, simulations, limitOrders, transactionSettings, pumpRiskSettings, pumpRiskLedger, pumpReceipts, pumpRpc, preparedPump, strategyManager, observationService);
   mainWindow = createMainWindow();
   tray = createTray();
   powerMonitor.on("suspend", () => { preparedPump.clear(); keystore?.lock(); observationService?.stopObservationLoop(); });

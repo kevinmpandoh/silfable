@@ -1938,6 +1938,8 @@ function MainWorkspace({
   const [draft, setDraft] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState("");
+  const [activePositions, setActivePositions] = useState<any[]>([]);
+  const [backgroundLoopEnabled, setBackgroundLoopEnabled] = useState(false);
   const [nav, setNav] = useState<"sessions" | "memory" | "missions">(
     "sessions",
   );
@@ -2656,6 +2658,20 @@ function MainWorkspace({
           >
             ⚙ Settings
           </button>
+          <div style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={backgroundLoopEnabled}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  setBackgroundLoopEnabled(enabled);
+                  window.silfable.toggleBackgroundLoop(enabled);
+                }}
+              />
+              Background Loop
+            </label>
+          </div>
         </nav>
         <div className="runtimeBadge">
           <span /> Mainnet guarded · {runtime ? "ready" : "checking"}
@@ -5237,8 +5253,34 @@ function RightRail({
   const [activityState, setActivityState] = useState<
     "idle" | "loading" | "ready" | "error"
   >("idle");
+  const [activePositions, setActivePositions] = useState<any[]>([]);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const [portfolioRetry, setPortfolioRetry] = useState(0);
+
+  const [tpPercent, setTpPercent] = useState("");
+  const [slPercent, setSlPercent] = useState("");
+  
+  const pumpConfig = session?.workspace === "pump" ? session.pumpConfig : undefined;
+  const activePosition = activePositions.find(p => p.mintAddress === pumpConfig?.tokenMint);
+
+  useEffect(() => {
+    let active = true;
+    const fetchPositions = async () => {
+      try {
+        const result = await window.silfable.getActivePositions();
+        if (active) setActivePositions(result.positions);
+      } catch (err) {
+        console.error("Failed to fetch active positions", err);
+      }
+    };
+    fetchPositions();
+    const interval = setInterval(fetchPositions, 5000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   const minimumPortfolioSlot = useMemo(() => session?.messages.reduce((highest, message) => {
     const receipt = message.missionExecution;
     return receipt?.status === "confirmed" && receipt.chainSlot !== null && receipt.chainSlot !== undefined
@@ -5346,7 +5388,6 @@ function RightRail({
         : portfolio
           ? `${portfolio.solBalance} SOL · slot ${portfolio.slot.toLocaleString()} · verified ${new Date(portfolio.verifiedAt).toLocaleTimeString()}`
           : "Select or configure a wallet to load its on-chain balances.";
-  const pumpConfig = session?.workspace === "pump" ? session.pumpConfig : undefined;
   const latestPumpPreview = session?.messages
     .slice()
     .reverse()
@@ -5541,12 +5582,51 @@ function RightRail({
               <span className="totalLabel">Selected wallet exposure</span>
               <strong className="portfolioTotal">{pumpAsset?.uiAmount ?? "0"}</strong>
               <small>{pumpAsset ? `Token units at finalized slot ${portfolio?.slot.toLocaleString()}` : "No finalized balance for this mint was found in the selected wallet."}</small>
-              <div className="pumpControlGrid">
-                <button disabled>Pause</button>
-                <button disabled>Prepare sell</button>
-                <button className="dangerOutline" disabled>Emergency stop</button>
+              
+              <div className="pumpControlGrid" style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input 
+                    type="number" 
+                    placeholder="Take-Profit %" 
+                    value={tpPercent}
+                    onChange={(e) => setTpPercent(e.target.value)}
+                    style={{ flex: 1, padding: '4px', background: 'var(--input-bg)', color: 'var(--input-fg)', border: '1px solid var(--border)' }}
+                  />
+                  <input 
+                    type="number" 
+                    placeholder="Stop-Loss %" 
+                    value={slPercent}
+                    onChange={(e) => setSlPercent(e.target.value)}
+                    style={{ flex: 1, padding: '4px', background: 'var(--input-bg)', color: 'var(--input-fg)', border: '1px solid var(--border)' }}
+                  />
+                </div>
+                {activePosition ? (
+                  <button className="dangerOutline" onClick={() => window.silfable.closePosition(activePosition.id)}>
+                    Cancel Automation (Active)
+                  </button>
+                ) : (
+                  <button 
+                    disabled={!pumpAsset || Number(pumpAsset.uiAmount) <= 0}
+                    onClick={() => {
+                      if (pumpAsset && pumpConfig?.tokenMint) {
+                        window.silfable.upsertPosition({
+                          mintAddress: pumpConfig.tokenMint,
+                          amount: Math.floor(Number(pumpAsset.uiAmount) * 1000000).toString(), // approximation
+                          entryPrice: latestPumpIntelligence?.metrics?.usdPrice ?? 0,
+                          takeProfitPrice: latestPumpIntelligence?.metrics?.usdPrice ? latestPumpIntelligence.metrics.usdPrice * (1 + Number(tpPercent) / 100) : undefined,
+                          stopLossPrice: latestPumpIntelligence?.metrics?.usdPrice ? latestPumpIntelligence.metrics.usdPrice * (1 - Number(slPercent) / 100) : undefined
+                        });
+                        setTpPercent("");
+                        setSlPercent("");
+                      }
+                    }}
+                  >
+                    Authorize Automation
+                  </button>
+                )}
               </div>
-              <p className="pumpUnavailable">DCA, take-profit, stop-loss, and direct Pump execution are not enabled yet.</p>
+              <p className="pumpUnavailable" style={{ marginTop: '0.5rem' }}>Background automation runs locally while the vault is unlocked.</p>
+              
               {visibleWallet && (
                 <div className="walletLine selected">
                   <span>SESSION WALLET</span>

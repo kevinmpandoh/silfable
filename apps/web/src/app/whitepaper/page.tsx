@@ -19,8 +19,8 @@ export const metadata: Metadata = {
 
 const statusRows = [
   ["Live", "Restricted Jupiter swap", "Solana Mainnet swap preview, deterministic simulation, wallet approval, broadcast, and verified receipt generation."],
-  ["Live", "24/7 Autonomous Cloud Worker", "Background AI trading via BullMQ/Redis with zero-click Mainnet signing within bounded risk limits."],
-  ["Live", "Centralized State Sync", "User settings, active sessions, and trading histories synced across MongoDB Cloud for persistent cross-platform access."],
+  ["Live", "24/7 Autonomous Cloud Worker", "Background AI trading via distributed task queues with zero-click Mainnet signing within bounded risk limits."],
+  ["Live", "Centralized State Sync", "User settings, active sessions, and trading histories synced across high-availability Cloud Storage for persistent cross-platform access."],
   ["Live", "Pump.fun Guarded Trading", "Autonomous and manual Pump.fun bonding-curve trading guarded by live Fee Guards, Slippage Validation, and Receipt Reconciliation."],
   ["Planned", "Cross-Chain EVM", "Layer-2 EVM bridging, execution, and Hyperliquid integrations remain in the planning phase."],
 ] as const;
@@ -39,7 +39,7 @@ const principles = [
   {
     icon: CheckCircle2,
     title: "Persistent Memory",
-    text: "With MongoDB and Redis integration, your AI agents never sleep. They remember past context and operate 24/7 even when your browser is closed.",
+    text: "With enterprise cloud storage and distributed task queues, your AI agents never sleep. They remember past context and operate 24/7 even when your browser is closed.",
   },
   {
     icon: TriangleAlert,
@@ -103,7 +103,7 @@ export default function WhitepaperPage() {
             <ul className="list-decimal pl-5 space-y-4 text-black">
               <li><strong>Intent-based research, deterministic execution:</strong> The AI may analyze markets and draft actions, but supported transactions must pass strict, hard-coded deterministic policy checks before execution.</li>
               <li><strong>Ephemeral Vault Architecture:</strong> Zero-click autonomous trading uses strictly isolated, AES-256 encrypted keypairs that live only for the duration of a session.</li>
-              <li><strong>Transparent Execution Receipts:</strong> Every quote, simulation, confirmation, rejection, and failure should be readable, verified on-chain, and persistently synced via MongoDB.</li>
+              <li><strong>Transparent Execution Receipts:</strong> Every quote, simulation, confirmation, rejection, and failure should be readable, verified on-chain, and persistently synced via encrypted cloud database.</li>
               <li><strong>Dual-Mode Execution:</strong> Users can choose between Restricted Mode (traditional browser-wallet approval) or Full Access Mode (24/7 autonomous cloud execution).</li>
             </ul>
           </div>
@@ -201,22 +201,22 @@ export default function WhitepaperPage() {
             <div className="flex gap-4">
               <Database className="size-6 text-electric shrink-0" strokeWidth={1.5} />
               <div>
-                <h3 className="font-serif text-xl mb-1">MongoDB State Layer</h3>
-                <p className="text-sm leading-6 text-black/60">A centralized NoSQL database that stores user preferences, chat session history, execution receipts, and AES-256-GCM encrypted Ephemeral Vault keys.</p>
+                <h3 className="font-serif text-xl mb-1">Encrypted Cloud State Layer</h3>
+                <p className="text-sm leading-6 text-black/60">A high-availability cloud database that stores user preferences, chat session history, execution receipts, and AES-256-GCM encrypted Ephemeral Vault keys.</p>
               </div>
             </div>
             <div className="flex gap-4">
               <ServerCrash className="size-6 text-electric shrink-0" strokeWidth={1.5} />
               <div>
-                <h3 className="font-serif text-xl mb-1">Redis & BullMQ Queue</h3>
-                <p className="text-sm leading-6 text-black/60">A high-performance message queue that bridges the Web Client and the Cloud Worker for 24/7 autonomous monitoring intents.</p>
+                <h3 className="font-serif text-xl mb-1">High-Throughput Task Queue</h3>
+                <p className="text-sm leading-6 text-black/60">An in-memory event and task queue that bridges the Web Client and the Cloud Worker for 24/7 autonomous monitoring intents.</p>
               </div>
             </div>
             <div className="flex gap-4">
               <BrainCircuit className="size-6 text-electric shrink-0" strokeWidth={1.5} />
               <div>
                 <h3 className="font-serif text-xl mb-1">The Cloud Worker Daemon</h3>
-                <p className="text-sm leading-6 text-black/60">A persistent Node.js worker operating continuously. It pulls intents from Redis, builds Solana transactions, decrypts the session's Ephemeral Vault in memory, signs the transaction, and broadcasts to Mainnet.</p>
+                <p className="text-sm leading-6 text-black/60">A persistent cloud worker operating continuously. It pulls intents from the message queue, builds Solana transactions, decrypts the session's Ephemeral Vault in memory, signs the transaction, and broadcasts to Mainnet.</p>
               </div>
             </div>
           </div>
@@ -259,7 +259,7 @@ export default function WhitepaperPage() {
             <div className="border border-black/15 p-6 bg-white">
               <h2 className="font-serif text-3xl font-normal tracking-normal">Web</h2>
               <p className="mt-4 text-sm leading-7 text-black/55">
-                Best for 24/7 Cloud Worker execution, MongoDB state synchronization, and shared UI parity. It supports full Ephemeral Vault autonomous execution today.
+                Best for 24/7 Cloud Worker execution, cloud state synchronization, and shared UI parity. It supports full Ephemeral Vault autonomous execution today.
               </p>
             </div>
           </div>

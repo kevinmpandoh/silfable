@@ -23,6 +23,7 @@ export class ReconciliationService {
         const messages = [...session.messages];
         for (let i = 0; i < messages.length; i++) {
           const msg = messages[i];
+          if (!msg) continue;
           if (msg.limitOrderExecution && msg.limitOrderExecution.status === "unknown") {
             try {
               msg.limitOrderExecution = await this.#limitOrders.verifyExecutionReceipt(msg.limitOrderExecution);

@@ -241,6 +241,18 @@ const api = {
   async saveSolanaRpcUrl(request: SolanaRpcSaveUrlRequest) {
     return SolanaRpcMutationResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.solanaRpcSaveUrl, SolanaRpcSaveUrlRequestSchema.parse(request)));
   },
+  async getActivePositions() {
+    return await ipcRenderer.invoke("strategy:getPositions");
+  },
+  async upsertPosition(config: any) {
+    return await ipcRenderer.invoke("strategy:upsertPosition", config);
+  },
+  async closePosition(id: string) {
+    return await ipcRenderer.invoke("strategy:closePosition", id);
+  },
+  async toggleBackgroundLoop(enabled: boolean) {
+    return await ipcRenderer.invoke("runtime:toggleBackgroundLoop", enabled);
+  }
 };
 
 contextBridge.exposeInMainWorld("silfable", Object.freeze(api));

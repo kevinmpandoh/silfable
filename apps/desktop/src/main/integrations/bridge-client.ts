@@ -56,7 +56,7 @@ export class BridgeClientService {
         return this.#createMockQuote(req);
       }
       const data = await response.json();
-      return {
+      const result: BridgeQuoteResponse = {
         quoteId: data.estimation?.id ?? crypto.randomUUID(),
         srcChainId: req.srcChainId,
         dstChainId: req.dstChainId,
@@ -65,8 +65,11 @@ export class BridgeClientService {
         estimatedFeeUsd: Number(data.estimation?.costsDetails?.totalFeeUsd ?? 0.5),
         estimatedTimeSeconds: 15,
         bridgeRoute: "deBridge DLN",
-        txPayload: data.tx ? { to: data.tx.to, data: data.tx.data, value: data.tx.value } : undefined,
       };
+      if (data.tx) {
+        result.txPayload = { to: data.tx.to, data: data.tx.data, value: data.tx.value };
+      }
+      return result;
     } catch {
       return this.#createMockQuote(req);
     }

@@ -61,10 +61,28 @@ model AgentSession {
   peakBalanceLamports    String     @default("0")
   currentBalanceLamports String     @default("0")
 
-  createdAt              DateTime      @default(now())
-  updatedAt              DateTime      @updatedAt
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
   tradeLogs              TradeLog[]
   dcaSchedules           DcaSchedule[]
+  positionStrategies     PositionStrategy[]
+}
+
+model PositionStrategy {
+  id              String       @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId       String       @db.ObjectId
+  session         AgentSession @relation(fields: [sessionId], references: [id])
+
+  mintAddress     String
+  amountLamports  String
+  entryPrice      Float
+  takeProfitPrice Float?
+  stopLossPrice   Float?
+
+  status          String       @default("ACTIVE") // ACTIVE, TRIGGERED_TP, TRIGGERED_SL, CANCELLED
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 }
 
 model DcaSchedule {

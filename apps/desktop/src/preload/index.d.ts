@@ -118,6 +118,10 @@ declare global {
       saveTavilyKey(request: TavilySaveKeyRequest): Promise<TavilyKeyMutationResponse>;
       getSolanaRpcSettings(): Promise<SolanaRpcSettingsResponse>;
       saveSolanaRpcUrl(request: SolanaRpcSaveUrlRequest): Promise<SolanaRpcMutationResponse>;
+      getActivePositions(): Promise<{ positions: any[] }>;
+      upsertPosition(config: any): Promise<{ success: boolean }>;
+      closePosition(id: string): Promise<{ success: boolean }>;
+      toggleBackgroundLoop(enabled: boolean): Promise<{ success: boolean }>;
     };
   }
 }

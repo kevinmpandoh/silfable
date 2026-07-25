@@ -50,7 +50,7 @@ Silfable is an open-source, Solana-first project designed to explore a shared co
 Silfable is built around four core ideas:
 1. **Intent-based research, deterministic execution:** The AI may analyze markets and draft actions, but supported transactions must pass strict, hard-coded deterministic policy checks before execution.
 2. **Ephemeral Vault Architecture:** Zero-click autonomous trading uses strictly isolated, AES-256 encrypted keypairs that live only for the duration of a session.
-3. **Transparent Execution Receipts:** Every quote, simulation, confirmation, rejection, and failure should be readable, verified on-chain, and persistently synced via MongoDB.
+3. **Transparent Execution Receipts:** Every quote, simulation, confirmation, rejection, and failure should be readable, verified on-chain, and persistently synced via encrypted cloud database.
 4. **Dual-Mode Execution:** Users can choose between Restricted Mode (traditional browser-wallet approval) or Full Access Mode (24/7 autonomous cloud execution).
 
 ---
@@ -61,9 +61,9 @@ The current Silfable platform is designed to demonstrate live, production-grade 
 
 ### 2.1 Live Capabilities
 - **Restricted Jupiter Swap:** Solana Mainnet swap preview, deterministic simulation, wallet approval, broadcast, and verified receipt generation.
-- **24/7 Autonomous Cloud Worker:** Background AI trading via BullMQ/Redis with zero-click Mainnet signing within bounded risk limits.
+- **24/7 Autonomous Cloud Worker:** Background AI trading via distributed task queues with zero-click Mainnet signing within bounded risk limits.
 - **Pump.fun Guarded Trading:** Autonomous and manual Pump.fun bonding-curve trading guarded by live Fee Guards, Slippage Validation, and Receipt Reconciliation.
-- **Centralized State Sync:** User settings, active sessions, and trading histories synced across MongoDB Cloud for persistent cross-platform access.
+- **Centralized State Sync:** User settings, active sessions, and trading histories synced across high-availability Cloud Storage for persistent cross-platform access.
 - **Portfolio Snapshots:** Connected-wallet SOL balance and token activity snapshots from configured Mainnet RPC providers.
 
 ### 2.2 Planned Capabilities
@@ -116,7 +116,7 @@ Unknown RPC state, fee spikes, missing route evidence, stale quote data, or poli
 Execution is not considered successful just because a transaction was broadcast. Silfable verifies the finalized on-chain signature, calculates exact slippage and network fees, and produces an immutable receipt.
 
 ### 5.4 Progressive Decentralization
-Silfable utilizes robust Web2 infrastructure (Next.js, MongoDB, Redis) to orchestrate Web3 actions (Solana Mainnet). As the project matures, operational control may distribute toward independent modules.
+Silfable utilizes robust Web2 cloud infrastructure (modern web app, enterprise database, high-throughput queues) to orchestrate Web3 actions (Solana Mainnet). As the project matures, operational control may distribute toward independent modules.
 
 ---
 
@@ -129,18 +129,18 @@ The interface allows humans to:
 - Review deterministic transaction quotes.
 - Approve or reject execution.
 
-### 6.2 MongoDB State Layer
-A centralized NoSQL database that stores:
+### 6.2 Encrypted Cloud State Layer
+A high-availability cloud database that stores:
 - User preferences and global risk parameters.
 - Chat session history and AI context.
 - Encrypted Ephemeral Vault keys (AES-256-GCM).
 - Execution receipts and position tracking.
 
-### 6.3 Redis & BullMQ Queue
-A high-performance message queue that bridges the Web Client and the Cloud Worker. When a user requests 24/7 autonomous monitoring, the intent is placed in Redis for background processing.
+### 6.3 High-Throughput Task Queue
+An in-memory event and task queue that bridges the Web Client and the Cloud Worker. When a user requests 24/7 autonomous monitoring, the intent is placed in the task queue for background processing.
 
 ### 6.4 The Cloud Worker Daemon
-A persistent Node.js worker operating continuously. It pulls intents from Redis, communicates with the LLM, builds Solana transactions, decrypts the session's Ephemeral Vault in memory, signs the transaction, and broadcasts to Mainnet.
+A persistent cloud worker operating continuously. It pulls intents from the message queue, communicates with the LLM, builds Solana transactions, decrypts the session's Ephemeral Vault in memory, signs the transaction, and broadcasts to Mainnet.
 
 ---
 
@@ -170,7 +170,7 @@ To solve the custody dilemma of AI trading, Silfable utilizes Ephemeral Vaults.
 When a 24/7 session is created, the system generates a brand-new Solana keypair on the fly. 
 
 ### 8.2 AES-256-GCM Encryption
-The private key of the Ephemeral Vault is immediately encrypted using AES-256-GCM before it is stored in MongoDB. The encryption key is derived from a highly secure environment variable (`WORKER_ENCRYPTION_KEY`) known only to the production server. 
+The private key of the Ephemeral Vault is immediately encrypted using AES-256-GCM before it is stored in the encrypted cloud database. The encryption key is derived from a highly secure environment variable (`WORKER_ENCRYPTION_KEY`) known only to the production server. 
 
 ### 8.3 Bounded Liability
 Because the Ephemeral Vault is entirely separate from the user's primary wallet, the maximum possible loss in the event of an AI hallucination or a theoretical systemic breach is strictly limited to the funds the user explicitly deposited into that specific session.
@@ -182,13 +182,13 @@ Because the Ephemeral Vault is entirely separate from the user's primary wallet,
 The Cloud Worker is the heart of Silfable's autonomous capabilities.
 
 ### 9.1 Polling and Inference
-The worker continuously loops through active BullMQ jobs. It feeds live market data (prices, token velocity, news) into the AI model to determine if conditions meet the user's intent.
+The worker continuously loops through active background queue jobs. It feeds live market data (prices, token velocity, news) into the AI model to determine if conditions meet the user's intent.
 
 ### 9.2 Execution Decoupling
 If the AI decides to execute, it must output a standardized JSON contract. The Cloud Worker strips away the AI's natural language, takes the JSON contract, and passes it to the Deterministic Policy Engine.
 
 ### 9.3 Reconciliation
-After broadcast, the worker polls the Solana RPC until the block is finalized. It then updates the MongoDB state, ensuring the Web Client reflects the new portfolio balances instantly.
+After broadcast, the worker polls the Solana RPC until the block is finalized. It then updates the cloud database state, ensuring the Web Client reflects the new portfolio balances instantly.
 
 ---
 

@@ -153,7 +153,7 @@ export function CloudWorkerSetupModal({
               <div className="p-3 bg-emerald-950/40 border border-emerald-800/50 rounded-lg flex items-start gap-3">
                 <ShieldCheck className="size-5 text-emerald-400 shrink-0 mt-0.5" />
                 <div className="text-xs text-emerald-200/90 leading-relaxed">
-                  <strong>Isolated Ephemeral Key Vault:</strong> Your main wallet remains secure. A dedicated, encrypted agent keypair will execute trades 24/7 on MongoDB + Redis Cloud even when your browser is closed.
+                  <strong>Isolated Ephemeral Key Vault:</strong> Your main wallet remains secure. A dedicated, encrypted agent keypair will execute trades 24/7 on distributed Cloud infrastructure even when your browser is closed.
                 </div>
               </div>
 
