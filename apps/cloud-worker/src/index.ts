@@ -2,6 +2,7 @@ import { config } from "./config/env.js";
 import { prisma } from "./services/db.js";
 import { redisConnection } from "./services/queue.js";
 import { startTradingWorker } from "./worker/trade-worker.js";
+import { startDcaWorker } from "./worker/dca-worker.js";
 
 async function main() {
   console.log("==================================================");
@@ -16,9 +17,12 @@ async function main() {
     console.error(`[Redis Cloud] Connection failed: ${err.message}`);
   }
 
-  // Start BullMQ Worker
+  // Start BullMQ Trading Worker & DCA Scheduler Worker
   startTradingWorker();
   console.log("[BullMQ Worker] Ready and listening on 'trading-queue'");
+
+  startDcaWorker();
+  console.log("[DCA Worker] 24/7 DCA Schedule Ticker started.");
 
   // Start dummy HTTP Server for Railway Health Checks
   import("http").then((http) => {
