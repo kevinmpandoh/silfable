@@ -859,6 +859,11 @@ function WalletStep({
   const [wallets, setWallets] = useState<
     Array<{ address: string; primary: boolean }>
   >([]);
+  const [evmMnemonic, setEvmMnemonic] = useState("");
+  const [evmAddress, setEvmAddress] = useState<string | null>(null);
+  const [evmRecovery, setEvmRecovery] = useState<string | null>(null);
+  const [evmMessage, setEvmMessage] = useState<string | null>(null);
+  const [walletTab, setWalletTab] = useState<"solana" | "evm">("solana");
   const configured = runtime?.wallet === "configured";
   useEffect(() => {
     if (!configured) return;
@@ -869,6 +874,9 @@ function WalletStep({
         setMessage("Wallet list could not be opened from the encrypted vault."),
       );
   }, [configured]);
+  useEffect(() => {
+    window.silfable.getRobinhoodWallet().then((result) => setEvmAddress(result.address)).catch(() => undefined);
+  }, []);
   async function onboard(): Promise<void> {
     setBusy(true);
     setMessage(null);
@@ -911,6 +919,22 @@ function WalletStep({
       setBusy(false);
     }
   }
+  async function createEvmWallet(): Promise<void> {
+    setBusy(true); setEvmMessage(null); setEvmRecovery(null);
+    try {
+      const result = await window.silfable.createRobinhoodWallet({ schemaVersion: 1, requestId: crypto.randomUUID(), acknowledgedHotWalletRisk: true });
+      setEvmAddress(result.address); setEvmRecovery(result.recoveryMnemonic); setEvmMessage("Robinhood Chain EVM wallet created and encrypted locally.");
+    } catch { setEvmMessage("EVM wallet could not be created. A wallet may already be configured."); }
+    finally { setBusy(false); }
+  }
+  async function importEvmWallet(): Promise<void> {
+    setBusy(true); setEvmMessage(null); setEvmRecovery(null);
+    try {
+      const result = await window.silfable.importRobinhoodWalletMnemonic({ schemaVersion: 1, requestId: crypto.randomUUID(), mnemonic: evmMnemonic, acknowledgedHotWalletRisk: true });
+      setEvmMnemonic(""); setEvmAddress(result.address); setEvmMessage("Robinhood Chain EVM wallet imported and encrypted locally.");
+    } catch { setEvmMessage("EVM recovery phrase could not be imported."); }
+    finally { setBusy(false); }
+  }
   return (
     <SetupCard
       icon="◇"
@@ -922,9 +946,10 @@ function WalletStep({
         deterministic policy checks remain mandatory.
       </Notice>
       <div className="chainTabs">
-        <button className="active">◎ Solana</button>
-        <button disabled>◆ EVM · experimental</button>
+        <button className={walletTab === "solana" ? "active" : ""} onClick={() => setWalletTab("solana")}>◎ Solana</button>
+        <button className={walletTab === "evm" ? "active" : ""} onClick={() => setWalletTab("evm")}>◆ EVM · Robinhood Chain</button>
       </div>
+      {walletTab === "solana" && <>
       {configured && (
         <div className="configuredReceipt">
           <span>✓</span>
@@ -1010,6 +1035,24 @@ function WalletStep({
           {recovery}
         </Notice>
       )}
+      </>}
+      {walletTab === "evm" &&
+      <section className="advanced transactionGuardSettings">
+        <strong>Robinhood Chain EVM wallet</strong>
+        <small className="providerHint">Separate from Solana. Creating or importing this wallet never enables a transaction.</small>
+        {evmAddress ? (
+          <div className="configuredReceipt"><span>âœ“</span><div><strong>EVM wallet configured</strong><small>{evmAddress}</small></div></div>
+        ) : (
+          <>
+            <Field label="Import EVM recovery phrase"><textarea value={evmMnemonic} onChange={(event) => setEvmMnemonic(event.target.value)} rows={3} spellCheck={false} placeholder="12 or 24 recovery words" /></Field>
+            <button className="secondaryButton" disabled={busy || evmMnemonic.trim().length < 32} onClick={() => void importEvmWallet()}>{busy ? "Importing…" : "Import EVM wallet"}</button>
+            <button className="secondaryButton" disabled={busy} onClick={() => void createEvmWallet()}>{busy ? "Creating…" : "Create new EVM wallet"}</button>
+          </>
+        )}
+        {evmRecovery && <Notice tone="danger" title="Write down this EVM recovery phrase">{evmRecovery}</Notice>}
+        {evmMessage && <p className="inlineMessage">{evmMessage}</p>}
+      </section>
+      }
       {message && <p className="inlineMessage">{message}</p>}
       <SetupActions
         step={2}
@@ -1037,9 +1080,7 @@ function IntegrationStep({
   const [solanaRpcUrl, setSolanaRpcUrl] = useState("");
   const [robinhoodRpcUrl, setRobinhoodRpcUrl] = useState("");
   const [zeroExKey, setZeroExKey] = useState("");
-  const [robinhoodWalletMnemonic, setRobinhoodWalletMnemonic] = useState("");
   const [robinhoodWalletAddress, setRobinhoodWalletAddress] = useState<string | null>(null);
-  const [robinhoodRecovery, setRobinhoodRecovery] = useState<string | null>(null);
   const [robinhoodSellToken, setRobinhoodSellToken] = useState("");
   const [robinhoodBuyToken, setRobinhoodBuyToken] = useState("");
   const [robinhoodSellAmount, setRobinhoodSellAmount] = useState("");
@@ -1180,41 +1221,6 @@ function IntegrationStep({
       setMessage(`0x Swap API verified for Robinhood Chain (${result.chainId}).`);
     } catch {
       setMessage("0x API could not be verified for Robinhood Chain. Check the saved API key and provider status.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function createRobinhoodWallet(): Promise<void> {
-    setBusy(true);
-    setMessage(null);
-    setRobinhoodRecovery(null);
-    try {
-      const wallet = await window.silfable.createRobinhoodWallet({ schemaVersion: 1, requestId: crypto.randomUUID(), acknowledgedHotWalletRisk: true });
-      setRobinhoodWalletAddress(wallet.address);
-      setRobinhoodRecovery(wallet.recoveryMnemonic);
-      setMessage("Robinhood EVM wallet created and encrypted locally.");
-    } catch {
-      setMessage("Robinhood EVM wallet could not be created. A wallet may already be configured.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function importRobinhoodWallet(): Promise<void> {
-    setBusy(true);
-    setMessage(null);
-    setRobinhoodRecovery(null);
-    try {
-      const wallet = await window.silfable.importRobinhoodWalletMnemonic({
-        schemaVersion: 1,
-        requestId: crypto.randomUUID(),
-        mnemonic: robinhoodWalletMnemonic,
-        acknowledgedHotWalletRisk: true,
-      });
-      setRobinhoodWalletMnemonic("");
-      setRobinhoodWalletAddress(wallet.address);
-      setMessage("Robinhood EVM wallet imported and encrypted locally.");
-    } catch {
-      setMessage("Robinhood EVM recovery phrase could not be imported.");
     } finally {
       setBusy(false);
     }
@@ -1362,39 +1368,11 @@ function IntegrationStep({
             </button>
           </div>
         </Field>
-        <Field label="Robinhood EVM wallet">
-          {robinhoodWalletAddress ? (
-            <small className="providerHint">Configured address: {robinhoodWalletAddress}</small>
-          ) : (
-            <>
-              <div className="inputWithAction">
-                <input
-                  type="password"
-                  value={robinhoodWalletMnemonic}
-                  onChange={(event) => setRobinhoodWalletMnemonic(event.target.value)}
-                  placeholder="Optional: import BIP-39 recovery phrase"
-                  autoComplete="new-password"
-                />
-                <button disabled={busy || robinhoodWalletMnemonic.trim().length < 32} onClick={() => void importRobinhoodWallet()}>
-                  {busy ? "Importing" : "Import"}
-                </button>
-              </div>
-              <button className="secondaryButton" disabled={busy} onClick={() => void createRobinhoodWallet()}>
-                {busy ? "Creating" : "Create new EVM wallet"}
-              </button>
-            </>
-          )}
-        </Field>
-        {robinhoodRecovery && (
-          <Notice tone="danger" title="Write down this Robinhood EVM recovery phrase">
-            {robinhoodRecovery}
-          </Notice>
-        )}
-        <Field label="Indicative 0x quote (ERC-20 raw units)">
+        <Field label="Robinhood trade preview (read-only, advanced)">
           <div className="advancedGrid">
-            <input value={robinhoodSellToken} onChange={(event) => setRobinhoodSellToken(event.target.value)} placeholder="Sell token contract (0x...)" autoComplete="off" />
-            <input value={robinhoodBuyToken} onChange={(event) => setRobinhoodBuyToken(event.target.value)} placeholder="Buy token contract (0x...)" autoComplete="off" />
-            <input inputMode="numeric" value={robinhoodSellAmount} onChange={(event) => setRobinhoodSellAmount(event.target.value)} placeholder="Sell amount in raw units" />
+            <input value={robinhoodSellToken} onChange={(event) => setRobinhoodSellToken(event.target.value)} placeholder="Sell token contract (advanced: 0x...)" autoComplete="off" />
+            <input value={robinhoodBuyToken} onChange={(event) => setRobinhoodBuyToken(event.target.value)} placeholder="Buy token contract (advanced: 0x...)" autoComplete="off" />
+            <input inputMode="numeric" value={robinhoodSellAmount} onChange={(event) => setRobinhoodSellAmount(event.target.value)} placeholder="Raw token units (advanced)" />
           </div>
           <button disabled={busy || !robinhoodWalletAddress || !zeroExConfigured || !robinhoodSellToken.trim() || !robinhoodBuyToken.trim() || !robinhoodSellAmount.trim()} onClick={() => void getRobinhoodQuote()}>
             {busy ? "Fetching" : "Get read-only quote"}
