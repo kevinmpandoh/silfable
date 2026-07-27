@@ -13,6 +13,14 @@ import type {
   PumpV2ProductionSimulationInput,
 } from "./production.js";
 
+import type {
+  PumpSwapProductionSimulation,
+  PumpSwapProductionSimulationInput,
+} from "./pumpswap-production.js";
+
+type PumpProductionSimulation = PumpV2ProductionSimulation | PumpSwapProductionSimulation;
+type PumpProductionSimulationInput = PumpV2ProductionSimulationInput | PumpSwapProductionSimulationInput;
+
 const PREPARED_TTL_MS = 90_000;
 const FINAL_TTL_MS = 60_000;
 
@@ -22,22 +30,35 @@ export type PreparedPumpExecution = {
   walletAddress: string;
   tokenMint: string;
   side: "buy" | "sell";
-  input: PumpV2ProductionSimulationInput;
+  input: PumpProductionSimulationInput;
   initialTransactionDigest: string;
   initialStateSlot: number;
   preparedAt: string;
   expiresAt: string;
 };
 
+export type FinalPreparedPumpExecution = {
+  sessionId: string;
+  previewId: string;
+  walletAddress: string;
+  tokenMint: string;
+  side: "buy" | "sell";
+  production: PumpProductionSimulation;
+  revalidation: PumpFinalRevalidation;
+  preparedAt: string;
+  expiresAt: string;
+};
+
 export class PumpPreparedExecutionService {
   readonly #prepared = new Map<string, PreparedPumpExecution>();
+  readonly #finalPrepared = new Map<string, FinalPreparedPumpExecution>();
 
   prepare(input: {
     sessionId: string;
     preview: PumpTradeContractPreview;
-    production: PumpV2ProductionSimulation;
+    production: PumpProductionSimulation;
     simulation: PumpSimulationArtifact;
-    buildInput: PumpV2ProductionSimulationInput;
+    buildInput: PumpProductionSimulationInput;
     now?: Date;
   }): PreparedPumpExecution {
     const now = input.now ?? new Date();
@@ -99,13 +120,87 @@ export class PumpPreparedExecutionService {
     return structuredClone(prepared);
   }
 
+  prepareFinal(input: {
+    sessionId: string;
+    preview: PumpTradeContractPreview;
+    production: PumpProductionSimulation;
+    revalidation: PumpFinalRevalidation;
+    now?: Date;
+  }): FinalPreparedPumpExecution {
+    const now = input.now ?? new Date();
+    this.#purge(now.getTime());
+    if (input.revalidation.status !== "ready-for-password"
+      || input.revalidation.previewId !== input.preview.id
+      || input.revalidation.walletAddress !== input.preview.walletAddress
+      || input.revalidation.tokenMint !== input.preview.tokenMint
+      || input.revalidation.side !== input.preview.side
+      || input.revalidation.checks.some((check) => !check.passed)
+      || Date.parse(input.revalidation.expiresAt) <= now.getTime()) {
+      throw new Error("Pump final transaction is not eligible for explicit approval");
+    }
+    const finalDigest = digest(input.production.unsignedTransaction.serialized);
+    if (finalDigest !== input.revalidation.finalTransactionDigest
+      || input.production.unsignedTransaction.signed
+      || input.production.broadcastAttempted
+      || input.production.simulation.transactionSigned
+      || input.production.simulation.broadcastAttempted) {
+      throw new Error("Pump final transaction does not match its unsigned revalidation");
+    }
+    const expiresAt = new Date(Math.min(
+      Date.parse(input.revalidation.expiresAt),
+      now.getTime() + FINAL_TTL_MS,
+    )).toISOString();
+    const prepared: FinalPreparedPumpExecution = {
+      sessionId: input.sessionId,
+      previewId: input.preview.id,
+      walletAddress: input.preview.walletAddress,
+      tokenMint: input.preview.tokenMint,
+      side: input.preview.side,
+      production: structuredClone(input.production),
+      revalidation: structuredClone(input.revalidation),
+      preparedAt: now.toISOString(),
+      expiresAt,
+    };
+    this.#finalPrepared.set(input.preview.id, prepared);
+    return structuredClone(prepared);
+  }
+
+  consumeFinal(input: {
+    sessionId: string;
+    preview: PumpTradeContractPreview;
+    expectedDigest: string;
+    now?: Date;
+  }): FinalPreparedPumpExecution {
+    const now = input.now ?? new Date();
+    this.#purge(now.getTime());
+    const prepared = this.#finalPrepared.get(input.preview.id);
+    this.#finalPrepared.delete(input.preview.id);
+    if (prepared === undefined) {
+      throw new Error("Pump final approval expired; run a new unsigned simulation and revalidation");
+    }
+    if (prepared.sessionId !== input.sessionId
+      || prepared.previewId !== input.preview.id
+      || prepared.walletAddress !== input.preview.walletAddress
+      || prepared.tokenMint !== input.preview.tokenMint
+      || prepared.side !== input.preview.side
+      || prepared.revalidation.finalTransactionDigest !== input.expectedDigest
+      || digest(prepared.production.unsignedTransaction.serialized) !== input.expectedDigest) {
+      throw new Error("Pump execution approval does not match the final revalidated transaction");
+    }
+    return structuredClone(prepared);
+  }
+
   clear(): void {
     this.#prepared.clear();
+    this.#finalPrepared.clear();
   }
 
   #purge(now: number): void {
     for (const [previewId, prepared] of this.#prepared) {
       if (Date.parse(prepared.expiresAt) <= now) this.#prepared.delete(previewId);
+    }
+    for (const [previewId, prepared] of this.#finalPrepared) {
+      if (Date.parse(prepared.expiresAt) <= now) this.#finalPrepared.delete(previewId);
     }
   }
 }
@@ -113,7 +208,7 @@ export class PumpPreparedExecutionService {
 export function evaluatePumpFinalRevalidation(input: {
   prepared: PreparedPumpExecution;
   preview: PumpTradeContractPreview;
-  production: PumpV2ProductionSimulation;
+  production: PumpProductionSimulation;
   simulation: PumpSimulationArtifact;
   risk: PumpRiskEvidence;
   now?: Date;

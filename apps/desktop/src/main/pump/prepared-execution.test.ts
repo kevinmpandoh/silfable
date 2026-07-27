@@ -42,6 +42,42 @@ test("final Pump revalidation proves fresh unsigned evidence without granting au
   assert.equal(result.executionAllowed, false);
 });
 
+test("final prepared Pump transaction is digest-bound, one-time, and expires closed", () => {
+  const service = new PumpPreparedExecutionService();
+  const now = new Date("2026-07-22T00:00:00.000Z");
+  service.prepare({ sessionId: SESSION, preview: preview(), production: production(), simulation: simulation(), buildInput: buildInput(), now });
+  const initial = service.consume({ sessionId: SESSION, preview: preview(), now: new Date(now.getTime() + 1_000) });
+  const finalProduction = production(501);
+  const revalidation = evaluatePumpFinalRevalidation({
+    prepared: initial,
+    preview: preview(),
+    production: finalProduction,
+    simulation: simulation(501),
+    risk: risk(),
+    now: new Date(now.getTime() + 2_000),
+  });
+  service.prepareFinal({
+    sessionId: SESSION,
+    preview: preview(),
+    production: finalProduction,
+    revalidation,
+    now: new Date(now.getTime() + 2_000),
+  });
+  const consumed = service.consumeFinal({
+    sessionId: SESSION,
+    preview: preview(),
+    expectedDigest: revalidation.finalTransactionDigest,
+    now: new Date(now.getTime() + 3_000),
+  });
+  assert.equal(consumed.revalidation.finalTransactionDigest, revalidation.finalTransactionDigest);
+  assert.throws(() => service.consumeFinal({
+    sessionId: SESSION,
+    preview: preview(),
+    expectedDigest: revalidation.finalTransactionDigest,
+    now: new Date(now.getTime() + 3_001),
+  }), /expired/u);
+});
+
 function buildInput() {
   return { side: "buy" as const, walletAddress: WALLET, tokenMint: MINT, inputAmount: "1000000", minimumOutputAmount: "100000", maxTotalFeeBps: 500, maxSlippageBps: 300, maxNetworkFeeLamports: 500_000, maxFeePercent: 5 };
 }
@@ -62,6 +98,7 @@ function production(slot = 500): PumpV2ProductionSimulation {
     instruction: { plan: { walletAddress: WALLET } },
     unsignedTransaction: { serialized: Uint8Array.of(1, 2, slot % 255), signed: false, blockhashContextSlot: slot, lastValidBlockHeight: 1_000 },
     executableQuote: { side: "buy", inputAmount: "1000000", minimumOutputAmount: "100000", approvedMinimumOutputAmount: "100000", expectedOutputAmount: "110000", maxSlippageBps: 300, stateSlot: slot },
+    simulation: simulation(slot),
     broadcastAttempted: false,
   } as unknown as PumpV2ProductionSimulation;
 }

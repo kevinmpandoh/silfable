@@ -6,13 +6,21 @@ import {
   AiSaveProviderRequestSchema,
   ClipboardWriteTransactionSignatureRequestSchema,
   ExternalOpenTransactionRequestSchema,
+  EmergencyStopEngageRequestSchema,
+  EmergencyStopReleaseRequestSchema,
+  EmergencyStopStatusSchema,
   IPC_CHANNELS,
   JupiterSaveKeyRequestSchema,
+  RobinhoodSaveRpcUrlRequestSchema,
+  RobinhoodSaveZeroXKeyRequestSchema,
+  RobinhoodWalletCreateRequestSchema,
+  RobinhoodWalletImportMnemonicRequestSchema,
   MissionSimulateRequestSchema,
   MissionExecuteRequestSchema,
   MissionVerifyExecutionRequestSchema,
   PumpFinalRevalidateRequestSchema,
   PumpExecuteRequestSchema,
+  PumpVerifyExecutionRequestSchema,
   PumpSimulateRequestSchema,
   PumpDiscoverySnapshotSchema,
   PumpRiskSettingsSaveRequestSchema,
@@ -96,14 +104,18 @@ test("security-sensitive requests reject privilege-shaped fields", () => {
     [AiSaveProviderRequestSchema, { schemaVersion: 1, requestId, provider: "openrouter", apiKey: "sk-private", model: "vendor/model", acknowledgedExternalProcessing: true, tools: ["shell"] }],
     [AiChatRequestSchema, { schemaVersion: 1, requestId, sessionId: requestId, prompt: "plan", mode: "agent", permission: "restricted", walletAddress: null, acknowledgedExternalProcessing: true, executionEnabled: true }],
     [JupiterSaveKeyRequestSchema, { schemaVersion: 1, requestId, apiKey: "jup-private", acknowledgedMainnetMarketData: true, transaction: "wire" }],
+    [RobinhoodSaveZeroXKeyRequestSchema, { schemaVersion: 1, requestId, apiKey: "0x-private", acknowledgedExternalQuoteProvider: true, broadcast: true }],
+    [RobinhoodSaveRpcUrlRequestSchema, { schemaVersion: 1, requestId, rpcUrl: "http://rpc.invalid" }],
+    [RobinhoodWalletCreateRequestSchema, { schemaVersion: 1, requestId, acknowledgedHotWalletRisk: true, privateKey: "secret" }],
+    [RobinhoodWalletImportMnemonicRequestSchema, { schemaVersion: 1, requestId, mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about", acknowledgedHotWalletRisk: true, executionEnabled: true }],
   ] as const;
   for (const [schema, value] of cases) assert.equal(schema.safeParse(value).success, false);
 });
 
-test("chat is restricted and acknowledgements must be literal booleans", () => {
+test("chat supports guarded session permissions and acknowledgements must be literal booleans", () => {
   const base = { schemaVersion: 1, requestId, sessionId: requestId, prompt: "Review my wallet", mode: "agent", walletAddress: "11111111111111111111111111111111", acknowledgedExternalProcessing: true };
   assert.equal(AiChatRequestSchema.safeParse({ ...base, permission: "restricted" }).success, true);
-  assert.equal(AiChatRequestSchema.safeParse({ ...base, permission: "full" }).success, false);
+  assert.equal(AiChatRequestSchema.safeParse({ ...base, permission: "full" }).success, true);
   assert.equal(AiChatRequestSchema.safeParse({ ...base, permission: "restricted", acknowledgedExternalProcessing: "true" }).success, false);
 });
 
@@ -130,7 +142,7 @@ test("Pump final revalidation is an unsigned no-execution request", () => {
   assert.equal(PumpFinalRevalidateRequestSchema.safeParse({ ...base, sign: true, broadcast: true }).success, false);
 });
 
-test("Pump execution request remains an exact restricted Mainnet gate for future wiring", () => {
+test("Pump execution request is an exact restricted Mainnet manual approval gate", () => {
   const base = {
     schemaVersion: 1,
     requestId,
@@ -144,6 +156,33 @@ test("Pump execution request remains an exact restricted Mainnet gate for future
   assert.equal(PumpExecuteRequestSchema.safeParse({ ...base, confirmation: "EXECUTE MAINNET" }).success, false);
   assert.equal(PumpExecuteRequestSchema.safeParse({ ...base, acknowledgedIrreversibleExecution: false }).success, false);
   assert.equal(PumpExecuteRequestSchema.safeParse({ ...base, unsignedOnly: true }).success, false);
+});
+
+test("emergency stop can be engaged immediately but release requires an explicit password boundary", () => {
+  const engage = { schemaVersion: 1, requestId, reason: "Manual safety halt", acknowledgedImmediateHalt: true };
+  assert.equal(EmergencyStopEngageRequestSchema.safeParse(engage).success, true);
+  assert.equal(EmergencyStopEngageRequestSchema.safeParse({ ...engage, acknowledgedImmediateHalt: false }).success, false);
+  assert.equal(EmergencyStopEngageRequestSchema.safeParse({ ...engage, masterPassword: "must-not-be-required" }).success, false);
+
+  const release = { schemaVersion: 1, requestId, masterPassword: "StrongPass1!", acknowledgedResumeRisk: true };
+  assert.equal(EmergencyStopReleaseRequestSchema.safeParse(release).success, true);
+  assert.equal(EmergencyStopReleaseRequestSchema.safeParse({ ...release, masterPassword: "" }).success, false);
+  assert.equal(EmergencyStopReleaseRequestSchema.safeParse({ ...release, acknowledgedResumeRisk: false }).success, false);
+  assert.equal(EmergencyStopStatusSchema.safeParse({ engaged: true, reason: null, engagedAt: "2026-07-27T00:00:00.000Z" }).success, true);
+  assert.equal(EmergencyStopStatusSchema.safeParse({ engaged: false, reason: "stale", engagedAt: null }).success, false);
+});
+
+test("Pump execution verification identifies one persisted record and cannot request rebroadcast", () => {
+  const base = {
+    schemaVersion: 1,
+    requestId,
+    sessionId: requestId,
+    previewId: requestId,
+    executionId: requestId,
+  };
+  assert.equal(PumpVerifyExecutionRequestSchema.safeParse(base).success, true);
+  assert.equal(PumpVerifyExecutionRequestSchema.safeParse({ ...base, rebroadcast: true }).success, false);
+  assert.equal(PumpVerifyExecutionRequestSchema.safeParse({ ...base, signedTransaction: "secret" }).success, false);
 });
 
 test("Pump risk settings reject inconsistent ceilings and privilege fields", () => {

@@ -7,6 +7,7 @@ import {
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from "bip39";
 import HDKey from "micro-key-producer/slip10.js";
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "node:crypto";
+import { Keypair } from "@solana/web3.js";
 
 import { MAINNET_PROFILE_ID, type EncryptedWalletMetadata } from "../storage/database.js";
 
@@ -118,6 +119,25 @@ export class WalletOnboardingService {
           ? await createKeyPairSignerFromPrivateKeyBytes(privateKey)
           : await createKeyPairSignerFromBytes(privateKey);
         if (signer.address === address) return await operation(signer);
+      }
+      throw new Error("Selected wallet secret is unavailable");
+    } finally {
+      for (const storedKey of privateKeys) storedKey.fill(0);
+    }
+  }
+
+  async withWalletWeb3Keypair<T>(address: string, operation: (keypair: Keypair) => Promise<T>): Promise<T> {
+    if (this.#keystore.isLocked()) throw new Error("Keystore is locked");
+    if (!this.#database.hasWallet(PROFILE_ID)) throw new Error("Mainnet wallet is not configured");
+    const serialized = await this.#keystore.getSecret("wallet-secret");
+    if (serialized === null) throw new Error("Wallet secret is unavailable");
+    const privateKeys = parseStoredWalletSecrets(serialized);
+    try {
+      for (const privateKey of privateKeys) {
+        const keypair = privateKey.length === 32
+          ? Keypair.fromSeed(privateKey)
+          : Keypair.fromSecretKey(privateKey);
+        if (keypair.publicKey.toBase58() === address) return await operation(keypair);
       }
       throw new Error("Selected wallet secret is unavailable");
     } finally {

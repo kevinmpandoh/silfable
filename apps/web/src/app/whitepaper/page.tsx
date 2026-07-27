@@ -19,32 +19,32 @@ export const metadata: Metadata = {
 
 const statusRows = [
   ["Live", "Restricted Jupiter swap", "Solana Mainnet swap preview, deterministic simulation, wallet approval, broadcast, and verified receipt generation."],
-  ["Live", "24/7 Autonomous Cloud Worker", "Background AI trading via distributed task queues with zero-click Mainnet signing within bounded risk limits."],
+  ["Preview", "Cloud Monitor", "Background monitoring and proposal infrastructure without signing or Mainnet broadcast authority."],
   ["Live", "Centralized State Sync", "User settings, active sessions, and trading histories synced across high-availability Cloud Storage for persistent cross-platform access."],
-  ["Live", "Pump.fun Guarded Trading", "Autonomous and manual Pump.fun bonding-curve trading guarded by live Fee Guards, Slippage Validation, and Receipt Reconciliation."],
+  ["Preview", "Pump.fun Guarded Research", "Read-only intelligence, bounded discovery, proposal building, simulation, and receipt foundations. Web broadcast is disabled."],
   ["Planned", "Cross-Chain EVM", "Layer-2 EVM bridging, execution, and Hyperliquid integrations remain in the planning phase."],
 ] as const;
 
 const principles = [
   {
     icon: ShieldCheck,
-    title: "Secure Ephemeral Vaults",
-    text: "Web autonomous trading uses strictly isolated, AES-256 encrypted keypairs per session. Your main wallet's seed phrase is never requested.",
+    title: "Separated Transaction Authority",
+    text: "Desktop keys remain in the local encrypted vault. On web, Phantom or Solflare retains signing authority and the server never creates a production signer.",
   },
   {
     icon: LockKeyhole,
-    title: "Dual-Mode Execution",
-    text: "Choose between 'Restricted Mode' (Phantom wallet pop-up approval) or 'Full Access 24/7 Mode' (Autonomous server execution with drawdown limits).",
+    title: "Restricted Execution",
+    text: "The connected browser wallet must explicitly approve every production web transaction. Full Access cloud execution is unavailable.",
   },
   {
     icon: CheckCircle2,
     title: "Persistent Memory",
-    text: "With enterprise cloud storage and distributed task queues, your AI agents never sleep. They remember past context and operate 24/7 even when your browser is closed.",
+    text: "After an exact bounded monitor-only policy is signed, cloud infrastructure may monitor and prepare proposals while the browser is closed. The grant fixes signing, broadcast, and execution authority to false and remains revocable.",
   },
   {
     icon: TriangleAlert,
-    title: "Automated Kill Switch",
-    text: "Full access sessions run with hard-coded max drawdown limits. If breached, the AI revokes its own keys to fail safely.",
+    title: "Deterministic Safety Gate",
+    text: "Fee, slippage, allowlist, balance, and freshness checks must pass before a restricted transaction can reach final user approval.",
   },
 ] as const;
 
@@ -59,7 +59,7 @@ export default function WhitepaperPage() {
               Guarded AI trading for Solana Mainnet.
             </h1>
             <p className="max-w-lg text-base leading-8 text-black/55 lg:justify-self-end">
-              An early-stage, open-source, Solana-first project exploring how AI agents, human users, zero-click autonomous cloud workers, and deterministic security boundaries can coordinate through a modular execution environment.
+              An early-stage, open-source, Solana-first project exploring how AI agents, human users, restricted wallet approvals, cloud monitoring, and deterministic security boundaries can coordinate through a modular execution environment.
             </p>
           </div>
         </div>
@@ -102,9 +102,10 @@ export default function WhitepaperPage() {
             </p>
             <ul className="list-decimal pl-5 space-y-4 text-black">
               <li><strong>Intent-based research, deterministic execution:</strong> The AI may analyze markets and draft actions, but supported transactions must pass strict, hard-coded deterministic policy checks before execution.</li>
-              <li><strong>Ephemeral Vault Architecture:</strong> Zero-click autonomous trading uses strictly isolated, AES-256 encrypted keypairs that live only for the duration of a session.</li>
+              <li><strong>Separated transaction authority:</strong> Desktop keys remain in the local encrypted vault; web signing remains in the connected browser wallet.</li>
               <li><strong>Transparent Execution Receipts:</strong> Every quote, simulation, confirmation, rejection, and failure should be readable, verified on-chain, and persistently synced via encrypted cloud database.</li>
-              <li><strong>Dual-Mode Execution:</strong> Users can choose between Restricted Mode (traditional browser-wallet approval) or Full Access Mode (24/7 autonomous cloud execution).</li>
+              <li><strong>Restricted execution:</strong> Every production web transaction requires explicit browser-wallet approval. Full Access cloud execution is unavailable.</li>
+              <li><strong>Wallet-scoped authentication:</strong> Web access requires an expiring, one-time wallet challenge signature. It authenticates the workspace but never authorizes a transaction.</li>
             </ul>
           </div>
         </div>
@@ -168,8 +169,8 @@ export default function WhitepaperPage() {
             </p>
             <p>A request may be expressed as:</p>
             <div className="bg-white border border-black/10 p-5 font-mono text-[11px] text-electric space-y-2">
-              <p>&gt; "Monitor the Solana mempool for trending tokens under $10M market cap and propose a $10 DCA entry."</p>
-              <p>&gt; "Execute a swap from USDC to SOL, ensuring slippage does not exceed 1%."</p>
+              <p>&gt; &ldquo;Monitor finalized Solana activity for tokens under $10M market cap and propose a $10 DCA entry.&rdquo;</p>
+              <p>&gt; &ldquo;Prepare a USDC-to-SOL swap proposal with slippage capped at 1%.&rdquo;</p>
             </div>
             <p>Silfable aims to perfectly coordinate the human requester, the AI intelligence provider (LLM), the deterministic policy engine, the ephemeral wallet, the Solana program, and the resulting receipt.</p>
           </div>
@@ -202,21 +203,21 @@ export default function WhitepaperPage() {
               <Database className="size-6 text-electric shrink-0" strokeWidth={1.5} />
               <div>
                 <h3 className="font-serif text-xl mb-1">Encrypted Cloud State Layer</h3>
-                <p className="text-sm leading-6 text-black/60">A high-availability cloud database that stores user preferences, chat session history, execution receipts, and AES-256-GCM encrypted Ephemeral Vault keys.</p>
+                <p className="text-sm leading-6 text-black/60">A cloud database for bounded user preferences, chat state, and proposal metadata. Production transaction keys are not part of the web cloud authority.</p>
               </div>
             </div>
             <div className="flex gap-4">
               <ServerCrash className="size-6 text-electric shrink-0" strokeWidth={1.5} />
               <div>
                 <h3 className="font-serif text-xl mb-1">High-Throughput Task Queue</h3>
-                <p className="text-sm leading-6 text-black/60">An in-memory event and task queue that bridges the Web Client and the Cloud Worker for 24/7 autonomous monitoring intents.</p>
+                <p className="text-sm leading-6 text-black/60">A task queue foundation for bounded monitoring and proposal intents. Execution jobs are frozen.</p>
               </div>
             </div>
             <div className="flex gap-4">
               <BrainCircuit className="size-6 text-electric shrink-0" strokeWidth={1.5} />
               <div>
                 <h3 className="font-serif text-xl mb-1">The Cloud Worker Daemon</h3>
-                <p className="text-sm leading-6 text-black/60">A persistent cloud worker operating continuously. It pulls intents from the message queue, builds Solana transactions, decrypts the session's Ephemeral Vault in memory, signs the transaction, and broadcasts to Mainnet.</p>
+                <p className="text-sm leading-6 text-black/60">A monitor-only cloud process with no production signer and no Mainnet broadcast authority.</p>
               </div>
             </div>
           </div>
@@ -259,7 +260,7 @@ export default function WhitepaperPage() {
             <div className="border border-black/15 p-6 bg-white">
               <h2 className="font-serif text-3xl font-normal tracking-normal">Web</h2>
               <p className="mt-4 text-sm leading-7 text-black/55">
-                Best for 24/7 Cloud Worker execution, cloud state synchronization, and shared UI parity. It supports full Ephemeral Vault autonomous execution today.
+                Best for browser-wallet restricted execution, cloud-backed state synchronization, and shared UI parity. Autonomous cloud signing is not available.
               </p>
             </div>
           </div>

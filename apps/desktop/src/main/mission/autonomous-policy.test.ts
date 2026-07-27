@@ -1,5 +1,6 @@
 import type { MissionContractPreview } from "@silfable/contracts";
-import { describe, expect, it, vi } from "vitest";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 
 import { AgentKeyService } from "../wallet/agent-keys.js";
 import { AutonomousPolicyService } from "./autonomous-policy.js";
@@ -29,14 +30,16 @@ describe("AutonomousPolicyService", () => {
   it("denies autonomous execution if agent key is uninitialized", async () => {
     const agentKeys = new AgentKeyService();
     const allowlist = {
-      evaluateAutonomousEligibility: vi.fn().mockResolvedValue({ eligible: true }),
+      async evaluateAutonomousEligibility() {
+        return { eligible: true as const };
+      },
     } as unknown as TokenAllowlistService;
 
     const service = new AutonomousPolicyService(agentKeys, allowlist);
     const result = await service.evaluateMissionForAutonomousExecution(mockPreview, 1_000_000n);
 
-    expect(result.allowed).toBe(false);
-    expect(result.reasons).toContain("Agent key is not initialized in active session.");
+    assert.equal(result.allowed, false);
+    assert.ok(result.reasons.includes("Agent key is not initialized in active session."));
   });
 
   it("approves autonomous execution when agent initialized and tokens allowlisted", async () => {
@@ -52,15 +55,17 @@ describe("AutonomousPolicyService", () => {
     );
 
     const allowlist = {
-      evaluateAutonomousEligibility: vi.fn().mockResolvedValue({ eligible: true }),
+      async evaluateAutonomousEligibility() {
+        return { eligible: true as const };
+      },
     } as unknown as TokenAllowlistService;
 
     const service = new AutonomousPolicyService(agentKeys, allowlist);
     const result = await service.evaluateMissionForAutonomousExecution(mockPreview, 1_000_000n);
 
-    expect(result.allowed).toBe(true);
-    expect(result.reasons).toHaveLength(0);
-    expect(result.agentAddress).toBeTruthy();
+    assert.equal(result.allowed, true);
+    assert.equal(result.reasons.length, 0);
+    assert.ok(result.agentAddress);
   });
 
   it("denies autonomous execution if input or output token is not allowlisted", async () => {
@@ -76,17 +81,17 @@ describe("AutonomousPolicyService", () => {
     );
 
     const allowlist = {
-      evaluateAutonomousEligibility: vi.fn().mockImplementation(async (mint: string) => {
+      async evaluateAutonomousEligibility(mint: string) {
         if (mint === USDC_MINT) return { eligible: true };
         return { eligible: false, reason: "Token is not in the autonomous allowlist." };
-      }),
+      },
     } as unknown as TokenAllowlistService;
 
     const service = new AutonomousPolicyService(agentKeys, allowlist);
     const result = await service.evaluateMissionForAutonomousExecution(mockPreview, 1_000_000n);
 
-    expect(result.allowed).toBe(false);
-    expect(result.reasons[0]).toContain("Output token");
-    expect(result.reasons[0]).toContain("not in the autonomous allowlist");
+    assert.equal(result.allowed, false);
+    assert.match(result.reasons[0] ?? "", /Output token/u);
+    assert.match(result.reasons[0] ?? "", /not in the autonomous allowlist/u);
   });
 });

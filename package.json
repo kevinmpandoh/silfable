@@ -25,6 +25,7 @@
     "build:worker": "npm run build --workspace @silfable/cloud-worker",
     "audit:desktop": "node scripts/audit-desktop-bundles.mjs",
     "audit:desktop:win": "node scripts/audit-windows-artifacts.mjs apps/desktop/release",
+    "qa:desktop:p2:win": "powershell -ExecutionPolicy Bypass -File scripts/start-windows-p2-qa.ps1",
     "dist:desktop:win": "npm run dist:win --workspace @silfable/desktop",
     "dist:desktop:win:qa": "npm run dist:win:qa --workspace @silfable/desktop",
     "setup:electron": "npm exec --workspace @silfable/desktop -- install-electron",

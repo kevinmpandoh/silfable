@@ -1,11 +1,18 @@
+import "server-only";
+
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 const ALGORITHM = "aes-256-gcm";
-const DEFAULT_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 function getEncryptionKey(): Buffer {
-  const secret = process.env.WORKER_ENCRYPTION_KEY || DEFAULT_KEY;
-  return Buffer.from(secret.slice(0, 64), "hex");
+  const secret = process.env.WORKER_ENCRYPTION_KEY?.trim();
+  if (!secret) {
+    throw new Error("WORKER_ENCRYPTION_KEY is required.");
+  }
+  if (!/^[0-9a-fA-F]{64}$/u.test(secret)) {
+    throw new Error("WORKER_ENCRYPTION_KEY must be exactly 32 bytes encoded as 64 hexadecimal characters.");
+  }
+  return Buffer.from(secret, "hex");
 }
 
 export function encryptAgentKey(plaintextSecret: string): { ciphertext: string; iv: string } {

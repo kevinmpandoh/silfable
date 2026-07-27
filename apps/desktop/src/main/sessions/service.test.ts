@@ -53,6 +53,20 @@ test("sessions survive reopen while message plaintext stays out of SQLite", asyn
           broadcastAttempted: false as const,
           simulatedAt: "2026-07-21T00:01:00.000Z",
         },
+        pumpExecution: {
+          id: "00000000-0000-4000-8000-000000000004",
+          previewId: "00000000-0000-4000-8000-000000000005",
+          signature: `5K${"A".repeat(62)}`,
+          walletAddress: "11111111111111111111111111111111",
+          tokenMint: "So11111111111111111111111111111111111111112",
+          side: "buy" as const,
+          transactionDigest: "a".repeat(64),
+          lastValidBlockHeight: 434_000_123,
+          status: "broadcast-unknown" as const,
+          error: "RPC timeout; verification is pending and no rebroadcast is allowed.",
+          createdAt: "2026-07-21T00:01:05.000Z",
+          updatedAt: "2026-07-21T00:01:06.000Z",
+        },
       },
     ],
     startedAt: "2026-07-21T00:00:00.000Z",
@@ -64,9 +78,15 @@ test("sessions survive reopen while message plaintext stays out of SQLite", asyn
     database.close();
     assert.equal((await readFile(path)).includes(Buffer.from("private session question")), false);
     assert.equal((await readFile(path)).includes(Buffer.from("private finalized Pump simulation evidence")), false);
+    assert.equal((await readFile(path)).includes(Buffer.from(`5K${"A".repeat(62)}`)), false);
     const reopened = await RuntimeDatabase.open(path);
-    assert.deepEqual(await new SessionService(reopened, secrets).list(), [session]);
-    reopened.close();
+    try {
+      const reopenedSessions = await new SessionService(reopened, secrets).list();
+      assert.deepEqual(reopenedSessions, [session]);
+      assert.equal(reopenedSessions[0]?.messages[1]?.pumpExecution?.status, "broadcast-unknown");
+    } finally {
+      reopened.close();
+    }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
@@ -143,6 +163,167 @@ test("sessions with mission execution receipts survive reopen cleanly while secr
     } finally {
       reopenedDb.close();
       reopenedDb = null;
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+  }
+});
+
+test("unknown limit-order receipts survive restart and remain encrypted for manual verification", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "silfable-limit-receipts-"));
+  const path = join(directory, "runtime.sqlite3");
+  const secrets = new MemorySecrets();
+  const depositSignature = "3".repeat(64);
+  const withdrawalSignature = "4".repeat(64);
+  const session = {
+    id: "00000000-0000-4000-8000-000000000020",
+    title: "Limit order recovery",
+    mode: "mission" as const,
+    permission: "restricted" as const,
+    workspace: "general" as const,
+    walletAddress: "11111111111111111111111111111111",
+    messages: [
+      {
+        id: "00000000-0000-4000-8000-000000000021",
+        role: "assistant" as const,
+        text: "Limit order receipt is awaiting an on-chain verification check.",
+        at: "2026-07-24T13:00:00.000Z",
+        limitOrderExecution: {
+          id: "00000000-0000-4000-8000-000000000022",
+          previewId: "00000000-0000-4000-8000-000000000023",
+          simulationId: "00000000-0000-4000-8000-000000000024",
+          orderId: "order-123456",
+          status: "unknown" as const,
+          depositSignature,
+          vaultAddress: "So11111111111111111111111111111111111111112",
+          explorerUrl: `https://explorer.solana.com/tx/${depositSignature}`,
+          depositConfirmed: false,
+          chainVerification: "unavailable" as const,
+          chainSlot: null,
+          error: "Deposit broadcast status is unknown.",
+          verifiedAt: null,
+          createdAt: "2026-07-24T13:00:00.000Z",
+        },
+        limitOrderCancelReceipt: {
+          id: "00000000-0000-4000-8000-000000000025",
+          orderId: "order-123456",
+          simulationId: "00000000-0000-4000-8000-000000000026",
+          status: "unknown" as const,
+          withdrawalSignature,
+          explorerUrl: `https://explorer.solana.com/tx/${withdrawalSignature}`,
+          chainVerification: "unavailable" as const,
+          chainSlot: null,
+          error: "Withdrawal broadcast status is unknown.",
+          verifiedAt: null,
+          createdAt: "2026-07-24T13:01:00.000Z",
+        },
+      },
+    ],
+    startedAt: "2026-07-24T13:00:00.000Z",
+    usage: { input: 0, output: 0, total: 0, cost: null },
+  };
+
+  try {
+    const database = await RuntimeDatabase.open(path);
+    await new SessionService(database, secrets).upsert(session);
+    database.close();
+
+    const rawDbContent = await readFile(path);
+    assert.equal(rawDbContent.includes(Buffer.from(depositSignature)), false);
+    assert.equal(rawDbContent.includes(Buffer.from(withdrawalSignature)), false);
+
+    const reopened = await RuntimeDatabase.open(path);
+    try {
+      const fetched = await new SessionService(reopened, secrets).get(session.id);
+      assert.equal(
+        fetched?.messages[0]?.limitOrderExecution?.status,
+        "unknown",
+      );
+      assert.equal(
+        fetched?.messages[0]?.limitOrderExecution?.depositSignature,
+        depositSignature,
+      );
+      assert.equal(
+        fetched?.messages[0]?.limitOrderCancelReceipt?.withdrawalSignature,
+        withdrawalSignature,
+      );
+    } finally {
+      reopened.close();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true }).catch(() => undefined);
+  }
+});
+
+test("unknown Jupiter broadcast keeps its local signature across encrypted restart", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "silfable-jupiter-unknown-"));
+  const path = join(directory, "runtime.sqlite3");
+  const secrets = new MemorySecrets();
+  const signature = "5".repeat(64);
+  const session = {
+    id: "00000000-0000-4000-8000-000000000030",
+    title: "Unknown Jupiter broadcast",
+    mode: "mission" as const,
+    permission: "restricted" as const,
+    workspace: "general" as const,
+    walletAddress: "11111111111111111111111111111111",
+    messages: [{
+      id: "00000000-0000-4000-8000-000000000031",
+      role: "assistant" as const,
+      text: "Broadcast status is unknown; verify the existing signature.",
+      at: "2026-07-24T14:00:00.000Z",
+      missionExecution: {
+        id: "00000000-0000-4000-8000-000000000032",
+        missionId: "00000000-0000-4000-8000-000000000033",
+        simulationId: "00000000-0000-4000-8000-000000000034",
+        status: "unknown" as const,
+        signature,
+        explorerUrl: `https://explorer.solana.com/tx/${signature}`,
+        router: "metis",
+        inputAmount: null,
+        outputAmount: null,
+        expectedOutputAmount: "6500000",
+        actualSlippageBps: null,
+        networkFeeLamports: 5000,
+        actualNetworkFeeLamports: null,
+        walletPreLamports: null,
+        walletPostLamports: null,
+        totalWalletOutflowLamports: null,
+        accountFundingLamports: null,
+        walletAddress: "11111111111111111111111111111111",
+        inputMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        code: null,
+        error: "Jupiter broadcast timed out.",
+        transactionSigned: true as const,
+        broadcastAttempted: true as const,
+        executedAt: "2026-07-24T14:00:00.000Z",
+        chainVerification: "unavailable" as const,
+        chainSlot: null,
+        chainError: "Verify the locally derived signature; never rebroadcast.",
+        verifiedAt: null,
+      },
+    }],
+    startedAt: "2026-07-24T14:00:00.000Z",
+    usage: { input: 0, output: 0, total: 0, cost: null },
+  };
+
+  try {
+    const database = await RuntimeDatabase.open(path);
+    await new SessionService(database, secrets).upsert(session);
+    database.close();
+
+    assert.equal((await readFile(path)).includes(Buffer.from(signature)), false);
+    const reopened = await RuntimeDatabase.open(path);
+    try {
+      const fetched = await new SessionService(reopened, secrets).get(session.id);
+      assert.equal(fetched?.messages[0]?.missionExecution?.status, "unknown");
+      assert.equal(fetched?.messages[0]?.missionExecution?.signature, signature);
+      assert.match(
+        fetched?.messages[0]?.missionExecution?.chainError ?? "",
+        /never rebroadcast/u,
+      );
+    } finally {
+      reopened.close();
     }
   } finally {
     await rm(directory, { recursive: true, force: true }).catch(() => undefined);

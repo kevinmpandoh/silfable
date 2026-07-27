@@ -13,6 +13,7 @@ export type DcaOrderTriggerEvent = {
   scheduleId: string;
   mintAddress: string;
   orderAmountLamports: string;
+  /** Number of confirmed executions before this reviewable proposal. */
   executedCount: number;
   triggeredAt: string;
 };
@@ -74,30 +75,30 @@ export class DcaSchedulerManager extends EventEmitter {
         const currentExecutedBig = BigInt(schedule.totalExecutedLamports);
         const totalBudgetBig = BigInt(schedule.totalBudgetLamports);
 
-        const newExecutedBig = currentExecutedBig + orderAmountBig;
-        const newCount = schedule.executedCount + 1;
-
-        const isCompleted = newExecutedBig + orderAmountBig > totalBudgetBig;
+        if (currentExecutedBig + orderAmountBig > totalBudgetBig) {
+          this.#db.upsertDcaSchedule({ ...schedule, status: "COMPLETED", nextExecutionAt: "COMPLETED" });
+          continue;
+        }
         const nextTime = new Date(now.getTime() + schedule.intervalSeconds * 1000).toISOString();
 
         this.#db.upsertDcaSchedule({
           ...schedule,
-          executedCount: newCount,
-          totalExecutedLamports: newExecutedBig.toString(),
-          nextExecutionAt: isCompleted ? "COMPLETED" : nextTime,
-          status: isCompleted ? "COMPLETED" : "ACTIVE",
+          // A scheduler tick is not evidence of a swap. Only a finalized
+          // venue receipt may increment executedCount/totalExecutedLamports.
+          nextExecutionAt: nextTime,
+          status: "ACTIVE",
         });
 
         const triggerEvent: DcaOrderTriggerEvent = {
           scheduleId: schedule.id,
           mintAddress: schedule.mintAddress,
           orderAmountLamports: schedule.orderAmountLamports,
-          executedCount: newCount,
+          executedCount: schedule.executedCount,
           triggeredAt: now.toISOString(),
         };
 
         triggeredEvents.push(triggerEvent);
-        this.emit("dca_order_triggered", triggerEvent);
+        this.emit("dca_proposal_due", triggerEvent);
       }
     }
 

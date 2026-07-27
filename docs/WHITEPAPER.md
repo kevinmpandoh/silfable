@@ -1,6 +1,6 @@
 # Silfable Whitepaper
 
-An early-stage, open-source, Solana-first project exploring how AI agents, human users, zero-click autonomous cloud workers, and deterministic security boundaries can coordinate through a modular execution environment.
+An early-stage, open-source, Solana-first project exploring how AI agents, human users, restricted wallet approvals, cloud monitoring, and deterministic security boundaries can coordinate through a modular execution environment.
 
 ## Contents
 
@@ -11,9 +11,9 @@ An early-stage, open-source, Solana-first project exploring how AI agents, human
 - [04] Silfable's Vision
 - [05] Design Principles
 - [06] Proposed System Architecture
-- [07] Dual-Mode Execution Framework
-- [08] Ephemeral Vaults and Security
-- [09] 24/7 Cloud Worker Orchestration
+- [07] Restricted Execution Framework
+- [08] Transaction Authority and Security
+- [09] Cloud Monitoring Roadmap
 - [10] Risk Management and Automated Kill Switches
 - [11] Pump.fun and Token Discovery Roadmap
 - [12] Public Commitments
@@ -49,9 +49,10 @@ Silfable is an open-source, Solana-first project designed to explore a shared co
 
 Silfable is built around four core ideas:
 1. **Intent-based research, deterministic execution:** The AI may analyze markets and draft actions, but supported transactions must pass strict, hard-coded deterministic policy checks before execution.
-2. **Ephemeral Vault Architecture:** Zero-click autonomous trading uses strictly isolated, AES-256 encrypted keypairs that live only for the duration of a session.
+2. **Separated transaction authority:** Desktop keys remain in the local encrypted vault; web signing remains in the connected browser wallet.
 3. **Transparent Execution Receipts:** Every quote, simulation, confirmation, rejection, and failure should be readable, verified on-chain, and persistently synced via encrypted cloud database.
-4. **Dual-Mode Execution:** Users can choose between Restricted Mode (traditional browser-wallet approval) or Full Access Mode (24/7 autonomous cloud execution).
+4. **Restricted Execution:** Web transactions require browser-wallet approval. Desktop transactions require the local encrypted vault, deterministic policy checks, and explicit final confirmation. Full Access cloud execution is not available.
+5. **Wallet-Scoped Web Authentication:** A web workspace requires an expiring, one-time Solana wallet challenge signature. Authentication signatures grant access only to that wallet's application data; they never authorize a transaction.
 
 ---
 
@@ -61,8 +62,8 @@ The current Silfable platform is designed to demonstrate live, production-grade 
 
 ### 2.1 Live Capabilities
 - **Restricted Jupiter Swap:** Solana Mainnet swap preview, deterministic simulation, wallet approval, broadcast, and verified receipt generation.
-- **24/7 Autonomous Cloud Worker:** Background AI trading via distributed task queues with zero-click Mainnet signing within bounded risk limits.
-- **Pump.fun Guarded Trading:** Autonomous and manual Pump.fun bonding-curve trading guarded by live Fee Guards, Slippage Validation, and Receipt Reconciliation.
+- **Cloud Monitor (Preview):** Background monitoring and proposal infrastructure. It has no production signing or Mainnet broadcast authority.
+- **Pump.fun Guarded Research:** Read-only intelligence, bounded discovery, proposal building, simulation, fee guards, and receipt foundations. Web Pump.fun broadcast remains disabled.
 - **Centralized State Sync:** User settings, active sessions, and trading histories synced across high-availability Cloud Storage for persistent cross-platform access.
 - **Portfolio Snapshots:** Connected-wallet SOL balance and token activity snapshots from configured Mainnet RPC providers.
 
@@ -133,18 +134,18 @@ The interface allows humans to:
 A high-availability cloud database that stores:
 - User preferences and global risk parameters.
 - Chat session history and AI context.
-- Encrypted Ephemeral Vault keys (AES-256-GCM).
+- Encrypted service credentials required for proposal and research integrations.
 - Execution receipts and position tracking.
 
 ### 6.3 High-Throughput Task Queue
-An in-memory event and task queue that bridges the Web Client and the Cloud Worker. When a user requests 24/7 autonomous monitoring, the intent is placed in the task queue for background processing.
+An in-memory event and task queue intended to bridge the Web Client and the Cloud Monitor. Execution jobs are frozen; the queue must not grant signing or broadcast authority.
 
 ### 6.4 The Cloud Worker Daemon
-A persistent cloud worker operating continuously. It pulls intents from the message queue, communicates with the LLM, builds Solana transactions, decrypts the session's Ephemeral Vault in memory, signs the transaction, and broadcasts to Mainnet.
+A persistent cloud monitor with a health endpoint. Production signing, transaction construction with a server-held signer, and Mainnet broadcast are disabled.
 
 ---
 
-## [07] Dual-Mode Execution Framework
+## [07] Restricted Execution Framework
 
 ### 7.1 Restricted Mode
 In Restricted Mode, Silfable acts purely as a research and transaction-building assistant. 
@@ -153,42 +154,38 @@ In Restricted Mode, Silfable acts purely as a research and transaction-building 
 3. The user manually reviews the exact output and signs the transaction.
 4. Final authority never leaves the user's primary wallet.
 
-### 7.2 Full Access 24/7 Mode
-In Full Access Mode, Silfable operates entirely autonomously.
-1. The user funds a temporary "Ephemeral Vault" with a strict budget (e.g., 1 SOL).
-2. The Cloud Worker takes over the session.
-3. The AI monitors the market and signs transactions autonomously using the Ephemeral Vault, without user intervention.
-4. Execution continues even if the user goes offline.
+### 7.2 Cloud Monitoring Preview
+The cloud layer may monitor schedules, evaluate trigger conditions, and prepare expiring proposals only after the wallet signs an exact, bounded `monitor-propose` policy. The grant includes explicit capabilities, value and fee ceilings, token scope, start time, and expiry. It always fixes signing, broadcast, and execution authority to false. The wallet can revoke grants or engage an emergency stop. The cloud layer cannot hold transaction authority, request a deposit into an agent wallet, sign a transaction, or broadcast to Mainnet.
 
 ---
 
-## [08] Ephemeral Vaults and Security
+## [08] Transaction Authority and Security
 
-To solve the custody dilemma of AI trading, Silfable utilizes Ephemeral Vaults.
+Silfable currently separates transaction authority by surface.
 
-### 8.1 Zero-Knowledge Architecture
-When a 24/7 session is created, the system generates a brand-new Solana keypair on the fly. 
+### 8.1 Desktop
+Desktop signing keys remain in the encrypted local vault and require the configured restricted execution gates.
 
-### 8.2 AES-256-GCM Encryption
-The private key of the Ephemeral Vault is immediately encrypted using AES-256-GCM before it is stored in the encrypted cloud database. The encryption key is derived from a highly secure environment variable (`WORKER_ENCRYPTION_KEY`) known only to the production server. 
+### 8.2 Web
+The connected Phantom or Solflare wallet retains signing authority. The server does not create a production agent signer.
 
-### 8.3 Bounded Liability
-Because the Ephemeral Vault is entirely separate from the user's primary wallet, the maximum possible loss in the event of an AI hallucination or a theoretical systemic breach is strictly limited to the funds the user explicitly deposited into that specific session.
+### 8.3 Cloud
+Cloud credentials must use deployment secrets without source-code fallbacks. Cloud execution remains frozen until custody, ownership authentication, policy enforcement, reconciliation, and independent security review are complete.
 
 ---
 
-## [09] 24/7 Cloud Worker Orchestration
+## [09] Cloud Monitoring Roadmap
 
-The Cloud Worker is the heart of Silfable's autonomous capabilities.
+The cloud service is currently a monitor-only foundation.
 
 ### 9.1 Polling and Inference
-The worker continuously loops through active background queue jobs. It feeds live market data (prices, token velocity, news) into the AI model to determine if conditions meet the user's intent.
+Future monitor jobs may evaluate bounded price, schedule, and research conditions without moving funds.
 
 ### 9.2 Execution Decoupling
-If the AI decides to execute, it must output a standardized JSON contract. The Cloud Worker strips away the AI's natural language, takes the JSON contract, and passes it to the Deterministic Policy Engine.
+If a condition is met, the target design produces an expiring proposal that must return to the appropriate restricted signing surface.
 
 ### 9.3 Reconciliation
-After broadcast, the worker polls the Solana RPC until the block is finalized. It then updates the cloud database state, ensuring the Web Client reflects the new portfolio balances instantly.
+Receipt reconciliation is performed only after a user-approved transaction has been broadcast by an authorized restricted surface.
 
 ---
 
@@ -200,7 +197,7 @@ Silfable enforces hard-coded limits that the AI cannot override.
 All transactions must pass a slippage check (e.g., max 1%) and a network priority fee ceiling. If network congestion causes fees to spike beyond the user's limit, the execution fails safely.
 
 ### 10.2 Max Drawdown Kill Switch
-Every 24/7 session tracks its starting balance. If the portfolio value drops below a user-defined threshold (e.g., -20%), the Cloud Worker triggers an automated kill switch. The session is forcibly halted, and the AI's signing privileges are revoked, preventing further loss.
+The target monitor may pause proposal generation when configured drawdown limits are reached. It has no current AI signing privilege to revoke.
 
 ---
 
@@ -228,7 +225,7 @@ Silfable will not intentionally:
 - Obfuscate the network fees or slippage incurred during a trade.
 - Claim an AI model is infallible or inherently profitable.
 - Request the seed phrase or private key of a user's primary wallet.
-- Execute trades using funds outside of an explicitly funded Ephemeral Vault in autonomous mode.
+- Claim cloud autonomous signing or Full Access is available.
 
 ---
 
@@ -236,8 +233,8 @@ Silfable will not intentionally:
 
 Silfable bridges the gap between the unpredictability of Artificial Intelligence and the strict, unforgiving nature of the blockchain. 
 
-By utilizing intent-based prompts, AES-256 encrypted Ephemeral Vaults, strict deterministic policy engines, and a 24/7 Cloud Worker architecture, Silfable provides a modular environment where AI can trade securely.
+By combining intent-based prompts, restricted wallet authority, deterministic policy engines, transparent receipts, and a monitor-only cloud roadmap, Silfable provides a modular environment for guarded AI-assisted trading.
 
-The infrastructure exists today. The ecosystem is live. The future of guarded AI execution is here. 
+Restricted components exist today; autonomous execution remains a roadmap item subject to explicit security and production gates.
 
 *(End of Document)*

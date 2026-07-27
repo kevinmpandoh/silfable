@@ -45,7 +45,7 @@ describe("TokenAllowlistService", () => {
     const result = await service.evaluateAutonomousEligibility("OtherMint");
     assert.equal(result.eligible, false);
     if (!result.eligible) {
-      assert.equal(result.reason, "Token is not in the autonomous allowlist.");
+      assert.equal(result.reason, "Token is not in the autonomous allowlist and Autonomous Discovery is disabled.");
     }
   });
 

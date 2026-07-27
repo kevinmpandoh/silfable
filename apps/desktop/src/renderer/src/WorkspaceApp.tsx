@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import logoUrl from "../../assets/logo.png";
 
 import type {
+  EmergencyStopStatus,
   LimitOrderCancelSimulation,
   LimitOrderContractPreview,
   LimitOrderExecutionReceipt,
@@ -11,6 +12,7 @@ import type {
   MissionSimulationPreview,
   OpenRouterModelView,
   PortfolioSnapshot,
+  PumpExecutionRecord,
   PumpFinalRevalidation,
   PumpRiskSettings,
   PumpSimulationArtifact,
@@ -916,12 +918,12 @@ function WalletStep({
       subtitle="Select the wallets a future session may reference. Adding a wallet never authorizes a transaction."
     >
       <Notice tone="warning" title="Execution stays locked">
-        Mainnet is the only visible network. Restricted approval and
+        Mainnet is the only active network. Restricted approval and
         deterministic policy checks remain mandatory.
       </Notice>
       <div className="chainTabs">
         <button className="active">◎ Solana</button>
-        <button disabled>◆ EVM · coming next</button>
+        <button disabled>◆ EVM · experimental</button>
       </div>
       {configured && (
         <div className="configuredReceipt">
@@ -932,8 +934,7 @@ function WalletStep({
               {wallets.length === 1 ? "" : "s"} configured
             </strong>
             <small>
-              You can generate or import another wallet below. The first wallet
-              remains primary.
+              You can generate or import another wallet below. The first wallet remains primary.
             </small>
           </div>
         </div>
@@ -941,16 +942,16 @@ function WalletStep({
       {wallets.length > 0 && (
         <div className="walletList">
           {wallets.map((wallet, index) => (
-            <div key={wallet.address}>
-              <span>0{index + 1}</span>
-              <strong>{shorten(wallet.address)}</strong>
-              {wallet.primary && (
-                <StatusPill tone="success">Primary</StatusPill>
-              )}
-              <button onClick={() => void copyWalletAddress(wallet.address)}>
-                Copy
-              </button>
-            </div>
+              <div key={wallet.address}>
+                <span>0{index + 1}</span>
+                <strong>{shorten(wallet.address)}</strong>
+                {wallet.primary && (
+                  <StatusPill tone="success">Primary</StatusPill>
+                )}
+                <button onClick={() => void copyWalletAddress(wallet.address)}>
+                  Copy
+                </button>
+              </div>
           ))}
         </div>
       )}
@@ -1034,6 +1035,17 @@ function IntegrationStep({
   const [jupiterKey, setJupiterKey] = useState("");
   const [tavilyKey, setTavilyKey] = useState("");
   const [solanaRpcUrl, setSolanaRpcUrl] = useState("");
+  const [robinhoodRpcUrl, setRobinhoodRpcUrl] = useState("");
+  const [zeroExKey, setZeroExKey] = useState("");
+  const [robinhoodWalletMnemonic, setRobinhoodWalletMnemonic] = useState("");
+  const [robinhoodWalletAddress, setRobinhoodWalletAddress] = useState<string | null>(null);
+  const [robinhoodRecovery, setRobinhoodRecovery] = useState<string | null>(null);
+  const [robinhoodSellToken, setRobinhoodSellToken] = useState("");
+  const [robinhoodBuyToken, setRobinhoodBuyToken] = useState("");
+  const [robinhoodSellAmount, setRobinhoodSellAmount] = useState("");
+  const [robinhoodQuote, setRobinhoodQuote] = useState<{ sellAmount: string; buyAmount: string; minBuyAmount: string | null; zeroExFeeAmount: string | null; liquidityAvailable: boolean; sellTokenSymbol: string; buyTokenSymbol: string } | null>(null);
+  const [robinhoodPreflight, setRobinhoodPreflight] = useState<{ allowanceRequired: boolean; currentAllowance: string; gasLimit: string; maxGasCostWei: string; expiresAt: string; expectedBuyAmount: string; minimumBuyAmount: string } | null>(null);
+  const [robinhoodReceipts, setRobinhoodReceipts] = useState<Array<{ id: string; transactionHash: string; kind: "approval" | "swap"; status: "confirmed" | "reverted" | "unknown"; reconciledAt: string }>>([]);
   const [jupiterConfigured, setJupiterConfigured] = useState(
     setup.jupiterConfigured,
   );
@@ -1041,6 +1053,9 @@ function IntegrationStep({
     setup.tavilyConfigured,
   );
   const [rpcConfigured, setRpcConfigured] = useState(false);
+  const [robinhoodRpcConfigured, setRobinhoodRpcConfigured] = useState(false);
+  const [zeroExConfigured, setZeroExConfigured] = useState(false);
+  const [robinhoodExecutionMissing, setRobinhoodExecutionMissing] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
@@ -1048,14 +1063,22 @@ function IntegrationStep({
       window.silfable.getJupiterSettings(),
       window.silfable.getTavilySettings(),
       window.silfable.getSolanaRpcSettings(),
+      window.silfable.getRobinhoodSettings(),
+      window.silfable.getRobinhoodWallet(),
+      window.silfable.listRobinhoodReceipts(),
     ])
-      .then(([jupiter, tavily, rpc]) => {
+      .then(([jupiter, tavily, rpc, robinhood, robinhoodWallet, receipts]) => {
         setJupiterConfigured(jupiter.configured);
         setTavilyConfigured(tavily.configured);
         if (rpc.rpcUrl) {
           setSolanaRpcUrl(rpc.rpcUrl);
           setRpcConfigured(true);
         }
+        setRobinhoodRpcConfigured(robinhood.rpcConfigured);
+        setZeroExConfigured(robinhood.zeroExConfigured);
+        setRobinhoodExecutionMissing(robinhood.executionMissing);
+        setRobinhoodWalletAddress(robinhoodWallet.address);
+        setRobinhoodReceipts(receipts.receipts);
       })
       .catch(() => undefined);
   }, []);
@@ -1109,6 +1132,135 @@ function IntegrationStep({
     } finally {
       setBusy(false);
     }
+  }
+  async function saveRobinhoodRpc(testOnly = false): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const request = { schemaVersion: 1 as const, requestId: crypto.randomUUID(), rpcUrl: robinhoodRpcUrl.trim() };
+      if (testOnly) {
+        const result = await window.silfable.testRobinhoodRpcUrl(request);
+        setMessage(`Robinhood RPC verified on chain ID ${result.chainId}.`);
+      } else {
+        await window.silfable.saveRobinhoodRpcUrl(request);
+        setRobinhoodRpcUrl("");
+        setRobinhoodRpcConfigured(true);
+        setMessage("Robinhood RPC encrypted in the local vault.");
+      }
+    } catch {
+      setMessage("Robinhood RPC could not be verified. Use an HTTPS endpoint serving chain ID 4663.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveZeroExKey(): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await window.silfable.saveRobinhoodZeroXKey({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        apiKey: zeroExKey,
+        acknowledgedExternalQuoteProvider: true,
+      });
+      setZeroExKey("");
+      setZeroExConfigured(true);
+      setMessage("0x API key encrypted in the local vault. Robinhood execution remains disabled until its release gate is complete.");
+    } catch {
+      setMessage("0x API key could not be stored. Unlock the vault and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function testZeroExKey(): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await window.silfable.testRobinhoodZeroXKey({ schemaVersion: 1, requestId: crypto.randomUUID() });
+      setMessage(`0x Swap API verified for Robinhood Chain (${result.chainId}).`);
+    } catch {
+      setMessage("0x API could not be verified for Robinhood Chain. Check the saved API key and provider status.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function createRobinhoodWallet(): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    setRobinhoodRecovery(null);
+    try {
+      const wallet = await window.silfable.createRobinhoodWallet({ schemaVersion: 1, requestId: crypto.randomUUID(), acknowledgedHotWalletRisk: true });
+      setRobinhoodWalletAddress(wallet.address);
+      setRobinhoodRecovery(wallet.recoveryMnemonic);
+      setMessage("Robinhood EVM wallet created and encrypted locally.");
+    } catch {
+      setMessage("Robinhood EVM wallet could not be created. A wallet may already be configured.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function importRobinhoodWallet(): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    setRobinhoodRecovery(null);
+    try {
+      const wallet = await window.silfable.importRobinhoodWalletMnemonic({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        mnemonic: robinhoodWalletMnemonic,
+        acknowledgedHotWalletRisk: true,
+      });
+      setRobinhoodWalletMnemonic("");
+      setRobinhoodWalletAddress(wallet.address);
+      setMessage("Robinhood EVM wallet imported and encrypted locally.");
+    } catch {
+      setMessage("Robinhood EVM recovery phrase could not be imported.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function getRobinhoodQuote(): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    setRobinhoodQuote(null);
+    try {
+      const result = await window.silfable.getRobinhoodIndicativePrice({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        sellToken: robinhoodSellToken.trim(),
+        buyToken: robinhoodBuyToken.trim(),
+        sellAmount: robinhoodSellAmount.trim(),
+        slippageBps: 100,
+        acknowledgedReadOnlyQuote: true,
+      });
+      setRobinhoodQuote(result.quote);
+      setMessage("Indicative 0x quote received. It is read-only and cannot be executed.");
+    } catch {
+      setMessage("Robinhood quote could not be retrieved. Verify the EVM wallet, 0x key, token contracts, amount, and liquidity.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function prepareRobinhoodTrade(): Promise<void> {
+    setBusy(true); setMessage(null); setRobinhoodPreflight(null);
+    try {
+      const result = await window.silfable.prepareRobinhoodTrade({ schemaVersion: 1, requestId: crypto.randomUUID(), sellToken: robinhoodSellToken.trim(), buyToken: robinhoodBuyToken.trim(), sellAmount: robinhoodSellAmount.trim(), slippageBps: 100, acknowledgedReadOnlyQuote: true });
+      setRobinhoodPreflight({ ...result.preflight, expectedBuyAmount: result.expectedBuyAmount, minimumBuyAmount: result.minimumBuyAmount });
+      setMessage("Trade preflight is ready for review. No approval or swap has been submitted.");
+    } catch { setMessage("Robinhood preflight could not be prepared. Check allowance, liquidity, policy, and gas settings."); }
+    finally { setBusy(false); }
+  }
+  async function refreshRobinhoodReceipts(reconcile = false): Promise<void> {
+    setBusy(true); setMessage(null);
+    try {
+      if (reconcile) {
+        const result = await window.silfable.reconcileRobinhoodReceipts();
+        setMessage(result.reconciled.length === 0 ? "No pending Robinhood receipts required reconciliation." : `${result.reconciled.length} Robinhood receipt(s) reconciled without rebroadcast.`);
+      }
+      const result = await window.silfable.listRobinhoodReceipts();
+      setRobinhoodReceipts(result.receipts);
+    } catch { setMessage("Robinhood receipts could not be loaded or reconciled. Check the saved RPC URL."); }
+    finally { setBusy(false); }
   }
   return (
     <SetupCard
@@ -1170,6 +1322,104 @@ function IntegrationStep({
         <small className="providerHint">
           Stored encrypted on this device. Leave blank to keep the current key.
         </small>
+      </ProviderCard>
+      <ProviderCard
+        name="Robinhood Chain"
+        tag={robinhoodRpcConfigured && zeroExConfigured ? "Configured · execution locked" : "Optional"}
+        description="Personal Robinhood Chain RPC and 0x quote credentials for future manual EVM trading. Saving these credentials never enables trading."
+      >
+        <Field label="Robinhood Chain HTTPS RPC URL (Alchemy recommended)">
+          <div className="inputWithAction">
+            <input
+              type="url"
+              value={robinhoodRpcUrl}
+              onChange={(event) => setRobinhoodRpcUrl(event.target.value)}
+              placeholder={robinhoodRpcConfigured ? "Replace saved RPC URL" : "https://robinhood-mainnet.g.alchemy.com/v2/..."}
+              autoComplete="off"
+            />
+            <button disabled={busy || !robinhoodRpcUrl.trim()} onClick={() => void saveRobinhoodRpc(true)}>
+              {busy ? "Checking" : "Test RPC"}
+            </button>
+            <button disabled={busy || !robinhoodRpcUrl.trim()} onClick={() => void saveRobinhoodRpc()}>
+              Save RPC
+            </button>
+          </div>
+        </Field>
+        <Field label="0x API key">
+          <div className="inputWithAction">
+            <input
+              type="password"
+              value={zeroExKey}
+              onChange={(event) => setZeroExKey(event.target.value)}
+              placeholder={zeroExConfigured ? "Replace saved key" : "Enter 0x API key"}
+              autoComplete="new-password"
+            />
+            <button disabled={busy || zeroExKey.trim().length < 8} onClick={() => void saveZeroExKey()}>
+              {busy ? "Saving" : "Save key"}
+            </button>
+            <button disabled={busy || !zeroExConfigured} onClick={() => void testZeroExKey()}>
+              {busy ? "Checking" : "Test 0x"}
+            </button>
+          </div>
+        </Field>
+        <Field label="Robinhood EVM wallet">
+          {robinhoodWalletAddress ? (
+            <small className="providerHint">Configured address: {robinhoodWalletAddress}</small>
+          ) : (
+            <>
+              <div className="inputWithAction">
+                <input
+                  type="password"
+                  value={robinhoodWalletMnemonic}
+                  onChange={(event) => setRobinhoodWalletMnemonic(event.target.value)}
+                  placeholder="Optional: import BIP-39 recovery phrase"
+                  autoComplete="new-password"
+                />
+                <button disabled={busy || robinhoodWalletMnemonic.trim().length < 32} onClick={() => void importRobinhoodWallet()}>
+                  {busy ? "Importing" : "Import"}
+                </button>
+              </div>
+              <button className="secondaryButton" disabled={busy} onClick={() => void createRobinhoodWallet()}>
+                {busy ? "Creating" : "Create new EVM wallet"}
+              </button>
+            </>
+          )}
+        </Field>
+        {robinhoodRecovery && (
+          <Notice tone="danger" title="Write down this Robinhood EVM recovery phrase">
+            {robinhoodRecovery}
+          </Notice>
+        )}
+        <Field label="Indicative 0x quote (ERC-20 raw units)">
+          <div className="advancedGrid">
+            <input value={robinhoodSellToken} onChange={(event) => setRobinhoodSellToken(event.target.value)} placeholder="Sell token contract (0x...)" autoComplete="off" />
+            <input value={robinhoodBuyToken} onChange={(event) => setRobinhoodBuyToken(event.target.value)} placeholder="Buy token contract (0x...)" autoComplete="off" />
+            <input inputMode="numeric" value={robinhoodSellAmount} onChange={(event) => setRobinhoodSellAmount(event.target.value)} placeholder="Sell amount in raw units" />
+          </div>
+          <button disabled={busy || !robinhoodWalletAddress || !zeroExConfigured || !robinhoodSellToken.trim() || !robinhoodBuyToken.trim() || !robinhoodSellAmount.trim()} onClick={() => void getRobinhoodQuote()}>
+            {busy ? "Fetching" : "Get read-only quote"}
+          </button>
+          <button disabled={busy || !robinhoodWalletAddress || !zeroExConfigured || !robinhoodSellToken.trim() || !robinhoodBuyToken.trim() || !robinhoodSellAmount.trim()} onClick={() => void prepareRobinhoodTrade()}>
+            {busy ? "Preparing" : "Prepare trade review"}
+          </button>
+          {robinhoodQuote && <small className="providerHint">Sell: {robinhoodQuote.sellAmount} {robinhoodQuote.sellTokenSymbol} · Expected buy: {robinhoodQuote.buyAmount} {robinhoodQuote.buyTokenSymbol} · Minimum: {robinhoodQuote.minBuyAmount ?? "unavailable"} · 0x fee: {robinhoodQuote.zeroExFeeAmount ?? "none"} · Liquidity: {robinhoodQuote.liquidityAvailable ? "available" : "not confirmed"}</small>}
+          {robinhoodPreflight && <small className="providerHint">Preflight: expected {robinhoodPreflight.expectedBuyAmount} · minimum {robinhoodPreflight.minimumBuyAmount} · allowance {robinhoodPreflight.currentAllowance} · approval {robinhoodPreflight.allowanceRequired ? "required" : "not required"} · gas {robinhoodPreflight.gasLimit} · expires {new Date(robinhoodPreflight.expiresAt).toLocaleTimeString()}</small>}
+        </Field>
+        <small className="providerHint">
+          Credentials are encrypted locally and never shown again. Router and token policy remain release-controlled; no key grants signing or broadcast authority.
+        </small>
+        <Field label="Robinhood execution receipts">
+          <button disabled={busy} onClick={() => void refreshRobinhoodReceipts()}>{busy ? "Loading" : "Refresh receipts"}</button>
+          <button disabled={busy || !robinhoodRpcConfigured} onClick={() => void refreshRobinhoodReceipts(true)}>{busy ? "Checking" : "Reconcile pending receipts"}</button>
+          {robinhoodReceipts.length === 0 ? <small className="providerHint">No Robinhood transaction receipts are stored on this device.</small> : (
+            <small className="providerHint">{robinhoodReceipts.slice(0, 5).map((receipt) => `${receipt.kind} ${receipt.status} · ${receipt.transactionHash.slice(0, 10)}… · ${new Date(receipt.reconciledAt).toLocaleString()}`).join(" | ")}</small>
+          )}
+        </Field>
+        {robinhoodExecutionMissing.length > 0 && (
+          <Notice tone="info" title="Manual trading is intentionally locked">
+            Remaining release evidence: {robinhoodExecutionMissing.join(", ")}.
+          </Notice>
+        )}
       </ProviderCard>
       <ProviderCard
         name="Tavily"
@@ -1894,6 +2144,7 @@ function ReviewStep({
         and explicit final confirmation. Autonomous execution, EVM, and Full
         Access remain unavailable.
       </Notice>
+      {editing && <EmergencyStopPanel />}
       {editing ? (
         <footer className="setupActions settingsActions">
           <span>Settings · Mainnet only</span>
@@ -1954,6 +2205,15 @@ function MainWorkspace({
   );
   const [simulatingPumpIds, setSimulatingPumpIds] = useState<string[]>([]);
   const [revalidatingPumpIds, setRevalidatingPumpIds] = useState<string[]>([]);
+  const [pumpExecutionApproval, setPumpExecutionApproval] = useState<{
+    sessionId: string;
+    messageId: string;
+    preview: PumpTradeContractPreview;
+    simulation: PumpSimulationArtifact;
+    revalidation: PumpFinalRevalidation;
+  } | null>(null);
+  const [executingPumpIds, setExecutingPumpIds] = useState<string[]>([]);
+  const [verifyingPumpExecutionIds, setVerifyingPumpExecutionIds] = useState<string[]>([]);
   const [executionApproval, setExecutionApproval] = useState<{
     sessionId: string;
     messageId: string;
@@ -1975,6 +2235,12 @@ function MainWorkspace({
     simulation: LimitOrderSimulationPreview;
   } | null>(null);
   const [executingLimitIds, setExecutingLimitIds] = useState<string[]>([]);
+  const [verifyingLimitExecutionIds, setVerifyingLimitExecutionIds] = useState<
+    string[]
+  >([]);
+  const [verifyingLimitCancelIds, setVerifyingLimitCancelIds] = useState<
+    string[]
+  >([]);
   const [limitCancelApproval, setLimitCancelApproval] = useState<{
     sessionId: string;
     messageId: string;
@@ -2282,6 +2548,67 @@ function MainWorkspace({
     }
   }
 
+  async function runPumpExecution(
+    input: NonNullable<typeof pumpExecutionApproval>,
+    credentials: { masterPassword: string; confirmation: string },
+  ): Promise<void> {
+    setExecutingPumpIds((current) => [...new Set([...current, input.preview.id])]);
+    try {
+      const response = await window.silfable.executePumpTrade({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        sessionId: input.sessionId,
+        previewId: input.preview.id,
+        masterPassword: credentials.masterPassword,
+        confirmation: "EXECUTE PUMP MAINNET",
+        acknowledgedIrreversibleExecution: true,
+      });
+      setSessions((current) => current.map((session) => session.id !== input.sessionId
+        ? session
+        : {
+            ...session,
+            messages: session.messages.map((message) => message.id === input.messageId
+              ? { ...message, pumpExecution: response.execution }
+              : message),
+          }));
+      setPumpExecutionApproval(null);
+      setPortfolioRefresh((current) => current + 1);
+    } finally {
+      setExecutingPumpIds((current) => current.filter((id) => id !== input.preview.id));
+    }
+  }
+
+  async function verifyPumpExecution(input: {
+    sessionId: string;
+    messageId: string;
+    preview: PumpTradeContractPreview;
+    execution: PumpExecutionRecord;
+  }): Promise<void> {
+    setVerifyingPumpExecutionIds((current) => [...new Set([...current, input.execution.id])]);
+    try {
+      const response = await window.silfable.verifyPumpExecution({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        sessionId: input.sessionId,
+        previewId: input.preview.id,
+        executionId: input.execution.id,
+      });
+      setSessions((current) => current.map((session) => session.id !== input.sessionId
+        ? session
+        : {
+            ...session,
+            messages: session.messages.map((message) => message.id === input.messageId
+              ? { ...message, pumpExecution: response.execution }
+              : message),
+          }));
+      if (response.execution.status === "finalized") {
+        setPortfolioRefresh((current) => current + 1);
+      }
+    } finally {
+      setVerifyingPumpExecutionIds((current) => current.filter((id) => id !== input.execution.id));
+    }
+  }
+
   async function runLimitOrderSimulation(input: {
     sessionId: string;
     messageId: string;
@@ -2462,6 +2789,90 @@ function MainWorkspace({
     } finally {
       setCancellingLimitIds((current) =>
         current.filter((id) => id !== input.orderId),
+      );
+    }
+  }
+  async function verifyLimitOrderExecution(input: {
+    sessionId: string;
+    messageId: string;
+    preview: LimitOrderContractPreview;
+    receipt: LimitOrderExecutionReceipt;
+  }): Promise<void> {
+    setVerifyingLimitExecutionIds((current) => [
+      ...new Set([...current, input.receipt.id]),
+    ]);
+    try {
+      const response = await window.silfable.verifyLimitOrderExecution({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        sessionId: input.sessionId,
+        previewId: input.preview.id,
+        receiptId: input.receipt.id,
+      });
+      setSessions((current) =>
+        current.map((session) =>
+          session.id !== input.sessionId
+            ? session
+            : {
+                ...session,
+                messages: session.messages.map((message) =>
+                  message.id === input.messageId
+                    ? { ...message, limitOrderExecution: response.receipt }
+                    : message,
+                ),
+              },
+        ),
+      );
+      if (response.receipt.status === "active") {
+        setPortfolioRefresh((value) => value + 1);
+      }
+    } finally {
+      setVerifyingLimitExecutionIds((current) =>
+        current.filter((id) => id !== input.receipt.id),
+      );
+    }
+  }
+  async function verifyLimitOrderCancel(input: {
+    sessionId: string;
+    messageId: string;
+    receipt: NonNullable<
+      SessionRecord["messages"][number]["limitOrderCancelReceipt"]
+    >;
+  }): Promise<void> {
+    setVerifyingLimitCancelIds((current) => [
+      ...new Set([...current, input.receipt.id]),
+    ]);
+    try {
+      const response = await window.silfable.verifyLimitOrderCancel({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        sessionId: input.sessionId,
+        orderId: input.receipt.orderId,
+        receiptId: input.receipt.id,
+      });
+      setSessions((current) =>
+        current.map((session) =>
+          session.id !== input.sessionId
+            ? session
+            : {
+                ...session,
+                messages: session.messages.map((message) =>
+                  message.id === input.messageId
+                    ? {
+                        ...message,
+                        limitOrderCancelReceipt: response.receipt,
+                      }
+                    : message,
+                ),
+              },
+        ),
+      );
+      if (response.receipt.status === "cancelled") {
+        setPortfolioRefresh((value) => value + 1);
+      }
+    } finally {
+      setVerifyingLimitCancelIds((current) =>
+        current.filter((id) => id !== input.receipt.id),
       );
     }
   }
@@ -2659,7 +3070,10 @@ function MainWorkspace({
             ⚙ Settings
           </button>
           <div style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+            <label
+              title="Observes configured strategies and creates reviewable proposals only. It cannot sign or broadcast."
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
+            >
               <input
                 type="checkbox"
                 checked={backgroundLoopEnabled}
@@ -2669,7 +3083,7 @@ function MainWorkspace({
                   window.silfable.toggleBackgroundLoop(enabled);
                 }}
               />
-              Background Loop
+              Monitor only
             </label>
           </div>
         </nav>
@@ -2710,11 +3124,15 @@ function MainWorkspace({
             simulatingMissionIds={simulatingMissionIds}
             simulatingPumpIds={simulatingPumpIds}
             revalidatingPumpIds={revalidatingPumpIds}
+            executingPumpIds={executingPumpIds}
+            verifyingPumpExecutionIds={verifyingPumpExecutionIds}
             executingMissionIds={executingMissionIds}
             verifyingReceiptIds={verifyingReceiptIds}
             simulatingLimitIds={simulatingLimitIds}
             executingLimitIds={executingLimitIds}
             cancellingLimitIds={cancellingLimitIds}
+            verifyingLimitExecutionIds={verifyingLimitExecutionIds}
+            verifyingLimitCancelIds={verifyingLimitCancelIds}
             onRequestLimitSimulation={(messageId, preview) =>
               setLimitSimulationApproval({
                 sessionId: active.id,
@@ -2752,6 +3170,21 @@ function MainWorkspace({
                 simulation,
               })
             }
+            onVerifyLimitExecution={(messageId, preview, receipt) =>
+              void verifyLimitOrderExecution({
+                sessionId: active.id,
+                messageId,
+                preview,
+                receipt,
+              })
+            }
+            onVerifyLimitCancel={(messageId, receipt) =>
+              void verifyLimitOrderCancel({
+                sessionId: active.id,
+                messageId,
+                receipt,
+              })
+            }
             onRequestSimulation={(messageId, preview) =>
               setSimulationApproval({
                 sessionId: active.id,
@@ -2771,6 +3204,23 @@ function MainWorkspace({
                 sessionId: active.id,
                 messageId,
                 preview,
+              })
+            }
+            onRequestPumpExecution={(messageId, preview, simulation, revalidation) =>
+              setPumpExecutionApproval({
+                sessionId: active.id,
+                messageId,
+                preview,
+                simulation,
+                revalidation,
+              })
+            }
+            onVerifyPumpExecution={(messageId, preview, execution) =>
+              void verifyPumpExecution({
+                sessionId: active.id,
+                messageId,
+                preview,
+                execution,
               })
             }
             onRequestExecution={(messageId, preview, simulation) =>
@@ -2840,6 +3290,17 @@ function MainWorkspace({
           onCancel={() => setExecutionApproval(null)}
           onConfirm={(credentials) =>
             runExecution(executionApproval, credentials)
+          }
+        />
+      )}
+      {pumpExecutionApproval && (
+        <PumpExecutionApprovalModal
+          preview={pumpExecutionApproval.preview}
+          simulation={pumpExecutionApproval.simulation}
+          revalidation={pumpExecutionApproval.revalidation}
+          onCancel={() => setPumpExecutionApproval(null)}
+          onConfirm={(credentials) =>
+            runPumpExecution(pumpExecutionApproval, credentials)
           }
         />
       )}
@@ -2954,18 +3415,26 @@ function Conversation({
   simulatingMissionIds,
   simulatingPumpIds,
   revalidatingPumpIds,
+  executingPumpIds,
+  verifyingPumpExecutionIds,
   executingMissionIds,
   verifyingReceiptIds,
   simulatingLimitIds,
   executingLimitIds,
   cancellingLimitIds,
+  verifyingLimitExecutionIds,
+  verifyingLimitCancelIds,
   onRequestLimitSimulation,
   onRequestLimitExecution,
   onRequestLimitCancel,
   onRequestLimitCancelExecution,
+  onVerifyLimitExecution,
+  onVerifyLimitCancel,
   onRequestSimulation,
   onRequestPumpSimulation,
   onRequestPumpFinalRevalidation,
+  onRequestPumpExecution,
+  onVerifyPumpExecution,
   onRequestExecution,
   onVerifyExecution,
 }: {
@@ -2979,11 +3448,15 @@ function Conversation({
   simulatingMissionIds: string[];
   simulatingPumpIds: string[];
   revalidatingPumpIds: string[];
+  executingPumpIds: string[];
+  verifyingPumpExecutionIds: string[];
   executingMissionIds: string[];
   verifyingReceiptIds: string[];
   simulatingLimitIds: string[];
   executingLimitIds: string[];
   cancellingLimitIds: string[];
+  verifyingLimitExecutionIds: string[];
+  verifyingLimitCancelIds: string[];
   onRequestLimitSimulation: (
     messageId: string,
     preview: LimitOrderContractPreview,
@@ -3004,6 +3477,17 @@ function Conversation({
     orderId: string,
     simulation: LimitOrderCancelSimulation,
   ) => void;
+  onVerifyLimitExecution: (
+    messageId: string,
+    preview: LimitOrderContractPreview,
+    receipt: LimitOrderExecutionReceipt,
+  ) => void;
+  onVerifyLimitCancel: (
+    messageId: string,
+    receipt: NonNullable<
+      SessionRecord["messages"][number]["limitOrderCancelReceipt"]
+    >,
+  ) => void;
   onRequestSimulation: (
     messageId: string,
     preview: MissionContractPreview,
@@ -3015,6 +3499,17 @@ function Conversation({
   onRequestPumpFinalRevalidation: (
     messageId: string,
     preview: PumpTradeContractPreview,
+  ) => void;
+  onRequestPumpExecution: (
+    messageId: string,
+    preview: PumpTradeContractPreview,
+    simulation: PumpSimulationArtifact,
+    revalidation: PumpFinalRevalidation,
+  ) => void;
+  onVerifyPumpExecution: (
+    messageId: string,
+    preview: PumpTradeContractPreview,
+    execution: PumpExecutionRecord,
   ) => void;
   onRequestExecution: (
     messageId: string,
@@ -3033,7 +3528,7 @@ function Conversation({
         <div>
           <span className="liveDot" />{" "}
           {session.workspace === "pump"
-            ? "Pump.fun · proposal only"
+            ? "Pump.fun · manual restricted"
             : session.mode === "mission"
               ? "Mission preparing"
               : "Agent active"}
@@ -3109,10 +3604,33 @@ function Conversation({
               {message.pumpSimulation && (
                 <PumpSimulationCard
                   simulation={message.pumpSimulation}
+                  execution={message.pumpExecution ?? null}
                   revalidating={message.pumpTradePreview ? revalidatingPumpIds.includes(message.pumpTradePreview.id) : false}
+                  executing={message.pumpTradePreview ? executingPumpIds.includes(message.pumpTradePreview.id) : false}
                   onFinalRevalidate={message.pumpTradePreview
                     ? () => onRequestPumpFinalRevalidation(message.id, message.pumpTradePreview!)
                     : undefined}
+                  onRequestExecution={message.pumpTradePreview && message.pumpSimulation.finalRevalidation
+                    ? () => onRequestPumpExecution(
+                        message.id,
+                        message.pumpTradePreview!,
+                        message.pumpSimulation!,
+                        message.pumpSimulation!.finalRevalidation!,
+                      )
+                    : undefined}
+                />
+              )}
+              {message.pumpTradePreview && message.pumpExecution && (
+                <PumpExecutionCard
+                  execution={message.pumpExecution}
+                  preview={message.pumpTradePreview}
+                  simulation={message.pumpSimulation ?? null}
+                  verifying={verifyingPumpExecutionIds.includes(message.pumpExecution.id)}
+                  onVerify={() => onVerifyPumpExecution(
+                    message.id,
+                    message.pumpTradePreview!,
+                    message.pumpExecution!,
+                  )}
                 />
               )}
               {message.limitOrderPreview && (
@@ -3132,6 +3650,20 @@ function Conversation({
                     message.limitOrderExecution?.orderId
                       ? cancellingLimitIds.includes(
                           message.limitOrderExecution.orderId,
+                        )
+                      : false
+                  }
+                  verifyingExecution={
+                    message.limitOrderExecution
+                      ? verifyingLimitExecutionIds.includes(
+                          message.limitOrderExecution.id,
+                        )
+                      : false
+                  }
+                  verifyingCancel={
+                    message.limitOrderCancelReceipt
+                      ? verifyingLimitCancelIds.includes(
+                          message.limitOrderCancelReceipt.id,
                         )
                       : false
                   }
@@ -3163,11 +3695,26 @@ function Conversation({
                       message.limitOrderCancelSimulation!,
                     )
                   }
+                  onVerifyExecution={() =>
+                    onVerifyLimitExecution(
+                      message.id,
+                      message.limitOrderPreview!,
+                      message.limitOrderExecution!,
+                    )
+                  }
+                  onVerifyCancel={() =>
+                    onVerifyLimitCancel(
+                      message.id,
+                      message.limitOrderCancelReceipt!,
+                    )
+                  }
                 />
               )}
               {message.role === "assistant" && (
                 <div className="evidenceTag">
-                  {message.missionExecution
+                  {message.pumpExecution
+                    ? `Pump Mainnet execution: ${message.pumpExecution.status}`
+                    : message.missionExecution
                     ? `Mainnet execution: ${message.missionExecution.status}`
                     : "No execution attempted"}
                   {message.toolsUsed?.length
@@ -3221,10 +3768,14 @@ function LimitOrderPreviewCard({
   simulating,
   executing,
   cancelling,
+  verifyingExecution,
+  verifyingCancel,
   onSimulate,
   onExecute,
   onCancel,
   onExecuteCancel,
+  onVerifyExecution,
+  onVerifyCancel,
 }: {
   preview: LimitOrderContractPreview;
   simulation: LimitOrderSimulationPreview | null;
@@ -3235,10 +3786,14 @@ function LimitOrderPreviewCard({
   simulating: boolean;
   executing: boolean;
   cancelling: boolean;
+  verifyingExecution: boolean;
+  verifyingCancel: boolean;
   onSimulate: () => void;
   onExecute: () => void;
   onCancel: () => void;
   onExecuteCancel: () => void;
+  onVerifyExecution: () => void;
+  onVerifyCancel: () => void;
 }) {
   const passed = preview.checks.filter(
     (check) => check.status === "pass",
@@ -3351,7 +3906,11 @@ function LimitOrderPreviewCard({
           className={`simulationResult ${execution.status === "active" ? "passed" : "failed"}`}
         >
           <strong>Order {execution.status}</strong>
-          <small>{execution.orderId ?? execution.error}</small>
+          <small>
+            {execution.orderId ??
+              execution.error ??
+              "Deposit broadcast status is awaiting verification."}
+          </small>
           <dl>
             <div>
               <dt>Deposit amount</dt>
@@ -3382,8 +3941,61 @@ function LimitOrderPreviewCard({
               <dt>Fee risk</dt>
               <dd>{execution.feeRisk ?? "unavailable"}</dd>
             </div>
+            <div>
+              <dt>On-chain status</dt>
+              <dd>{execution.chainVerification}</dd>
+            </div>
+            <div>
+              <dt>Verified slot</dt>
+              <dd>{execution.chainSlot?.toLocaleString() ?? "Unavailable"}</dd>
+            </div>
+            <div>
+              <dt>Last verified</dt>
+              <dd>
+                {execution.verifiedAt
+                  ? new Date(execution.verifiedAt).toLocaleString()
+                  : "Not verified yet"}
+              </dd>
+            </div>
           </dl>
+          {execution.depositSignature && (
+            <p>
+              Signature: <code>{shorten(execution.depositSignature)}</code>
+            </p>
+          )}
+          {execution.error && <p className="executionError">{execution.error}</p>}
           {execution.feeGuardMessage && <p>{execution.feeGuardMessage}</p>}
+          {execution.depositSignature && (
+            <div className="receiptActions">
+              <button
+                onClick={() =>
+                  void window.silfable.copyTransactionSignature({
+                    schemaVersion: 1,
+                    requestId: crypto.randomUUID(),
+                    signature: execution.depositSignature!,
+                  })
+                }
+              >
+                Copy signature
+              </button>
+              <button
+                onClick={() =>
+                  void window.silfable.openTransactionInExplorer({
+                    schemaVersion: 1,
+                    requestId: crypto.randomUUID(),
+                    signature: execution.depositSignature!,
+                  })
+                }
+              >
+                Open explorer
+              </button>
+              {execution.status === "unknown" && (
+                <button disabled={verifyingExecution} onClick={onVerifyExecution}>
+                  {verifyingExecution ? "Verifying..." : "Verify on-chain"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
       {cancelSimulation && (
@@ -3401,8 +4013,68 @@ function LimitOrderPreviewCard({
         >
           <strong>Order {cancelReceipt.status}</strong>
           <small>
-            {cancelReceipt.withdrawalSignature ?? cancelReceipt.error}
+            {cancelReceipt.error ??
+              (cancelReceipt.status === "cancelled"
+                ? "Vault withdrawal is confirmed."
+                : "Withdrawal status is awaiting verification.")}
           </small>
+          <dl>
+            <div>
+              <dt>On-chain status</dt>
+              <dd>{cancelReceipt.chainVerification}</dd>
+            </div>
+            <div>
+              <dt>Verified slot</dt>
+              <dd>
+                {cancelReceipt.chainSlot?.toLocaleString() ?? "Unavailable"}
+              </dd>
+            </div>
+            <div>
+              <dt>Last verified</dt>
+              <dd>
+                {cancelReceipt.verifiedAt
+                  ? new Date(cancelReceipt.verifiedAt).toLocaleString()
+                  : "Not verified yet"}
+              </dd>
+            </div>
+          </dl>
+          {cancelReceipt.withdrawalSignature && (
+            <>
+              <p>
+                Signature:{" "}
+                <code>{shorten(cancelReceipt.withdrawalSignature)}</code>
+              </p>
+              <div className="receiptActions">
+                <button
+                  onClick={() =>
+                    void window.silfable.copyTransactionSignature({
+                      schemaVersion: 1,
+                      requestId: crypto.randomUUID(),
+                      signature: cancelReceipt.withdrawalSignature!,
+                    })
+                  }
+                >
+                  Copy signature
+                </button>
+                <button
+                  onClick={() =>
+                    void window.silfable.openTransactionInExplorer({
+                      schemaVersion: 1,
+                      requestId: crypto.randomUUID(),
+                      signature: cancelReceipt.withdrawalSignature!,
+                    })
+                  }
+                >
+                  Open explorer
+                </button>
+                {cancelReceipt.status === "unknown" && (
+                  <button disabled={verifyingCancel} onClick={onVerifyCancel}>
+                    {verifyingCancel ? "Verifying..." : "Verify on-chain"}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
       <footer>
@@ -3417,9 +4089,12 @@ function LimitOrderPreviewCard({
                   : "Execution locked"}
           </span>
           <small>
-            {simulation?.status === "passed"
-              ? "The exact simulated deposit can be authorized with your password."
-              : "Vault registration may occur during simulation; no funds are signed or deposited."}
+            {cancelReceipt?.status === "unknown" ||
+            execution?.status === "unknown"
+              ? "Verification only reads the known signature and never rebroadcasts."
+              : simulation?.status === "passed"
+                ? "The exact simulated deposit can be authorized with your password."
+                : "Vault registration may occur during simulation; no funds are signed or deposited."}
           </small>
         </div>
         {cancelReceipt ? null : cancelSimulation?.status === "passed" ? (
@@ -3481,7 +4156,7 @@ function PumpTradePreviewCard({
         ))}
       </div>
       <footer>
-        <div><span>Execution locked</span><small>The local builder can simulate this proposal unsigned. Signing and broadcast remain unavailable.</small></div>
+        <div><span>Execution locked</span><small>Simulation is unsigned. A fresh final revalidation, master password, and exact manual confirmation are required before one broadcast attempt.</small></div>
         <button
           disabled={preview.status !== "ready-for-review" || preview.venue !== "bonding-curve-active" || simulating}
           onClick={onSimulate}
@@ -3495,12 +4170,18 @@ function PumpTradePreviewCard({
 
 function PumpSimulationCard({
   simulation,
+  execution,
   revalidating,
+  executing,
   onFinalRevalidate,
+  onRequestExecution,
 }: {
   simulation: PumpSimulationArtifact;
+  execution: PumpExecutionRecord | null;
   revalidating: boolean;
+  executing: boolean;
   onFinalRevalidate?: (() => void) | undefined;
+  onRequestExecution?: (() => void) | undefined;
 }) {
   const statusTone =
     simulation.status === "passed"
@@ -3639,7 +4320,7 @@ function PumpSimulationCard({
           <div>
             <p>
               Usage source: {simulation.riskEvidence.usageSource === "no-execution-baseline"
-                ? "zero baseline — Pump execution is unavailable"
+                ? "zero baseline — no finalized Pump receipt exists yet"
                 : "persisted confirmed receipts"}
             </p>
             <ul>
@@ -3699,7 +4380,7 @@ function PumpSimulationCard({
             <p>
               Fresh state slot {simulation.finalRevalidation.finalStateSlot.toLocaleString()} and simulation slot {simulation.finalRevalidation.finalSimulationSlot.toLocaleString()} are bound to transaction digest <code>{simulation.finalRevalidation.finalTransactionDigest.slice(0, 16)}...</code>.
             </p>
-            <p>Signing remains locked. Master password and exact confirmation <code>{simulation.finalRevalidation.requiredConfirmation}</code> have not been requested.</p>
+            <p>Signing remains locked until the master password and exact confirmation <code>{simulation.finalRevalidation.requiredConfirmation}</code> are entered in the final approval dialog.</p>
             <ul>
               {simulation.finalRevalidation.checks.map((check) => (
                 <li key={check.id}>
@@ -3741,8 +4422,12 @@ function PumpSimulationCard({
           </small>
         </div>
         {simulation.finalRevalidation?.status === "ready-for-password" ? (
-          <button disabled title="Pump.fun signing and broadcast are not enabled yet.">
-            Execution not enabled
+          <button
+            className="dangerButton"
+            disabled={execution !== null || executing || onRequestExecution === undefined}
+            onClick={onRequestExecution}
+          >
+            {executing ? "Submitting..." : execution ? "Execution recorded" : "Review & execute"}
           </button>
         ) : (
           <button
@@ -3755,6 +4440,224 @@ function PumpSimulationCard({
       </footer>
     </section>
   );
+}
+
+function EmergencyStopPanel() {
+  const [status, setStatus] = useState<EmergencyStopStatus | null>(null);
+  const [reason, setReason] = useState("");
+  const [password, setPassword] = useState("");
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    window.silfable.getEmergencyStop()
+      .then((response) => setStatus(response.status))
+      .catch(() => setMessage("Emergency-stop status could not be loaded."));
+  }, []);
+
+  async function engage(): Promise<void> {
+    if (!acknowledged || busy) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await window.silfable.engageEmergencyStop({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        reason,
+        acknowledgedImmediateHalt: true,
+      });
+      setStatus(response.status);
+      setAcknowledged(false);
+      setMessage("Emergency stop engaged. New execution and final revalidation requests are blocked.");
+    } catch (error) {
+      setMessage(friendlyError(error, "Emergency stop could not be engaged."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function release(): Promise<void> {
+    if (!acknowledged || password.length === 0 || busy) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await window.silfable.releaseEmergencyStop({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        masterPassword: password,
+        acknowledgedResumeRisk: true,
+      });
+      setStatus(response.status);
+      setPassword("");
+      setAcknowledged(false);
+      setMessage("Emergency stop released. Monitoring remains stopped until explicitly restarted.");
+    } catch (error) {
+      setMessage(friendlyError(error, "Emergency stop could not be released."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const engaged = status?.engaged === true;
+  return (
+    <section className={`emergencyStopPanel ${engaged ? "engaged" : ""}`}>
+      <div>
+        <strong>Global emergency stop</strong>
+        <StatusPill tone={engaged ? "danger" : "success"}>
+          {status === null ? "Loading" : engaged ? "Engaged" : "Ready"}
+        </StatusPill>
+      </div>
+      <p>
+        Immediately clears prepared Pump transactions, stops local strategy monitoring,
+        and blocks final revalidation and every supported execution handler. Pending
+        signatures remain reconciliation-only and are never rebroadcast.
+      </p>
+      {engaged ? (
+        <>
+          <small>
+            Engaged {status.engagedAt ? new Date(status.engagedAt).toLocaleString() : ""}
+            {status.reason ? ` · ${status.reason}` : ""}
+          </small>
+          <Field label="Master password to release">
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+            />
+          </Field>
+        </>
+      ) : (
+        <Field label="Reason (optional)">
+          <input
+            value={reason}
+            maxLength={200}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Manual safety halt"
+          />
+        </Field>
+      )}
+      <label className="checkRow">
+        <input
+          type="checkbox"
+          checked={acknowledged}
+          onChange={(event) => setAcknowledged(event.target.checked)}
+        />
+        <span>
+          {engaged
+            ? "I understand that releasing this gate allows new manually approved execution requests."
+            : "I understand that this immediately invalidates prepared transactions and stops monitoring."}
+        </span>
+      </label>
+      <button
+        type="button"
+        className={engaged ? "secondaryButton" : "dangerButton"}
+        disabled={!acknowledged || busy || (engaged && password.length === 0)}
+        onClick={() => void (engaged ? release() : engage())}
+      >
+        {busy ? "Working…" : engaged ? "Release emergency stop" : "Engage emergency stop"}
+      </button>
+      {message && <p className="inlineMessage">{message}</p>}
+    </section>
+  );
+}
+
+function PumpExecutionCard({
+  execution,
+  preview,
+  simulation,
+  verifying,
+  onVerify,
+}: {
+  execution: PumpExecutionRecord;
+  preview: PumpTradeContractPreview;
+  simulation: PumpSimulationArtifact | null;
+  verifying: boolean;
+  onVerify: () => void;
+}) {
+  const receipt = execution.receipt;
+  const expectedOutput = simulation?.quoteEvidence?.expectedOutputAmount ?? preview.minimumOutputAmount;
+  const actualSlippageBps = receipt
+    ? calculateActualSlippageBps(expectedOutput, receipt.actualOutputAmount)
+    : null;
+  const walletOutflowLamports = receipt && BigInt(receipt.walletLamportDelta) < 0n
+    ? (-BigInt(receipt.walletLamportDelta)).toString()
+    : "0";
+  const tone = execution.status === "finalized"
+    ? "success"
+    : execution.status === "failed"
+      ? "danger"
+      : "warning";
+  return (
+    <section className={`missionPreview pumpExecutionCard ${execution.status === "finalized" ? "ready" : "blocked"}`}>
+      <header>
+        <div>
+          <span>Pump.fun Mainnet execution</span>
+          <strong>{execution.status === "finalized"
+            ? "Finalized and independently reconciled"
+            : execution.status === "failed"
+              ? "Execution failed"
+              : "Broadcast verification pending"}</strong>
+        </div>
+        <StatusPill tone={tone}>{execution.status}</StatusPill>
+      </header>
+      <dl>
+        <div><dt>Side</dt><dd>{execution.side.toUpperCase()}</dd></div>
+        <div><dt>Signature</dt><dd>{shorten(execution.signature)}</dd></div>
+        <div><dt>Transaction digest</dt><dd>{execution.transactionDigest.slice(0, 16)}...</dd></div>
+        <div><dt>Last valid block height</dt><dd>{execution.lastValidBlockHeight.toLocaleString()}</dd></div>
+        {receipt && (
+          <>
+            <div><dt>Actual input</dt><dd>{receipt.actualInputAmount} raw</dd></div>
+            <div><dt>Expected output</dt><dd>{expectedOutput} raw</dd></div>
+            <div><dt>Actual output</dt><dd>{receipt.actualOutputAmount} raw</dd></div>
+            <div><dt>Actual slippage</dt><dd>{actualSlippageBps === null ? "Unavailable" : `${actualSlippageBps} bps`}</dd></div>
+            <div><dt>Network fee</dt><dd>{receipt.networkFeeLamports.toLocaleString()} lamports</dd></div>
+            <div><dt>Account funding</dt><dd>{receipt.accountCreationFundingLamports.toLocaleString()} lamports</dd></div>
+            <div><dt>Total wallet SOL outflow</dt><dd>{walletOutflowLamports} lamports</dd></div>
+            <div><dt>Finalized slot</dt><dd>{receipt.slot.toLocaleString()}</dd></div>
+          </>
+        )}
+      </dl>
+      {execution.error && <p className="executionError">{execution.error}</p>}
+      <footer>
+        <div>
+          <span>{execution.status === "finalized" ? "Finalized receipt persisted" : "No automatic rebroadcast"}</span>
+          <small>
+            {execution.status === "finalized"
+              ? "Balance and position panels refresh from finalized Mainnet data."
+              : "Silfable only checks the locally derived signature."}
+          </small>
+        </div>
+        <div className="receiptActions">
+          <button onClick={() => void window.silfable.copyTransactionSignature({
+            schemaVersion: 1,
+            requestId: crypto.randomUUID(),
+            signature: execution.signature,
+          })}>Copy signature</button>
+          <button onClick={() => void window.silfable.openTransactionInExplorer({
+            schemaVersion: 1,
+            requestId: crypto.randomUUID(),
+            signature: execution.signature,
+          })}>Open explorer</button>
+          {execution.status !== "finalized" && execution.status !== "failed" && (
+            <button disabled={verifying} onClick={onVerify}>
+              {verifying ? "Verifying..." : "Verify on-chain"}
+            </button>
+          )}
+        </div>
+      </footer>
+    </section>
+  );
+}
+
+function calculateActualSlippageBps(expectedOutput: string, actualOutput: string): number | null {
+  const expected = BigInt(expectedOutput);
+  const actual = BigInt(actualOutput);
+  if (expected <= 0n) return null;
+  if (actual >= expected) return 0;
+  return Number(((expected - actual) * 10_000n) / expected);
 }
 
 function MissionPreviewCard({
@@ -4103,6 +5006,11 @@ function MissionsView({
       </div>
     </div>
   );
+}
+
+function friendlyError(error: unknown, fallback: string): string {
+  const detail = error instanceof Error ? error.message.trim() : "";
+  return detail.length > 0 ? detail.slice(0, 240) : fallback;
 }
 
 function inferenceFailureMessage(error: unknown): string {
@@ -4720,7 +5628,7 @@ function ExecutionApprovalModal({
   );
 }
 
-function DisabledPumpExecutionApprovalModal({
+function PumpExecutionApprovalModal({
   preview,
   simulation,
   revalidation,
@@ -4772,10 +5680,11 @@ function DisabledPumpExecutionApprovalModal({
         aria-labelledby="pump-execution-approval-title"
       >
         <p className="kicker">Pump.fun Mainnet boundary</p>
-        <h2 id="pump-execution-approval-title">Execution Not Enabled</h2>
+        <h2 id="pump-execution-approval-title">Approve exact Pump trade</h2>
         <p>
-          Pump.fun signing and broadcast are not enabled in this build. Keep this
-          proposal at unsigned simulation and final revalidation only.
+          Review the exact wallet, mint, amount, fee evidence, and transaction
+          digest. This approval is valid only for the freshly revalidated
+          transaction shown below.
         </p>
         <dl>
           <div>
@@ -4816,7 +5725,9 @@ function DisabledPumpExecutionApprovalModal({
           </div>
         </dl>
         <Notice tone="danger" title="Irreversible Mainnet transaction">
-          Pump.fun live execution is still locked until signer, broadcast, receipt recovery, and exit-path tests are complete.
+          This signs locally and submits a real Mainnet transaction. Silfable
+          persists the locally derived signature before the network call and
+          never rebroadcasts an unknown result automatically.
         </Notice>
         <Field label="Master password">
           <input
@@ -4839,7 +5750,8 @@ function DisabledPumpExecutionApprovalModal({
             onChange={(event) => setAcknowledged(event.target.checked)}
           />
           <span>
-            I understand this build cannot execute this Pump.fun transaction.
+            I authorize this exact restricted Pump.fun transaction and
+            understand that it uses real Mainnet funds.
           </span>
         </label>
         {error && <p className="executionError">{error}</p>}
@@ -4967,7 +5879,7 @@ function SessionModal({
               >
                 <span className="choiceNumber">02</span>
                 <strong>Pump.fun agent</strong>
-                <small>Exact-mint monitoring and proposal-only Pump/PumpSwap analysis.</small>
+                <small>Exact-mint monitoring, restricted Pump analysis, and manually approved Pump/PumpSwap execution.</small>
               </button>
             </div>
           </section>
@@ -5111,7 +6023,7 @@ function SessionModal({
                 </div>
                 <div className="pumpBoundaryNote">
                   <strong>Proposal only</strong>
-                  <span>Direct Pump/PumpSwap signing and broadcast remain unavailable.</span>
+                  <span>Manual restricted signing for a verified Pump active curve or canonical PumpSwap pool is available after final approval; unattended execution remains unavailable.</span>
                 </div>
               </div>
             </section>
@@ -5138,10 +6050,11 @@ function SessionModal({
                 className={permission === "full" ? "active" : ""}
                 onClick={() => setPermission("full")}
               >
-                <span className="choiceNumber">02 · Delegated Agent</span>
+                <span className="choiceNumber">02 · Guarded MVP</span>
                 <strong>Full access</strong>
                 <small>
-                  Autonomous execution using a dedicated session Agent Wallet with strict Capital Isolation limits.
+                  Prepare broader multi-step proposals. Signing, policy checks,
+                  and final transaction approval remain mandatory.
                 </small>
               </button>
             </div>
@@ -5606,26 +6519,30 @@ function RightRail({
                   </button>
                 ) : (
                   <button 
-                    disabled={!pumpAsset || Number(pumpAsset.uiAmount) <= 0}
+                    disabled={!pumpAsset || Number(pumpAsset.uiAmount) <= 0 || pumpAsset.usdPrice === null}
                     onClick={() => {
-                      if (pumpAsset && pumpConfig?.tokenMint) {
+                      if (pumpAsset && pumpConfig?.tokenMint && pumpAsset.usdPrice !== null) {
+                        const entryPriceUsd = pumpAsset.usdPrice;
                         window.silfable.upsertPosition({
+                          id: crypto.randomUUID(),
                           mintAddress: pumpConfig.tokenMint,
-                          amount: Math.floor(Number(pumpAsset.uiAmount) * 1000000).toString(), // approximation
-                          entryPrice: latestPumpIntelligence?.metrics?.usdPrice ?? 0,
-                          takeProfitPrice: latestPumpIntelligence?.metrics?.usdPrice ? latestPumpIntelligence.metrics.usdPrice * (1 + Number(tpPercent) / 100) : undefined,
-                          stopLossPrice: latestPumpIntelligence?.metrics?.usdPrice ? latestPumpIntelligence.metrics.usdPrice * (1 - Number(slPercent) / 100) : undefined
+                          amount: pumpAsset.amount,
+                          entryPrice: entryPriceUsd,
+                          takeProfitPrice: tpPercent ? entryPriceUsd * (1 + Number(tpPercent) / 100) : undefined,
+                          stopLossPrice: slPercent ? entryPriceUsd * (1 - Number(slPercent) / 100) : undefined
                         });
                         setTpPercent("");
                         setSlPercent("");
                       }
                     }}
                   >
-                    Authorize Automation
+                    Save Exit Proposal Monitor
                   </button>
                 )}
               </div>
-              <p className="pumpUnavailable" style={{ marginTop: '0.5rem' }}>Background automation runs locally while the vault is unlocked.</p>
+              <p className="pumpUnavailable" style={{ marginTop: '0.5rem' }}>
+                Monitoring runs locally while the vault is unlocked. A trigger creates a proposal; it does not sign or broadcast automatically.
+              </p>
               
               {visibleWallet && (
                 <div className="walletLine selected">

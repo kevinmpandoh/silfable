@@ -75,6 +75,30 @@ const productionCodecPaths = [
   resolve(repositoryRoot, "apps/desktop/src/main/pump/state.ts"),
   resolve(repositoryRoot, "apps/desktop/src/main/pump/transaction-codec.ts"),
 ];
+
+const autonomousExecutorPath = resolve(
+  repositoryRoot,
+  "apps/desktop/src/main/execution/autonomous-executor.ts",
+);
+const autonomousExecutorSource = await readFile(autonomousExecutorPath, "utf8");
+assert.equal(
+  autonomousExecutorSource.includes("Autonomous execution is disabled."),
+  true,
+  "Autonomous executor must remain an explicit fail-closed proposal-only boundary",
+);
+for (const marker of [
+  "withWalletSigner(",
+  "buildAndSimulatePumpV2ProductionTransaction(",
+  ".sendTransaction(",
+  "signTransactionMessageWithSigners(",
+]) {
+  if (autonomousExecutorSource.includes(marker)) {
+    violations.push(
+      `${autonomousExecutorPath}: autonomous signing or broadcast authority is forbidden: ${marker}`,
+    );
+  }
+}
+
 for (const productionCodecPath of productionCodecPaths) {
   const productionCodecSource = await readFile(productionCodecPath, "utf8");
   for (const marker of [

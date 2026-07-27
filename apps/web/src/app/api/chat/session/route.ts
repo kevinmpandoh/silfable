@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cloudDb, isDbConfigured, safeDbQuery } from "@/lib/cloud-db";
+import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
 
 function isValidObjectId(id?: string): boolean {
   return typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id);
@@ -17,6 +18,8 @@ export async function GET(req: NextRequest) {
     if (!walletAddress) {
       return NextResponse.json({ error: "walletAddress parameter is required" }, { status: 400 });
     }
+    const auth = await requireWalletAuth(req, walletAddress);
+    if (isAuthFailure(auth)) return auth;
 
     const user = await safeDbQuery(
       () =>
@@ -62,6 +65,8 @@ export async function POST(req: NextRequest) {
     if (!walletAddress) {
       return NextResponse.json({ error: "walletAddress is required" }, { status: 400 });
     }
+    const auth = await requireWalletAuth(req, walletAddress);
+    if (isAuthFailure(auth)) return auth;
 
     let user = await safeDbQuery(() => cloudDb.user.findUnique({ where: { walletAddress } }), null);
     if (!user) {
@@ -77,8 +82,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "sessionId is required for delete" }, { status: 400 });
       }
       if (isValidObjectId(sessionId)) {
-        await safeDbQuery(() => cloudDb.chatMessage.deleteMany({ where: { sessionId } }), null);
-        await safeDbQuery(() => cloudDb.chatSession.delete({ where: { id: sessionId } }), null);
+        const owned = await safeDbQuery(
+          () => cloudDb.chatSession.findFirst({ where: { id: sessionId, userId: user.id } }),
+          null,
+        );
+        if (!owned) {
+          return NextResponse.json({ error: "Session not found." }, { status: 404 });
+        }
+        await safeDbQuery(() => cloudDb.chatMessage.deleteMany({ where: { sessionId: owned.id } }), null);
+        await safeDbQuery(() => cloudDb.chatSession.delete({ where: { id: owned.id } }), null);
       }
       return NextResponse.json({ success: true });
     }
@@ -105,22 +117,24 @@ export async function POST(req: NextRequest) {
     let savedSession;
 
     if (isValidObjectId(session.id)) {
+      const owned = await safeDbQuery(
+        () => cloudDb.chatSession.findFirst({ where: { id: session.id, userId: user.id } }),
+        null,
+      );
+      if (!owned) {
+        return NextResponse.json({ error: "Session not found." }, { status: 404 });
+      }
       savedSession = await safeDbQuery(
         () =>
-          cloudDb.chatSession.upsert({
-            where: { id: session.id },
-            create: {
-              userId: user.id,
-              title: session.title || "New Chat",
-              filter: session.filter || "all",
-            },
-            update: {
+          cloudDb.chatSession.update({
+            where: { id: owned.id },
+            data: {
               title: session.title,
               filter: session.filter,
               updatedAt: new Date(),
             },
           }),
-        null
+        null,
       );
     } else {
       savedSession = await safeDbQuery(

@@ -40,7 +40,7 @@ These items are required before another round of routine Mainnet execution testi
 - [x] Prevent an older portfolio response from replacing a newer snapshot.
 - [x] Provide an explicit retry action when RPC or price data cannot be refreshed.
 
-### P0.3 Complete execution receipts — Partial
+### P0.3 Complete execution receipts — Complete in code
 
 Already present: encrypted receipt persistence, signature, router status, independent Solana status, slot, Explorer action, success/failure state, and limit-order fee/risk evidence for vault-deposit simulation plus order creation receipts.
 
@@ -50,7 +50,7 @@ Still required:
 - [x] Show actual slippage in both raw amount and basis points.
 - [x] Show estimated fee, actual network fee, account/rent funding, and total wallet outflow separately.
 - [x] Convert known router/program failures into human-readable explanations; retain bounded raw evidence only behind the attached bounded logs/details.
-- Ensure every successful, failed, and unknown receipt can be reopened from session history.
+- [x] Ensure every successful, failed, and unknown swap, Pump, limit-order deposit, and limit-order cancellation receipt can be reopened from encrypted session history. Unknown limit-order receipts expose signature copy, Explorer, and read-only on-chain verification controls that never rebroadcast.
 - [x] Hold portfolio refresh until its finalized snapshot slot reaches the confirmed receipt slot.
 
 ### P0.4 Transaction settings — Partial
@@ -59,13 +59,24 @@ Still required:
 - [x] Persist and enforce maximum fee as a percentage of trade value when pricing evidence is available.
 - [x] Persist a default slippage limit and apply it automatically to AI-created swap and limit-order drafts when the user did not provide an explicit value.
 - [x] Persist a default mission deadline and apply it automatically to AI-created swap deadlines and limit-order expiry defaults when the user did not provide an explicit value.
-- [ ] Apply priority presets `Economy`, `Standard`, and `Fast` during Jupiter transaction construction and show their estimated cost (the preference is persisted but not yet sent to Jupiter).
+- [x] Apply priority presets `Economy`, `Standard`, and `Fast` during Jupiter transaction construction; the selected preference is sent to the Jupiter order builder and the resulting simulated fee is shown before approval.
 - Per-session overrides that can only become stricter than the configured safety ceiling.
 - Restricted execution and explicit final approval remain mandatory.
 
 ## P1 — Production hardening and release readiness
 
 These gates must be complete before describing the desktop application as production-ready.
+
+### P1.0 Per-venue execution gate — Partial
+
+- [x] A shared fail-closed gate evaluates isolated signer custody, deterministic policy, fresh simulation, receipt reconciliation, recovery drill, security audit, controlled Mainnet acceptance, explicit final approval, revocation/kill switch, and spend limits.
+- [x] The Robinhood EVM raw-broadcast method requires the EVM gate in addition to the mandatory chain-ID check.
+- [x] `Full Access` is explicitly bound to the same gates and final-approval requirement; it is never an approval, policy, or kill-switch bypass.
+- [x] Main-process-only venue readiness attestations persist normalized evidence, SHA-256 evidence digest, reviewer, and timestamp. Tampered/incomplete state fails closed and invalidation closes the venue immediately.
+- [x] The EVM broadcast path is tested to reject before any RPC broadcast attempt while readiness is incomplete.
+- [ ] Connect each attestation to independently generated signer/policy/simulation/receipt/recovery/audit evidence. A Boolean set by a renderer or AI must never satisfy this gate.
+
+The exact controlled-Mainnet evidence and negative-case procedure for Bridge, EVM, Hyperliquid, DCA, TP/SL, and Full Access is documented in [Per-venue controlled Mainnet acceptance](VENUE_CONTROLLED_ACCEPTANCE.md).
 
 ### P1.1 Wallet and vault security audit — Partial
 
@@ -90,10 +101,23 @@ Still required:
 
 ### P1.3 Network and logging resilience — Partial
 
-- Add bounded rate limiting and provider-specific backoff.
-- Classify retry-safe reads separately from broadcasts, which must never be retried blindly.
-- Add explicit handling for RPC timeout, partial provider outage, and contradictory provider/RPC status.
-- Audit logs, crash reports, and packaged artifacts to ensure keys, seed phrases, passwords, signed transactions, and provider request secrets never appear.
+Completed:
+
+- [x] Pump/Mainnet RPC and Jupiter receipt verification use bounded backoff only for retry-safe reads and simulations.
+- [x] Pump, Jupiter, and Trigger V2 mutation/broadcast calls are single-attempt and are never blindly retried after timeout or an ambiguous response.
+- [x] Trigger V2 retries only the explicitly classified `/vault` and `/orders/history` reads; registration, deposit, order creation, and cancellation mutations remain single-attempt.
+- [x] Reconciliation no longer prints decrypted/provider error details to the process console.
+- [x] Reconciliation diagnostics now use a structured field allowlist. Free-form errors, request/response bodies, wallet data, signed transactions, passwords, and provider credentials cannot enter this log boundary.
+- [x] The dormant autonomous executor is an explicit proposal-only fail-closed boundary with no signer or broadcast access.
+- [x] The production bundle audit rejects reintroduction of autonomous wallet signing or broadcast authority.
+- [x] Bridge quote and Hyperliquid metadata reads use bounded in-process circuit breakers; repeated provider failures temporarily close the caller and never synthesize fallback market or route data.
+
+Still required:
+
+- Add provider-wide rate budgets/circuit breakers for sustained partial outages.
+- Define reconciliation behavior when provider and finalized RPC evidence contradict each other.
+- Complete a manual audit of logs, crash reports, Windows event artifacts, and packaged diagnostics for keys, seed phrases, passwords, signed transactions, and provider credentials.
+- Add sanitized structured logging with an explicit field allowlist and retention policy.
 
 ### P1.4 Windows release gate — Partial
 
@@ -108,17 +132,19 @@ Still required:
 
 ## P2 — Remaining validation matrix
 
-Automated tests already cover insufficient balance, changed evidence before execution, unknown broadcast status, encrypted session persistence, and the final pre-sign re-simulation boundary. Do not duplicate those as wholly missing features.
+Automated tests already cover both SOL→USDC and USDC→SOL simulation, insufficient SOL/SPL balance before construction, changed evidence before execution, unknown broadcast status, encrypted session persistence, and the final pre-sign re-simulation boundary. A timed-out Jupiter broadcast now persists the locally derived signature before returning an unknown receipt; subsequent checks are read-only and never rebroadcast. Do not duplicate those as wholly missing features.
 
 Remaining validation work:
 
-- **USDC to SOL**: quote and simulate first; broadcast only when the fee guard is complete and the user explicitly approves.
+- **USDC to SOL**: automated quote-policy and unsigned simulation direction/balance coverage is complete; a minimum-value live acceptance remains optional and requires a separate explicit wallet-owner approval.
 - **Portfolio reconciliation**: verify SOL, SPL balances, rent-bearing account creation, and receipt slot after restart.
-- **RPC timeout**: exercise read, simulation, broadcast-response, and verification timeouts independently.
-- **Unknown broadcast recovery**: restart the app, reopen the encrypted receipt, verify by signature, and prove there is no rebroadcast path.
+- **RPC timeout**: automated tests now prove bounded retry for read, simulation, and signature-verification calls, while a timed-out broadcast is attempted exactly once. Repeat these cases in the signed QA build.
+- **Unknown broadcast recovery**: encrypted restart persistence, signature-only recovery, friendly pending evidence, and the no-rebroadcast boundary are covered in code/tests. Re-run the complete path in the signed QA build.
 - **Fee ceiling**: prove excessive network fee and excessive fee percentage both block before signer access.
 - **Account-creation estimate**: prove first-time SPL receipt shows rent separately and a later swap does not incorrectly charge it again.
 - **Packaged application**: repeat the above critical paths in the signed Windows build, not only the development runtime.
+
+The packaged Windows procedure, isolated-profile launcher, evidence rules, and case-by-case pass criteria are documented in [Windows P2 Mainnet acceptance](P2_WINDOWS_ACCEPTANCE.md). Run `npm.cmd run qa:desktop:p2:win` only after producing the audited unpacked QA application; the launcher never configures, signs, approves, or broadcasts a transaction. The NSIS installer remains exclusive to the certificate-enforced production build.
 
 ## P3 — Guarded AI trading missions
 
@@ -153,7 +179,7 @@ These features may begin only after P0 is complete and the relevant P1 security 
 
 ### P3.5 Real limit-order lifecycle — Partial and blocked
 
-Preview and policy foundations exist, but production order creation and the full authenticated lifecycle are not enabled as a supported capability.
+Manual Jupiter Trigger V2 order creation and cancellation are wired through the desktop approval flow. They remain pilot-only until controlled live acceptance, provider failure recovery, and signed-build validation are complete.
 
 Required work:
 
@@ -164,13 +190,26 @@ Required work:
 - [x] Add human-readable vault-deposit wording that separates deposited token amount from SOL fee/rent impact.
 Current status: **In progress**
 
+Manual desktop MVP implemented:
+
+- [x] Jupiter Trigger V2 vault registration, exact vault-deposit simulation, single local signature, order creation, and independent Solana receipt verification.
+- [x] Order listing, cancellation/withdrawal simulation, exact local signature, and read-only re-verification of unknown signatures.
+- [ ] Controlled low-value live create/cancel acceptance plus provider-outage and partial-fill recovery are required before a production claim.
+
+### P3.6 Autonomous and Full Access controls — Deliberately gated
+
+- [x] TP/SL and DCA schedulers can observe conditions and issue reviewable proposals.
+- [x] The global emergency stop blocks prepared execution and local observation loops.
+- [x] The autonomous executor fails closed: it cannot close a position, sign, or broadcast.
+- [ ] No unattended or approval-bypass signer will be released until separate custody, revocation, spend-limit, recovery, and external-security-review gates are complete.
+
 For a concise implementation audit, current user flow, and explicit completed/partial/blocked matrix, see [Pump.fun implementation status](PUMPFUN_IMPLEMENTATION_STATUS.md).
 
 - [x] Pin the official Pump program address used by the read-only verifier.
 - [x] Derive the canonical bonding-curve PDA from an exact mint.
 - [x] Verify finalized RPC evidence, official program ownership, Anchor account discriminator, curve completion state, and bounded reserve fields.
 - [x] Expose `pump_token_analysis` to the AI for exact-mint research and proposal support without requiring a Jupiter key.
-- [x] Explicitly prevent the AI from representing Pump/PumpSwap buy, sell, creation, migration, or autonomous execution as available.
+- [x] Describe restricted Pump/PumpSwap buy and sell accurately while explicitly preventing claims that token creation, migration, or autonomous execution are available.
 - [x] Verify canonical migrated PumpSwap pools independently through the official program, canonical index, pool authority, mint, and WSOL bindings; a missing or completed Pump curve is never treated as proof of migration.
 - [x] Add finalized mint/freeze authority, token-program, supply, and top-ten account concentration evidence.
 - [x] Read PumpSwap base/quote vault liquidity and calculate effective quote reserves including the pool's signed virtual reserve field.
@@ -199,12 +238,14 @@ For a concise implementation audit, current user flow, and explicit completed/pa
 - [x] Persist typed Pump simulation artifacts inside encrypted session records and restore them after restart without leaking bounded simulation logs into plaintext SQLite.
 - [x] Render persisted Pump simulation evidence as a read-only conversation card with fee guard, invoked programs, bounded logs, and explicit unsigned/no-broadcast state.
 - [x] Expose a simulation-only Pump mutation IPC after isolating the SDK/native-binding harness from production. The renderer can request and persist an unsigned simulation for an active bonding curve, but receives no transaction bytes and has no signing or broadcast method.
-- [ ] Require simulation, fee guard, token-risk policy, final pre-sign simulation, master-password confirmation, and explicit final approval.
+- [x] Require simulation, fee guard, token-risk policy, final pre-sign simulation, master-password confirmation, and explicit final approval for the restricted active-curve pilot.
   - [x] Persist a deterministic pre-approval readiness artifact that binds the encrypted restricted session wallet, exact mint, proposal, passed simulation, fee guard, 14-check eligibility evidence, eight-check risk policy, two-minute freshness, and zero signing/broadcast authority. It explicitly records that master password plus `EXECUTE PUMP MAINNET` are still required; it does not authorize execution.
   - [x] Add a one-time 90-second in-memory prepared-transaction boundary and a separate final revalidation action. The action consumes the cache, rebuilds from fresh finalized state and blockhash evidence, re-runs quote, fee, risk, eligibility, program inspection, and unsigned simulation checks, persists a 12-check digest-bound artifact, and still grants no signing or broadcast authority. Restart, suspend, mismatch, reuse, or expiry requires a new simulation.
-- [ ] Persist and independently reconcile actual SOL/token settlement and a complete receipt after restart.
-  - [x] Add the finalized-only reconciliation foundation for a future Pump execution receipt. It independently verifies the signature state and slot, fetches finalized exact-wallet/exact-mint settlement, separates network fee and newly funded token-account rent, derives actual buy/sell input and output from raw balance deltas, and rejects pending, mismatched, or directionally impossible evidence. No broadcast path or receipt writer is connected yet.
-- [ ] Prove buy and sell exit paths with minimum-value Mainnet tests before marking restricted execution available.
+- [x] Persist and independently reconcile actual SOL/token settlement and a complete receipt after restart.
+  - [x] Persist the locally derived signature before one broadcast attempt, recover pending signatures after restart without rebroadcast, independently verify finalized exact-wallet/exact-mint settlement, separate network fee and token-account funding, and idempotently write the encrypted receipt and risk ledger.
+- [ ] Complete live acceptance for both buy and sell exit paths before marking restricted execution production-ready.
+  - [x] Deterministic minimum-value buy and sell validation matrices pass against mocked Mainnet evidence.
+  - [ ] Controlled real-wallet minimum-value Pump buy and sell are still required in a signed QA build.
 
 ### Pump.fun product model and session UX — Partial
 
@@ -233,8 +274,8 @@ Global Pump.fun settings are a deterministic local boundary shared by all Pump s
 - [x] Add an encrypted, restart-safe Pump risk ledger with signature idempotency, conflicting-receipt rejection, rolling 24-hour/hourly aggregation, and nonnegative per-token exposure reconciliation. Connecting a future execution receipt writer remains blocked on the complete Pump signing/broadcast safety boundary.
 - [x] Persist maximum slippage, bounded reference price impact, network fee, total known fee, fee percentage, finalized protocol/creator fee evidence, and simulated account-creation funding in typed encrypted session artifacts.
 - [x] Persist verified reserve/liquidity evidence and top-ten token-account concentration with the evidence slot and timestamp used by eligibility checks.
-- [ ] Complete every venue hard block. Active Pump v2 simulation already blocks invalid ownership/state, unsupported token programs, live mint/freeze authority, stale state, missing quote/exit path, excessive fees, and failed/non-allowlisted simulation; the PumpSwap execution path is not implemented.
-- [ ] Add a global emergency stop that cancels schedules, prevents new signing requests, and leaves already-broadcast signatures in reconciliation-only state.
+- [x] Apply the same hard blocks to active Pump v2 and canonical PumpSwap execution: invalid ownership/state, unsupported token programs, live mint/freeze authority, stale state, missing quote/exit path, excessive fees, and failed/non-allowlisted simulation all fail closed.
+- [x] Add a persistent global emergency stop that immediately clears prepared Pump transactions, stops local strategy monitoring, blocks Pump final revalidation and all supported execution handlers, requires the master password to release, and leaves already-broadcast signatures in reconciliation-only state. Durable autonomous schedules remain unavailable, so schedule cancellation beyond the local observation loop is not claimed.
 - [ ] Add creator and mint allowlists/blocklists without allowing AI to modify them implicitly.
 
 ### Pump.fun discovery and candidate ranking — Partial
@@ -343,22 +384,35 @@ Dependencies: all P0 items, P1.1–P1.3, the relevant P2 failure tests, P3.1, an
 
 ### P4.2 Bridge support — Planned
 
-- Route and destination-chain verification.
-- Source and destination fee disclosure.
-- Finality, timeout, refund, and stuck-transfer recovery.
-- Explicit destination address and chain binding.
+Current MVP integrity boundary:
+
+- [x] The bridge client accepts only provider-backed quotes; an unavailable, malformed, or incomplete provider response fails closed and is never displayed as a mock route.
+- [ ] Route and destination-chain verification.
+- [ ] Source and destination fee disclosure.
+- [ ] Finality, timeout, refund, and stuck-transfer recovery.
+- [ ] Explicit destination address and chain binding.
+- [ ] Signing, broadcast, and receipt reconciliation remain disabled until the bridge-specific signer, policy, simulation, and controlled Mainnet acceptance gates are complete.
 
 ### P4.3 EVM support — Planned
 
-- Separate wallet derivation/import and chain allowlist.
-- Chain ID, nonce, gas, allowance, approval, contract, and simulation policy.
-- Protection against unlimited approvals and chain-switch confusion.
+Current MVP integrity boundary:
+
+- [x] Robinhood Chain RPC reads verify chain ID `4663` before returning balance, gas, submission, or receipt evidence.
+- [x] A verified router deployment address is mandatory before EVM calldata construction; no Ethereum-mainnet router address is assumed to exist on Robinhood Chain.
+- [ ] Separate wallet derivation/import and chain allowlist.
+- [ ] Chain ID, nonce, gas, allowance, approval, contract, and simulation policy.
+- [ ] Protection against unlimited approvals and chain-switch confusion.
+- [ ] Signing and broadcast remain disabled pending a verified venue/router, deterministic policy, simulation, receipt reconciliation, and controlled Mainnet acceptance.
 
 ### P4.4 Hyperliquid — Planned
 
-- Separate spot/perpetuals workspace and credential boundary.
-- Leverage, liquidation, margin, funding, and position-size controls.
-- No shared `Full Access` authority with spot swaps.
+Current MVP integrity boundary:
+
+- [x] Venue metadata is fetched and validated from Hyperliquid; failure does not synthesize market data.
+- [x] Generic order placement fails closed because canonical asset IDs, Hyperliquid signing, nonce/expiry, API-wallet approval, margin policy, and receipt reconciliation are not wired.
+- [ ] Separate spot/perpetuals workspace and credential boundary.
+- [ ] Leverage, liquidation, margin, funding, and position-size controls.
+- [ ] No shared `Full Access` authority with spot swaps.
 
 ## Recommended delivery order
 

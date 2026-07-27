@@ -76,3 +76,24 @@ test("resolvePumpSwapFinalizedBuildEvidence rejects unrevoked mint authority", a
     /mint authority has not been revoked/,
   );
 });
+
+test("resolvePumpSwapFinalizedBuildEvidence rejects incomplete pool data without fallback accounts", async () => {
+  const reader: PumpSwapFinalizedAccountReader = {
+    async getMultipleAccountsInfoAndContext() {
+      return {
+        context: { slot: 500 },
+        value: [
+          { data: new Uint8Array(199), owner: PUMP_SWAP },
+          { data: mockMintData(), owner: TOKEN_PROGRAM },
+          { data: new Uint8Array(165), owner: TOKEN_PROGRAM },
+          { data: new Uint8Array(165), owner: TOKEN_PROGRAM },
+        ],
+      };
+    },
+  };
+
+  await assert.rejects(
+    () => resolvePumpSwapFinalizedBuildEvidence(reader, MINT),
+    /pool account data is incomplete/u,
+  );
+});

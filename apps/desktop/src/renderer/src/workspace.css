@@ -106,6 +106,12 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .notice.info { color: var(--blue-2); border-color: rgb(49 87 255 / .3); background: rgb(49 87 255 / .05); }
 .notice.warning { color: var(--amber); border-color: rgb(247 183 51 / .34); background: rgb(247 183 51 / .05); }
 .notice.danger { color: var(--red); border-color: rgb(255 95 109 / .34); background: rgb(255 95 109 / .05); }
+.emergencyStopPanel { display: grid; gap: 14px; padding: 18px; border: 1px solid rgb(59 255 159 / .22); border-radius: 14px; background: rgb(59 255 159 / .035); }
+.emergencyStopPanel.engaged { border-color: rgb(255 95 109 / .42); background: rgb(255 95 109 / .055); }
+.emergencyStopPanel > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.emergencyStopPanel p { margin: 0; color: var(--muted); line-height: 1.55; }
+.emergencyStopPanel > button { justify-self: end; min-width: 220px; padding: 11px 16px; border: 1px solid var(--red); border-radius: 20px; color: white; background: rgb(255 95 109 / .82); }
+.emergencyStopPanel > button.secondaryButton { border-color: var(--blue); background: rgb(47 87 255 / .2); }
 .field { display: flex; flex-direction: column; gap: 8px; }
 .field > span, .choiceSection > span, .walletBinding > span { color: #b4bdd3; font: 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 .field input, .field textarea, .field select { width: 100%; min-height: 42px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 9px; outline: 0; color: #eef2ff; background: #090c19; font: 12px var(--mono); }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cloudDb, isDbConfigured } from "@/lib/cloud-db";
+import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
 
 function isValidObjectId(id?: string): boolean {
   return typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id);
@@ -10,6 +11,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ messages: [] });
   }
   try {
+    const auth = await requireWalletAuth(req);
+    if (isAuthFailure(auth)) return auth;
     const { searchParams } = new URL(req.url);
     const sessionId = searchParams.get("sessionId");
 
@@ -17,6 +20,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ messages: [] });
     }
 
+    const ownedSession = await cloudDb.chatSession.findFirst({
+      where: { id: sessionId, user: { walletAddress: auth.walletAddress } },
+      select: { id: true },
+    });
+    if (!ownedSession) {
+      return NextResponse.json({ error: "Session not found." }, { status: 404 });
+    }
     const messages = await cloudDb.chatMessage.findMany({
       where: { sessionId },
       orderBy: { createdAt: "asc" },
@@ -41,11 +51,20 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireWalletAuth(req);
+    if (isAuthFailure(auth)) return auth;
     const body = await req.json();
     const { message } = body;
 
     if (!message || !message.sessionId || !isValidObjectId(message.sessionId) || !message.role || !message.content) {
       return NextResponse.json({ error: "Invalid message payload or sessionId" }, { status: 400 });
+    }
+    const ownedSession = await cloudDb.chatSession.findFirst({
+      where: { id: message.sessionId, user: { walletAddress: auth.walletAddress } },
+      select: { id: true },
+    });
+    if (!ownedSession) {
+      return NextResponse.json({ error: "Session not found." }, { status: 404 });
     }
 
     const created = await cloudDb.chatMessage.create({

@@ -23,7 +23,7 @@ linux:
         - x64
         - arm64
 win:
-  icon: resources/icon.ico
+  icon: resources/icon.png
   target:
     - target: nsis
       arch:

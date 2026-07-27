@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cloudDb } from "@/lib/cloud-db";
-import { encryptAgentKey, decryptAgentKey } from "@/lib/cloud-crypto";
+import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,6 +10,8 @@ export async function GET(req: NextRequest) {
     if (!walletAddress) {
       return NextResponse.json({ error: "walletAddress parameter is required" }, { status: 400 });
     }
+    const auth = await requireWalletAuth(req, walletAddress);
+    if (isAuthFailure(auth)) return auth;
 
     const user = await cloudDb.user.findUnique({
       where: { walletAddress },
@@ -22,50 +24,26 @@ export async function GET(req: NextRequest) {
         slippageBps: 100,
         priorityFeeLevel: "medium",
         selectedModel: "google/gemini-2.5-flash",
-        openRouterKey: "",
-        jupiterKey: "",
-        tavilyKey: "",
+        credentials: {
+          openRouterConfigured: false,
+          jupiterConfigured: false,
+          tavilyConfigured: false,
+        },
       });
     }
 
     const s = user.settings;
-
-    // Decrypt keys safely
-    let openRouterKey = "";
-    if (s.encryptedOpenRouterKey && s.openRouterIv) {
-      try {
-        openRouterKey = decryptAgentKey(s.encryptedOpenRouterKey, s.openRouterIv);
-      } catch (err) {
-        console.error("Failed to decrypt OpenRouter key:", err);
-      }
-    }
-
-    let jupiterKey = "";
-    if (s.encryptedJupiterKey && s.jupiterIv) {
-      try {
-        jupiterKey = decryptAgentKey(s.encryptedJupiterKey, s.jupiterIv);
-      } catch (err) {
-        console.error("Failed to decrypt Jupiter key:", err);
-      }
-    }
-
-    let tavilyKey = "";
-    if (s.encryptedTavilyKey && s.tavilyIv) {
-      try {
-        tavilyKey = decryptAgentKey(s.encryptedTavilyKey, s.tavilyIv);
-      } catch (err) {
-        console.error("Failed to decrypt Tavily key:", err);
-      }
-    }
 
     return NextResponse.json({
       customRpcUrl: s.customRpcUrl || "",
       slippageBps: s.slippageBps ?? 100,
       priorityFeeLevel: s.priorityFeeLevel || "medium",
       selectedModel: s.selectedModel || "google/gemini-2.5-flash",
-      openRouterKey,
-      jupiterKey,
-      tavilyKey,
+      credentials: {
+        openRouterConfigured: Boolean(s.encryptedOpenRouterKey && s.openRouterIv),
+        jupiterConfigured: Boolean(s.encryptedJupiterKey && s.jupiterIv),
+        tavilyConfigured: Boolean(s.encryptedTavilyKey && s.tavilyIv),
+      },
     });
   } catch (error) {
     console.error("GET /api/user/settings error:", error);
@@ -74,74 +52,14 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { walletAddress, settings } = body;
-
-    if (!walletAddress || !settings) {
-      return NextResponse.json({ error: "walletAddress and settings are required" }, { status: 400 });
-    }
-
-    // Ensure User exists
-    let user = await cloudDb.user.findUnique({ where: { walletAddress } });
-    if (!user) {
-      user = await cloudDb.user.create({ data: { walletAddress } });
-    }
-
-    // Encrypt keys if provided
-    let encryptedOpenRouterKey: string | undefined = undefined;
-    let openRouterIv: string | undefined = undefined;
-    if (settings.openRouterKey) {
-      const enc = encryptAgentKey(settings.openRouterKey);
-      encryptedOpenRouterKey = enc.ciphertext;
-      openRouterIv = enc.iv;
-    }
-
-    let encryptedJupiterKey: string | undefined = undefined;
-    let jupiterIv: string | undefined = undefined;
-    if (settings.jupiterKey) {
-      const enc = encryptAgentKey(settings.jupiterKey);
-      encryptedJupiterKey = enc.ciphertext;
-      jupiterIv = enc.iv;
-    }
-
-    let encryptedTavilyKey: string | undefined = undefined;
-    let tavilyIv: string | undefined = undefined;
-    if (settings.tavilyKey) {
-      const enc = encryptAgentKey(settings.tavilyKey);
-      encryptedTavilyKey = enc.ciphertext;
-      tavilyIv = enc.iv;
-    }
-
-    const updatedSettings = await cloudDb.userSettings.upsert({
-      where: { userId: user.id },
-      create: {
-        userId: user.id,
-        customRpcUrl: settings.customRpcUrl || null,
-        slippageBps: settings.slippageBps ? Number(settings.slippageBps) : 100,
-        priorityFeeLevel: settings.priorityFeeLevel || "medium",
-        selectedModel: settings.selectedModel || "google/gemini-2.5-flash",
-        encryptedOpenRouterKey,
-        openRouterIv,
-        encryptedJupiterKey,
-        jupiterIv,
-        encryptedTavilyKey,
-        tavilyIv,
-      },
-      update: {
-        customRpcUrl: settings.customRpcUrl || null,
-        slippageBps: settings.slippageBps ? Number(settings.slippageBps) : 100,
-        priorityFeeLevel: settings.priorityFeeLevel || "medium",
-        selectedModel: settings.selectedModel || "google/gemini-2.5-flash",
-        ...(encryptedOpenRouterKey !== undefined ? { encryptedOpenRouterKey, openRouterIv } : {}),
-        ...(encryptedJupiterKey !== undefined ? { encryptedJupiterKey, jupiterIv } : {}),
-        ...(encryptedTavilyKey !== undefined ? { encryptedTavilyKey, tavilyIv } : {}),
-      },
-    });
-
-    return NextResponse.json({ success: true, settings: updatedSettings });
-  } catch (error) {
-    console.error("POST /api/user/settings error:", error);
-    return NextResponse.json({ error: "Failed to save user settings" }, { status: 500 });
-  }
+  const auth = await requireWalletAuth(req);
+  if (isAuthFailure(auth)) return auth;
+  return NextResponse.json(
+    {
+      success: false,
+      code: "CLOUD_SETTINGS_FROZEN",
+      error: "Cloud credential storage remains disabled pending a dedicated encrypted credential-vault audit.",
+    },
+    { status: 409 },
+  );
 }

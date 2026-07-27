@@ -12,9 +12,30 @@ import type {
   ClipboardWriteTransactionSignatureResponse,
   ExternalOpenTransactionRequest,
   ExternalOpenTransactionResponse,
+  EmergencyStopEngageRequest,
+  EmergencyStopGetResponse,
+  EmergencyStopMutationResponse,
+  EmergencyStopReleaseRequest,
   JupiterKeyMutationResponse,
   JupiterSaveKeyRequest,
   JupiterSettingsResponse,
+  RobinhoodKeyMutationResponse,
+  RobinhoodRpcMutationResponse,
+  RobinhoodSaveRpcUrlRequest,
+  RobinhoodSaveZeroXKeyRequest,
+  RobinhoodSettingsResponse,
+  RobinhoodTestRpcResponse,
+  RobinhoodTestZeroXResponse,
+  RobinhoodWalletCreateRequest,
+  RobinhoodWalletCreateResponse,
+  RobinhoodWalletGetResponse,
+  RobinhoodWalletImportMnemonicRequest,
+  RobinhoodWalletImportResponse,
+  RobinhoodIndicativePriceRequest,
+  RobinhoodIndicativePriceResponse,
+  RobinhoodPrepareTradeResponse,
+  RobinhoodReceiptsResponse,
+  RobinhoodReconcileReceiptsResponse,
   LimitOrderExecuteRequest,
   LimitOrderExecuteResponse,
   LimitOrderVerifyExecutionRequest,
@@ -41,6 +62,8 @@ import type {
   PumpFinalRevalidateResponse,
   PumpExecuteRequest,
   PumpExecuteResponse,
+  PumpVerifyExecutionRequest,
+  PumpVerifyExecutionResponse,
   PumpSimulateRequest,
   PumpSimulateResponse,
   PumpRiskSettingsMutationResponse,
@@ -76,6 +99,9 @@ declare global {
   interface Window {
     silfable: {
       getRuntimeStatus(): Promise<RuntimeStatus>;
+      getEmergencyStop(): Promise<EmergencyStopGetResponse>;
+      engageEmergencyStop(request: EmergencyStopEngageRequest): Promise<EmergencyStopMutationResponse>;
+      releaseEmergencyStop(request: EmergencyStopReleaseRequest): Promise<EmergencyStopMutationResponse>;
       configureMasterPassword(request: SecurityConfigurePasswordRequest): Promise<SecurityPasswordMutationResponse>;
       unlockVault(request: SecurityUnlockRequest): Promise<SecurityPasswordMutationResponse>;
       changeMasterPassword(request: SecurityChangePasswordRequest): Promise<SecurityPasswordMutationResponse>;
@@ -99,6 +125,7 @@ declare global {
       simulatePumpTrade(request: PumpSimulateRequest): Promise<PumpSimulateResponse>;
       finalRevalidatePumpTrade(request: PumpFinalRevalidateRequest): Promise<PumpFinalRevalidateResponse>;
       executePumpTrade(request: PumpExecuteRequest): Promise<PumpExecuteResponse>;
+      verifyPumpExecution(request: PumpVerifyExecutionRequest): Promise<PumpVerifyExecutionResponse>;
       getPumpRiskSettings(): Promise<PumpRiskSettingsResponse>;
       savePumpRiskSettings(request: PumpRiskSettingsSaveRequest): Promise<PumpRiskSettingsMutationResponse>;
       executeMission(request: MissionExecuteRequest): Promise<MissionExecuteResponse>;
@@ -118,6 +145,18 @@ declare global {
       saveTavilyKey(request: TavilySaveKeyRequest): Promise<TavilyKeyMutationResponse>;
       getSolanaRpcSettings(): Promise<SolanaRpcSettingsResponse>;
       saveSolanaRpcUrl(request: SolanaRpcSaveUrlRequest): Promise<SolanaRpcMutationResponse>;
+      getRobinhoodSettings(): Promise<RobinhoodSettingsResponse>;
+      saveRobinhoodZeroXKey(request: RobinhoodSaveZeroXKeyRequest): Promise<RobinhoodKeyMutationResponse>;
+      saveRobinhoodRpcUrl(request: RobinhoodSaveRpcUrlRequest): Promise<RobinhoodRpcMutationResponse>;
+      testRobinhoodRpcUrl(request: RobinhoodSaveRpcUrlRequest): Promise<RobinhoodTestRpcResponse>;
+      testRobinhoodZeroXKey(request: Pick<RobinhoodSaveZeroXKeyRequest, "schemaVersion" | "requestId">): Promise<RobinhoodTestZeroXResponse>;
+      getRobinhoodWallet(): Promise<RobinhoodWalletGetResponse>;
+      createRobinhoodWallet(request: RobinhoodWalletCreateRequest): Promise<RobinhoodWalletCreateResponse>;
+      importRobinhoodWalletMnemonic(request: RobinhoodWalletImportMnemonicRequest): Promise<RobinhoodWalletImportResponse>;
+      getRobinhoodIndicativePrice(request: RobinhoodIndicativePriceRequest): Promise<RobinhoodIndicativePriceResponse>;
+      prepareRobinhoodTrade(request: RobinhoodIndicativePriceRequest): Promise<RobinhoodPrepareTradeResponse>;
+      listRobinhoodReceipts(): Promise<RobinhoodReceiptsResponse>;
+      reconcileRobinhoodReceipts(): Promise<RobinhoodReconcileReceiptsResponse>;
       getActivePositions(): Promise<{ positions: any[] }>;
       upsertPosition(config: any): Promise<{ success: boolean }>;
       closePosition(id: string): Promise<{ success: boolean }>;

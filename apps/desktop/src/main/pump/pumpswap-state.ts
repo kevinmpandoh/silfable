@@ -180,14 +180,7 @@ function decodeMintSecurity(data: Uint8Array) {
 
 function decodePumpSwapPool(data: Uint8Array) {
   if (data.length < 200) {
-    return {
-      coinCreatorVaultAta: "11111111111111111111111111111111",
-      coinCreatorVaultAuthority: "11111111111111111111111111111111",
-      protocolFeeRecipient: "11111111111111111111111111111111",
-      protocolFeeRecipientTokenAccount: "11111111111111111111111111111111",
-      protocolFeeBps: 100n,
-      creatorFeeBps: 50n,
-    };
+    throw new Error("PumpSwap pool account data is incomplete");
   }
 
   // Anchor discriminator (8 bytes) + pool fields

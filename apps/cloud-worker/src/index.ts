@@ -1,55 +1,55 @@
 import { config } from "./config/env.js";
 import { prisma } from "./services/db.js";
 import { redisConnection } from "./services/queue.js";
-import { startTradingWorker } from "./worker/trade-worker.js";
-import { startDcaWorker } from "./worker/dca-worker.js";
-import { startTpSlWorker } from "./worker/tpsl-worker.js";
-import { startDiscoveryWorker } from "./worker/discovery-worker.js";
 
 async function main() {
   console.log("==================================================");
-  console.log("🚀 Starting Silfable 24/7 Cloud AI Trading Worker");
+  console.log("Starting Silfable Cloud Monitor");
+  console.log(`Mode: ${config.mode}`);
   console.log("==================================================");
 
-  // Test Redis Connection
   try {
     const pong = await redisConnection.ping();
     console.log(`[Redis Cloud] Connection successful: ${pong}`);
-  } catch (err: any) {
-    console.error(`[Redis Cloud] Connection failed: ${err.message}`);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown Redis error";
+    console.error(`[Redis Cloud] Connection failed: ${message}`);
   }
 
-  // Start BullMQ Trading Worker, DCA Scheduler Worker, TP/SL Worker & Autonomous Discovery Worker
-  startTradingWorker();
-  console.log("[BullMQ Worker] Ready and listening on 'trading-queue'");
+  console.log("[Execution] Signing and Mainnet broadcast are disabled.");
+  console.log("[Schedulers] DCA, TP/SL, and autonomous discovery execution are frozen.");
 
-  startDcaWorker();
-  console.log("[DCA Worker] 24/7 DCA Schedule Ticker started.");
-
-  startTpSlWorker();
-  console.log("[TP/SL Worker] 24/7 TP/SL Strategy Ticker started.");
-
-  startDiscoveryWorker();
-  console.log("[Discovery Worker] 24/7 Autonomous Token Discovery Ticker started.");
-
-  // Start dummy HTTP Server for Railway Health Checks
-  import("http").then((http) => {
-    const port = process.env.PORT || 8080;
-    http.createServer((_, res) => res.end("Silfable Cloud Worker is running 24/7")).listen(port, () => {
-      console.log(`[Health Check] HTTP Server listening on port ${port}`);
-    });
+  const http = await import("node:http");
+  const port = Number(process.env.PORT || 8080);
+  const server = http.createServer((_, response) => {
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({
+      service: "silfable-cloud-worker",
+      mode: config.mode,
+      executionEnabled: false,
+    }));
+  });
+  server.listen(port, () => {
+    console.log(`[Health Check] HTTP Server listening on port ${port}`);
   });
 
-  // Graceful Shutdown
-  process.on("SIGINT", async () => {
-    console.log("Shutting down worker...");
+  async function shutdown() {
+    console.log("Shutting down cloud monitor...");
+    server.close();
     await redisConnection.quit();
     await prisma.$disconnect();
-    process.exit(0);
+  }
+
+  process.once("SIGINT", () => {
+    void shutdown().finally(() => process.exit(0));
+  });
+  process.once("SIGTERM", () => {
+    void shutdown().finally(() => process.exit(0));
   });
 }
 
-main().catch((err) => {
-  console.error("Fatal error starting Cloud Worker:", err);
+main().catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : "Unknown startup error";
+  console.error("Fatal error starting Cloud Monitor:", message);
   process.exit(1);
 });

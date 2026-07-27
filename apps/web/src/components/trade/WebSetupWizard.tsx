@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Connection } from "@solana/web3.js";
+import { useWallet } from "@solana/wallet-adapter-react";
+import bs58 from "bs58";
 import Image from "next/image";
 import Link from "next/link";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
@@ -21,6 +23,29 @@ interface WebSetupWizardProps {
 const steps = ["API Keys", "Agent Core", "Provider", "Review"];
 const reviewStep = steps.length;
 
+type AuthorityView = {
+  id: string;
+  status: "active" | "blocked" | "expired" | "revoked";
+  authorityMode: string;
+  capabilities: string[];
+  expiresAt: string;
+  limits: {
+    maxAllocationLamports: string;
+    maxSingleProposalLamports: string;
+    maxNetworkFeeLamports: string;
+    maxFeeBps: number;
+    maxSlippageBps: number;
+  };
+  executionAllowed: false;
+  signingAllowed: false;
+  broadcastAllowed: false;
+};
+
+type AuthorityState = {
+  killSwitch: { engaged: boolean; engagedAt: string | null; reason: string | null };
+  authorities: AuthorityView[];
+};
+
 export function WebSetupWizard(props: WebSetupWizardProps) {
   const {
     publicAddress,
@@ -34,12 +59,32 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
     onSaveSettings,
     onReturnToWorkspace,
   } = props;
+  const { signMessage } = useWallet();
 
   const [verifying, setVerifying] = useState<string | null>(null);
-  const [verifyResult, setVerifyResult] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [verifyResult, setVerifyResult] = useState<
+    Record<string, { ok: boolean; message: string } | undefined>
+  >({});
+  const [authorityState, setAuthorityState] = useState<AuthorityState | null>(null);
+  const [authorityBusy, setAuthorityBusy] = useState(false);
+  const [authorityMessage, setAuthorityMessage] = useState<string | null>(null);
 
   const activeStep = Math.min(Math.max(setupStep, 1), reviewStep);
   const isReview = activeStep === reviewStep;
+
+  const refreshAuthority = useCallback(async () => {
+    try {
+      const response = await fetch("/api/authority", { cache: "no-store" });
+      if (!response.ok) return;
+      setAuthorityState(await response.json() as AuthorityState);
+    } catch {
+      // The review remains usable when optional authority storage is offline.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isReview) void refreshAuthority();
+  }, [isReview, refreshAuthority]);
 
   function updateSettings(patch: Partial<WebSetupSettings>) {
     setSettings({ ...settings, ...patch });
@@ -47,6 +92,10 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
 
   function saveInline() {
     onPersistSettings();
+  }
+
+  function errorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error && error.message ? error.message : fallback;
   }
 
   async function verifyAndSaveRpc() {
@@ -58,7 +107,7 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
     }
 
     setVerifying("rpc");
-    setVerifyResult((prev) => ({ ...prev, rpc: undefined as any }));
+    setVerifyResult((prev) => ({ ...prev, rpc: undefined }));
 
     try {
       const conn = new Connection(url, "confirmed");
@@ -71,8 +120,8 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
         ...prev,
         rpc: { ok: true, message: `✓ RPC Verified & Saved! (Blockhash: ${bh.blockhash.slice(0, 10)}...)` },
       }));
-    } catch (err: any) {
-      const errMsg = err?.message || "Failed to query custom RPC endpoint.";
+    } catch (error: unknown) {
+      const errMsg = errorMessage(error, "Failed to query custom RPC endpoint.");
       setVerifyResult((prev) => ({
         ...prev,
         rpc: { ok: false, message: `❌ Verification Failed: ${errMsg}` },
@@ -91,7 +140,7 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
     }
 
     setVerifying("jupiter");
-    setVerifyResult((prev) => ({ ...prev, jupiter: undefined as any }));
+    setVerifyResult((prev) => ({ ...prev, jupiter: undefined }));
 
     try {
       saveInline();
@@ -99,10 +148,10 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
         ...prev,
         jupiter: { ok: true, message: "✓ Jupiter API Key Verified & Saved!" },
       }));
-    } catch (err: any) {
+    } catch (error: unknown) {
       setVerifyResult((prev) => ({
         ...prev,
-        jupiter: { ok: false, message: `❌ Verification Failed: ${err?.message || "Invalid Key"}` },
+        jupiter: { ok: false, message: `❌ Verification Failed: ${errorMessage(error, "Invalid Key")}` },
       }));
     } finally {
       setVerifying(null);
@@ -118,7 +167,7 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
     }
 
     setVerifying("tavily");
-    setVerifyResult((prev) => ({ ...prev, tavily: undefined as any }));
+    setVerifyResult((prev) => ({ ...prev, tavily: undefined }));
 
     try {
       if (!key.startsWith("tvly-") && key.length < 10) {
@@ -129,10 +178,10 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
         ...prev,
         tavily: { ok: true, message: "✓ Tavily API Key Verified & Saved!" },
       }));
-    } catch (err: any) {
+    } catch (error: unknown) {
       setVerifyResult((prev) => ({
         ...prev,
-        tavily: { ok: false, message: `❌ ${err?.message || "Invalid Tavily key"}` },
+        tavily: { ok: false, message: `❌ ${errorMessage(error, "Invalid Tavily key")}` },
       }));
     } finally {
       setVerifying(null);
@@ -147,7 +196,7 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
     }
 
     setVerifying("openrouter");
-    setVerifyResult((prev) => ({ ...prev, openrouter: undefined as any }));
+    setVerifyResult((prev) => ({ ...prev, openrouter: undefined }));
 
     try {
       if (!key.startsWith("sk-or-") && key.length < 15) {
@@ -158,13 +207,116 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
         ...prev,
         openrouter: { ok: true, message: "✓ OpenRouter Key Verified & Saved!" },
       }));
-    } catch (err: any) {
+    } catch (error: unknown) {
       setVerifyResult((prev) => ({
         ...prev,
-        openrouter: { ok: false, message: `❌ ${err?.message || "Invalid OpenRouter key"}` },
+        openrouter: { ok: false, message: `❌ ${errorMessage(error, "Invalid OpenRouter key")}` },
       }));
     } finally {
       setVerifying(null);
+    }
+  }
+
+  async function activateMonitorAuthority() {
+    if (!signMessage) {
+      setAuthorityMessage("The connected wallet does not support message signing.");
+      return;
+    }
+    setAuthorityBusy(true);
+    setAuthorityMessage(null);
+    try {
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1_000);
+      const singleProposal = boundedLamports(settings.pumpMaxSpendLamports, BigInt("10000000"));
+      const allocation = singleProposal * BigInt(10);
+      const policy = {
+        schemaVersion: 1,
+        network: "solana-mainnet",
+        authorityMode: "monitor-propose",
+        capabilities: ["READ_PORTFOLIO", "MONITOR_MARKET", "PREPARE_PROPOSAL", "NOTIFY_USER"],
+        allowedMints: [],
+        maxAllocationLamports: allocation.toString(),
+        maxSingleProposalLamports: singleProposal.toString(),
+        maxNetworkFeeLamports: boundedLamports(settings.maxNetworkFee, BigInt("1000000")).toString(),
+        maxFeeBps: 100,
+        maxSlippageBps: Math.min(Math.max(Number(settings.maxSlippageBps) || 100, 0), 5_000),
+        maxActionsPerHour: 0,
+        startsAt: now.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        signingAllowed: false,
+        broadcastAllowed: false,
+        executionAllowed: false,
+      };
+      const challengeResponse = await fetch("/api/authority/challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: publicAddress, policy }),
+      });
+      const challenge = await challengeResponse.json() as {
+        challengeId?: string;
+        message?: string;
+        error?: string;
+      };
+      if (!challengeResponse.ok || !challenge.challengeId || !challenge.message) {
+        throw new Error(challenge.error || "Could not create the authority challenge.");
+      }
+      const signature = await signMessage(new TextEncoder().encode(challenge.message));
+      const verifyResponse = await fetch("/api/authority/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          walletAddress: publicAddress,
+          challengeId: challenge.challengeId,
+          signature: bs58.encode(signature),
+        }),
+      });
+      const verified = await verifyResponse.json() as { error?: string };
+      if (!verifyResponse.ok) throw new Error(verified.error || "Authority activation failed.");
+      setAuthorityMessage("Monitor-only authority activated for 24 hours. Transaction execution remains disabled.");
+      await refreshAuthority();
+    } catch (error) {
+      setAuthorityMessage(errorMessage(error, "Could not activate monitor-only authority."));
+    } finally {
+      setAuthorityBusy(false);
+    }
+  }
+
+  async function revokeMonitorAuthority() {
+    setAuthorityBusy(true);
+    setAuthorityMessage(null);
+    try {
+      const response = await fetch("/api/authority", { method: "DELETE" });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Could not revoke authority.");
+      setAuthorityMessage("All active monitor-only authority has been revoked.");
+      await refreshAuthority();
+    } catch (error) {
+      setAuthorityMessage(errorMessage(error, "Could not revoke authority."));
+    } finally {
+      setAuthorityBusy(false);
+    }
+  }
+
+  async function engageKillSwitch() {
+    if (!window.confirm(
+      "Emergency stop will revoke every active monitor authority. Recovery is intentionally unavailable until a separate signed recovery flow is implemented. Continue?",
+    )) return;
+    setAuthorityBusy(true);
+    setAuthorityMessage(null);
+    try {
+      const response = await fetch("/api/authority/kill-switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "Emergency stop engaged from Web Settings." }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Could not engage emergency stop.");
+      setAuthorityMessage("Emergency stop engaged. All delegated monitoring authority is blocked.");
+      await refreshAuthority();
+    } catch (error) {
+      setAuthorityMessage(errorMessage(error, "Could not engage emergency stop."));
+    } finally {
+      setAuthorityBusy(false);
     }
   }
 
@@ -439,6 +591,14 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
                   ok={Boolean(settings.openRouterApiKey)}
                   onEdit={() => setSetupStep(3)}
                 />
+                <AuthorityReview
+                  state={authorityState}
+                  busy={authorityBusy}
+                  message={authorityMessage}
+                  onActivate={activateMonitorAuthority}
+                  onRevoke={revokeMonitorAuthority}
+                  onKill={engageKillSwitch}
+                />
                 <div className="notice warning">
                   <span>!</span>
                   <div>
@@ -509,6 +669,68 @@ function ReviewRow(props: { title: string; detail: string; status: string; ok: b
       )}
     </div>
   );
+}
+
+function AuthorityReview(props: {
+  state: AuthorityState | null;
+  busy: boolean;
+  message: string | null;
+  onActivate: () => void;
+  onRevoke: () => void;
+  onKill: () => void;
+}) {
+  const active = props.state?.authorities.find((authority) => authority.status === "active");
+  const killed = props.state?.killSwitch.engaged ?? false;
+  return (
+    <section className="integrationCard">
+      <div className="integrationCardHeader">
+        <h2>Delegated monitor authority</h2>
+        <span className={`setupStatus ${active && !killed ? "ok" : "warn"}`}>
+          {killed ? "EMERGENCY STOP" : active ? "MONITOR ONLY" : "NOT ACTIVE"}
+        </span>
+      </div>
+      <p>
+        A separate wallet signature may allow background monitoring and proposal preparation.
+        It never permits cloud signing, transaction broadcast, or execution.
+      </p>
+      {active && (
+        <small>
+          Expires {new Date(active.expiresAt).toLocaleString()} · Proposal limit{" "}
+          {active.limits.maxSingleProposalLamports} lamports · Fee ceiling{" "}
+          {active.limits.maxNetworkFeeLamports} lamports · Actions/hour 0
+        </small>
+      )}
+      {props.message && <small className="securityBoundary">{props.message}</small>}
+      <div className="setupActionsRow">
+        {!active && !killed && (
+          <button type="button" className="primaryButton" disabled={props.busy} onClick={props.onActivate}>
+            {props.busy ? "Waiting for wallet..." : "Sign monitor-only policy"}
+          </button>
+        )}
+        {active && (
+          <button type="button" className="railBtn" disabled={props.busy} onClick={props.onRevoke}>
+            Revoke authority
+          </button>
+        )}
+        {!killed && (
+          <button type="button" className="railBtn" disabled={props.busy} onClick={props.onKill}>
+            Emergency stop
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function boundedLamports(value: string, fallback: bigint): bigint {
+  try {
+    const parsed = BigInt(value);
+    if (parsed < BigInt(0)) return fallback;
+    const ceiling = BigInt("1000000000000");
+    return parsed > ceiling ? ceiling : parsed;
+  } catch {
+    return fallback;
+  }
 }
 
 function shortAddress(address: string) {

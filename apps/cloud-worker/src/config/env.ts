@@ -1,11 +1,32 @@
 import dotenv from "dotenv";
-import path from "node:path";
 
 dotenv.config();
-dotenv.config({ path: path.resolve(process.cwd(), ".env.example") });
+
+function requireEnvironmentVariable(name: "DATABASE_URL" | "REDIS_URL" | "WORKER_ENCRYPTION_KEY"): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`${name} is required; Silfable does not use production secret fallbacks.`);
+  }
+  return value;
+}
+
+function requireEncryptionKey(): string {
+  const value = requireEnvironmentVariable("WORKER_ENCRYPTION_KEY");
+  if (!/^[0-9a-fA-F]{64}$/u.test(value)) {
+    throw new Error("WORKER_ENCRYPTION_KEY must be exactly 32 bytes encoded as 64 hexadecimal characters.");
+  }
+  return value;
+}
 
 export const config = {
-  databaseUrl: process.env.DATABASE_URL || "mongodb://127.0.0.1:27017/silfable_ai",
-  redisUrl: process.env.REDIS_URL || "redis://default:yblPbxcQBMF5BGWJjrWPaMy0ztmMNTRB@redis-13730.c281.us-east-1-2.ec2.cloud.redislabs.com:13730",
-  workerEncryptionKey: process.env.WORKER_ENCRYPTION_KEY || "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  get databaseUrl(): string {
+    return requireEnvironmentVariable("DATABASE_URL");
+  },
+  get redisUrl(): string {
+    return requireEnvironmentVariable("REDIS_URL");
+  },
+  get workerEncryptionKey(): string {
+    return requireEncryptionKey();
+  },
+  mode: "monitor-only" as const,
 };

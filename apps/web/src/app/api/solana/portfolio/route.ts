@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { PublicKey } from "@solana/web3.js";
+import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
 
 const DEFAULT_MAINNET_RPC =
   process.env.SOLANA_RPC_URL
@@ -64,9 +65,11 @@ async function readBalance(endpoint: string, address: string) {
   return { lamports, slot: typeof slot === "number" ? slot : null };
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as { address?: unknown; customRpcUrl?: unknown };
+    const auth = await requireWalletAuth(request, body.address);
+    if (isAuthFailure(auth)) return auth;
     if (typeof body.address !== "string") throw new Error("Alamat wallet diperlukan.");
     const address = new PublicKey(body.address).toBase58();
     const customRpcUrl = validateCustomRpcUrl(body.customRpcUrl);

@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const { quoteResponse, userPublicKey, jupiterApiKey } = (await req.json()) as {
       quoteResponse?: unknown;
@@ -14,6 +15,8 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+    const auth = await requireWalletAuth(req, userPublicKey);
+    if (isAuthFailure(auth)) return auth;
 
     const headers: HeadersInit = {
       "Content-Type": "application/json",

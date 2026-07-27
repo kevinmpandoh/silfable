@@ -16,6 +16,10 @@ import {
   ClipboardWriteWalletAddressResponseSchema,
   ClipboardWriteTransactionSignatureRequestSchema,
   ClipboardWriteTransactionSignatureResponseSchema,
+  EmergencyStopEngageRequestSchema,
+  EmergencyStopGetResponseSchema,
+  EmergencyStopMutationResponseSchema,
+  EmergencyStopReleaseRequestSchema,
   ExternalOpenTransactionRequestSchema,
   ExternalOpenTransactionResponseSchema,
   IPC_CHANNELS,
@@ -47,12 +51,32 @@ import {
   PumpFinalRevalidateRequestSchema,
   PumpFinalRevalidateResponseSchema,
   PumpExecuteRequestSchema,
+  PumpExecuteResponseSchema,
+  PumpVerifyExecutionRequestSchema,
+  PumpVerifyExecutionResponseSchema,
   PumpSimulateRequestSchema,
   PumpSimulateResponseSchema,
   PumpSimulationArtifactSchema,
   PumpRiskSettingsMutationResponseSchema,
   PumpRiskSettingsResponseSchema,
   PumpRiskSettingsSaveRequestSchema,
+  RobinhoodKeyMutationResponseSchema,
+  RobinhoodRpcMutationResponseSchema,
+  RobinhoodSaveRpcUrlRequestSchema,
+  RobinhoodSaveZeroXKeyRequestSchema,
+  RobinhoodSettingsResponseSchema,
+  RobinhoodTestRpcResponseSchema,
+  RobinhoodTestZeroXResponseSchema,
+  RobinhoodWalletCreateRequestSchema,
+  RobinhoodWalletCreateResponseSchema,
+  RobinhoodWalletGetResponseSchema,
+  RobinhoodWalletImportMnemonicRequestSchema,
+  RobinhoodWalletImportResponseSchema,
+  RobinhoodIndicativePriceRequestSchema,
+  RobinhoodIndicativePriceResponseSchema,
+  RobinhoodPrepareTradeResponseSchema,
+  RobinhoodReceiptsResponseSchema,
+  RobinhoodReconcileReceiptsResponseSchema,
   RuntimeStatusSchema,
   SecurityChangePasswordRequestSchema,
   SecurityConfigurePasswordRequestSchema,
@@ -80,6 +104,8 @@ import {
   WalletImportPrivateKeyRequestSchema,
   WalletImportResponseSchema,
   WalletListResponseSchema,
+  type PumpExecutionRecord,
+  type PumpTradeContractPreview,
 } from "@silfable/contracts";
 
 import { previewOpenRouterModels } from "./ai/providers.js";
@@ -89,13 +115,17 @@ import { JupiterTriggerV2Client } from "./integrations/trigger-v2.js";
 import { LimitOrderService } from "./mission/limit-order.js";
 import { MissionSimulationService } from "./mission/simulation.js";
 import { TransactionSettingsService } from "./mission/transaction-settings.js";
-import { AutonomousExecutorService } from "./execution/autonomous-executor.js";
 import { DurableBackgroundObservationService } from "./execution/background-loop.js";
-import { PositionStrategyManager, type ExitTriggerEvent } from "./execution/strategy-manager.js";
+import { PositionStrategyManager } from "./execution/strategy-manager.js";
 import { MissionProposalService } from "./mission/proposals.js";
 import { TokenAllowlistService } from "./mission/token-allowlist.js";
 import { ReconciliationService } from "./execution/reconciliation.js";
 import { buildAndSimulatePumpV2ProductionTransaction, type PumpV2ProductionSimulationInput } from "./pump/production.js";
+import {
+  buildAndSimulatePumpSwapProductionTransaction,
+  pumpSwapEvidenceForPolicy,
+  type PumpSwapProductionSimulationInput,
+} from "./pump/pumpswap-production.js";
 import { evaluatePumpTradeEligibility } from "./pump/eligibility.js";
 import { evaluatePumpExecutionReadiness } from "./pump/execution-readiness.js";
 import { evaluatePumpFinalRevalidation, PumpPreparedExecutionService } from "./pump/prepared-execution.js";
@@ -103,7 +133,16 @@ import { EncryptedPumpReceiptService } from "./pump/receipt-store.js";
 import { PumpRiskLedgerService } from "./pump/risk-ledger.js";
 import { assertPumpProposalWithinRisk, PumpRiskSettingsService } from "./pump/risk-settings.js";
 import { PumpMainnetRpc } from "./pump/rpc.js";
+import { PumpReceiptReconciliationService } from "./pump/receipt-reconciliation.js";
+import {
+  createSignedPumpExecution,
+  markPumpBroadcastUnknown,
+  markPumpExecutionFailed,
+  markPumpExecutionFinalized,
+} from "./pump/execution.js";
+import { broadcastPumpTransaction } from "./pump/signer.js";
 import { MasterPasswordService } from "./security/master-password.js";
+import { EmergencyStopService } from "./security/emergency-stop.js";
 import { SessionService } from "./sessions/service.js";
 import {
   assertTrustedIpcEvent,
@@ -116,6 +155,17 @@ import {
 import { RuntimeDatabase, MAINNET_PROFILE_ID } from "./storage/database.js";
 import { LocalEncryptedKeystore } from "./storage/keystore.js";
 import { WalletOnboardingService } from "./wallet/onboarding.js";
+import { EvmEngine } from "./execution/evm-engine.js";
+import { VenueExecutionGate } from "./execution/venue-execution-gate.js";
+import { verifyZeroExRobinhoodSupport } from "./integrations/zeroex.js";
+import { getRobinhoodIndicativePrice } from "./integrations/zeroex-price.js";
+import { resolveRobinhoodVerifiedAssets } from "./integrations/robinhood-assets.js";
+import { assertRobinhoodPilotQuotePolicy } from "./execution/robinhood-policy.js";
+import { RobinhoodPreflightService } from "./execution/robinhood-preflight.js";
+import { getRobinhoodFirmQuote } from "./integrations/zeroex-firm-quote.js";
+import { EvmWalletService } from "./wallet/evm-wallet.js";
+import { EncryptedRobinhoodReceiptService } from "./execution/robinhood-receipt-store.js";
+import { RobinhoodReceiptReconciliationService } from "./execution/robinhood-reconciliation.js";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -201,8 +251,87 @@ function createTray(): Tray {
   return appTray;
 }
 
-function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, wallets: WalletOnboardingService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService, strategyManager: PositionStrategyManager, observationService: DurableBackgroundObservationService): void {
+function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, emergencyStop: EmergencyStopService, wallets: WalletOnboardingService, evmWallet: EvmWalletService, robinhoodReceipts: EncryptedRobinhoodReceiptService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService, strategyManager: PositionStrategyManager, observationService: DurableBackgroundObservationService): void {
+  const robinhoodPreflight = new RobinhoodPreflightService();
+  const robinhoodReconciliation = new RobinhoodReceiptReconciliationService(robinhoodReceipts);
+  const reconciliation = new ReconciliationService(sessions, limitOrders);
   const requireUnlocked = (): void => { if (secretStore.isLocked()) throw new Error("Vault is locked"); };
+  const pumpReconciler = new PumpReceiptReconciliationService(reads);
+
+  const persistPumpExecution = async (
+    sessionId: string,
+    messageIndex: number,
+    execution: PumpExecutionRecord,
+  ): Promise<void> => {
+    const sessionRecord = await sessions.get(sessionId);
+    if (sessionRecord === null || sessionRecord.messages[messageIndex]?.pumpTradePreview?.id !== execution.previewId) {
+      throw new Error("Pump execution session scope is unavailable");
+    }
+    const messages = sessionRecord.messages.map((message, index) => index === messageIndex
+      ? { ...message, pumpExecution: execution }
+      : message);
+    await sessions.upsert({ ...sessionRecord, messages });
+  };
+
+  const reconcilePumpExecution = async (
+    preview: PumpTradeContractPreview,
+    execution: PumpExecutionRecord,
+  ): Promise<PumpExecutionRecord> => {
+    const verification = await reads.verifyTransactionSignature(execution.signature);
+    if (verification.state === "failed" || verification.error !== null) {
+      return markPumpExecutionFailed(
+        execution,
+        verification.error ?? "The Pump transaction failed on chain.",
+      );
+    }
+    if (verification.state === "finalized" && verification.slot !== null) {
+      const receipt = await pumpReconciler.reconcile({
+        receiptId: execution.id,
+        preview,
+        signature: execution.signature,
+      });
+      await pumpReceipts.saveReceipt(receipt);
+      return markPumpExecutionFinalized(execution, receipt);
+    }
+    if (verification.state === "not-found") {
+      const blockHeight = await pumpRpc.getBlockHeight({ commitment: "finalized" });
+      if (blockHeight > execution.lastValidBlockHeight) {
+        return markPumpExecutionFailed(
+          execution,
+          "The locally derived signature was not found before its blockhash expired. The transaction was not rebroadcast.",
+        );
+      }
+    }
+    return markPumpBroadcastUnknown(execution, execution.error);
+  };
+
+  const recoverPendingPumpExecutions = async (): Promise<void> => {
+    const sessionRecords = await sessions.list();
+    for (const sessionRecord of sessionRecords) {
+      for (const [messageIndex, message] of sessionRecord.messages.entries()) {
+        const preview = message.pumpTradePreview;
+        const execution = message.pumpExecution;
+        if (
+          preview === undefined
+          || execution === undefined
+          || execution.status === "finalized"
+          || execution.status === "failed"
+        ) continue;
+        try {
+          const recovered = await reconcilePumpExecution(preview, execution);
+          await persistPumpExecution(sessionRecord.id, messageIndex, recovered);
+        } catch (error) {
+          // A read failure cannot prove failure. Keep the encrypted signature
+          // available for the next recovery pass and never rebroadcast it.
+          const recovered = markPumpBroadcastUnknown(
+            execution,
+            error instanceof Error ? error.message : "Pump verification is temporarily unavailable",
+          );
+          await persistPumpExecution(sessionRecord.id, messageIndex, recovered);
+        }
+      }
+    }
+  };
 
   ipcMain.handle(IPC_CHANNELS.runtimeStatus, async (event) => {
     assertTrustedSender(event);
@@ -214,6 +343,41 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
       masterPassword: passwords.isConfigured() ? "configured" : "missing",
       wallet: database.hasWallet(MAINNET_PROFILE_ID) ? "configured" : "none",
       activeMissionCount: 0,
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.emergencyStopGet, async (event) => {
+    assertTrustedSender(event);
+    return EmergencyStopGetResponseSchema.parse({
+      schemaVersion: 1,
+      status: emergencyStop.get(),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.emergencyStopEngage, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = EmergencyStopEngageRequestSchema.parse(raw);
+    const status = emergencyStop.engage(request.reason);
+    preparedPump.clear();
+    observationService.stopObservationLoop();
+    return EmergencyStopMutationResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      status,
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.emergencyStopRelease, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = EmergencyStopReleaseRequestSchema.parse(raw);
+    requireUnlocked();
+    if (!(await passwords.verify(request.masterPassword))) {
+      throw new Error("Master password is incorrect");
+    }
+    return EmergencyStopMutationResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      status: emergencyStop.release(),
     });
   });
 
@@ -281,6 +445,8 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     // Return no decrypted data and avoid surfacing a rejected IPC handler.
     if (secretStore.isLocked())
       return SessionListResponseSchema.parse({ schemaVersion: 1, sessions: [] });
+    await reconciliation.reconcilePendingOrders();
+    await recoverPendingPumpExecutions();
     return SessionListResponseSchema.parse({ schemaVersion: 1, sessions: await sessions.list() });
   });
 
@@ -392,13 +558,20 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     const request = AiChatRequestSchema.parse(raw);
     requireUnlocked();
     const session = await sessions.get(request.sessionId);
-    if (session === null || session.mode !== request.mode || session.walletAddress !== request.walletAddress) throw new Error("Session context is unavailable");
+    if (session === null
+      || session.mode !== request.mode
+      || session.permission !== request.permission
+      || session.walletAddress !== request.walletAddress) {
+      throw new Error("Session context is unavailable");
+    }
     const latest = session.messages.at(-1);
     if (latest?.role !== "user" || latest.text !== request.prompt) throw new Error("Session context is out of date");
     const history = session.messages.slice(0, -1).slice(-20).map((message) => ({ role: message.role, text: message.text.slice(0, 4_000) }));
-    const pumpContext = session.workspace === "pump" && session.pumpConfig
-      ? `Pump.fun proposal-only workspace; exact token mint ${session.pumpConfig.tokenMint ?? "none"}; watchlist mints ${(session.pumpConfig.watchlistMints ?? []).join(", ") || "none"}; scope ${session.pumpConfig.scope}; objective ${session.pumpConfig.objective}; reference buy analysis amount ${session.pumpConfig.analysisBuyLamports ?? "1000000"} lamports. For exact-mint scope, use only the bound token. For watchlist scope, pump_token_analysis may read only a mint present in that encrypted watchlist. For discovery scope, call pump_recent_candidates only when the user explicitly requests a manual scan; report that coverage is incomplete and never rank a candidate whose typed rankingAllowed field is false. Direct Pump/PumpSwap execution is unavailable.`
-      : undefined;
+    const workspaceContext = session.workspace === "pump" && session.pumpConfig
+      ? `Pump.fun restricted workspace; exact token mint ${session.pumpConfig.tokenMint ?? "none"}; watchlist mints ${(session.pumpConfig.watchlistMints ?? []).join(", ") || "none"}; scope ${session.pumpConfig.scope}; objective ${session.pumpConfig.objective}; reference buy analysis amount ${session.pumpConfig.analysisBuyLamports ?? "1000000"} lamports. For exact-mint scope, use only the bound token. For watchlist scope, pump_token_analysis may read only a mint present in that encrypted watchlist. For discovery scope, call pump_recent_candidates only when the user explicitly requests a manual scan; report that coverage is incomplete and never rank a candidate whose typed rankingAllowed field is false. The runtime can manually execute an exact verified Pump active-curve or canonical PumpSwap proposal only after deterministic checks, unsigned simulation, fresh final revalidation, master-password verification, and an exact user confirmation. The AI never receives signing authority; unattended execution remains unavailable.`
+      : session.permission === "full"
+        ? "Guarded Full Access MVP session. The AI may research and prepare multiple typed proposals, but this permission does not grant signer access, automatic broadcast, policy bypass, or approval bypass. Every Mainnet mutation still uses its venue-specific deterministic simulation and explicit final approval gate."
+        : undefined;
     const pumpScope = session.workspace === "pump" && session.pumpConfig
       ? {
           kind: session.pumpConfig.scope,
@@ -416,7 +589,7 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
       prompt: request.prompt,
       mode: request.mode,
       walletAddress: request.walletAddress,
-      ...(pumpContext ? { sessionContext: pumpContext } : {}),
+      ...(workspaceContext ? { sessionContext: workspaceContext } : {}),
       ...(pumpScope ? { pumpScope } : {}),
       history,
     });
@@ -457,8 +630,8 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     if (preview.walletAddress !== sessionRecord.walletAddress || preview.tokenMint !== sessionRecord.pumpConfig?.tokenMint) {
       throw new Error("Pump proposal does not match the encrypted session scope");
     }
-    if (preview.venue !== "bonding-curve-active") {
-      throw new Error("Only an active verified Pump bonding curve can use this simulator");
+    if (preview.venue !== "bonding-curve-active" && preview.venue !== "pumpswap-migrated") {
+      throw new Error("Only an active verified Pump curve or canonical PumpSwap pool can use this simulator");
     }
     const settings = transactionSettings.get();
     const pumpRisk = pumpRiskSettings.get();
@@ -473,7 +646,7 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
       settings: pumpRisk,
       usage,
     });
-    const buildInput: PumpV2ProductionSimulationInput = {
+    const buildInput: PumpV2ProductionSimulationInput | PumpSwapProductionSimulationInput = {
       side: preview.side,
       walletAddress: preview.walletAddress,
       tokenMint: preview.tokenMint,
@@ -484,12 +657,17 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
       maxNetworkFeeLamports: settings.maxNetworkFeeLamports,
       maxFeePercent: settings.maxFeePercent,
     };
-    const build = await buildAndSimulatePumpV2ProductionTransaction(pumpRpc, buildInput);
+    const build = preview.venue === "pumpswap-migrated"
+      ? await buildAndSimulatePumpSwapProductionTransaction(pumpRpc, buildInput)
+      : await buildAndSimulatePumpV2ProductionTransaction(pumpRpc, buildInput);
     const eligibilityEvidence = evaluatePumpTradeEligibility({
+      venue: preview.venue,
       side: preview.side,
       tokenMint: preview.tokenMint,
       inputAmount: preview.inputAmount,
-      state: build.stateEvidence,
+      state: build.codec === "silfable-pumpswap"
+        ? pumpSwapEvidenceForPolicy(build.stateEvidence)
+        : build.stateEvidence,
       fee: build.feePreview,
       quote: build.executableQuote,
       risk: riskEvidence,
@@ -521,6 +699,7 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     assertTrustedSender(event);
     const request = PumpFinalRevalidateRequestSchema.parse(raw);
     requireUnlocked();
+    emergencyStop.assertExecutionAllowed();
     const sessionRecord = await sessions.get(request.sessionId);
     if (sessionRecord === null || sessionRecord.workspace !== "pump" || sessionRecord.permission !== "restricted" || sessionRecord.walletAddress === null) {
       throw new Error("Restricted Pump session context is unavailable");
@@ -531,6 +710,9 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     const initialSimulation = message?.pumpSimulation;
     if (preview === undefined || initialSimulation?.executionReadiness?.status !== "ready-for-final-approval") {
       throw new Error("A passed Pump unsigned simulation is required before final revalidation");
+    }
+    if (preview.venue !== "bonding-curve-active" && preview.venue !== "pumpswap-migrated") {
+      throw new Error("The approved Pump venue is not executable");
     }
     if (preview.walletAddress !== sessionRecord.walletAddress || preview.tokenMint !== sessionRecord.pumpConfig?.tokenMint) {
       throw new Error("Pump proposal does not match the encrypted session scope");
@@ -549,12 +731,17 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
       settings: pumpRisk,
       usage,
     });
-    const build = await buildAndSimulatePumpV2ProductionTransaction(pumpRpc, prepared.input);
+    const build = preview.venue === "pumpswap-migrated"
+      ? await buildAndSimulatePumpSwapProductionTransaction(pumpRpc, prepared.input)
+      : await buildAndSimulatePumpV2ProductionTransaction(pumpRpc, prepared.input);
     const eligibilityEvidence = evaluatePumpTradeEligibility({
+      venue: preview.venue,
       side: preview.side,
       tokenMint: preview.tokenMint,
       inputAmount: preview.inputAmount,
-      state: build.stateEvidence,
+      state: build.codec === "silfable-pumpswap"
+        ? pumpSwapEvidenceForPolicy(build.stateEvidence)
+        : build.stateEvidence,
       fee: build.feePreview,
       quote: build.executableQuote,
       risk: riskEvidence,
@@ -562,6 +749,14 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     });
     const freshSimulation = PumpSimulationArtifactSchema.parse({ ...build.simulation, riskEvidence, eligibilityEvidence });
     const finalRevalidation = evaluatePumpFinalRevalidation({ prepared, preview, production: build, simulation: freshSimulation, risk: riskEvidence });
+    if (finalRevalidation.status === "ready-for-password") {
+      preparedPump.prepareFinal({
+        sessionId: sessionRecord.id,
+        preview,
+        production: build,
+        revalidation: finalRevalidation,
+      });
+    }
     const simulation = PumpSimulationArtifactSchema.parse({ ...freshSimulation, executionReadiness: initialSimulation.executionReadiness, finalRevalidation });
     const messages = sessionRecord.messages.map((entry, index) => index === messageIndex ? { ...entry, pumpSimulation: simulation } : entry);
     await sessions.upsert({ ...sessionRecord, messages });
@@ -572,8 +767,117 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     assertTrustedSender(event);
     const request = PumpExecuteRequestSchema.parse(raw);
     requireUnlocked();
-    void request;
-    throw new Error("Pump.fun Mainnet execution is not enabled yet. Use proposal, unsigned simulation, and final revalidation only.");
+    emergencyStop.assertExecutionAllowed();
+    if (!(await passwords.verify(request.masterPassword))) {
+      throw new Error("Master password is incorrect");
+    }
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (sessionRecord === null || sessionRecord.workspace !== "pump" || sessionRecord.permission !== "restricted" || sessionRecord.walletAddress === null) {
+      throw new Error("Restricted Pump session context is unavailable");
+    }
+    const messageIndex = sessionRecord.messages.findIndex((message) => message.pumpTradePreview?.id === request.previewId);
+    const message = messageIndex < 0 ? undefined : sessionRecord.messages[messageIndex];
+    const preview = message?.pumpTradePreview;
+    const revalidation = message?.pumpSimulation?.finalRevalidation;
+    if (preview === undefined || revalidation?.status !== "ready-for-password") {
+      throw new Error("A fresh passed Pump final revalidation is required");
+    }
+    if (message?.pumpExecution !== undefined) {
+      return PumpExecuteResponseSchema.parse({
+        schemaVersion: 1,
+        requestId: request.requestId,
+        execution: message.pumpExecution,
+      });
+    }
+    if (preview.walletAddress !== sessionRecord.walletAddress || preview.tokenMint !== sessionRecord.pumpConfig?.tokenMint) {
+      throw new Error("Pump proposal does not match the encrypted session scope");
+    }
+    const prepared = preparedPump.consumeFinal({
+      sessionId: sessionRecord.id,
+      preview,
+      expectedDigest: revalidation.finalTransactionDigest,
+    });
+    const signed = await wallets.withWalletWeb3Keypair(preview.walletAddress, async (keypair) =>
+      createSignedPumpExecution({
+        preview,
+        production: prepared.production,
+        revalidation: prepared.revalidation,
+        keypair,
+      }));
+
+    // Persist the locally derived signature before entering the network call.
+    // A restart can therefore verify the signature without ever rebroadcasting.
+    await persistPumpExecution(sessionRecord.id, messageIndex, signed.execution);
+    let execution = markPumpBroadcastUnknown(
+      signed.execution,
+      "Broadcast is in progress. Silfable will verify this signature and will not submit it twice.",
+    );
+    await persistPumpExecution(sessionRecord.id, messageIndex, execution);
+    try {
+      const broadcast = await broadcastPumpTransaction({
+        signedTransaction: signed.transaction,
+        rpc: pumpRpc,
+      });
+      if (broadcast.signature !== execution.signature) {
+        execution = markPumpBroadcastUnknown(
+          execution,
+          "The RPC returned a different signature. Silfable will verify the locally derived signature and will not rebroadcast.",
+        );
+      } else {
+        execution = markPumpBroadcastUnknown(execution, null);
+      }
+    } catch (error) {
+      execution = markPumpBroadcastUnknown(
+        execution,
+        error instanceof Error ? error.message : "Pump broadcast status is unknown",
+      );
+    }
+    await persistPumpExecution(sessionRecord.id, messageIndex, execution);
+    try {
+      execution = await reconcilePumpExecution(preview, execution);
+      await persistPumpExecution(sessionRecord.id, messageIndex, execution);
+    } catch {
+      // A read failure cannot prove execution failure. Keep the signature in
+      // broadcast-unknown state and expose an explicit verify action.
+    }
+    return PumpExecuteResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      execution,
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.pumpVerifyExecution, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = PumpVerifyExecutionRequestSchema.parse(raw);
+    requireUnlocked();
+    const sessionRecord = await sessions.get(request.sessionId);
+    const messageIndex = sessionRecord?.messages.findIndex((message) =>
+      message.pumpTradePreview?.id === request.previewId
+      && message.pumpExecution?.id === request.executionId) ?? -1;
+    const message = messageIndex < 0 ? undefined : sessionRecord?.messages[messageIndex];
+    if (sessionRecord === null || sessionRecord === undefined || message?.pumpTradePreview === undefined || message.pumpExecution === undefined) {
+      throw new Error("Pump execution record is unavailable in encrypted session history");
+    }
+    let execution = message.pumpExecution;
+    if (execution.status !== "finalized" && execution.status !== "failed") {
+      try {
+        execution = await reconcilePumpExecution(message.pumpTradePreview, execution);
+      } catch (error) {
+        // Verification is a read-only recovery path. A provider timeout cannot
+        // prove success or failure and must never cause a second broadcast.
+        execution = markPumpBroadcastUnknown(
+          execution,
+          error instanceof Error ? error.message : "Pump verification is temporarily unavailable",
+        );
+      }
+    }
+    await persistPumpExecution(sessionRecord.id, messageIndex, execution);
+    return PumpVerifyExecutionResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      execution,
+    });
   });
 
   ipcMain.handle(IPC_CHANNELS.pumpRiskSettingsGet, async (event) => {
@@ -615,6 +919,7 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     assertTrustedSender(event);
     const request = LimitOrderExecuteRequestSchema.parse(raw);
     requireUnlocked();
+    emergencyStop.assertExecutionAllowed();
     if (!(await passwords.verify(request.masterPassword))) throw new Error("Master password is incorrect");
     const sessionRecord = await sessions.get(request.sessionId);
     if (!sessionRecord) throw new Error("Session is unavailable");
@@ -640,6 +945,7 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
 
   ipcMain.handle(IPC_CHANNELS.limitOrderCancelExecute, async (event, raw: unknown) => {
     assertTrustedSender(event); const request = LimitOrderCancelExecuteRequestSchema.parse(raw); requireUnlocked();
+    emergencyStop.assertExecutionAllowed();
     if (!(await passwords.verify(request.masterPassword))) throw new Error("Master password is incorrect");
     const receipt = await limitOrders.executeCancel(request.walletAddress, request.orderId, request.simulationId);
     return LimitOrderCancelExecuteResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt });
@@ -675,9 +981,13 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     assertTrustedSender(event);
     const request = MissionExecuteRequestSchema.parse(raw);
     requireUnlocked();
+    emergencyStop.assertExecutionAllowed();
     if (!(await passwords.verify(request.masterPassword))) throw new Error("Master password is incorrect");
     const sessionRecord = await sessions.get(request.sessionId);
-    if (sessionRecord === null || sessionRecord.permission !== "restricted") throw new Error("Restricted session context is unavailable");
+    if (sessionRecord === null
+      || (sessionRecord.permission !== "restricted" && sessionRecord.permission !== "full")) {
+      throw new Error("Guarded Mainnet session context is unavailable");
+    }
     const messageIndex = sessionRecord.messages.findIndex((message) => message.missionPreview?.id === request.missionId);
     const message = messageIndex < 0 ? undefined : sessionRecord.messages[messageIndex];
     const mission = message?.missionPreview;
@@ -767,6 +1077,127 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     return SolanaRpcMutationResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, rpcUrl: request.rpcUrl });
   });
 
+  ipcMain.handle(IPC_CHANNELS.robinhoodGetSettings, async (event) => {
+    assertTrustedSender(event);
+    requireUnlocked();
+    return RobinhoodSettingsResponseSchema.parse({
+      schemaVersion: 1,
+      zeroExConfigured: (await secretStore.getSecret("zeroex-api-key")) !== null,
+      rpcConfigured: (await secretStore.getSecret("robinhood-rpc-url")) !== null,
+      executionEnabled: false,
+      executionMissing: new VenueExecutionGate().evaluate("evm").missing,
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.robinhoodSaveZeroXKey, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = RobinhoodSaveZeroXKeyRequestSchema.parse(raw);
+    requireUnlocked();
+    await secretStore.setSecret("zeroex-api-key", request.apiKey);
+    return RobinhoodKeyMutationResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, configured: true });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.robinhoodSaveRpcUrl, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = RobinhoodSaveRpcUrlRequestSchema.parse(raw);
+    requireUnlocked();
+    if (!request.rpcUrl.startsWith("https://")) throw new Error("Robinhood RPC URL must use HTTPS");
+    await secretStore.setSecret("robinhood-rpc-url", request.rpcUrl);
+    return RobinhoodRpcMutationResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, configured: true });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.robinhoodTestRpc, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = RobinhoodSaveRpcUrlRequestSchema.parse(raw);
+    requireUnlocked();
+    if (!request.rpcUrl.startsWith("https://")) throw new Error("Robinhood RPC URL must use HTTPS");
+    const chainId = await new EvmEngine(request.rpcUrl).assertExpectedChain();
+    return RobinhoodTestRpcResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, chainId });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.robinhoodTestZeroX, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = RobinhoodSaveZeroXKeyRequestSchema.pick({ schemaVersion: true, requestId: true }).parse(raw);
+    requireUnlocked();
+    const apiKey = await secretStore.getSecret("zeroex-api-key");
+    if (apiKey === null) throw new Error("0x API key is not configured");
+    const result = await verifyZeroExRobinhoodSupport(apiKey);
+    return RobinhoodTestZeroXResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, chainId: result.chainId });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.robinhoodWalletGet, async (event) => {
+    assertTrustedSender(event);
+    requireUnlocked();
+    return RobinhoodWalletGetResponseSchema.parse({ schemaVersion: 1, address: await evmWallet.getAddress() });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.robinhoodWalletCreate, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = RobinhoodWalletCreateRequestSchema.parse(raw);
+    requireUnlocked();
+    const wallet = await evmWallet.createWallet();
+    return RobinhoodWalletCreateResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, ...wallet });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.robinhoodWalletImportMnemonic, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = RobinhoodWalletImportMnemonicRequestSchema.parse(raw);
+    requireUnlocked();
+    const wallet = await evmWallet.importMnemonic(request.mnemonic);
+    return RobinhoodWalletImportResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, ...wallet });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.robinhoodGetIndicativePrice, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = RobinhoodIndicativePriceRequestSchema.parse(raw);
+    requireUnlocked();
+    const [apiKey, taker] = await Promise.all([secretStore.getSecret("zeroex-api-key"), evmWallet.getAddress()]);
+    if (apiKey === null) throw new Error("0x API key is not configured");
+    if (taker === null) throw new Error("Robinhood EVM wallet is not configured");
+    const verifiedAssets = await resolveRobinhoodVerifiedAssets([request.sellToken, request.buyToken]);
+    const [sellAsset, buyAsset] = verifiedAssets;
+    if (sellAsset === undefined || buyAsset === undefined) throw new Error("Robinhood asset verification is unavailable");
+    assertRobinhoodPilotQuotePolicy({ sellSymbol: sellAsset.symbol, buySymbol: buyAsset.symbol, slippageBps: request.slippageBps });
+    const quote = await getRobinhoodIndicativePrice({
+      apiKey,
+      taker,
+      sellToken: request.sellToken,
+      buyToken: request.buyToken,
+      sellAmount: request.sellAmount,
+      slippageBps: request.slippageBps,
+    });
+    return RobinhoodIndicativePriceResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, quote: {
+      ...quote,
+      sellTokenSymbol: sellAsset.symbol,
+      buyTokenSymbol: buyAsset.symbol,
+      sellTokenMultiplier: sellAsset.multiplier,
+      buyTokenMultiplier: buyAsset.multiplier,
+    } });
+  });
+  ipcMain.handle(IPC_CHANNELS.robinhoodPrepareTrade, async (event, raw: unknown) => {
+    assertTrustedSender(event); const request = RobinhoodIndicativePriceRequestSchema.parse(raw); requireUnlocked();
+    const [apiKey, wallet, rpcUrl] = await Promise.all([secretStore.getSecret("zeroex-api-key"), evmWallet.getAddress(), secretStore.getSecret("robinhood-rpc-url")]);
+    if (apiKey === null || wallet === null || rpcUrl === null) throw new Error("Robinhood wallet, RPC, and 0x API key must be configured");
+    const [sellAsset, buyAsset] = await resolveRobinhoodVerifiedAssets([request.sellToken, request.buyToken]);
+    if (!sellAsset || !buyAsset) throw new Error("Robinhood asset verification is unavailable");
+    assertRobinhoodPilotQuotePolicy({ sellSymbol: sellAsset.symbol, buySymbol: buyAsset.symbol, slippageBps: request.slippageBps });
+    const firmQuote = await getRobinhoodFirmQuote({ apiKey, taker: wallet, sellToken: request.sellToken as `0x${string}`, buyToken: request.buyToken as `0x${string}`, sellAmount: request.sellAmount, slippageBps: request.slippageBps });
+    const preflight = await robinhoodPreflight.prepare({ engine: new EvmEngine(rpcUrl), wallet, token: request.sellToken as `0x${string}`, firmQuote });
+    return RobinhoodPrepareTradeResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, preflight, sellTokenSymbol: sellAsset.symbol, buyTokenSymbol: buyAsset.symbol, expectedBuyAmount: firmQuote.buyAmount, minimumBuyAmount: firmQuote.minBuyAmount });
+  });
+  ipcMain.handle(IPC_CHANNELS.robinhoodListReceipts, async (event) => {
+    assertTrustedSender(event); requireUnlocked();
+    const receipts = await robinhoodReceipts.list();
+    return RobinhoodReceiptsResponseSchema.parse({ schemaVersion: 1, receipts: receipts.map(({ wallet: _wallet, ...receipt }) => receipt) });
+  });
+  ipcMain.handle(IPC_CHANNELS.robinhoodReconcileReceipts, async (event) => {
+    assertTrustedSender(event); requireUnlocked();
+    const rpcUrl = await secretStore.getSecret("robinhood-rpc-url");
+    if (rpcUrl === null) throw new Error("Robinhood RPC URL is not configured");
+    const reconciled = await robinhoodReconciliation.reconcilePending(new EvmEngine(rpcUrl));
+    return RobinhoodReconcileReceiptsResponseSchema.parse({ schemaVersion: 1, reconciled: reconciled.map(({ wallet: _wallet, ...receipt }) => receipt) });
+  });
+
   ipcMain.handle("strategy:getPositions", async (event) => {
     assertTrustedSender(event);
     requireUnlocked();
@@ -817,7 +1248,10 @@ app.whenReady().then(async () => {
   runtimeDatabase = await RuntimeDatabase.open(join(app.getPath("userData"), "data", "silfable-mainnet.sqlite3"));
   const initialCustomRpc = (runtimeDatabase.getSetting("solana_rpc_url") as string | null) ?? undefined;
   const passwords = new MasterPasswordService(runtimeDatabase);
+  const emergencyStop = new EmergencyStopService(runtimeDatabase);
   const wallets = new WalletOnboardingService(keystore, runtimeDatabase);
+  const evmWallet = new EvmWalletService(keystore);
+  const robinhoodReceipts = new EncryptedRobinhoodReceiptService(runtimeDatabase, keystore);
   const rpcConfig = initialCustomRpc === undefined ? {} : { rpcUrl: initialCustomRpc };
   const reads = new MainnetReadService({ secrets: keystore, wallets, ...rpcConfig });
   const ai = new AiService({ keystore, settings: runtimeDatabase, readService: reads });
@@ -835,29 +1269,10 @@ app.whenReady().then(async () => {
   const strategyManager = new PositionStrategyManager(runtimeDatabase);
   observationService = new DurableBackgroundObservationService(strategyManager, 15000);
   
-  const autonomousExecutor = new AutonomousExecutorService({
-    strategyManager,
-    pumpRpc,
-    transactionSettings,
-    pumpRiskSettings,
-    pumpRiskLedger,
-    keystore,
-    receiptStore: pumpReceipts,
-    wallets,
-  });
-
-  observationService.on("auto_execution_triggered", (event: ExitTriggerEvent) => {
-    autonomousExecutor.executeTrigger(event).catch(console.error);
-  });
-
   const missionProposals = new MissionProposalService(reads, observationService);
   const tokenAllowlist = new TokenAllowlistService(runtimeDatabase, reads);
 
-  // P3.5 Durable order reconciliation
-  const reconciliation = new ReconciliationService(sessions, limitOrders);
-  reconciliation.reconcilePendingOrders().catch(() => {});
-
-  observationService.startObservationLoop(async (mints) => {
+  if (!emergencyStop.get().engaged) observationService.startObservationLoop(async (mints) => {
     const pricePoints = await reads.prices(mints);
     const map = new Map<string, number>();
     for (const [mint, pp] of pricePoints) {
@@ -866,11 +1281,12 @@ app.whenReady().then(async () => {
     return map;
   });
 
-  registerIpc(keystore, runtimeDatabase, passwords, wallets, reads, ai, sessions, simulations, limitOrders, transactionSettings, pumpRiskSettings, pumpRiskLedger, pumpReceipts, pumpRpc, preparedPump, strategyManager, observationService);
+  registerIpc(keystore, runtimeDatabase, passwords, emergencyStop, wallets, evmWallet, robinhoodReceipts, reads, ai, sessions, simulations, limitOrders, transactionSettings, pumpRiskSettings, pumpRiskLedger, pumpReceipts, pumpRpc, preparedPump, strategyManager, observationService);
   mainWindow = createMainWindow();
   tray = createTray();
   powerMonitor.on("suspend", () => { preparedPump.clear(); keystore?.lock(); observationService?.stopObservationLoop(); });
   powerMonitor.on("resume", () => {
+    if (emergencyStop.get().engaged) return;
     observationService?.startObservationLoop(async (mints) => {
       const pricePoints = await reads.prices(mints);
       const map = new Map<string, number>();

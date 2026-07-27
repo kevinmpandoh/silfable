@@ -5,14 +5,17 @@ import { join, resolve } from "node:path";
 import { listPackage } from "@electron/asar";
 
 const releaseDirectory = resolve(process.argv[2] ?? "apps/desktop/release");
+const unpackedOnly = process.argv.includes("--unpacked-only");
 const entries = await readdir(releaseDirectory);
 const installers = entries.filter((name) => /^Silfable-[0-9]+\.[0-9]+\.[0-9]+-windows-x64-setup\.exe$/u.test(name));
-assert.equal(installers.length, 1, "Release must contain exactly one versioned Windows x64 NSIS installer");
+if (!unpackedOnly) {
+  assert.equal(installers.length, 1, "Release must contain exactly one versioned Windows x64 NSIS installer");
 
-const installerPath = join(releaseDirectory, installers[0]);
-assert.ok((await stat(installerPath)).size > 50_000_000, "Windows installer is unexpectedly small");
-const installerHeader = await readFile(installerPath);
-assert.equal(installerHeader.subarray(0, 2).toString("ascii"), "MZ", "Windows installer is not a PE executable");
+  const installerPath = join(releaseDirectory, installers[0]);
+  assert.ok((await stat(installerPath)).size > 50_000_000, "Windows installer is unexpectedly small");
+  const installerHeader = await readFile(installerPath);
+  assert.equal(installerHeader.subarray(0, 2).toString("ascii"), "MZ", "Windows installer is not a PE executable");
+}
 
 const unpackedDirectory = join(releaseDirectory, "win-unpacked");
 const executablePath = join(unpackedDirectory, "silfable.exe");
@@ -40,4 +43,8 @@ for (const name of packagedFiles) {
   if (firstParty) assert.equal(firstPartyForbidden.some((pattern) => pattern.test(name)), false, `Development artifact entry: ${name}`);
 }
 
-console.log(`Windows artifact audit passed: ${installers[0]}, ${packagedFiles.length} ASAR entries.`);
+console.log(
+  unpackedOnly
+    ? `Windows unpacked QA artifact audit passed: ${packagedFiles.length} ASAR entries.`
+    : `Windows artifact audit passed: ${installers[0]}, ${packagedFiles.length} ASAR entries.`,
+);

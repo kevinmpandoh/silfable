@@ -29,9 +29,17 @@ export type HyperliquidOrderResponse = {
 export class HyperliquidClientService {
   readonly #baseUrl: string;
   readonly #env: HyperliquidEnvironment;
+  readonly #fetch: typeof fetch;
+  readonly #metadataCircuit: ProviderCircuitBreaker;
 
-  constructor(env: HyperliquidEnvironment = "mainnet") {
+  constructor(
+    env: HyperliquidEnvironment = "mainnet",
+    fetcher: typeof fetch = globalThis.fetch,
+    metadataCircuit: ProviderCircuitBreaker = new ProviderCircuitBreaker({ name: "Hyperliquid metadata provider" }),
+  ) {
     this.#env = env;
+    this.#fetch = fetcher;
+    this.#metadataCircuit = metadataCircuit;
     this.#baseUrl =
       env === "mainnet"
         ? "https://api.hyperliquid.xyz"
@@ -44,15 +52,33 @@ export class HyperliquidClientService {
 
   async getMetaData(): Promise<{ universe: Array<{ name: string; szDecimals: number; maxLeverage: number }> }> {
     try {
-      const res = await fetch(`${this.#baseUrl}/info`, {
+      this.#metadataCircuit.assertAvailable();
+      const res = await this.#fetch(`${this.#baseUrl}/info`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "meta" }),
       });
-      if (!res.ok) return this.#mockMetaData();
-      return await res.json();
-    } catch {
-      return this.#mockMetaData();
+      if (!res.ok) throw new Error(`Hyperliquid metadata request failed (${res.status})`);
+      const body = await res.json() as { universe?: unknown };
+      if (!Array.isArray(body.universe)) throw new Error("Hyperliquid metadata response is invalid");
+      const universe = body.universe.flatMap((item): Array<{ name: string; szDecimals: number; maxLeverage: number }> => {
+        if (typeof item !== "object" || item === null) return [];
+        const value = item as { name?: unknown; szDecimals?: unknown; maxLeverage?: unknown };
+        if (
+          typeof value.name !== "string" ||
+          typeof value.szDecimals !== "number" ||
+          !Number.isInteger(value.szDecimals) ||
+          typeof value.maxLeverage !== "number" ||
+          !Number.isFinite(value.maxLeverage)
+        ) return [];
+        return [{ name: value.name, szDecimals: value.szDecimals, maxLeverage: value.maxLeverage }];
+      });
+      if (universe.length === 0) throw new Error("Hyperliquid metadata contains no valid markets");
+      this.#metadataCircuit.recordSuccess();
+      return { universe };
+    } catch (error) {
+      this.#metadataCircuit.recordFailure();
+      throw new Error(error instanceof Error ? error.message : "Hyperliquid metadata request failed");
     }
   }
 
@@ -68,66 +94,12 @@ export class HyperliquidClientService {
       return { status: "err", error: "Limit price must be greater than zero." };
     }
 
-    const payload = {
-      action: {
-        type: "order",
-        orders: [
-          {
-            a: 0, // asset index
-            b: order.isBuy,
-            p: order.limitPrice.toString(),
-            s: order.size.toString(),
-            r: order.reduceOnly ?? false,
-            t: order.orderType === "market" ? { limit: { tif: "Ioc" } } : { limit: { tif: "Gtc" } },
-          },
-        ],
-        grouping: "na",
-      },
-      nonce: Date.now(),
-      signature: { r: signature, s: signature, v: 27 },
-      vaultAddress: agentAddress,
-    };
-
-    try {
-      const res = await fetch(`${this.#baseUrl}/exchange`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) return this.#mockOrderResult(order);
-      return await res.json();
-    } catch {
-      return this.#mockOrderResult(order);
-    }
-  }
-
-  #mockMetaData() {
-    return {
-      universe: [
-        { name: "SOL", szDecimals: 2, maxLeverage: 20 },
-        { name: "ETH", szDecimals: 3, maxLeverage: 50 },
-        { name: "BTC", szDecimals: 4, maxLeverage: 50 },
-      ],
-    };
-  }
-
-  #mockOrderResult(order: HyperliquidOrderRequest): HyperliquidOrderResponse {
-    return {
-      status: "ok",
-      response: {
-        type: "order",
-        data: {
-          statuses: [
-            {
-              filled: {
-                totalSz: order.size.toString(),
-                avgPx: order.limitPrice.toString(),
-                oid: Math.floor(Math.random() * 1_000_000),
-              },
-            },
-          ],
-        },
-      },
-    };
+    void agentAddress;
+    void signature;
+    // Hyperliquid requires a venue-specific action signature with canonical
+    // asset IDs, nonce, expiry, and agent-wallet approval. This generic
+    // adapter has none of that evidence and must never fabricate an order.
+    throw new Error("Hyperliquid live order execution is not configured. Prepare and review a venue-signed order through the dedicated integration.");
   }
 }
+import { ProviderCircuitBreaker } from "./provider-circuit-breaker.js";

@@ -30,11 +30,13 @@ describe("MissionProposalService", () => {
 
     const drafts = service.getDrafts();
     assert.equal(drafts.length, 1);
-    assert.equal(drafts[0].status, "draft");
-    assert.equal(drafts[0].inputMint, "TokenX");
-    assert.equal(drafts[0].reason, "TAKE_PROFIT");
+    const draft = drafts[0];
+    assert.ok(draft);
+    assert.equal(draft.status, "draft");
+    assert.equal(draft.inputMint, "TokenX");
+    assert.equal(draft.reason, "TAKE_PROFIT");
     
-    assert.deepEqual(createdEventPayload, drafts[0]);
+    assert.deepEqual(createdEventPayload, draft);
   });
 
   test("can approve a draft proposal", async () => {
@@ -48,6 +50,7 @@ describe("MissionProposalService", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     
     const draft = service.getDrafts()[0];
+    assert.ok(draft);
     const approved = service.approveProposal(draft.id);
     
     assert.notStrictEqual(approved, null);
@@ -66,6 +69,7 @@ describe("MissionProposalService", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     
     const draft = service.getDrafts()[0];
+    assert.ok(draft);
     service.rejectProposal(draft.id);
     
     assert.equal(service.getDrafts().length, 0); // No longer a draft

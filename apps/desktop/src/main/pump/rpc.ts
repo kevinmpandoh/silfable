@@ -7,6 +7,7 @@ const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/u;
 const MAX_ACCOUNT_BYTES = 65_536;
 
 type Fetch = typeof fetch;
+type Sleep = (delayMs: number) => Promise<void>;
 
 export type PumpRpcAccount = PumpFinalizedAccount & { lamports: number };
 export type PumpRpcSimulationAccount = { lamports: number; data: [string, "base64"] } | null;
@@ -18,10 +19,12 @@ export type PumpRpcInnerInstructionGroup = {
 export class PumpMainnetRpc {
   #url: string;
   readonly #fetch: Fetch;
+  readonly #sleep: Sleep;
 
-  constructor(input: { rpcUrl?: string; fetch?: Fetch } = {}) {
+  constructor(input: { rpcUrl?: string; fetch?: Fetch; sleep?: Sleep } = {}) {
     this.#url = input.rpcUrl ?? MAINNET_RPC_URL;
     this.#fetch = input.fetch ?? fetch;
+    this.#sleep = input.sleep ?? ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)));
     this.#validateUrl(this.#url);
   }
 
@@ -72,6 +75,14 @@ export class PumpMainnetRpc {
     const result = contextValue(await this.#rpc("getBalance", [walletAddress, config]));
     if (!Number.isSafeInteger(result.value) || (result.value as number) < 0) throw new Error("Pump RPC wallet balance is invalid");
     return { context: result.context, value: String(result.value) };
+  }
+
+  async getBlockHeight(config: { commitment: "finalized" }): Promise<number> {
+    const result = await this.#rpc("getBlockHeight", [config]);
+    if (!Number.isSafeInteger(result) || (result as number) < 1) {
+      throw new Error("Pump RPC block height is invalid");
+    }
+    return result as number;
   }
 
   async getFeeForMessage(
@@ -130,7 +141,7 @@ export class PumpMainnetRpc {
         const body: unknown = await response.json();
         if (!response.ok || typeof body !== "object" || body === null) {
           if (attempt < maxRetries && (response.status === 429 || response.status >= 500)) {
-            await new Promise((res) => setTimeout(res, delayMs));
+            await this.#sleep(delayMs);
             delayMs *= 2;
             continue;
           }
@@ -141,7 +152,7 @@ export class PumpMainnetRpc {
         return envelope.result;
       } catch (err) {
         if (attempt < maxRetries && err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError" || err.message.includes("fetch failed"))) {
-          await new Promise((res) => setTimeout(res, delayMs));
+          await this.#sleep(delayMs);
           delayMs *= 2;
           continue;
         }

@@ -9,6 +9,7 @@ import { extractPumpActivitySignals, extractPumpCandidateMints, extractPumpEvent
 const WALLET = "11111111111111111111111111111111";
 const MINT = "So11111111111111111111111111111111111111112";
 const PUMP_MINT = "7LSsEoJGhLeZzGvDofTdNg7M3JttxQqGWNLo6vWMpump";
+const ASSOCIATED_TOKEN_PROGRAM_ID = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 
 class Secrets {
   readonly values = new Map<SecretName, string>();
@@ -321,6 +322,27 @@ test("transaction receipt verification distinguishes missing and failed signatur
   assert.match(verification.error ?? "", /InstructionError/u);
 });
 
+test("transaction receipt verification retries timeouts with bounded read-only backoff", async () => {
+  let attempts = 0;
+  const delays: number[] = [];
+  const timeout = Object.assign(new Error("verification timed out"), { name: "TimeoutError" });
+  const service = new MainnetReadService({
+    secrets: new Secrets(),
+    wallets: { listWallets: async () => [] },
+    fetch: async () => {
+      attempts += 1;
+      throw timeout;
+    },
+    sleep: async (delayMs) => { delays.push(delayMs); },
+  });
+  await assert.rejects(
+    () => service.verifyTransactionSignature("1".repeat(64)),
+    /timed out/u,
+  );
+  assert.equal(attempts, 4);
+  assert.deepEqual(delays, [500, 1_000, 2_000]);
+});
+
 test("confirmed transaction settlement exposes actual fee and selected-wallet lamport delta", async () => {
   const wallet = "11111111111111111111111111111111";
   let request: { method?: string } = {};
@@ -395,6 +417,19 @@ test("Jupiter token search returns bounded verification evidence without exposin
 });
 
 test("Pump token analysis verifies the canonical curve owner and decodes bounded reserve evidence", async () => {
+  const encoder = getAddressEncoder();
+  const [bondingCurveAddress] = await getProgramDerivedAddress({
+    programAddress: solanaAddress(PUMP_PROGRAM_ID),
+    seeds: [new TextEncoder().encode("bonding-curve"), encoder.encode(solanaAddress(PUMP_MINT))],
+  });
+  const [bondingCurveTokenAccount] = await getProgramDerivedAddress({
+    programAddress: solanaAddress(ASSOCIATED_TOKEN_PROGRAM_ID),
+    seeds: [
+      encoder.encode(bondingCurveAddress),
+      encoder.encode(solanaAddress("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")),
+      encoder.encode(solanaAddress(PUMP_MINT)),
+    ],
+  });
   const data = Buffer.alloc(115);
   createHash("sha256").update("account:BondingCurve").digest().copy(data, 0, 0, 8);
   data.writeBigUInt64LE(1_073_000_000_000_000n, 8);
@@ -416,7 +451,10 @@ test("Pump token analysis verifies the canonical curve owner and decodes bounded
     fetch: async (_input, init) => {
       const request = JSON.parse(String(init?.body)) as { method: string; params: unknown[] };
       requests.push(request);
-      if (request.method === "getTokenLargestAccounts") return rpcContext(4240, []);
+      if (request.method === "getTokenLargestAccounts") return rpcContext(4240, [
+        { address: String(bondingCurveTokenAccount), amount: "793100000000000" },
+        { address: WALLET, amount: "200000000000000" },
+      ]);
       if ((request.params[1] as { encoding?: string }).encoding === "jsonParsed") return rpcContext(4241, mintAccount("1000000000000000"));
       base64AccountCalls += 1;
       if (base64AccountCalls === 1) return rpcContext(4242, { owner: PUMP_PROGRAM_ID, data: [data.toString("base64"), "base64"] });
@@ -435,6 +473,7 @@ test("Pump token analysis verifies the canonical curve owner and decodes bounded
   assert.equal(evidence.metrics.curveProgressPercent, 0);
   assert.equal(evidence.metrics.baseProtocolFeeBps, 100);
   assert.equal(evidence.metrics.baseCreatorFeeBps, 50);
+  assert.equal(evidence.top10ConcentrationPercent, 20);
   assert.ok((evidence.metrics.estimatedMarketCapQuote ?? 0) > 27);
   assert.ok((evidence.metrics.referenceBuyPriceImpactBps ?? 0) > 0);
   assert.equal(evidence.metrics.referencePath.venue, "bonding-curve");
@@ -490,7 +529,10 @@ test("Pump token analysis independently verifies a canonical migrated PumpSwap p
     secrets: new Secrets(), wallets: { listWallets: async () => [] },
     fetch: async (_input, init) => {
       const request = JSON.parse(String(init?.body)) as { method: string; params: unknown[] };
-      if (request.method === "getTokenLargestAccounts") return rpcContext(501, [{ amount: "600000" }, { amount: "100000" }]);
+      if (request.method === "getTokenLargestAccounts") return rpcContext(501, [
+        { address: WALLET, amount: "600000" },
+        { address: MINT, amount: "100000" },
+      ]);
       if (request.method === "getTokenAccountBalance") {
         vaultBalanceCalls += 1;
         return rpcContext(504 + vaultBalanceCalls, { amount: vaultBalanceCalls === 1 ? "800000" : "2500000000", decimals: vaultBalanceCalls === 1 ? 6 : 9 });
@@ -504,11 +546,11 @@ test("Pump token analysis independently verifies a canonical migrated PumpSwap p
   assert.equal(evidence.venue, "pumpswap-migrated");
   assert.equal(evidence.pumpSwapPoolVerified, true);
   assert.equal(evidence.pumpSwapPoolAddress, String(poolAddress));
-  assert.equal(evidence.top10ConcentrationPercent, 70);
+  assert.equal(evidence.top10ConcentrationPercent, 10);
   assert.equal(evidence.poolBaseReserves, "800000");
   assert.equal(evidence.poolQuoteReserves, "2500000000");
   assert.equal(evidence.pumpSwapEffectiveQuoteReserves, "2500000500");
-  assert.match(evidence.warnings.join(" "), /concentration risk is high/u);
+  assert.doesNotMatch(evidence.warnings.join(" "), /concentration risk is high/u);
 });
 
 function rpcContext(slot: number, value: unknown): Response {

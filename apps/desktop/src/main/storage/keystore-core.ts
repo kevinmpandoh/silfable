@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-export type SecretName = "wallet-secret" | "openai-api-key" | "anthropic-api-key" | "openrouter-api-key" | "jupiter-api-key" | "tavily-api-key" | "database-data-key" | "session-data-key" | "pump-risk-ledger-key" | "pump-receipt-store-key";
+export type SecretName = "wallet-secret" | "evm-wallet-secret" | "openai-api-key" | "anthropic-api-key" | "openrouter-api-key" | "jupiter-api-key" | "tavily-api-key" | "zeroex-api-key" | "robinhood-rpc-url" | "database-data-key" | "session-data-key" | "pump-risk-ledger-key" | "pump-receipt-store-key" | "robinhood-receipt-store-key";
 
 type KeystoreFileV1 = {
   version: 1;
@@ -17,15 +17,19 @@ export type SecureStoragePort = {
 
 const SECRET_NAMES = new Set<SecretName>([
   "wallet-secret",
+  "evm-wallet-secret",
   "openai-api-key",
   "anthropic-api-key",
   "openrouter-api-key",
   "jupiter-api-key",
   "tavily-api-key",
+  "zeroex-api-key",
+  "robinhood-rpc-url",
   "database-data-key",
   "session-data-key",
   "pump-risk-ledger-key",
   "pump-receipt-store-key",
+  "robinhood-receipt-store-key",
 ]);
 const MAX_KEYSTORE_BYTES = 1024 * 1024;
 

@@ -1,4 +1,4 @@
-import { getCompiledTransactionMessageDecoder, getTransactionDecoder, getTransactionEncoder, partiallySignTransaction } from "@solana/kit";
+import { getCompiledTransactionMessageDecoder, getSignatureFromTransaction, getTransactionDecoder, getTransactionEncoder, partiallySignTransaction } from "@solana/kit";
 import { MissionExecutionReceiptSchema, MissionSimulationPreviewSchema, type MissionContractPreview, type MissionExecutionReceipt, type MissionSimulationPreview } from "@silfable/contracts";
 
 import type { MainnetReadService, SignatureVerification, TransactionSettlement, UnsignedSwapOrder } from "../integrations/read-only.js";
@@ -80,30 +80,42 @@ export class MissionSimulationService {
     const finalFee = await evaluateFeeGuard(this.#reads, this.#settings, mission, finalSimulation.feeLamports);
     if (!finalFee.feeGuardPassed) throw new Error(`${finalFee.feeGuardMessage ?? "Fee guard blocked execution."} No transaction was signed or broadcast.`);
     const decoded = getTransactionDecoder().decode(Buffer.from(prepared.order.transaction, "base64"));
-    const signedBase64 = await this.#wallets.withWalletSigner(mission.walletAddress, async (signer) => {
+    const signedTransaction = await this.#wallets.withWalletSigner(mission.walletAddress, async (signer) => {
       const signed = await partiallySignTransaction([signer.keyPair], decoded);
-      return Buffer.from(getTransactionEncoder().encode(signed)).toString("base64");
+      return {
+        encoded: Buffer.from(getTransactionEncoder().encode(signed)).toString("base64"),
+        signature: getSignatureFromTransaction(signed),
+      };
     });
     const base = { id: crypto.randomUUID(), missionId: mission.id, simulationId, router: prepared.order.router, walletAddress: mission.walletAddress, inputMint: mission.inputMint, transactionSigned: true as const, broadcastAttempted: true as const, executedAt: new Date().toISOString() };
     try {
-      const execution = await this.#reads.executeSignedSwap(signedBase64, prepared.order.requestId, prepared.order.lastValidBlockHeight);
+      const execution = await this.#reads.executeSignedSwap(signedTransaction.encoded, prepared.order.requestId, prepared.order.lastValidBlockHeight);
+      if (
+        execution.signature !== null &&
+        execution.signature !== signedTransaction.signature
+      ) {
+        throw new Error(
+          "The router returned a signature that does not match the locally signed transaction",
+        );
+      }
+      const receiptSignature = execution.signature ?? signedTransaction.signature;
       let verification: SignatureVerification | null = null;
       let settlement: TransactionSettlement | null = null;
       let verificationError: string | null = null;
-      if (execution.signature !== null) {
-        try { verification = await this.#reads.verifyTransactionSignature(execution.signature); }
+      if (receiptSignature !== null) {
+        try { verification = await this.#reads.verifyTransactionSignature(receiptSignature); }
         catch (error) { verificationError = error instanceof Error ? error.message.slice(0, 500) : "Solana RPC verification is unavailable"; }
         if (verification?.state === "confirmed" || verification?.state === "finalized") {
-          try { settlement = await this.#reads.transactionSettlement(execution.signature, mission.walletAddress); } catch { /* Can be retried from the persisted receipt. */ }
+          try { settlement = await this.#reads.transactionSettlement(receiptSignature, mission.walletAddress); } catch { /* Can be retried from the persisted receipt. */ }
         }
       }
-      const status = receiptStatus(execution.status, execution.code, execution.signature, verification);
+      const status = receiptStatus(execution.status, execution.code, receiptSignature, verification);
       const outflow = settlementDetails(settlement, mission.inputMint === SOL_MINT ? execution.totalInputAmount : null);
       return MissionExecutionReceiptSchema.parse({
         ...base,
         status,
-        signature: execution.signature,
-        explorerUrl: execution.signature === null ? null : `https://explorer.solana.com/tx/${execution.signature}`,
+        signature: receiptSignature,
+        explorerUrl: `https://explorer.solana.com/tx/${receiptSignature}`,
         inputAmount: execution.totalInputAmount,
         outputAmount: execution.totalOutputAmount,
         expectedOutputAmount: prepared.order.outAmount,
@@ -122,11 +134,11 @@ export class MissionSimulationService {
       });
     } catch (error) {
       return MissionExecutionReceiptSchema.parse({
-        ...base, status: "unknown", signature: null, explorerUrl: null, inputAmount: null, outputAmount: null,
+        ...base, status: "unknown", signature: signedTransaction.signature, explorerUrl: `https://explorer.solana.com/tx/${signedTransaction.signature}`, inputAmount: null, outputAmount: null,
         expectedOutputAmount: prepared.order.outAmount, actualSlippageBps: null, networkFeeLamports: finalSimulation.feeLamports,
         actualNetworkFeeLamports: null, walletPreLamports: null, walletPostLamports: null, totalWalletOutflowLamports: null, accountFundingLamports: null, code: null,
         error: error instanceof Error ? error.message.slice(0, 500) : "Execution was submitted but its status is unknown",
-        chainVerification: "unavailable", chainSlot: null, chainError: "No signature was available for independent verification", verifiedAt: null,
+        chainVerification: "unavailable", chainSlot: null, chainError: "The locally derived signature is available for read-only verification; never rebroadcast without checking it first", verifiedAt: null,
       });
     }
   }

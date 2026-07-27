@@ -1,18 +1,21 @@
-import { describe, expect, it } from "vitest";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 
 import { HyperliquidClientService } from "./hyperliquid.js";
 
 describe("HyperliquidClientService", () => {
-  it("fetches perpetual market metadata", async () => {
-    const client = new HyperliquidClientService("mainnet");
+  it("fetches and validates perpetual market metadata", async () => {
+    const client = new HyperliquidClientService("mainnet", async () => Response.json({
+      universe: [{ name: "SOL", szDecimals: 2, maxLeverage: 20 }],
+    }));
     const meta = await client.getMetaData();
-    expect(meta.universe.length).toBeGreaterThan(0);
-    expect(meta.universe.some((item) => item.name === "SOL")).toBe(true);
+    assert.ok(meta.universe.length > 0);
+    assert.equal(meta.universe.some((item) => item.name === "SOL"), true);
   });
 
-  it("places perpetual order using Agent key", async () => {
+  it("fails closed instead of fabricating a perpetual order", async () => {
     const client = new HyperliquidClientService("mainnet");
-    const res = await client.placeOrder(
+    await assert.rejects(() => client.placeOrder(
       "0x1111111111111111111111111111111111111111",
       "0xmock_signature",
       {
@@ -22,10 +25,7 @@ describe("HyperliquidClientService", () => {
         size: 1.0,
         orderType: "market",
       }
-    );
-
-    expect(res.status).toBe("ok");
-    expect(res.response?.data.statuses[0]?.filled).toBeDefined();
+    ), /live order execution is not configured/u);
   });
 
   it("rejects order with invalid size or limit price", async () => {
@@ -38,7 +38,7 @@ describe("HyperliquidClientService", () => {
       orderType: "market",
     });
 
-    expect(res.status).toBe("err");
-    expect(res.error).toContain("Order size must be greater than zero");
+    assert.equal(res.status, "err");
+    assert.match(res.error ?? "", /Order size must be greater than zero/u);
   });
 });

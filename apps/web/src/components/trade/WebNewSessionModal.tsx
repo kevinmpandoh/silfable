@@ -10,34 +10,25 @@ interface WebNewSessionModalProps {
     workspace: "general" | "pump";
     mode: "agent" | "mission";
   }) => void;
-  onSelectFullAccess: () => void;
 }
 
 export function WebNewSessionModal({
   isOpen,
   onClose,
   onCreateRestrictedSession,
-  onSelectFullAccess,
 }: WebNewSessionModalProps) {
   const [workspace, setWorkspace] = useState<"general" | "pump">("general");
   const [title, setTitle] = useState("New Mainnet session");
   const [mode, setMode] = useState<"agent" | "mission">("agent");
-  const [permission, setPermission] = useState<"restricted" | "full_access">("restricted");
-
   if (!isOpen) return null;
 
   function handleSubmit() {
-    if (permission === "full_access") {
-      onClose();
-      onSelectFullAccess();
-    } else {
-      onCreateRestrictedSession({
-        title: title.trim() || "New Mainnet session",
-        workspace,
-        mode,
-      });
-      onClose();
-    }
+    onCreateRestrictedSession({
+      title: title.trim() || "New Mainnet session",
+      workspace,
+      mode,
+    });
+    onClose();
   }
 
   return (
@@ -156,8 +147,7 @@ export function WebNewSessionModal({
             <div className="choiceGrid">
               <button
                 type="button"
-                className={permission === "restricted" ? "active" : ""}
-                onClick={() => setPermission("restricted")}
+                className="active"
               >
                 <span className="choiceNumber">01</span>
                 <strong>Restricted</strong>
@@ -166,25 +156,25 @@ export function WebNewSessionModal({
 
               <button
                 type="button"
-                className={permission === "full_access" ? "active" : ""}
-                onClick={() => setPermission("full_access")}
+                className="unavailableChoice"
+                disabled
               >
-                <span className="choiceNumber">02</span>
-                <strong>Full access (24/7 Cloud)</strong>
-                <small>Autonomous execution using a dedicated session Ephemeral Vault with drawdown limits.</small>
+                <span className="choiceNumber">02 · LOCKED</span>
+                <strong>Cloud execution</strong>
+                <small>Monitoring and proposal workflows are being hardened. Cloud signing and broadcast are disabled.</small>
               </button>
             </div>
           </section>
         </div>
 
         <footer className="sessionModalFooter">
-          <span>MAINNET — {permission.toUpperCase()}</span>
+          <span>MAINNET — RESTRICTED</span>
           <div className="flex items-center gap-3">
             <button type="button" className="cancelBtn" onClick={onClose}>
               Cancel
             </button>
             <button type="button" className="createBtn" onClick={handleSubmit}>
-              {permission === "full_access" ? "Next: Configure Cloud Worker" : "Create Session"}
+              Create Session
             </button>
           </div>
         </footer>

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildAndSimulatePumpSwapProductionTransactionFromEvidence,
+  pumpSwapEvidenceForPolicy,
   type PumpSwapProductionSimulationInput,
 } from "./pumpswap-production.js";
 import { type PumpSwapFinalizedBuildEvidence } from "./pumpswap-state.js";
@@ -154,28 +155,18 @@ test("Full End-to-End PumpSwap Pipeline Validation Matrix", async () => {
   });
 
   const eligibilityEvidence = evaluatePumpTradeEligibility({
+    venue: "pumpswap-migrated",
     side: "buy",
     tokenMint: MINT,
     inputAmount: "1000000",
-    state: {
-      mint: MINT,
-      tokenProgram: TOKEN_PROGRAM,
-      creator: CREATOR_AUTH,
-      mintSecurity: { initialized: true, mintAuthority: null, freezeAuthority: null },
-      feeRecipients: [FEE_RECIP],
-      buybackFeeRecipients: [FEE_RECIP],
-      curve: { virtualTokenReserves: "1000000000", virtualQuoteReserves: "1000000000", realTokenReserves: "1000000000", tokenTotalSupply: "1000000000000000", mayhemMode: false },
-      feeSchedule: { source: "global-fallback", protocolFeeBps: "100", creatorFeeBps: "50", buybackAllocationBps: "0", tiers: [] },
-      slot: 500,
-      commitment: "finalized",
-      verifiedAt: TEST_NOW.toISOString(),
-    },
+    state: pumpSwapEvidenceForPolicy(mockEvidence()),
     fee: build.feePreview,
     quote: build.executableQuote,
     risk: riskEvidence,
     simulation: build.simulation,
     now: TEST_NOW,
   });
+  assert.equal(eligibilityEvidence.venue, "pumpswap-migrated");
 
   const preview = {
     id: "00000000-0000-4000-8000-000000000020",
@@ -222,7 +213,7 @@ test("Full End-to-End PumpSwap Pipeline Validation Matrix", async () => {
   const prepared = preparedService.prepare({
     sessionId: "00000000-0000-4000-8000-000000000001",
     preview,
-    production: build as any,
+    production: build,
     simulation,
     buildInput: input,
     now: TEST_NOW,

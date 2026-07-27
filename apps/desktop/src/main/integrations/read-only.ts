@@ -11,6 +11,7 @@ const SOL_MINT = "So11111111111111111111111111111111111111112";
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 export const PUMP_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
 export const PUMP_SWAP_PROGRAM_ID = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA";
+const ASSOCIATED_TOKEN_PROGRAM_ID = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 const PUMP_BONDING_CURVE_DISCRIMINATOR = createHash("sha256").update("account:BondingCurve").digest().subarray(0, 8);
 const PUMP_GLOBAL_DISCRIMINATOR = createHash("sha256").update("account:Global").digest().subarray(0, 8);
 const PUMP_SWAP_POOL_DISCRIMINATOR = Buffer.from([241, 154, 109, 4, 17, 177, 109, 188]);
@@ -37,6 +38,7 @@ const RAW_AMOUNT_PATTERN = /^[1-9]\d*$/u;
 const MAX_U64 = 18_446_744_073_709_551_615n;
 
 type Fetch = typeof globalThis.fetch;
+type Sleep = (delayMs: number) => Promise<void>;
 type SecretReader = { getSecret(name: SecretName): Promise<string | null> };
 type WalletRegistry = { listWallets(): Promise<Array<{ address: string; primary: boolean }>> };
 
@@ -99,14 +101,16 @@ export type PumpActivitySignal = PumpDiscoverySnapshot["candidates"][number]["si
 
 export class MainnetReadService {
   readonly #fetch: Fetch;
+  readonly #sleep: Sleep;
   #rpcUrl: string;
   readonly #secrets: SecretReader;
   readonly #wallets: WalletRegistry;
 
-  constructor(input: { secrets: SecretReader; wallets: WalletRegistry; fetch?: Fetch; rpcUrl?: string }) {
+  constructor(input: { secrets: SecretReader; wallets: WalletRegistry; fetch?: Fetch; rpcUrl?: string; sleep?: Sleep }) {
     this.#secrets = input.secrets;
     this.#wallets = input.wallets;
     this.#fetch = input.fetch ?? globalThis.fetch;
+    this.#sleep = input.sleep ?? ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)));
     this.#rpcUrl = input.rpcUrl ?? MAINNET_RPC_URL;
     if (!this.#rpcUrl.startsWith("https://")) throw new Error("Mainnet RPC must use HTTPS");
   }
@@ -540,8 +544,20 @@ export class MainnetReadService {
     ]);
     const token = parseMintEvidence(mintResponse.value);
     const global = parsePumpGlobal(globalResponse.value);
-    const concentration = parseLargestAccountConcentration(largestResponse.value, token.supply);
     const pool = parseCanonicalPumpSwapPool(poolResponse.value, { poolAuthority: String(poolAuthority), mint });
+    const [bondingCurveTokenAccount] = await getProgramDerivedAddress({
+      programAddress: solanaAddress(ASSOCIATED_TOKEN_PROGRAM_ID),
+      seeds: [
+        encoder.encode(bondingCurveAddress),
+        encoder.encode(solanaAddress(token.program)),
+        encoder.encode(solanaAddress(mint)),
+      ],
+    });
+    const concentration = parseLargestAccountConcentration(
+      largestResponse.value,
+      token.supply,
+      new Set([String(bondingCurveTokenAccount), ...(pool === null ? [] : [pool.baseTokenAccount])]),
+    );
     const liquidity = pool === null ? null : await Promise.all([
       this.#rpc("getTokenAccountBalance", [pool.baseTokenAccount, { commitment: "finalized" }]).then(parseContextValue),
       this.#rpc("getTokenAccountBalance", [pool.quoteTokenAccount, { commitment: "finalized" }]).then(parseContextValue),
@@ -719,7 +735,7 @@ export class MainnetReadService {
         const body: unknown = await response.json();
         if (!response.ok || typeof body !== "object" || body === null) {
           if (attempt < maxRetries && (response.status === 429 || response.status >= 500)) {
-            await new Promise((res) => setTimeout(res, delayMs));
+            await this.#sleep(delayMs);
             delayMs *= 2;
             continue;
           }
@@ -730,7 +746,7 @@ export class MainnetReadService {
         return envelope.result;
       } catch (err) {
         if (attempt < maxRetries && err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError" || err.message.includes("fetch failed"))) {
-          await new Promise((res) => setTimeout(res, delayMs));
+          await this.#sleep(delayMs);
           delayMs *= 2;
           continue;
         }
@@ -819,13 +835,19 @@ function parseMintEvidence(value: unknown): { program: string; decimals: number;
   };
 }
 
-function parseLargestAccountConcentration(value: unknown, supply: string): number | null {
+function parseLargestAccountConcentration(value: unknown, supply: string, excludedAccounts: ReadonlySet<string>): number | null {
   if (!Array.isArray(value) || supply === "0") return null;
   let total = 0n;
-  for (const entry of value.slice(0, 10)) {
-    const amount = typeof entry === "object" && entry !== null ? (entry as { amount?: unknown }).amount : null;
-    if (typeof amount !== "string" || !/^\d+$/u.test(amount)) return null;
+  let includedAccounts = 0;
+  for (const entry of value) {
+    if (typeof entry !== "object" || entry === null) return null;
+    const { address, amount } = entry as { address?: unknown; amount?: unknown };
+    if (typeof address !== "string" || !ADDRESS_PATTERN.test(address)
+      || typeof amount !== "string" || !/^\d+$/u.test(amount)) return null;
+    if (excludedAccounts.has(address)) continue;
     total += BigInt(amount);
+    includedAccounts += 1;
+    if (includedAccounts === 10) break;
   }
   const basisPoints = (total * 10_000n) / BigInt(supply);
   return Number(basisPoints > 1_000_000n ? 1_000_000n : basisPoints) / 100;

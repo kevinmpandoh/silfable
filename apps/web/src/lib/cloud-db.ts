@@ -35,7 +35,7 @@ export function getPrismaClient(): PrismaClient {
 export const cloudDb = new Proxy({} as PrismaClient, {
   get(_target, prop) {
     const client = getPrismaClient();
-    const val = (client as any)[prop];
+    const val: unknown = Reflect.get(client, prop);
     if (typeof val === "function") {
       return val.bind(client);
     }
@@ -53,8 +53,9 @@ export async function safeDbQuery<T>(queryFn: () => Promise<T>, fallback: T): Pr
   }
   try {
     return await queryFn();
-  } catch (err: any) {
-    console.warn("[CloudDB] Database query skipped (unreachable database connection):", err?.message || err);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn("[CloudDB] Database query skipped (unreachable database connection):", message);
     return fallback;
   }
 }

@@ -96,6 +96,68 @@ test("Pump Mainnet RPC never retries sendTransaction on 429 or failure", async (
   assert.equal(attempts, 1);
 });
 
+test("Pump Mainnet RPC retries timeout-safe reads with bounded backoff", async () => {
+  let attempts = 0;
+  const delays: number[] = [];
+  const timeout = Object.assign(new Error("RPC request timed out"), { name: "TimeoutError" });
+  const rpc = new PumpMainnetRpc({
+    rpcUrl: "https://rpc.example.test",
+    fetch: async () => {
+      attempts += 1;
+      throw timeout;
+    },
+    sleep: async (delayMs) => { delays.push(delayMs); },
+  });
+  await assert.rejects(
+    () => rpc.getBalanceAndContext(GLOBAL, { commitment: "finalized" }),
+    /timed out/u,
+  );
+  assert.equal(attempts, 4);
+  assert.deepEqual(delays, [500, 1_000, 2_000]);
+});
+
+test("Pump Mainnet RPC never retries a timed-out broadcast", async () => {
+  let attempts = 0;
+  const delays: number[] = [];
+  const dummyTxBase64 = Buffer.from(new Uint8Array(100)).toString("base64");
+  const timeout = Object.assign(new Error("This operation was aborted"), { name: "AbortError" });
+  const rpc = new PumpMainnetRpc({
+    rpcUrl: "https://rpc.example.test",
+    fetch: async () => {
+      attempts += 1;
+      throw timeout;
+    },
+    sleep: async (delayMs) => { delays.push(delayMs); },
+  });
+  await assert.rejects(() => rpc.sendTransaction(dummyTxBase64), /aborted/u);
+  assert.equal(attempts, 1);
+  assert.deepEqual(delays, []);
+});
+
+test("Pump Mainnet RPC treats simulation timeout as a retry-safe read", async () => {
+  let attempts = 0;
+  const delays: number[] = [];
+  const transactionBase64 = Buffer.from(new Uint8Array(100)).toString("base64");
+  const timeout = Object.assign(new Error("simulation timed out"), { name: "TimeoutError" });
+  const rpc = new PumpMainnetRpc({
+    rpcUrl: "https://rpc.example.test",
+    fetch: async () => {
+      attempts += 1;
+      throw timeout;
+    },
+    sleep: async (delayMs) => { delays.push(delayMs); },
+  });
+  await assert.rejects(() => rpc.simulateTransaction(transactionBase64, {
+    commitment: "confirmed",
+    sigVerify: false,
+    replaceRecentBlockhash: false,
+    innerInstructions: true,
+    accounts: { encoding: "base64", addresses: [] },
+  }), /timed out/u);
+  assert.equal(attempts, 4);
+  assert.deepEqual(delays, [500, 1_000, 2_000]);
+});
+
 function response(body: unknown): Response {
   return { ok: true, status: 200, json: async () => body } as Response;
 }

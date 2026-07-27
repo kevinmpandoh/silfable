@@ -46,4 +46,24 @@ describe("ReconciliationService", () => {
     assert.strictEqual(upsertedSession.messages[0].limitOrderExecution.status, "active");
     assert.strictEqual(upsertedSession.messages[0].limitOrderExecution.depositConfirmed, true);
   });
+
+  test("does not print provider or decrypted error details", async () => {
+    const secretMarker = "jup_private_key_must_not_appear";
+    const messages: unknown[][] = [];
+    const original = console.info;
+    console.info = (...args: unknown[]) => { messages.push(args); };
+    try {
+      const service = new ReconciliationService({
+        list: async () => { throw new Error(`provider failed: ${secretMarker}`); },
+      } as any, {} as any);
+      assert.strictEqual(await service.reconcilePendingOrders(), 0);
+    } finally {
+      console.info = original;
+    }
+    assert.strictEqual(JSON.stringify(messages).includes(secretMarker), false);
+    assert.strictEqual(messages.length, 1);
+    const record = JSON.parse(String(messages[0]?.[0])) as Record<string, unknown>;
+    assert.strictEqual(record.event, "reconciliation_failed");
+    assert.strictEqual(record.operation, "limit_order_reconciliation");
+  });
 });

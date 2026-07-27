@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
 
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -75,8 +76,8 @@ async function callOpenRouter(input: {
     );
   const capabilityBoundary =
     "You are Silfable Web's restricted Solana Mainnet assistant. " +
-    "You may explain wallet data, research, plan trades, and set up 24/7 Cloud Auto DCA schedules via Cloud Worker. The web runtime can prepare a Jupiter SOL-to-USDC quote, 24/7 recurring DCA tasks, and unsigned transactions. " +
-    "Pump.fun is preview-only on web. The web vault may hold one encrypted same-address Solana signer, but it is not yet authorized for Pump.fun signing or broadcast. Bridge, EVM, Hyperliquid, autonomous signing, silent broadcast, and full access are unavailable. " +
+    "You may explain wallet data, perform read-only research, plan trades, and prepare restricted proposals. The web runtime may prepare a Jupiter SOL-to-USDC quote and an unsigned transaction for explicit approval by the connected browser wallet. " +
+    "Cloud signing, Auto DCA, scheduled execution, automated TP/SL, and discovery-to-buy are disabled. Pump.fun is preview-only on web. Bridge, EVM, Hyperliquid, autonomous signing, silent broadcast, and full access are unavailable. " +
     "Never request a private key, seed phrase, password, or API key. Never claim a transaction succeeded without a structured on-chain receipt from the application. " +
     "Answer in the user's language, use short headings and bullets when useful, and do not wrap the whole answer in a JSON object.";
   const system =
@@ -138,7 +139,7 @@ async function callOpenRouter(input: {
   };
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const { messages, settings, sessionMode, walletAddress } = (await req.json()) as {
       messages?: ChatMessage[];
@@ -146,6 +147,8 @@ export async function POST(req: Request) {
       sessionMode?: "agent" | "mission";
       walletAddress?: string | null;
     };
+    const auth = await requireWalletAuth(req, walletAddress);
+    if (isAuthFailure(auth)) return auth;
     const lastUserMessage = messages?.[messages.length - 1]?.content ?? "";
     const maxSlippageBps = Math.max(1, Math.min(500, Number(settings?.maxSlippageBps ?? "100") || 100));
 

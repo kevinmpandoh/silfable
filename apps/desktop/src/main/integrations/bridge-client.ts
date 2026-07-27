@@ -27,9 +27,17 @@ export type BridgeQuoteResponse = {
 
 export class BridgeClientService {
   readonly #baseUrl: string;
+  readonly #fetch: typeof fetch;
+  readonly #circuit: ProviderCircuitBreaker;
 
-  constructor(baseUrl: string = "https://deswap.debridge.finance/v1.0") {
+  constructor(
+    baseUrl: string = "https://deswap.debridge.finance/v1.0",
+    fetcher: typeof fetch = globalThis.fetch,
+    circuit: ProviderCircuitBreaker = new ProviderCircuitBreaker({ name: "Bridge quote provider" }),
+  ) {
     this.#baseUrl = baseUrl;
+    this.#fetch = fetcher;
+    this.#circuit = circuit;
   }
 
   async getQuote(req: BridgeQuoteRequest): Promise<BridgeQuoteResponse> {
@@ -50,51 +58,34 @@ export class BridgeClientService {
     });
 
     try {
-      const response = await fetch(`${this.#baseUrl}/dln/order/create-tx?${searchParams.toString()}`);
+      this.#circuit.assertAvailable();
+      const response = await this.#fetch(`${this.#baseUrl}/dln/order/create-tx?${searchParams.toString()}`, { signal: AbortSignal.timeout(15_000) });
       if (!response.ok) {
-        // Fallback mock quote if remote API endpoint is unreachable during testing
-        return this.#createMockQuote(req);
+        throw new Error(`Bridge quote request failed (${response.status})`);
       }
-      const data = await response.json();
+      const data = await response.json() as { estimation?: { id?: unknown; dstChainTokenOut?: { amount?: unknown }; costsDetails?: { totalFeeUsd?: unknown } }; tx?: { to?: unknown; data?: unknown; value?: unknown } };
+      if (typeof data.estimation?.dstChainTokenOut?.amount !== "string" || !/^\d+$/u.test(data.estimation.dstChainTokenOut.amount)) {
+        throw new Error("Bridge quote response is missing a verified output amount");
+      }
       const result: BridgeQuoteResponse = {
-        quoteId: data.estimation?.id ?? crypto.randomUUID(),
+        quoteId: typeof data.estimation?.id === "string" ? data.estimation.id : crypto.randomUUID(),
         srcChainId: req.srcChainId,
         dstChainId: req.dstChainId,
         amountIn: req.amountIn,
-        estimatedAmountOut: data.estimation?.dstChainTokenOut?.amount ?? req.amountIn,
-        estimatedFeeUsd: Number(data.estimation?.costsDetails?.totalFeeUsd ?? 0.5),
-        estimatedTimeSeconds: 15,
+        estimatedAmountOut: data.estimation.dstChainTokenOut.amount,
+        estimatedFeeUsd: Number(data.estimation?.costsDetails?.totalFeeUsd ?? 0),
+        estimatedTimeSeconds: 0,
         bridgeRoute: "deBridge DLN",
       };
-      if (data.tx) {
+      if (typeof data.tx?.to === "string" && typeof data.tx.data === "string" && typeof data.tx.value === "string") {
         result.txPayload = { to: data.tx.to, data: data.tx.data, value: data.tx.value };
       }
+      this.#circuit.recordSuccess();
       return result;
-    } catch {
-      return this.#createMockQuote(req);
+    } catch (error) {
+      this.#circuit.recordFailure();
+      throw new Error(error instanceof Error ? error.message : "Bridge quote request failed");
     }
   }
-
-  #createMockQuote(req: BridgeQuoteRequest): BridgeQuoteResponse {
-    // 0.3% bridge protocol fee simulation
-    const amountInNum = BigInt(req.amountIn);
-    const feeLamports = (amountInNum * 3n) / 1000n;
-    const netAmountOut = (amountInNum - feeLamports).toString();
-
-    return {
-      quoteId: `mock-bridge-${crypto.randomUUID()}`,
-      srcChainId: req.srcChainId,
-      dstChainId: req.dstChainId,
-      amountIn: req.amountIn,
-      estimatedAmountOut: netAmountOut,
-      estimatedFeeUsd: 0.45,
-      estimatedTimeSeconds: 12,
-      bridgeRoute: "deBridge DLN (Mock Mode)",
-      txPayload: {
-        to: "0x1111111111111111111111111111111111111111",
-        data: "0x",
-        value: "0",
-      },
-    };
-  }
 }
+import { ProviderCircuitBreaker } from "./provider-circuit-breaker.js";

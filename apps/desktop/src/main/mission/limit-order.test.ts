@@ -98,6 +98,64 @@ test("limit-order verifyCancelReceipt updates status based on signature verifica
   assert.equal(failedCancel.status, "failed");
 });
 
+test("limit-order receipt verification fails safely without calling a write client", async () => {
+  let writeClientAccesses = 0;
+  const reads = {
+    verifyTransactionSignature: async () => {
+      throw new Error("RPC verification timed out");
+    },
+  } as unknown as MainnetReadService;
+  const trigger = new Proxy(
+    {},
+    {
+      get() {
+        writeClientAccesses += 1;
+        throw new Error("Verification must not access the Jupiter write client");
+      },
+    },
+  ) as JupiterTriggerV2Client;
+  const service = new LimitOrderService({
+    reads,
+    wallets: {} as WalletOnboardingService,
+    trigger,
+  });
+  const execution = await service.verifyExecutionReceipt({
+    id: "00000000-0000-4000-8000-000000000030",
+    previewId: "00000000-0000-4000-8000-000000000031",
+    simulationId: "00000000-0000-4000-8000-000000000032",
+    orderId: "order-123456",
+    status: "unknown",
+    depositSignature: "3".repeat(64),
+    vaultAddress: SOL,
+    explorerUrl: `https://explorer.solana.com/tx/${"3".repeat(64)}`,
+    depositConfirmed: false,
+    chainVerification: "unavailable",
+    chainSlot: null,
+    error: "Pending",
+    verifiedAt: null,
+    createdAt: "2026-07-24T10:00:00.000Z",
+  });
+  const cancellation = await service.verifyCancelReceipt({
+    id: "00000000-0000-4000-8000-000000000033",
+    orderId: "order-123456",
+    simulationId: "00000000-0000-4000-8000-000000000034",
+    status: "unknown",
+    withdrawalSignature: "4".repeat(64),
+    explorerUrl: `https://explorer.solana.com/tx/${"4".repeat(64)}`,
+    chainVerification: "unavailable",
+    chainSlot: null,
+    error: "Pending",
+    verifiedAt: null,
+    createdAt: "2026-07-24T10:00:00.000Z",
+  });
+
+  assert.equal(execution.status, "unknown");
+  assert.match(execution.error ?? "", /timed out/u);
+  assert.equal(cancellation.status, "unknown");
+  assert.match(cancellation.error ?? "", /timed out/u);
+  assert.equal(writeClientAccesses, 0);
+});
+
 test("limit-order simulation handles USDC to SOL swap preview", async () => {
   const signer = await createKeyPairSignerFromPrivateKeyBytes(Uint8Array.from({ length: 32 }, (_, index) => index + 1));
   const transaction = unsignedTransaction(signer.address, "11111111111111111111111111111111");

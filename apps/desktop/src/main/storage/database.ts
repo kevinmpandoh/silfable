@@ -83,6 +83,14 @@ export class RuntimeDatabase {
         updated_at TEXT NOT NULL
       ) STRICT;
 
+      CREATE TABLE IF NOT EXISTS robinhood_receipt_records (
+        id TEXT PRIMARY KEY,
+        ciphertext TEXT NOT NULL,
+        nonce TEXT NOT NULL,
+        auth_tag TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
       CREATE TABLE IF NOT EXISTS pump_blocked_creators (
         creator_address TEXT PRIMARY KEY,
         blocked_at TEXT NOT NULL
@@ -143,7 +151,7 @@ export class RuntimeDatabase {
   resetVaultData(): void {
     this.#database.exec("BEGIN IMMEDIATE;");
     try {
-      this.#database.exec("DELETE FROM pump_receipt_records; DELETE FROM pump_risk_ledger; DELETE FROM session_records; DELETE FROM wallet_metadata; DELETE FROM app_settings; COMMIT;");
+      this.#database.exec("DELETE FROM robinhood_receipt_records; DELETE FROM pump_receipt_records; DELETE FROM pump_risk_ledger; DELETE FROM session_records; DELETE FROM wallet_metadata; DELETE FROM app_settings; COMMIT;");
     } catch (error) {
       this.#database.exec("ROLLBACK;");
       throw error;
@@ -250,6 +258,23 @@ export class RuntimeDatabase {
   upsertPumpReceiptRecord(record: EncryptedSessionRecord): void {
     this.#database.prepare(`
       INSERT INTO pump_receipt_records (id, ciphertext, nonce, auth_tag, updated_at) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET ciphertext = excluded.ciphertext, nonce = excluded.nonce, auth_tag = excluded.auth_tag, updated_at = excluded.updated_at
+    `).run(record.id, record.ciphertext, record.nonce, record.tag, record.updatedAt);
+  }
+
+  listRobinhoodReceiptRecords(): EncryptedSessionRecord[] {
+    const rows = this.#database.prepare("SELECT id, ciphertext, nonce, auth_tag, updated_at FROM robinhood_receipt_records ORDER BY updated_at DESC").all() as Array<{ id: string; ciphertext: string; nonce: string; auth_tag: string; updated_at: string }>;
+    return rows.map((row) => ({ id: row.id, ciphertext: row.ciphertext, nonce: row.nonce, tag: row.auth_tag, updatedAt: row.updated_at }));
+  }
+
+  getRobinhoodReceiptRecord(id: string): EncryptedSessionRecord | null {
+    const row = this.#database.prepare("SELECT id, ciphertext, nonce, auth_tag, updated_at FROM robinhood_receipt_records WHERE id = ?").get(id) as { id: string; ciphertext: string; nonce: string; auth_tag: string; updated_at: string } | undefined;
+    return row === undefined ? null : { id: row.id, ciphertext: row.ciphertext, nonce: row.nonce, tag: row.auth_tag, updatedAt: row.updated_at };
+  }
+
+  upsertRobinhoodReceiptRecord(record: EncryptedSessionRecord): void {
+    this.#database.prepare(`
+      INSERT INTO robinhood_receipt_records (id, ciphertext, nonce, auth_tag, updated_at) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET ciphertext = excluded.ciphertext, nonce = excluded.nonce, auth_tag = excluded.auth_tag, updated_at = excluded.updated_at
     `).run(record.id, record.ciphertext, record.nonce, record.tag, record.updatedAt);
   }

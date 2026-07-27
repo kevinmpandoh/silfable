@@ -1,7 +1,7 @@
 {
   "name": "@silfable/cloud-worker",
   "version": "0.1.0",
-  "description": "Background 24/7 AI Trading Worker with MongoDB, Redis, and BullMQ",
+  "description": "Monitor-only cloud runtime; signing and autonomous execution are frozen",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
@@ -13,6 +13,7 @@
     "prisma:generate": "prisma generate"
   },
   "dependencies": {
+    "@silfable/contracts": "0.1.0",
     "@prisma/client": "^6.4.1",
     "@pump-fun/pump-sdk": "^1.36.0",
     "@solana/spl-token": "^0.4.15",

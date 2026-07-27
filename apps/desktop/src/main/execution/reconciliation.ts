@@ -1,5 +1,6 @@
 import type { SessionService } from "../sessions/service.js";
 import type { LimitOrderService } from "../mission/limit-order.js";
+import { writeSafeAuditLog } from "../telemetry/safe-audit-log.js";
 
 export class ReconciliationService {
   readonly #sessions: SessionService;
@@ -43,8 +44,13 @@ export class ReconciliationService {
           await this.#sessions.upsert({ ...session, messages });
         }
       }
-    } catch (error) {
-      console.error("Failed to reconcile pending orders:", error);
+    } catch {
+      // Do not print provider errors or decrypted session context. A later
+      // unlocked session-list pass safely retries reconciliation.
+      writeSafeAuditLog("reconciliation_failed", {
+        operation: "limit_order_reconciliation",
+        outcome: "failure",
+      });
     }
     return reconciledCount;
   }

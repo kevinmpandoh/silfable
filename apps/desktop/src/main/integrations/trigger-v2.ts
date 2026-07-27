@@ -5,6 +5,7 @@ const ADDRESS_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/u;
 const RAW_AMOUNT_PATTERN = /^[1-9]\d*$/u;
 
 type Fetch = typeof globalThis.fetch;
+type Sleep = (delayMs: number) => Promise<void>;
 type SecretReader = { getSecret(name: "jupiter-api-key"): Promise<string | null> };
 type WalletSigner = { withWalletSigner<T>(address: string, operation: (signer: KeyPairSigner) => Promise<T>): Promise<T> };
 
@@ -23,12 +24,14 @@ export class JupiterTriggerV2Client {
   readonly #fetch: Fetch;
   readonly #secrets: SecretReader;
   readonly #wallets: WalletSigner;
+  readonly #sleep: Sleep;
   readonly #tokens = new Map<string, { token: string; expiresAt: number }>();
 
-  constructor(input: { secrets: SecretReader; wallets: WalletSigner; fetch?: Fetch }) {
+  constructor(input: { secrets: SecretReader; wallets: WalletSigner; fetch?: Fetch; sleep?: Sleep }) {
     this.#secrets = input.secrets;
     this.#wallets = input.wallets;
     this.#fetch = input.fetch ?? globalThis.fetch;
+    this.#sleep = input.sleep ?? ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)));
   }
 
   async authenticate(walletAddress: string): Promise<string> {
@@ -53,7 +56,7 @@ export class JupiterTriggerV2Client {
   async getOrRegisterVault(walletAddress: string): Promise<TriggerVault> {
     const { apiKey, token } = await this.#auth(walletAddress);
     let value: unknown;
-    try { value = await this.#request("/vault", apiKey, token, { method: "GET" }); }
+    try { value = await this.#request("/vault", apiKey, token, { method: "GET", retrySafe: true }); }
     catch (error) {
       if (!(error instanceof TriggerApiError) || error.status !== 404) throw error;
       value = await this.#request("/vault/register", apiKey, token, { method: "GET" });
@@ -81,7 +84,7 @@ export class JupiterTriggerV2Client {
 
   async history(walletAddress: string, state: "active" | "past" = "active"): Promise<TriggerOrderHistory> {
     const { apiKey, token } = await this.#auth(walletAddress);
-    const value = await this.#request(`/orders/history?state=${state}&limit=50&offset=0`, apiKey, token, { method: "GET" });
+    const value = await this.#request(`/orders/history?state=${state}&limit=50&offset=0`, apiKey, token, { method: "GET", retrySafe: true });
     if (!isRecord(value) || !Array.isArray(value.orders) || !isRecord(value.pagination)) throw new Error("Jupiter Trigger order history is invalid");
     return { orders: value.orders.slice(0, 50).map(orderHistoryItem), pagination: { total: integerField(value.pagination, "total"), limit: integerField(value.pagination, "limit"), offset: integerField(value.pagination, "offset") } };
   }
@@ -102,12 +105,33 @@ export class JupiterTriggerV2Client {
 
   async #auth(walletAddress: string): Promise<{ apiKey: string; token: string }> { return { apiKey: await this.#apiKey(), token: await this.authenticate(walletAddress) }; }
   async #apiKey(): Promise<string> { const value = await this.#secrets.getSecret("jupiter-api-key"); if (value === null) throw new Error("Jupiter is not configured"); return value; }
-  async #request(path: string, apiKey: string, token: string | null, input: { method: "GET" | "POST"; body?: Record<string, unknown> }): Promise<unknown> {
-    const response = await this.#fetch(`${BASE_URL}${path}`, { method: input.method, headers: { "x-api-key": apiKey, ...(token === null ? {} : { Authorization: `Bearer ${token}` }), ...(input.body === undefined ? {} : { "Content-Type": "application/json" }) }, ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }), signal: AbortSignal.timeout(20_000) });
-    let body: unknown = null; try { body = await response.json(); } catch { /* handled below */ }
-    if (!response.ok) throw new TriggerApiError(response.status, safeApiError(body));
-    if (!isRecord(body)) throw new Error("Jupiter Trigger returned an invalid response");
-    return body;
+  async #request(path: string, apiKey: string, token: string | null, input: { method: "GET" | "POST"; body?: Record<string, unknown>; retrySafe?: boolean }): Promise<unknown> {
+    const maxRetries = input.retrySafe === true ? 2 : 0;
+    let delayMs = 250;
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        const response = await this.#fetch(`${BASE_URL}${path}`, { method: input.method, headers: { "x-api-key": apiKey, ...(token === null ? {} : { Authorization: `Bearer ${token}` }), ...(input.body === undefined ? {} : { "Content-Type": "application/json" }) }, ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }), signal: AbortSignal.timeout(20_000) });
+        let body: unknown = null; try { body = await response.json(); } catch { /* handled below */ }
+        if (!response.ok) {
+          if (attempt < maxRetries && (response.status === 429 || response.status >= 500)) {
+            await this.#sleep(delayMs);
+            delayMs *= 2;
+            continue;
+          }
+          throw new TriggerApiError(response.status, safeApiError(body));
+        }
+        if (!isRecord(body)) throw new Error("Jupiter Trigger returned an invalid response");
+        return body;
+      } catch (error) {
+        if (attempt < maxRetries && retryableReadError(error)) {
+          await this.#sleep(delayMs);
+          delayMs *= 2;
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error("Jupiter Trigger read failed after bounded retries");
   }
 }
 
@@ -121,6 +145,11 @@ function booleanField(value: unknown, name: string): boolean { if (!isRecord(val
 function vault(value: unknown, walletAddress: string): TriggerVault { const result = { userPubkey: field(value, "userPubkey"), vaultPubkey: field(value, "vaultPubkey"), privyVaultId: field(value, "privyVaultId") }; if (result.userPubkey !== walletAddress) throw new Error("Jupiter vault is not bound to the selected wallet"); assertAddress(result.vaultPubkey); return result; }
 function validateOrder(input: TriggerSingleOrderInput): void { assertAddress(input.userPubkey); assertAddress(input.inputMint); assertAddress(input.outputMint); assertAddress(input.triggerMint); if (input.inputMint === input.outputMint || (input.triggerMint !== input.inputMint && input.triggerMint !== input.outputMint) || !RAW_AMOUNT_PATTERN.test(input.inputAmount) || !Number.isFinite(input.triggerPriceUsd) || input.triggerPriceUsd <= 0 || !Number.isInteger(input.slippageBps) || input.slippageBps < 0 || input.slippageBps > 300 || !Number.isInteger(input.expiresAt) || input.expiresAt <= Date.now()) throw new Error("Trigger order fields are invalid"); }
 function safeApiError(value: unknown): string { return isRecord(value) && typeof value.error === "string" ? value.error.slice(0, 300) : "Jupiter Trigger request failed"; }
+function retryableReadError(value: unknown): boolean {
+  return value instanceof Error
+    && !(value instanceof TriggerApiError)
+    && (value.name === "TimeoutError" || value.name === "AbortError" || value.message.includes("fetch failed"));
+}
 function orderHistoryItem(value: unknown): TriggerOrderHistoryItem {
   if (!isRecord(value)) throw new Error("Jupiter Trigger order history item is invalid");
   const orderState = value.orderState; const triggerCondition = value.triggerCondition;

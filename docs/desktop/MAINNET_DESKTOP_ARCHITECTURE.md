@@ -2,7 +2,7 @@
 
 ## Product boundary
 
-The desktop application has one runtime profile: `mainnet-guarded`. It provides secure local configuration, wallet identity, verified Mainnet balances, optional integrations, OpenRouter-backed AI chat, typed mission contracts, explicitly approved simulations, and restricted Jupiter swap execution. Pump.fun support currently includes bounded research/discovery, proposal-only buy/sell contracts, unsigned Pump v2 construction/simulation, and final revalidation; Pump.fun signing and broadcast are not connected. It does not provide autonomous execution, Full Access, faucet access, or Devnet simulation.
+The desktop application has one runtime profile: `mainnet-guarded`. It provides secure local configuration, wallet identity, verified Mainnet balances, optional integrations, OpenRouter-backed AI chat, typed mission contracts, explicitly approved simulations, restricted Jupiter swap execution, and manually approved restricted Pump v2 active-curve/PumpSwap pilots. Pump execution requires deterministic policy, unsigned simulation, fresh final revalidation, master-password verification, an exact confirmation phrase, and one explicit user action. A guarded Full Access session profile permits broader typed planning but never bypasses policy, simulation, signing, password, or final approval. It does not provide unattended/autonomous execution, faucet access, or Devnet simulation.
 
 The detailed Pump.fun capability matrix and remaining safety gates are maintained in [Pump.fun implementation status](PUMPFUN_IMPLEMENTATION_STATUS.md).
 
@@ -36,7 +36,8 @@ The active Electron main process owns only:
 - deterministic mission policy checks for wallet registration, pair and amount validity, guarded slippage, deadline, finalized balance, and transaction-free quotes;
 - a simulation boundary that refreshes policy evidence, inspects the unsigned transaction's sole signer and allowlisted programs, and calls Solana `simulateTransaction` without signature verification or broadcast;
 - a one-time execution boundary that accepts only the exact transaction cached by a passed simulation, rechecks policy and the master password, signs locally, submits through Jupiter `/execute`, independently queries Solana signature status, and persists the receipt.
-- a Pump.fun read-only intelligence boundary, bounded finalized scanner, exact-mint proposal policy, local Pump v2 codec/inspector, unsigned RPC simulator, one-time final-revalidation cache, and finalized-only future-receipt reconciler. None of these Pump services can currently request a signature or broadcast.
+- a Pump.fun/PumpSwap read-only intelligence boundary, bounded finalized scanner, exact-mint proposal policy, local venue-specific codecs/inspectors, unsigned RPC simulator, one-time final-revalidation cache, restricted local signer, one-attempt broadcaster, and finalized-only receipt reconciler.
+- a Robinhood Chain EVM foundation that verifies RPC chain ID `4663` before reads, estimates, or broadcasts. No Robinhood trade route is supported until a deployment-specific router/aggregator address and program policy are independently verified and pinned; Ethereum router addresses are never assumed to exist on Robinhood Chain.
 
 There is no Devnet RPC client, faucet request, fixture provisioner, canary executor, scheduler, DCA service, market shadow service, autonomous signing loop, or generic broadcast service in the active codebase.
 
@@ -73,7 +74,9 @@ Restricted execution requires another policy refresh, the current master passwor
 
 The renderer can copy a validated signature or ask the main process to open its constructed `https://explorer.solana.com/tx/<signature>` URL. It cannot submit an arbitrary external URL, and receipt verification contains no rebroadcast field or authority.
 
-For Pump.fun, the AI may analyze exact mints and create typed proposal-only contracts only inside the permitted session scope. Deterministic research eligibility, risk checks, transaction inspection, simulation, and final revalidation run outside the model. The AI cannot see private keys or raw transactions, call the signer, bypass confirmation, or claim that an action succeeded without a structured execution receipt. Pump.fun live execution and all autonomous execution remain unavailable.
+For Pump.fun, the AI may analyze exact mints and create typed proposal contracts only inside the permitted session scope. Deterministic research eligibility, risk checks, transaction inspection, simulation, final revalidation, signing, broadcast, and receipt verification run outside the model. The AI cannot see private keys or raw transactions, call the signer, bypass confirmation, or claim that an action succeeded without a structured execution receipt. Manually approved restricted active-curve and canonically verified PumpSwap trades are available for pilot validation; all autonomous execution remains unavailable.
+
+The guarded Full Access MVP changes the planning scope, not the custody boundary. It may prepare broader multi-step typed proposals, but every supported mutation still uses its venue-specific deterministic policy, simulation, password, exact confirmation, one-time signer, and receipt flow. It is not unattended authority.
 
 ## Windows distribution gate
 

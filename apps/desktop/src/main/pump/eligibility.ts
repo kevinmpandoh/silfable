@@ -17,6 +17,7 @@ const TOKEN_PROGRAMS = new Set([
 const MAX_STATE_AGE_MS = 2 * 60_000;
 
 export function evaluatePumpTradeEligibility(input: {
+  venue?: "bonding-curve-active" | "pumpswap-migrated";
   side: "buy" | "sell";
   tokenMint: string;
   inputAmount: string;
@@ -27,6 +28,7 @@ export function evaluatePumpTradeEligibility(input: {
   simulation: PumpSimulationArtifact;
   now?: Date;
 }): PumpEligibilityEvidence {
+  const venue = input.venue ?? "bonding-curve-active";
   const now = input.now ?? new Date();
   const stateAge = now.getTime() - Date.parse(input.state.verifiedAt);
   const exactMint = input.state.mint === input.tokenMint;
@@ -43,7 +45,9 @@ export function evaluatePumpTradeEligibility(input: {
     result("finalized-state", input.state.commitment === "finalized" && input.state.slot > 0, input.state.commitment === "finalized" ? "Canonical Pump state resolver returned a finalized slot." : "Pump state is not finalized."),
     result("token-program", TOKEN_PROGRAMS.has(input.state.tokenProgram), TOKEN_PROGRAMS.has(input.state.tokenProgram) ? "Mint is owned by an allowlisted Solana token program." : "Mint token program is not allowlisted."),
     result("authorities-revoked", input.state.mintSecurity.initialized && input.state.mintSecurity.mintAuthority === null && input.state.mintSecurity.freezeAuthority === null, input.state.mintSecurity.mintAuthority === null && input.state.mintSecurity.freezeAuthority === null ? "Mint and freeze authorities are revoked." : "Mint or freeze authority remains active."),
-    result("active-curve", input.state.curve.realTokenReserves !== "0", input.state.curve.realTokenReserves !== "0" ? "The canonical Pump bonding curve remains active." : "The Pump bonding curve has no available token reserves."),
+    result("active-curve", input.state.curve.realTokenReserves !== "0", input.state.curve.realTokenReserves !== "0"
+      ? venue === "pumpswap-migrated" ? "The canonical PumpSwap pool has available base reserves." : "The canonical Pump bonding curve remains active."
+      : venue === "pumpswap-migrated" ? "The PumpSwap pool has no available base reserves." : "The Pump bonding curve has no available token reserves."),
     result("reserves-available", reservesAvailable, reservesAvailable ? "Finalized virtual and real reserves are positive." : "Required finalized reserves are unavailable."),
     result("fee-tier", input.fee.allowed && input.fee.totalTradingFeeBps <= input.fee.maxTotalFeeBps, input.fee.allowed ? `Trading fee ${input.fee.totalTradingFeeBps} bps is within the configured ceiling.` : "Finalized Pump trading fees exceed the configured ceiling."),
     result("quote-binding", quoteBound, quoteBound ? "Executable quote matches side, amount, mint state, and finalized slot." : "Executable quote is stale or does not match the proposal."),
@@ -58,7 +62,7 @@ export function evaluatePumpTradeEligibility(input: {
   return PumpEligibilityEvidenceSchema.parse({
     status: passed ? "eligible" : "blocked",
     tokenMint: input.tokenMint,
-    venue: "bonding-curve-active",
+    venue,
     stateSlot: input.state.slot,
     simulationSlot: input.simulation.simulationSlot,
     checks,

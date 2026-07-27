@@ -99,7 +99,10 @@ test("multiple wallets can be added and the first wallet remains primary", async
   assert.equal(await service.getWalletAddress(), first.address);
   const selected = await service.withWalletSigner(second.address, async (signer) => signer.address);
   assert.equal(selected, second.address);
+  const web3Selected = await service.withWalletWeb3Keypair(second.address, async (keypair) => keypair.publicKey.toBase58());
+  assert.equal(web3Selected, second.address);
   await assert.rejects(() => service.withWalletSigner("11111111111111111111111111111111", async (signer) => signer.address), /unavailable/u);
+  await assert.rejects(() => service.withWalletWeb3Keypair("11111111111111111111111111111111", async (keypair) => keypair.publicKey.toBase58()), /unavailable/u);
 });
 
 test("a locked keystore blocks wallet onboarding", async () => {

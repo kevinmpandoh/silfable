@@ -1,9 +1,12 @@
+import "server-only";
+
 import { Queue } from "bullmq";
 import { Redis } from "ioredis";
 
-const REDIS_URL =
-  process.env.REDIS_URL ||
-  "redis://default:yblPbxcQBMF5BGWJjrWPaMy0ztmMNTRB@redis-13730.c281.us-east-1-2.ec2.cloud.redislabs.com:13730";
+const REDIS_URL = process.env.REDIS_URL?.trim();
+if (!REDIS_URL) {
+  throw new Error("REDIS_URL is required; Silfable does not use a source-code Redis fallback.");
+}
 
 const globalForRedis = globalThis as unknown as {
   redisConnection: Redis | undefined;

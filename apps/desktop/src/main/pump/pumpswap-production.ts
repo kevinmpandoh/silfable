@@ -9,6 +9,7 @@ import {
   type PumpSwapFinalizedAccountReader,
   type PumpSwapFinalizedBuildEvidence,
 } from "./pumpswap-state.js";
+import type { PumpV2FinalizedBuildEvidence } from "./state.js";
 import {
   simulatePumpKitUnsignedTransaction,
   type PumpKitSimulationRpc,
@@ -64,6 +65,36 @@ export type PumpSwapProductionSimulation = PumpSwapProductionUnsignedBuild & {
   executableQuote: PumpExecutableQuoteEvidence;
   simulation: PumpSimulationArtifact;
 };
+
+export function pumpSwapEvidenceForPolicy(
+  evidence: PumpSwapFinalizedBuildEvidence,
+): PumpV2FinalizedBuildEvidence {
+  return {
+    mint: evidence.mint,
+    tokenProgram: evidence.tokenProgram,
+    creator: evidence.coinCreatorVaultAuthority,
+    mintSecurity: evidence.mintSecurity,
+    feeRecipients: [evidence.protocolFeeRecipient],
+    buybackFeeRecipients: [evidence.protocolFeeRecipient],
+    curve: {
+      virtualTokenReserves: evidence.baseReserves,
+      virtualQuoteReserves: evidence.quoteReserves,
+      realTokenReserves: evidence.baseReserves,
+      tokenTotalSupply: "1000000000000000",
+      mayhemMode: false,
+    },
+    slot: evidence.slot,
+    commitment: evidence.commitment,
+    verifiedAt: evidence.verifiedAt,
+    feeSchedule: {
+      source: "global-fallback",
+      protocolFeeBps: evidence.feeSchedule.protocolFeeBps,
+      creatorFeeBps: evidence.feeSchedule.creatorFeeBps,
+      buybackAllocationBps: evidence.feeSchedule.buybackAllocationBps,
+      tiers: [],
+    },
+  };
+}
 
 export async function buildPumpSwapProductionUnsignedTransaction(
   reader: PumpSwapKitFinalizedTransactionReader,
@@ -250,6 +281,14 @@ export async function buildAndSimulatePumpSwapProductionTransactionFromEvidence(
     executableQuote,
     simulation,
   };
+}
+
+export async function buildAndSimulatePumpSwapProductionTransaction(
+  rpc: PumpSwapKitFinalizedTransactionReader & PumpKitSimulationRpc,
+  input: PumpSwapProductionSimulationInput,
+): Promise<PumpSwapProductionSimulation> {
+  const evidence = await resolvePumpSwapFinalizedBuildEvidence(rpc, input.tokenMint);
+  return buildAndSimulatePumpSwapProductionTransactionFromEvidence(rpc, input, evidence);
 }
 
 async function deriveAta(walletAddress: string, mintAddress: string, tokenProgram: string): Promise<string> {

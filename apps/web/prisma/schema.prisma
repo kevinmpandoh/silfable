@@ -14,6 +14,77 @@ model User {
   settings       UserSettings?
   agentSessions  AgentSession[]
   chatSessions   ChatSession[]
+  delegatedAuthorities DelegatedAuthority[]
+  safetyState    WalletSafetyState?
+}
+
+model WalletAuthChallenge {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  walletAddress String
+  nonceHash     String    @unique
+  message       String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([walletAddress, expiresAt])
+}
+
+model WalletAuthSession {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  walletAddress String
+  tokenHash     String    @unique
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+
+  @@index([walletAddress, expiresAt])
+}
+
+model DelegatedAuthorityChallenge {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  walletAddress String
+  nonceHash     String    @unique
+  policyHash    String
+  policy        Json
+  message       String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([walletAddress, expiresAt])
+}
+
+model DelegatedAuthority {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String    @db.ObjectId
+  user          User      @relation(fields: [userId], references: [id])
+  walletAddress String
+  status        String    @default("ACTIVE")
+  authorityMode String    @default("monitor-propose")
+  policyHash    String
+  policy        Json
+  startsAt      DateTime
+  expiresAt     DateTime
+  activatedAt   DateTime  @default(now())
+  revokedAt     DateTime?
+  revokeReason  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([walletAddress, status, expiresAt])
+}
+
+model WalletSafetyState {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String    @unique @db.ObjectId
+  user              User      @relation(fields: [userId], references: [id])
+  walletAddress     String    @unique
+  killSwitchEngaged Boolean   @default(false)
+  reason            String?
+  engagedAt         DateTime?
+  updatedAt         DateTime  @updatedAt
 }
 
 model UserSettings {
@@ -150,4 +221,3 @@ model ChatMessage {
   usageJson    String?     // Stored JSON string of WebUsage
   createdAt    DateTime    @default(now())
 }
-

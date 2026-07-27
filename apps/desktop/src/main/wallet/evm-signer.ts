@@ -1,14 +1,22 @@
-import { mnemonicToSeedSync, validateMnemonic } from "bip39";
-import { createHmac, createSign, createHash } from "node:crypto";
+import { privateKeyToAccount, mnemonicToAccount } from "viem/accounts";
+import { bytesToHex, keccak256, type Hex } from "viem";
+import { validateMnemonic } from "bip39";
 
 export const EVM_DERIVATION_PATH = "m/44'/60'/0'/0/0" as const;
+
+export const ROBINHOOD_CHAIN_CONFIG = {
+  chainId: 4663,
+  name: "Robinhood Chain",
+  rpcUrl: "https://rpc.mainnet.chain.robinhood.com/",
+  currencySymbol: "ETH",
+} as const;
 
 export type EvmAddress = `0x${string}`;
 
 export type EvmTransactionRequest = {
   to: EvmAddress;
   value: bigint;
-  data?: string;
+  data?: Hex;
   nonce: number;
   gasLimit: bigint;
   maxFeePerGas: bigint;
@@ -17,73 +25,71 @@ export type EvmTransactionRequest = {
 };
 
 /**
- * Derives an Ethereum public address (0x...) from a private key buffer.
+ * Derives an Ethereum public address (0x...) from a 32-byte private key using Viem.
  */
 export function privateKeyToEvmAddress(privateKey: Uint8Array): EvmAddress {
-  // Secp256k1 public key generation using Node's crypto module
-  const ecdha = createHmac("sha256", "evm-key-derivation").update(privateKey).digest();
-  const addressHash = createHash("sha256").update(ecdha).digest("hex").slice(-40);
-  return `0x${addressHash}` as EvmAddress;
+  if (privateKey.length !== 32) {
+    throw new Error("EVM private key must be exactly 32 bytes");
+  }
+  const hexPk = bytesToHex(privateKey);
+  const account = privateKeyToAccount(hexPk);
+  return account.address;
 }
 
 export class EvmSignerService {
-  readonly #privateKey: Uint8Array;
-  readonly #address: EvmAddress;
+  readonly #account: ReturnType<typeof privateKeyToAccount>;
 
   constructor(privateKey: Uint8Array) {
     if (privateKey.length !== 32) {
       throw new Error("EVM private key must be exactly 32 bytes");
     }
-    this.#privateKey = Uint8Array.from(privateKey);
-    this.#address = privateKeyToEvmAddress(this.#privateKey);
+    const hexPk = bytesToHex(privateKey);
+    this.#account = privateKeyToAccount(hexPk);
   }
 
   static fromMnemonic(mnemonic: string, path: string = EVM_DERIVATION_PATH): EvmSignerService {
     if (!validateMnemonic(mnemonic)) {
       throw new Error("Invalid BIP-39 mnemonic");
     }
-    const seed = mnemonicToSeedSync(mnemonic);
-    // Simple deterministic derivation for EVM test vectors
-    const derivedKey = createHmac("sha256", seed).update(path).digest();
-    return new EvmSignerService(derivedKey);
+    const account = mnemonicToAccount(mnemonic, { path: path as `m/44'/60'/${string}` });
+    const pkBytes = Buffer.from(account.getHdKey().privateKey!);
+    return new EvmSignerService(pkBytes);
   }
 
   getAddress(): EvmAddress {
-    return this.#address;
+    return this.#account.address;
   }
 
   /**
-   * Signs an EVM personal message (EIP-191 / HMAC)
+   * Signs an EVM personal message (EIP-191) using real secp256k1 ECDSA
    */
-  signMessage(message: string): { address: EvmAddress; signature: string } {
-    const signature = createHmac("sha256", this.#privateKey).update(message).digest("hex");
+  async signMessage(message: string): Promise<{ address: EvmAddress; signature: Hex }> {
+    const signature = await this.#account.signMessage({ message });
     return {
-      address: this.#address,
-      signature: `0x${signature}`,
+      address: this.#account.address,
+      signature,
     };
   }
 
   /**
    * Prepares a signed EVM EIP-1559 transaction payload
    */
-  signTransaction(tx: EvmTransactionRequest): { rawTransaction: string; txHash: string } {
-    const rawPayload = JSON.stringify({
+  async signTransaction(tx: EvmTransactionRequest): Promise<{ rawTransaction: Hex; txHash: Hex }> {
+    const serializedTx = await this.#account.signTransaction({
+      type: "eip1559",
       to: tx.to,
-      value: tx.value.toString(),
+      value: tx.value,
       data: tx.data ?? "0x",
       nonce: tx.nonce,
-      gasLimit: tx.gasLimit.toString(),
-      maxFeePerGas: tx.maxFeePerGas.toString(),
-      maxPriorityFeePerGas: tx.maxPriorityFeePerGas.toString(),
+      gas: tx.gasLimit,
+      maxFeePerGas: tx.maxFeePerGas,
+      maxPriorityFeePerGas: tx.maxPriorityFeePerGas,
       chainId: tx.chainId,
     });
 
-    const txHash = `0x${createHash("sha256").update(rawPayload).digest("hex")}`;
-    const signature = this.signMessage(txHash).signature;
-
     return {
-      rawTransaction: JSON.stringify({ payload: rawPayload, signature }),
-      txHash,
+      rawTransaction: serializedTx,
+      txHash: keccak256(serializedTx),
     };
   }
 }

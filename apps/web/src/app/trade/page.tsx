@@ -1,18 +1,11 @@
 "use client";
 
 import React, { useCallback, useState, useEffect, useRef } from "react";
-import dynamic from "next/dynamic";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { VersionedTransaction } from "@solana/web3.js";
-import {
-  Cpu,
-  Settings,
-  ShieldAlert,
-  Trash2,
-  Zap,
-} from "lucide-react";
+import { Trash2 } from "lucide-react";
 import Link from "next/link";
 import {
   getAllSessions,
@@ -30,14 +23,7 @@ import { PumpTradePreviewCard } from "@/components/cards/PumpTradePreviewCard";
 import { LimitOrderPreviewCard } from "@/components/cards/LimitOrderPreviewCard";
 import { JupiterSwapPreviewCard } from "@/components/cards/JupiterSwapPreviewCard";
 import { WebSetupWizard } from "@/components/trade/WebSetupWizard";
-import { CloudWorkerSetupModal } from "@/components/trade/CloudWorkerSetupModal";
 import { WebNewSessionModal } from "@/components/trade/WebNewSessionModal";
-
-// Dynamically import WalletMultiButton to prevent SSR hydration errors
-const WalletMultiButton = dynamic<React.HTMLAttributes<HTMLButtonElement>>(
-  () => import("@solana/wallet-adapter-react-ui").then((mod) => mod.WalletMultiButton),
-  { ssr: false }
-);
 
 function base64ToBytes(value: string): Uint8Array {
   const binary = window.atob(value);
@@ -129,9 +115,12 @@ export default function TradePage() {
   const { publicKey, sendTransaction, connected } = useWallet();
   const walletAddress = publicKey?.toBase58() ?? null;
   const activeWalletAddressRef = useRef<string | null>(walletAddress);
-  activeWalletAddressRef.current = walletAddress;
   const { connection } = useConnection();
   const router = useRouter();
+
+  useEffect(() => {
+    activeWalletAddressRef.current = walletAddress;
+  }, [walletAddress]);
 
   // Redirect to /connect if wallet is not connected
   useEffect(() => {
@@ -146,6 +135,7 @@ export default function TradePage() {
   // Setup Flow State
   const [setupCompleted, setSetupCompleted] = useState<boolean>(false);
   const [editingSetup, setEditingSetup] = useState<boolean>(false);
+  const [authenticatedWallet, setAuthenticatedWallet] = useState<string | null>(null);
   const [settings, setSettings] = useState<WebSetupSettings>(DEFAULT_SETTINGS);
   const [setupStep, setSetupStep] = useState<number>(1);
 
@@ -154,13 +144,6 @@ export default function TradePage() {
   const [activeSessionId, setActiveSessionId] = useState<string>("");
   const [sessionFilter, setSessionFilter] = useState<"all" | "agent" | "mission" | "pump">("all");
   const [showSessionModal, setShowSessionModal] = useState(false);
-  const [sessionDraft, setSessionDraft] = useState<{
-    title: string;
-    mode: "agent" | "mission" | "pump";
-    prompt: string;
-    pumpScope: "exact_mint" | "watchlist" | "discovery";
-    pumpMint: string;
-  }>({ title: "", mode: "agent", prompt: "", pumpScope: "exact_mint", pumpMint: "" });
   const [messages, setMessages] = useState<WebMessage[]>([]);
   const [nav, setNav] = useState("sessions");
   const [input, setInput] = useState("");
@@ -170,53 +153,28 @@ export default function TradePage() {
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [portfolioStatus, setPortfolioStatus] = useState("Refreshing Mainnet balance...");
 
-  // Cloud Worker 24/7 State
-  const [showCloudWorkerModal, setShowCloudWorkerModal] = useState(false);
-  const [cloudSessionState, setCloudSessionState] = useState<{
-    active: boolean;
-    session: any | null;
-  }>({ active: false, session: null });
-
-  // Poll Cloud Worker Session Status every 5 seconds when wallet is connected
   useEffect(() => {
-    if (!walletAddress) return;
-    let timer: NodeJS.Timeout;
-
-    async function checkCloudStatus() {
-      try {
-        const res = await fetch(`/api/agent/session/status?walletAddress=${walletAddress}`);
-        if (res.ok) {
-          const data = await res.json();
-          setCloudSessionState({ active: data.active, session: data.session });
+    let cancelled = false;
+    if (!connected || !walletAddress) return () => {
+      cancelled = true;
+    };
+    fetch("/api/auth/wallet/session", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((session) => {
+        if (cancelled) return;
+        if (session.authenticated === true && session.walletAddress === walletAddress) {
+          setAuthenticatedWallet(walletAddress);
+          return;
         }
-      } catch (err) {
-        console.error("Failed to fetch cloud worker status:", err);
-      }
-    }
-
-    void checkCloudStatus();
-    timer = setInterval(() => {
-      void checkCloudStatus();
-    }, 5000);
-
-    return () => clearInterval(timer);
-  }, [walletAddress]);
-
-  async function handleKillCloudSession() {
-    if (!walletAddress || !cloudSessionState.session?.id) return;
-    if (!window.confirm("Are you sure you want to stop the 24/7 Cloud Worker agent?")) return;
-
-    try {
-      await fetch("/api/agent/session/kill", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: cloudSessionState.session.id }),
+        router.replace("/connect?next=/trade");
+      })
+      .catch(() => {
+        if (!cancelled) router.replace("/connect?next=/trade");
       });
-      setCloudSessionState({ active: false, session: null });
-    } catch (err) {
-      alert("Failed to stop cloud session.");
-    }
-  }
+    return () => {
+      cancelled = true;
+    };
+  }, [connected, walletAddress, router]);
 
   const runtimeUsage = messages.reduce(
     (total, message) => {
@@ -354,36 +312,6 @@ export default function TradePage() {
   // --------------------------------------------------------------------------
   // SESSION HANDLERS (IndexedDB CRUD)
   // --------------------------------------------------------------------------
-  async function handleCreateNewSession() {
-    if (!walletAddress) return;
-    const newId = `session_${Date.now()}`;
-    const now = Date.now();
-    const fallbackTitle =
-      sessionDraft.mode === "pump"
-        ? "Pump.fun research session"
-        : sessionDraft.mode === "mission"
-          ? "Mainnet mission session"
-          : "Agent chat session";
-    const newSession: SessionItem = {
-      id: newId,
-      title: sessionDraft.title.trim() || fallbackTitle,
-      filter: sessionDraft.mode,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    await saveSession(walletAddress, newSession);
-    const updatedSessions = await getAllSessions(walletAddress);
-    setSessions(updatedSessions);
-    setActiveSessionId(newId);
-    setShowSessionModal(false);
-    setSessionDraft({ title: "", mode: "agent", prompt: "", pumpScope: "exact_mint", pumpMint: "" });
-
-    // Empty session, no init message so HomeComposer is shown
-    setMessages([]);
-    setInput(sessionDraft.prompt.trim());
-  }
-
   async function handleDeleteSession(id: string, e: React.MouseEvent) {
     if (!walletAddress) return;
     e.stopPropagation();
@@ -586,11 +514,11 @@ export default function TradePage() {
   }
 
   // Loading Gate while checking Wallet Connection
-  if (!connected || !publicKey) {
+  if (!connected || !publicKey || authenticatedWallet !== walletAddress) {
     return (
       <div className="tradeDesktopShell gateScreenLayout">
         <div className="flex items-center justify-center min-h-screen text-slate-400 font-mono text-sm">
-          Redirecting to wallet onboarding...
+          Verifying wallet authentication...
         </div>
       </div>
     );
@@ -636,19 +564,6 @@ export default function TradePage() {
             setSessions((prev) => [saved, ...prev.filter((s) => s.id !== saved.id)]);
             setActiveSessionId(saved.id);
           }
-        }}
-        onSelectFullAccess={() => {
-          setShowCloudWorkerModal(true);
-        }}
-      />
-
-      <CloudWorkerSetupModal
-        walletAddress={publicKey.toBase58()}
-        isOpen={showCloudWorkerModal}
-        onClose={() => setShowCloudWorkerModal(false)}
-        onSessionStarted={(sessionId, agentPubKey) => {
-          setActiveSessionId(sessionId);
-          setNav("sessions");
         }}
       />
 

@@ -74,4 +74,69 @@ test("Trigger V2 exposes bounded history and the documented two-step cancellatio
   assert.equal(calls.some((url) => url.includes("confirm-cancel")), true);
 });
 
+test("Trigger V2 retries only explicitly retry-safe reads with bounded backoff", async () => {
+  const signer = await generateKeyPairSigner();
+  const now = Date.now();
+  let historyAttempts = 0;
+  const delays: number[] = [];
+  const fetch = async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.endsWith("/auth/challenge")) return json({ type: "message", challenge: "challenge" });
+    if (url.endsWith("/auth/verify")) return json({ token: "jwt" });
+    if (url.includes("/orders/history")) {
+      historyAttempts += 1;
+      if (historyAttempts === 1) return json({ error: "rate limited" }, 429);
+      return json({ orders: [{
+        id: "order-123456", orderState: "open", userPubkey: signer.address, inputMint: SOL, outputMint: USDC,
+        initialInputAmount: "100000000", remainingInputAmount: "100000000", triggerMint: SOL,
+        triggerCondition: "above", triggerPriceUsd: 200, slippageBps: 100,
+        expiresAt: now + 60_000, createdAt: now, updatedAt: now,
+      }], pagination: { total: 1, limit: 50, offset: 0 } });
+    }
+    throw new Error(`Unexpected URL ${url}`);
+  };
+  const client = new JupiterTriggerV2Client({
+    secrets: { getSecret: async () => "jup_key" },
+    wallets: { withWalletSigner: async (_address, operation) => operation(signer) },
+    fetch: fetch as typeof globalThis.fetch,
+    sleep: async (delayMs) => { delays.push(delayMs); },
+  });
+
+  const history = await client.history(signer.address);
+  assert.equal(history.orders.length, 1);
+  assert.equal(historyAttempts, 2);
+  assert.deepEqual(delays, [250]);
+});
+
+test("Trigger V2 never retries a timed-out mutation", async () => {
+  const signer = await generateKeyPairSigner();
+  let depositAttempts = 0;
+  const delays: number[] = [];
+  const fetch = async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.endsWith("/auth/challenge")) return json({ type: "message", challenge: "challenge" });
+    if (url.endsWith("/auth/verify")) return json({ token: "jwt" });
+    if (url.endsWith("/deposit/craft")) {
+      depositAttempts += 1;
+      const error = new Error("request timed out");
+      error.name = "TimeoutError";
+      throw error;
+    }
+    throw new Error(`Unexpected URL ${url}`);
+  };
+  const client = new JupiterTriggerV2Client({
+    secrets: { getSecret: async () => "jup_key" },
+    wallets: { withWalletSigner: async (_address, operation) => operation(signer) },
+    fetch: fetch as typeof globalThis.fetch,
+    sleep: async (delayMs) => { delays.push(delayMs); },
+  });
+
+  await assert.rejects(
+    () => client.craftSingleDeposit({ walletAddress: signer.address, inputMint: SOL, outputMint: USDC, amount: "100000000" }),
+    /timed out/u,
+  );
+  assert.equal(depositAttempts, 1);
+  assert.deepEqual(delays, []);
+});
+
 function json(value: unknown, status = 200): Response { return new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } }); }

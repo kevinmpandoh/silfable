@@ -8,6 +8,7 @@ import {
   compileTransaction,
   createTransactionMessage,
   createKeyPairSignerFromPrivateKeyBytes,
+  getSignatureFromTransaction,
   getTransactionDecoder,
   getTransactionEncoder,
   pipe,
@@ -92,6 +93,130 @@ test("mission simulation accepts the explicitly allowlisted OKX Aggregator V6 ro
   assert.equal(result.broadcastAttempted, false);
 });
 
+test("P2 reverse swap simulates USDC to SOL with finalized token balance evidence", async () => {
+  const mission: MissionContractPreview = {
+    ...missionFor(SELECTED_WALLET),
+    goal: "Preview selling 1 USDC for SOL",
+    inputMint: USDC,
+    outputMint: SOL,
+    inputAmount: "1000000",
+    quote: {
+      inputMint: USDC,
+      outputMint: SOL,
+      inAmount: "1000000",
+      outAmount: "6500000",
+      router: "metis",
+      mode: "ultra",
+      feeBps: 2,
+      feeMint: USDC,
+      quoteOnly: true,
+      verifiedAt: new Date().toISOString(),
+    },
+  };
+  const transaction = unsignedTransaction("11111111111111111111111111111111");
+  let builtPair = "";
+  const reads = {
+    portfolio: async () => ({
+      address: SELECTED_WALLET,
+      slot: 1,
+      solBalance: "1",
+      solUsdPrice: 150,
+      totalUsd: 151,
+      assets: [{
+        mint: USDC,
+        symbol: "USDC",
+        amount: "1000000",
+        balance: "1",
+        decimals: 6,
+        usdPrice: 1,
+        usdValue: 1,
+        logoUri: null,
+      }],
+      verifiedAt: new Date().toISOString(),
+    }),
+    swapQuote: async (inputMint: string, outputMint: string) => ({
+      inputMint,
+      outputMint,
+      inAmount: "1000000",
+      outAmount: "6500000",
+      router: "metis",
+      mode: "ultra",
+      feeBps: 2,
+      feeMint: USDC,
+      quoteOnly: true as const,
+      verifiedAt: new Date().toISOString(),
+    }),
+    buildUnsignedSwapOrder: async (inputMint: string, outputMint: string) => {
+      builtPair = `${inputMint}->${outputMint}`;
+      return {
+        transaction,
+        requestId: "private-order-id",
+        lastValidBlockHeight: "12345",
+        outAmount: "6500000",
+        router: "metis",
+        mode: "ultra",
+      };
+    },
+    simulateUnsignedTransaction: async () => ({
+      slot: 2,
+      err: null,
+      logs: [],
+      unitsConsumed: 500,
+      feeLamports: 5000,
+    }),
+  } as unknown as MainnetReadService;
+
+  const result = await new MissionSimulationService(reads, WALLETS).simulate(mission);
+  assert.equal(result.status, "passed");
+  assert.equal(builtPair, `${USDC}->${SOL}`);
+  assert.equal(result.transactionSigned, false);
+  assert.equal(result.broadcastAttempted, false);
+});
+
+test("P2 reverse swap blocks insufficient USDC before construction or signing", async () => {
+  const mission: MissionContractPreview = {
+    ...missionFor(SELECTED_WALLET),
+    inputMint: USDC,
+    outputMint: SOL,
+    inputAmount: "1000000",
+  };
+  let constructionAttempts = 0;
+  const reads = {
+    portfolio: async () => ({
+      address: SELECTED_WALLET,
+      slot: 1,
+      solBalance: "1",
+      solUsdPrice: 150,
+      totalUsd: 150,
+      assets: [],
+      verifiedAt: new Date().toISOString(),
+    }),
+    swapQuote: async () => ({
+      inputMint: USDC,
+      outputMint: SOL,
+      inAmount: "1000000",
+      outAmount: "6500000",
+      router: "metis",
+      mode: "ultra",
+      feeBps: 2,
+      feeMint: USDC,
+      quoteOnly: true as const,
+      verifiedAt: new Date().toISOString(),
+    }),
+    buildUnsignedSwapOrder: async () => {
+      constructionAttempts += 1;
+      throw new Error("must not construct");
+    },
+  } as unknown as MainnetReadService;
+
+  const result = await new MissionSimulationService(reads, WALLETS).simulate(mission);
+  assert.equal(result.status, "blocked");
+  assert.match(result.error ?? "", /policy no longer passes/iu);
+  assert.equal(constructionAttempts, 0);
+  assert.equal(result.transactionSigned, false);
+  assert.equal(result.broadcastAttempted, false);
+});
+
 test("fee guard blocks an excessive simulated fee before the signer can be reached", async () => {
   const transaction = unsignedTransaction("11111111111111111111111111111111");
   const reads = passingReads(transaction, { slot: 2, err: null, logs: [], unitsConsumed: 500, feeLamports: 250_000 });
@@ -121,14 +246,17 @@ test("approved execution signs the exact simulated transaction once and returns 
   const mission = missionFor(signer.address);
   const transaction = unsignedTransactionFor(signer.address, "11111111111111111111111111111111");
   let submittedSignaturePresent = false;
+  let submittedSignature = "";
   const reads = {
     portfolio: async () => ({ address: signer.address, slot: 1, solBalance: "1000000000", solUsdPrice: 150, totalUsd: 150, assets: [], verifiedAt: new Date().toISOString() }),
     swapQuote: async () => ({ inputMint: SOL, outputMint: USDC, inAmount: "100000000", outAmount: "15000000", router: "metis", mode: "ultra", feeBps: 2, feeMint: SOL, quoteOnly: true as const, verifiedAt: new Date().toISOString() }),
     buildUnsignedSwapOrder: async () => ({ transaction, requestId: "private-order-id", lastValidBlockHeight: "12345", outAmount: "15000000", router: "metis", mode: "ultra" }),
     simulateUnsignedTransaction: async () => ({ slot: 2, err: null, logs: [], unitsConsumed: 500, feeLamports: 5000 }),
     executeSignedSwap: async (signed: string) => {
-      submittedSignaturePresent = getTransactionDecoder().decode(Buffer.from(signed, "base64")).signatures[signer.address] !== null;
-      return { status: "Success" as const, signature: "1".repeat(64), code: 0, totalInputAmount: "100000000", totalOutputAmount: "15000000", error: null };
+      const decoded = getTransactionDecoder().decode(Buffer.from(signed, "base64"));
+      submittedSignaturePresent = decoded.signatures[signer.address] !== null;
+      submittedSignature = getSignatureFromTransaction(decoded);
+      return { status: "Success" as const, signature: submittedSignature, code: 0, totalInputAmount: "100000000", totalOutputAmount: "15000000", error: null };
     },
     verifyTransactionSignature: async () => ({ state: "finalized" as const, slot: 77, error: null, verifiedAt: new Date().toISOString() }),
     transactionSettlement: async () => ({ slot: 77, feeLamports: 5000, walletPreLamports: "1000000000", walletPostLamports: "899995000" }),
@@ -144,7 +272,7 @@ test("approved execution signs the exact simulated transaction once and returns 
   assert.equal(simulation.status, "passed");
   const receipt = await service.execute(mission, simulation.id);
   assert.equal(receipt.status, "confirmed");
-  assert.equal(receipt.signature, "1".repeat(64));
+  assert.equal(receipt.signature, submittedSignature);
   assert.equal(receipt.chainVerification, "finalized");
   assert.equal(receipt.chainSlot, 77);
   assert.equal(receipt.actualNetworkFeeLamports, 5000);
@@ -197,7 +325,16 @@ test("a successful router response remains unknown until Solana RPC confirms its
     swapQuote: async () => ({ inputMint: SOL, outputMint: USDC, inAmount: "100000000", outAmount: "15000000", router: "metis", mode: "ultra", feeBps: 2, feeMint: SOL, quoteOnly: true as const, verifiedAt: new Date().toISOString() }),
     buildUnsignedSwapOrder: async () => ({ transaction, requestId: "private-order-id", lastValidBlockHeight: "12345", outAmount: "15000000", router: "metis", mode: "ultra" }),
     simulateUnsignedTransaction: async () => ({ slot: 2, err: null, logs: [], unitsConsumed: 500, feeLamports: 5000 }),
-    executeSignedSwap: async () => ({ status: "Success" as const, signature: "1".repeat(64), code: 0, totalInputAmount: "100000000", totalOutputAmount: "15000000", error: null }),
+    executeSignedSwap: async (signed: string) => ({
+      status: "Success" as const,
+      signature: getSignatureFromTransaction(
+        getTransactionDecoder().decode(Buffer.from(signed, "base64")),
+      ),
+      code: 0,
+      totalInputAmount: "100000000",
+      totalOutputAmount: "15000000",
+      error: null,
+    }),
     verifyTransactionSignature: async () => ({ state: "not-found" as const, slot: null, error: null, verifiedAt: new Date().toISOString() }),
   } as unknown as MainnetReadService;
   const wallets = { withWalletSigner: async <T>(_address: string, operation: (value: typeof signer) => Promise<T>) => operation(signer) } as unknown as WalletOnboardingService;
@@ -207,6 +344,93 @@ test("a successful router response remains unknown until Solana RPC confirms its
   assert.equal(receipt.status, "unknown");
   assert.equal(receipt.chainVerification, "not-found");
   assert.match(receipt.error ?? "", /not yet|not independently/u);
+});
+
+test("a timed-out Jupiter broadcast persists the local signature and is never retried", async () => {
+  const signer = await createKeyPairSignerFromPrivateKeyBytes(
+    Uint8Array.from({ length: 32 }, (_, index) => index + 1),
+  );
+  const mission = missionFor(signer.address);
+  const transaction = unsignedTransactionFor(
+    signer.address,
+    "11111111111111111111111111111111",
+  );
+  let broadcastAttempts = 0;
+  let verificationChecks = 0;
+  const reads = {
+    portfolio: async () => ({
+      address: signer.address,
+      slot: 1,
+      solBalance: "1000000000",
+      solUsdPrice: 150,
+      totalUsd: 150,
+      assets: [],
+      verifiedAt: new Date().toISOString(),
+    }),
+    swapQuote: async () => ({
+      inputMint: SOL,
+      outputMint: USDC,
+      inAmount: "100000000",
+      outAmount: "15000000",
+      router: "metis",
+      mode: "ultra",
+      feeBps: 2,
+      feeMint: SOL,
+      quoteOnly: true as const,
+      verifiedAt: new Date().toISOString(),
+    }),
+    buildUnsignedSwapOrder: async () => ({
+      transaction,
+      requestId: "private-order-id",
+      lastValidBlockHeight: "12345",
+      outAmount: "15000000",
+      router: "metis",
+      mode: "ultra",
+    }),
+    simulateUnsignedTransaction: async () => ({
+      slot: 2,
+      err: null,
+      logs: [],
+      unitsConsumed: 500,
+      feeLamports: 5000,
+    }),
+    executeSignedSwap: async () => {
+      broadcastAttempts += 1;
+      throw Object.assign(new Error("Jupiter broadcast timed out"), {
+        name: "TimeoutError",
+      });
+    },
+    verifyTransactionSignature: async () => {
+      verificationChecks += 1;
+      return {
+        state: "not-found" as const,
+        slot: null,
+        error: null,
+        verifiedAt: new Date().toISOString(),
+      };
+    },
+  } as unknown as MainnetReadService;
+  const wallets = {
+    withWalletSigner: async <T>(
+      _address: string,
+      operation: (value: typeof signer) => Promise<T>,
+    ) => operation(signer),
+  } as unknown as WalletOnboardingService;
+  const service = new MissionSimulationService(reads, wallets);
+  const simulation = await service.simulate(mission);
+  const receipt = await service.execute(mission, simulation.id);
+
+  assert.equal(receipt.status, "unknown");
+  assert.equal(receipt.signature?.length !== 0, true);
+  assert.match(receipt.error ?? "", /timed out/u);
+  assert.match(receipt.chainError ?? "", /never rebroadcast/u);
+  assert.equal(broadcastAttempts, 1);
+
+  const checked = await service.verifyReceipt(receipt);
+  assert.equal(checked.status, "unknown");
+  assert.equal(checked.signature, receipt.signature);
+  assert.equal(verificationChecks, 1);
+  assert.equal(broadcastAttempts, 1);
 });
 
 test("verifyReceipt rejects a receipt without a signature", async () => {
