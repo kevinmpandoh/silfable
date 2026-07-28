@@ -45,7 +45,7 @@ Settings reopens the review screen so each section can be edited and then return
 - Windows QA launches the packaged executable with an isolated profile and verifies that the React renderer and restricted preload bridge start successfully.
 - The signed-release workflow additionally requires a valid Authenticode result. Certificates and passwords are supplied through CI secrets and never committed.
 
-See [the Phase 0 baseline](docs/PHASE_0_BASELINE.md), [the venue product architecture](docs/VENUE_PRODUCT_ARCHITECTURE.md), and [the current desktop architecture](docs/desktop/MAINNET_DESKTOP_ARCHITECTURE.md) before adding privileged capabilities.
+See [the Phase 0 baseline](docs/PHASE_0_BASELINE.md), [Phase 1 production hardening](docs/PHASE_1_PRODUCTION_HARDENING.md), [the venue product architecture](docs/VENUE_PRODUCT_ARCHITECTURE.md), and [the current desktop architecture](docs/desktop/MAINNET_DESKTOP_ARCHITECTURE.md) before adding privileged capabilities.
 
 Future work is tracked in the [prioritized Mainnet product roadmap](docs/desktop/MAINNET_PRODUCT_ROADMAP.md). It places fee and state correctness, security review, recovery, and signed-release gates ahead of scheduled or autonomous trading features.
 

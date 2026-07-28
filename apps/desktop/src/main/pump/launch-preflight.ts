@@ -31,13 +31,9 @@ import {
 } from "@solana/kit";
 
 import {
-  ASSOCIATED_TOKEN_PROGRAM_ID,
   encodeAndInspectPumpLaunchInstruction,
   inspectPumpLaunchInstruction,
-  MAYHEM_PROGRAM_ID,
   PUMP_LAUNCH_CODEC_REVISION,
-  SYSTEM_PROGRAM_ID,
-  TOKEN_2022_PROGRAM_ID,
   type PumpLaunchEncodedInstruction,
 } from "./launch-codec.js";
 import { PUMP_PROGRAM_ID } from "./inspector.js";
@@ -46,6 +42,7 @@ import type {
   PumpRpcAccount,
   PumpRpcSimulationAccount,
 } from "./rpc.js";
+import { allowedSolanaPrograms } from "../security/solana-program-policy.js";
 import { decodePumpGlobalLaunchReadiness } from "./state.js";
 
 const SDK_VERSION = "1.36.0";
@@ -53,14 +50,7 @@ const COMPUTE_UNIT_LIMIT = 300_000;
 const PREPARED_TTL_MS = 10 * 60_000;
 const COMPUTE_BUDGET_PROGRAM_ID = "ComputeBudget111111111111111111111111111111";
 const PROGRAM_INVOKE_PATTERN = /^Program ([1-9A-HJ-NP-Za-km-z]{32,44}) invoke \[\d+\]$/u;
-const ALLOWED_PROGRAMS = new Set([
-  PUMP_PROGRAM_ID,
-  COMPUTE_BUDGET_PROGRAM_ID,
-  SYSTEM_PROGRAM_ID,
-  TOKEN_2022_PROGRAM_ID,
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-  MAYHEM_PROGRAM_ID,
-]);
+const ALLOWED_PROGRAMS = allowedSolanaPrograms("pump-token-launch");
 
 type GlobalReadiness = {
   createV2Enabled: boolean;

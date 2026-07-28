@@ -5,7 +5,9 @@ import { PumpDiscoverySnapshotSchema, PumpTokenIntelligenceSchema, type JupiterS
 
 import type { SecretName } from "../storage/keystore.js";
 import { evaluatePumpResearchEligibility } from "../pump/research-eligibility.js";
+import { writeSafeAuditLog } from "../telemetry/safe-audit-log.js";
 import { ProviderCircuitBreaker } from "./provider-circuit-breaker.js";
+import { ProviderRateBudget } from "./provider-rate-budget.js";
 
 const MAINNET_RPC_URL = "https://api.mainnet-beta.solana.com";
 const SOL_MINT = "So11111111111111111111111111111111111111112";
@@ -112,6 +114,8 @@ export class MainnetReadService {
   readonly #secrets: SecretReader;
   readonly #wallets: WalletRegistry;
   readonly #jupiterCircuit: ProviderCircuitBreaker;
+  readonly #jupiterRateBudget: ProviderRateBudget;
+  readonly #solanaRpcRateBudget: ProviderRateBudget;
 
   constructor(input: {
     secrets: SecretReader;
@@ -120,6 +124,8 @@ export class MainnetReadService {
     rpcUrl?: string;
     sleep?: Sleep;
     jupiterCircuit?: ProviderCircuitBreaker;
+    jupiterRateBudget?: ProviderRateBudget;
+    solanaRpcRateBudget?: ProviderRateBudget;
   }) {
     this.#secrets = input.secrets;
     this.#wallets = input.wallets;
@@ -130,6 +136,16 @@ export class MainnetReadService {
       name: "Jupiter provider",
       failureThreshold: 3,
       cooldownMs: 30_000,
+    });
+    this.#jupiterRateBudget = input.jupiterRateBudget ?? new ProviderRateBudget({
+      name: "Jupiter provider",
+      limit: 120,
+      windowMs: 60_000,
+    });
+    this.#solanaRpcRateBudget = input.solanaRpcRateBudget ?? new ProviderRateBudget({
+      name: "Solana RPC",
+      limit: 240,
+      windowMs: 60_000,
     });
     if (!this.#rpcUrl.startsWith("https://")) throw new Error("Mainnet RPC must use HTTPS");
   }
@@ -857,6 +873,18 @@ export class MainnetReadService {
   }
 
   async #withJupiterCircuit<T>(operation: () => Promise<T>): Promise<T> {
+    // Budget rejection happens before circuit accounting because it is a local
+    // safety decision, not evidence that the provider failed.
+    try {
+      this.#jupiterRateBudget.consume();
+    } catch (error) {
+      writeSafeAuditLog("provider_budget_blocked", {
+        operation: "jupiter_request",
+        outcome: "blocked",
+        code: "RATE_BUDGET",
+      });
+      throw error;
+    }
     this.#jupiterCircuit.assertAvailable();
     try {
       const result = await operation();
@@ -875,6 +903,16 @@ export class MainnetReadService {
 
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
+        try {
+          this.#solanaRpcRateBudget.consume();
+        } catch (error) {
+          writeSafeAuditLog("provider_budget_blocked", {
+            operation: "solana_rpc_request",
+            outcome: "blocked",
+            code: "RATE_BUDGET",
+          });
+          throw error;
+        }
         const response = await this.#fetch(this.#rpcUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

@@ -93,12 +93,16 @@ Still required:
 
 Already present: sole-signer checks, program allowlisting, deterministic mission policy, one-time cached approvals, and a final pre-sign simulation.
 
+Completed for the restricted Solana lanes:
+
+- [x] Jupiter Swap and Pump.fun Token Launch derive their program sets from one release-controlled manifest that pins each address to an intended capability and lane.
+- [x] The controlled process for adding, updating, or removing a program ID is documented in [Solana program allowlist change control](SOLANA_PROGRAM_ALLOWLIST.md).
+- [x] Fee/rent ceilings, stale quote/blockhash rejection, sole-signer inspection, final simulation, one-time preparation, unknown-broadcast recovery, and duplicate-submission protection remain in the deterministic boundary.
+- [x] Provider/RPC status contradictions are resolved from chain evidence and recorded as sanitized conflict events without rebroadcast.
+
 Still required:
 
-- Review every allowlisted program and pin its intended capability and owner.
-- Define a controlled process for adding, updating, or removing program IDs.
-- Add fee/rent ceilings and token-risk policy to the same deterministic boundary.
-- Review stale quote, blockhash, RPC disagreement, and duplicate-submission scenarios.
+- Independent review of the manifest, official deployment provenance, and signed-build fixtures.
 
 ### P1.3 Network and logging resilience — Partial
 
@@ -116,10 +120,10 @@ Completed:
 Still required:
 
 - [x] Jupiter price, quote-only order, unsigned-order, and execute requests share an in-process fail-closed circuit breaker: after bounded consecutive provider failures, new requests are paused until cooldown and no fallback quote/order is invented.
-- Add provider-wide rate budgets for sustained partial outages.
-- Define reconciliation behavior when provider and finalized RPC evidence contradict each other.
+- [x] Add provider-wide sliding request budgets for Jupiter, general Solana RPC, and Pump launch RPC. Every retry consumes budget and exhaustion blocks before network I/O.
+- [x] Define reconciliation behavior when provider and finalized RPC evidence contradict each other: finalized/confirmed chain evidence is authoritative, the conflict is audited, and no contradiction triggers rebroadcast.
 - Complete a manual audit of logs, crash reports, Windows event artifacts, and packaged diagnostics for keys, seed phrases, passwords, signed transactions, and provider credentials.
-- Add sanitized structured logging with an explicit field allowlist and retention policy.
+- [x] Add sanitized structured JSONL logging with an explicit field allowlist, 1 MiB rotation, and three-archive retention.
 
 ### P1.4 Windows release gate — Partial
 

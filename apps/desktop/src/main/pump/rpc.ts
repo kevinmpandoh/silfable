@@ -1,3 +1,5 @@
+import { ProviderRateBudget } from "../integrations/provider-rate-budget.js";
+import { writeSafeAuditLog } from "../telemetry/safe-audit-log.js";
 import type { PumpFinalizedAccount } from "./state.js";
 
 const MAINNET_RPC_URL = "https://api.mainnet-beta.solana.com";
@@ -20,11 +22,17 @@ export class PumpMainnetRpc {
   #url: string;
   readonly #fetch: Fetch;
   readonly #sleep: Sleep;
+  readonly #rateBudget: ProviderRateBudget;
 
-  constructor(input: { rpcUrl?: string; fetch?: Fetch; sleep?: Sleep } = {}) {
+  constructor(input: { rpcUrl?: string; fetch?: Fetch; sleep?: Sleep; rateBudget?: ProviderRateBudget } = {}) {
     this.#url = input.rpcUrl ?? MAINNET_RPC_URL;
     this.#fetch = input.fetch ?? fetch;
     this.#sleep = input.sleep ?? ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)));
+    this.#rateBudget = input.rateBudget ?? new ProviderRateBudget({
+      name: "Pump Solana RPC",
+      limit: 240,
+      windowMs: 60_000,
+    });
     this.#validateUrl(this.#url);
   }
 
@@ -132,6 +140,16 @@ export class PumpMainnetRpc {
 
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
+        try {
+          this.#rateBudget.consume();
+        } catch (error) {
+          writeSafeAuditLog("provider_budget_blocked", {
+            operation: "pump_solana_rpc_request",
+            outcome: "blocked",
+            code: "RATE_BUDGET",
+          });
+          throw error;
+        }
         const response = await this.#fetch(this.#url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

@@ -19,7 +19,7 @@ import type { MissionContractPreview } from "@silfable/contracts";
 
 import type { MainnetReadService } from "../integrations/read-only.js";
 import type { WalletOnboardingService } from "../wallet/onboarding.js";
-import { MissionSimulationService } from "./simulation.js";
+import { MissionSimulationService, resolveSwapReceiptStatus } from "./simulation.js";
 
 const WALLET = "11111111111111111111111111111111";
 const SOL = "So11111111111111111111111111111111111111112";
@@ -620,3 +620,27 @@ function unsignedTransactionFor(walletValue: string, program: string): string {
   );
   return Buffer.from(getTransactionEncoder().encode(compileTransaction(message))).toString("base64");
 }
+
+test("finalized RPC evidence is authoritative and records provider contradictions", () => {
+  const confirmed = resolveSwapReceiptStatus("Failed", 8010, "3".repeat(64), {
+    state: "finalized",
+    slot: 123,
+    error: null,
+    verifiedAt: "2026-07-28T00:00:00.000Z",
+  });
+  assert.deepEqual(confirmed, {
+    status: "confirmed",
+    conflictCode: "ROUTER_FAILED_RPC_CONFIRMED",
+  });
+
+  const failed = resolveSwapReceiptStatus("Success", 0, "3".repeat(64), {
+    state: "failed",
+    slot: 124,
+    error: "Instruction failed",
+    verifiedAt: "2026-07-28T00:00:01.000Z",
+  });
+  assert.deepEqual(failed, {
+    status: "failed",
+    conflictCode: "ROUTER_SUCCESS_RPC_FAILED",
+  });
+});

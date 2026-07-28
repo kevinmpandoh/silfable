@@ -2,23 +2,15 @@ import { getCompiledTransactionMessageDecoder, getSignatureFromTransaction, getT
 import { MissionExecutionReceiptSchema, MissionSimulationPreviewSchema, type MissionContractPreview, type MissionExecutionReceipt, type MissionSimulationPreview, type TransactionSettings } from "@silfable/contracts";
 
 import type { MainnetReadService, SignatureVerification, TransactionSettlement, UnsignedSwapOrder } from "../integrations/read-only.js";
+import { allowedSolanaPrograms } from "../security/solana-program-policy.js";
+import { writeSafeAuditLog } from "../telemetry/safe-audit-log.js";
 import type { WalletOnboardingService } from "../wallet/onboarding.js";
 import { MissionPolicyService } from "./policy.js";
 import { DEFAULT_TRANSACTION_SETTINGS, type TransactionSettingsService } from "./transaction-settings.js";
 
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 
-const ALLOWED_PROGRAMS = new Set([
-  "11111111111111111111111111111111",
-  "ComputeBudget111111111111111111111111111111",
-  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
-  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-  "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
-  // OKX Aggregator V6. Jupiter Ultra may select this audited route program.
-  "proVF4pMXVaYqmy4NjniPh4pqKNfMmsihgd4wdkCX3u",
-  "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr",
-]);
+const ALLOWED_PROGRAMS = allowedSolanaPrograms("jupiter-swap");
 
 export class MissionSimulationService {
   readonly #reads: MainnetReadService;
@@ -109,7 +101,15 @@ export class MissionSimulationService {
           try { settlement = await this.#reads.transactionSettlement(receiptSignature, mission.walletAddress); } catch { /* Can be retried from the persisted receipt. */ }
         }
       }
-      const status = receiptStatus(execution.status, execution.code, receiptSignature, verification);
+      const receiptDecision = resolveSwapReceiptStatus(execution.status, execution.code, receiptSignature, verification);
+      const status = receiptDecision.status;
+      if (receiptDecision.conflictCode !== null) {
+        writeSafeAuditLog("provider_rpc_evidence_conflict", {
+          operation: "jupiter_swap_reconciliation",
+          outcome: "blocked",
+          code: receiptDecision.conflictCode,
+        });
+      }
       const outflow = settlementDetails(settlement, mission.inputMint === SOL_MINT ? execution.totalInputAmount : null);
       return MissionExecutionReceiptSchema.parse({
         ...base,
@@ -279,14 +279,28 @@ function friendlySwapFailure(router: string, error: string, logs: string[] = [])
   return error;
 }
 
-function receiptStatus(
+export function resolveSwapReceiptStatus(
   routerStatus: "Success" | "Failed",
   code: number | null,
   signature: string | null,
   verification: SignatureVerification | null,
-): MissionExecutionReceipt["status"] {
-  if (verification?.state === "confirmed" || verification?.state === "finalized") return "confirmed";
-  if (verification?.state === "failed" || routerStatus === "Failed") return "failed";
-  if (routerStatus === "Success" && code === 0 && signature !== null) return "unknown";
-  return "failed";
+): {
+  status: MissionExecutionReceipt["status"];
+  conflictCode: "ROUTER_FAILED_RPC_CONFIRMED" | "ROUTER_SUCCESS_RPC_FAILED" | null;
+} {
+  if (verification?.state === "confirmed" || verification?.state === "finalized") {
+    return {
+      status: "confirmed",
+      conflictCode: routerStatus === "Failed" ? "ROUTER_FAILED_RPC_CONFIRMED" : null,
+    };
+  }
+  if (verification?.state === "failed") {
+    return {
+      status: "failed",
+      conflictCode: routerStatus === "Success" ? "ROUTER_SUCCESS_RPC_FAILED" : null,
+    };
+  }
+  if (routerStatus === "Failed") return { status: "failed", conflictCode: null };
+  if (routerStatus === "Success" && code === 0 && signature !== null) return { status: "unknown", conflictCode: null };
+  return { status: "failed", conflictCode: null };
 }

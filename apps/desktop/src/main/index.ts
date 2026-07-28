@@ -202,6 +202,7 @@ import { RobinhoodReceiptReconciliationService } from "./execution/robinhood-rec
 import { RobinhoodApprovalExecutionService } from "./execution/robinhood-approval-execution.js";
 import { RobinhoodSwapExecutionService } from "./execution/robinhood-swap-execution.js";
 import { VenueReadinessService } from "./security/venue-readiness.js";
+import { configureSafeAuditLog } from "./telemetry/safe-audit-log.js";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -1738,6 +1739,11 @@ function assertTrustedSender(event: Electron.IpcMainInvokeEvent): void {
 app.whenReady().then(async () => {
   session.defaultSession.setPermissionCheckHandler(denyPermissionCheck);
   session.defaultSession.setPermissionRequestHandler(denyPermissionRequest);
+  configureSafeAuditLog({
+    directory: join(app.getPath("userData"), "logs"),
+    maxBytes: 1_048_576,
+    maxArchives: 3,
+  });
   keystore = new LocalEncryptedKeystore(join(app.getPath("userData"), "keystore", "secrets.v1.json"));
   const initializedKeystore = keystore;
   runtimeDatabase = await RuntimeDatabase.open(join(app.getPath("userData"), "data", "silfable-mainnet.sqlite3"));

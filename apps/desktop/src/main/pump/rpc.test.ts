@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { ProviderRateBudget } from "../integrations/provider-rate-budget.js";
 import { PumpMainnetRpc } from "./rpc.js";
 
 const GLOBAL = "4wTV1YmiEkRvAtNtsSGPtUrqRYQq8fJAPxrBN1ybump";
@@ -156,6 +157,28 @@ test("Pump Mainnet RPC treats simulation timeout as a retry-safe read", async ()
   }), /timed out/u);
   assert.equal(attempts, 4);
   assert.deepEqual(delays, [500, 1_000, 2_000]);
+});
+
+test("Pump Mainnet RPC rate budget blocks before another provider request", async () => {
+  let requests = 0;
+  const rpc = new PumpMainnetRpc({
+    rpcUrl: "https://rpc.example.test",
+    rateBudget: new ProviderRateBudget({
+      name: "Pump Solana RPC",
+      limit: 1,
+      windowMs: 60_000,
+    }),
+    fetch: async () => {
+      requests += 1;
+      return response({ result: 123 });
+    },
+  });
+  assert.equal(await rpc.getBlockHeight({ commitment: "finalized" }), 123);
+  await assert.rejects(
+    () => rpc.getBlockHeight({ commitment: "finalized" }),
+    /request budget is exhausted/u,
+  );
+  assert.equal(requests, 1);
 });
 
 function response(body: unknown): Response {

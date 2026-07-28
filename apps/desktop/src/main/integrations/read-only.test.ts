@@ -5,6 +5,7 @@ import test from "node:test";
 import { address as solanaAddress, getAddressEncoder, getBase58Decoder, getProgramDerivedAddress } from "@solana/kit";
 import type { SecretName } from "../storage/keystore.js";
 import { ProviderCircuitBreaker } from "./provider-circuit-breaker.js";
+import { ProviderRateBudget } from "./provider-rate-budget.js";
 import { extractPumpActivitySignals, extractPumpCandidateMints, extractPumpEventSignals, extractPumpMintSignals, MainnetReadService, PUMP_PROGRAM_ID, PUMP_SWAP_PROGRAM_ID } from "./read-only.js";
 
 const WALLET = "11111111111111111111111111111111";
@@ -355,6 +356,53 @@ test("Jupiter requests stop after bounded provider failures and recover only aft
   const prices = await service.prices([MINT]);
   assert.equal(prices.get(MINT)?.usdPrice, 150);
   assert.equal(requests, 3);
+});
+
+test("Jupiter request budget fails closed before another provider request", async () => {
+  const secrets = new Secrets();
+  secrets.values.set("jupiter-api-key", "jupiter-private-key");
+  let requests = 0;
+  const service = new MainnetReadService({
+    secrets,
+    wallets: { listWallets: async () => [] },
+    jupiterRateBudget: new ProviderRateBudget({
+      name: "Jupiter provider",
+      limit: 1,
+      windowMs: 60_000,
+    }),
+    fetch: async () => {
+      requests += 1;
+      return Response.json({ [MINT]: { usdPrice: 150 } });
+    },
+  });
+
+  await service.prices([MINT]);
+  await assert.rejects(() => service.prices([MINT]), /request budget is exhausted/u);
+  assert.equal(requests, 1);
+});
+
+test("Solana RPC request budget blocks sustained reads before another fetch", async () => {
+  let requests = 0;
+  const service = new MainnetReadService({
+    secrets: new Secrets(),
+    wallets: { listWallets: async () => [] },
+    solanaRpcRateBudget: new ProviderRateBudget({
+      name: "Solana RPC",
+      limit: 1,
+      windowMs: 60_000,
+    }),
+    fetch: async () => {
+      requests += 1;
+      return Response.json({ jsonrpc: "2.0", id: 1, result: { value: [null] } });
+    },
+  });
+
+  await service.verifyTransactionSignature("1".repeat(64));
+  await assert.rejects(
+    () => service.verifyTransactionSignature("1".repeat(64)),
+    /request budget is exhausted/u,
+  );
+  assert.equal(requests, 1);
 });
 
 test("transaction receipt verification retries timeouts with bounded read-only backoff", async () => {
