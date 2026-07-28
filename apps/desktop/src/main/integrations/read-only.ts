@@ -5,6 +5,7 @@ import { PumpDiscoverySnapshotSchema, PumpTokenIntelligenceSchema, type JupiterS
 
 import type { SecretName } from "../storage/keystore.js";
 import { evaluatePumpResearchEligibility } from "../pump/research-eligibility.js";
+import { ProviderCircuitBreaker } from "./provider-circuit-breaker.js";
 
 const MAINNET_RPC_URL = "https://api.mainnet-beta.solana.com";
 const SOL_MINT = "So11111111111111111111111111111111111111112";
@@ -71,6 +72,11 @@ export type PumpTransactionSettlement = TransactionSettlement & {
   tokenRawDelta: string;
   accountCreationFundingLamports: number;
 };
+export type PumpLaunchTransactionSettlement = TransactionSettlement & {
+  mintAddress: string;
+  accountCreationFundingLamports: number;
+  walletOutflowLamports: string;
+};
 
 export type TavilyEvidence = {
   query: string;
@@ -105,13 +111,26 @@ export class MainnetReadService {
   #rpcUrl: string;
   readonly #secrets: SecretReader;
   readonly #wallets: WalletRegistry;
+  readonly #jupiterCircuit: ProviderCircuitBreaker;
 
-  constructor(input: { secrets: SecretReader; wallets: WalletRegistry; fetch?: Fetch; rpcUrl?: string; sleep?: Sleep }) {
+  constructor(input: {
+    secrets: SecretReader;
+    wallets: WalletRegistry;
+    fetch?: Fetch;
+    rpcUrl?: string;
+    sleep?: Sleep;
+    jupiterCircuit?: ProviderCircuitBreaker;
+  }) {
     this.#secrets = input.secrets;
     this.#wallets = input.wallets;
     this.#fetch = input.fetch ?? globalThis.fetch;
     this.#sleep = input.sleep ?? ((delayMs) => new Promise((resolve) => setTimeout(resolve, delayMs)));
     this.#rpcUrl = input.rpcUrl ?? MAINNET_RPC_URL;
+    this.#jupiterCircuit = input.jupiterCircuit ?? new ProviderCircuitBreaker({
+      name: "Jupiter provider",
+      failureThreshold: 3,
+      cooldownMs: 30_000,
+    });
     if (!this.#rpcUrl.startsWith("https://")) throw new Error("Mainnet RPC must use HTTPS");
   }
 
@@ -181,32 +200,38 @@ export class MainnetReadService {
   }
 
   async prices(mints: string[]): Promise<Map<string, PricePoint>> {
-    const unique = [...new Set(mints)].filter((mint) => ADDRESS_PATTERN.test(mint)).slice(0, 100);
-    if (unique.length === 0) return new Map();
-    const apiKey = await this.#secrets.getSecret("jupiter-api-key");
-    if (apiKey === null) throw new Error("Jupiter is not configured");
-    const response = await this.#fetch(`https://api.jup.ag/price/v3?ids=${encodeURIComponent(unique.join(","))}`, {
-      headers: { "x-api-key": apiKey },
-      signal: AbortSignal.timeout(15_000),
-    });
-    const body: unknown = await response.json();
-    if (!response.ok || typeof body !== "object" || body === null || Array.isArray(body)) throw new Error(`Jupiter price request failed (${response.status})`);
-    const prices = new Map<string, PricePoint>();
-    for (const mint of unique) {
-      const entry = (body as Record<string, unknown>)[mint];
-      if (typeof entry !== "object" || entry === null) continue;
-      const value = entry as { usdPrice?: unknown; createdAt?: unknown; blockId?: unknown };
-      if (typeof value.usdPrice !== "number" || !Number.isFinite(value.usdPrice) || value.usdPrice < 0) continue;
-      prices.set(mint, {
-        usdPrice: value.usdPrice,
-        createdAt: typeof value.createdAt === "string" ? value.createdAt.slice(0, 64) : null,
-        blockId: typeof value.blockId === "number" && Number.isInteger(value.blockId) && value.blockId >= 0 ? value.blockId : null,
+    return await this.#withJupiterCircuit(async () => {
+      const unique = [...new Set(mints)].filter((mint) => ADDRESS_PATTERN.test(mint)).slice(0, 100);
+      if (unique.length === 0) return new Map();
+      const apiKey = await this.#secrets.getSecret("jupiter-api-key");
+      if (apiKey === null) throw new Error("Jupiter is not configured");
+      const response = await this.#fetch(`https://api.jup.ag/price/v3?ids=${encodeURIComponent(unique.join(","))}`, {
+        headers: { "x-api-key": apiKey },
+        signal: AbortSignal.timeout(15_000),
       });
-    }
-    return prices;
+      const body: unknown = await response.json();
+      if (!response.ok || typeof body !== "object" || body === null || Array.isArray(body)) throw new Error(`Jupiter price request failed (${response.status})`);
+      const prices = new Map<string, PricePoint>();
+      for (const mint of unique) {
+        const entry = (body as Record<string, unknown>)[mint];
+        if (typeof entry !== "object" || entry === null) continue;
+        const value = entry as { usdPrice?: unknown; createdAt?: unknown; blockId?: unknown };
+        if (typeof value.usdPrice !== "number" || !Number.isFinite(value.usdPrice) || value.usdPrice < 0) continue;
+        prices.set(mint, {
+          usdPrice: value.usdPrice,
+          createdAt: typeof value.createdAt === "string" ? value.createdAt.slice(0, 64) : null,
+          blockId: typeof value.blockId === "number" && Number.isInteger(value.blockId) && value.blockId >= 0 ? value.blockId : null,
+        });
+      }
+      return prices;
+    });
   }
 
   async swapQuote(inputMint: string, outputMint: string, amount: string): Promise<JupiterSwapQuotePreview> {
+    return await this.#withJupiterCircuit(async () => this.#swapQuote(inputMint, outputMint, amount));
+  }
+
+  async #swapQuote(inputMint: string, outputMint: string, amount: string): Promise<JupiterSwapQuotePreview> {
     validateSwapInput(inputMint, outputMint, amount);
     const apiKey = await this.#secrets.getSecret("jupiter-api-key");
     if (apiKey === null) throw new Error("Jupiter is not configured");
@@ -245,6 +270,24 @@ export class MainnetReadService {
     taker: string,
     slippageBps: number,
     priority?: "economy" | "standard" | "fast"
+  ): Promise<UnsignedSwapOrder> {
+    return await this.#withJupiterCircuit(async () => this.#buildUnsignedSwapOrder(
+      inputMint,
+      outputMint,
+      amount,
+      taker,
+      slippageBps,
+      priority,
+    ));
+  }
+
+  async #buildUnsignedSwapOrder(
+    inputMint: string,
+    outputMint: string,
+    amount: string,
+    taker: string,
+    slippageBps: number,
+    priority?: "economy" | "standard" | "fast",
   ): Promise<UnsignedSwapOrder> {
     validateSwapInput(inputMint, outputMint, amount);
     if (!ADDRESS_PATTERN.test(taker)) throw new Error("Swap taker is invalid");
@@ -297,6 +340,10 @@ export class MainnetReadService {
   }
 
   async executeSignedSwap(transaction: string, requestId: string, lastValidBlockHeight: string | null): Promise<JupiterExecutionResult> {
+    return await this.#withJupiterCircuit(async () => this.#executeSignedSwap(transaction, requestId, lastValidBlockHeight));
+  }
+
+  async #executeSignedSwap(transaction: string, requestId: string, lastValidBlockHeight: string | null): Promise<JupiterExecutionResult> {
     validateBase64Transaction(transaction);
     if (requestId.length < 1 || requestId.length > 200) throw new Error("Jupiter request identifier is invalid");
     const apiKey = await this.#secrets.getSecret("jupiter-api-key");
@@ -717,6 +764,108 @@ export class MainnetReadService {
   async #assertRegisteredWallet(address: string): Promise<void> {
     const wallets = await this.#wallets.listWallets();
     if (!wallets.some((wallet) => wallet.address === address)) throw new Error("Wallet is not registered on this device");
+  }
+
+  async pumpLaunchTransactionSettlement(
+    signature: string,
+    walletAddress: string,
+    mintAddress: string,
+  ): Promise<PumpLaunchTransactionSettlement> {
+    if (!SIGNATURE_PATTERN.test(signature)) throw new Error("Transaction signature is invalid");
+    if (!ADDRESS_PATTERN.test(walletAddress) || !ADDRESS_PATTERN.test(mintAddress)) {
+      throw new Error("Token Launch settlement scope is invalid");
+    }
+    const body = await this.#rpc("getTransaction", [signature, {
+      commitment: "finalized",
+      encoding: "jsonParsed",
+      maxSupportedTransactionVersion: 0,
+    }]);
+    if (typeof body !== "object" || body === null) {
+      throw new Error("Finalized Token Launch transaction details are not available yet");
+    }
+    const value = body as { slot?: unknown; meta?: unknown; transaction?: unknown; blockTime?: unknown };
+    const meta = value.meta as { err?: unknown; fee?: unknown; preBalances?: unknown; postBalances?: unknown } | null;
+    const transaction = value.transaction as { message?: { accountKeys?: unknown } } | null;
+    if (
+      !Number.isSafeInteger(value.slot)
+      || (value.slot as number) < 1
+      || meta === null
+      || typeof meta !== "object"
+      || meta.err !== null
+      || !Number.isSafeInteger(meta.fee)
+      || (meta.fee as number) < 0
+      || !Array.isArray(meta.preBalances)
+      || !Array.isArray(meta.postBalances)
+      || !Array.isArray(transaction?.message?.accountKeys)
+      || meta.preBalances.length !== meta.postBalances.length
+      || meta.preBalances.length !== transaction.message.accountKeys.length
+    ) {
+      throw new Error("Solana returned invalid finalized Token Launch settlement details");
+    }
+    const keys = transaction.message.accountKeys.map((entry) => typeof entry === "string"
+      ? entry
+      : typeof entry === "object" && entry !== null && typeof (entry as { pubkey?: unknown }).pubkey === "string"
+        ? (entry as { pubkey: string }).pubkey
+        : "");
+    const walletIndex = keys.indexOf(walletAddress);
+    const mintIndex = keys.indexOf(mintAddress);
+    const preBalances = meta.preBalances as unknown[];
+    const postBalances = meta.postBalances as unknown[];
+    const walletPre = preBalances[walletIndex];
+    const walletPost = postBalances[walletIndex];
+    const mintPre = preBalances[mintIndex];
+    const mintPost = postBalances[mintIndex];
+    if (
+      walletIndex < 0
+      || mintIndex < 0
+      || !Number.isSafeInteger(walletPre)
+      || (walletPre as number) < 0
+      || !Number.isSafeInteger(walletPost)
+      || (walletPost as number) < 0
+      || !Number.isSafeInteger(mintPre)
+      || (mintPre as number) !== 0
+      || !Number.isSafeInteger(mintPost)
+      || (mintPost as number) <= 0
+      || (walletPost as number) > (walletPre as number)
+    ) {
+      throw new Error("Finalized Token Launch settlement does not prove creator outflow and a newly funded mint");
+    }
+    let accountCreationFundingLamports = 0;
+    for (let index = 0; index < preBalances.length; index += 1) {
+      if (index === walletIndex) continue;
+      const pre = preBalances[index];
+      const post = postBalances[index];
+      if (!Number.isSafeInteger(pre) || !Number.isSafeInteger(post) || (pre as number) < 0 || (post as number) < 0) {
+        throw new Error("Token Launch account funding evidence is invalid");
+      }
+      if ((pre as number) === 0 && (post as number) > 0) {
+        accountCreationFundingLamports += post as number;
+      }
+    }
+    if (!Number.isSafeInteger(accountCreationFundingLamports)) {
+      throw new Error("Token Launch account funding exceeds the safe integer range");
+    }
+    return {
+      slot: value.slot as number,
+      feeLamports: meta.fee as number,
+      walletPreLamports: String(walletPre),
+      walletPostLamports: String(walletPost),
+      mintAddress,
+      accountCreationFundingLamports,
+      walletOutflowLamports: String((walletPre as number) - (walletPost as number)),
+    };
+  }
+
+  async #withJupiterCircuit<T>(operation: () => Promise<T>): Promise<T> {
+    this.#jupiterCircuit.assertAvailable();
+    try {
+      const result = await operation();
+      this.#jupiterCircuit.recordSuccess();
+      return result;
+    } catch (error) {
+      this.#jupiterCircuit.recordFailure();
+      throw error;
+    }
   }
 
   async #rpc(method: string, params: unknown[]): Promise<unknown> {

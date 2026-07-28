@@ -1,4 +1,4 @@
-import { TransactionSettingsSchema, type TransactionSettings } from "@silfable/contracts";
+import { TransactionSettingsSchema, type SessionSafetyOverrides, type TransactionSettings } from "@silfable/contracts";
 
 import type { RuntimeDatabase } from "../storage/database.js";
 
@@ -8,6 +8,7 @@ export const DEFAULT_TRANSACTION_SETTINGS: TransactionSettings = Object.freeze({
   maxNetworkFeeLamports: 200_000,
   maxFeePercent: 5,
   defaultSlippageBps: 50,
+  maxSlippageBps: 300,
   defaultDeadlineMinutes: 30,
   priority: "standard",
 });
@@ -30,4 +31,18 @@ export class TransactionSettingsService {
     this.#database.setSetting(SETTINGS_KEY, settings);
     return settings;
   }
+}
+
+/**
+ * Session overrides are intentionally a one-way safety ratchet. A stale or
+ * tampered session can never widen the current device-level slippage ceiling.
+ */
+export function withSessionSafetyOverrides(settings: TransactionSettings, overrides: SessionSafetyOverrides | undefined): TransactionSettings {
+  if (overrides === undefined) return settings;
+  const maxSlippageBps = Math.min(settings.maxSlippageBps, overrides.maxSlippageBps);
+  return {
+    ...settings,
+    maxSlippageBps,
+    defaultSlippageBps: Math.min(settings.defaultSlippageBps, maxSlippageBps),
+  };
 }

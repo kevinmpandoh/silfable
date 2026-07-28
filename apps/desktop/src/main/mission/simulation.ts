@@ -1,5 +1,5 @@
 import { getCompiledTransactionMessageDecoder, getSignatureFromTransaction, getTransactionDecoder, getTransactionEncoder, partiallySignTransaction } from "@solana/kit";
-import { MissionExecutionReceiptSchema, MissionSimulationPreviewSchema, type MissionContractPreview, type MissionExecutionReceipt, type MissionSimulationPreview } from "@silfable/contracts";
+import { MissionExecutionReceiptSchema, MissionSimulationPreviewSchema, type MissionContractPreview, type MissionExecutionReceipt, type MissionSimulationPreview, type TransactionSettings } from "@silfable/contracts";
 
 import type { MainnetReadService, SignatureVerification, TransactionSettlement, UnsignedSwapOrder } from "../integrations/read-only.js";
 import type { WalletOnboardingService } from "../wallet/onboarding.js";
@@ -22,37 +22,36 @@ const ALLOWED_PROGRAMS = new Set([
 
 export class MissionSimulationService {
   readonly #reads: MainnetReadService;
-  readonly #policy: MissionPolicyService;
   readonly #wallets: WalletOnboardingService;
   readonly #settings: Pick<TransactionSettingsService, "get">;
-  readonly #prepared = new Map<string, { mission: MissionContractPreview; order: UnsignedSwapOrder; expiresAt: number }>();
+  readonly #prepared = new Map<string, { mission: MissionContractPreview; order: UnsignedSwapOrder; settings: TransactionSettings; expiresAt: number }>();
 
   constructor(reads: MainnetReadService, wallets: WalletOnboardingService, settings: Pick<TransactionSettingsService, "get"> = { get: () => ({ ...DEFAULT_TRANSACTION_SETTINGS }) }) {
     this.#reads = reads;
-    this.#policy = new MissionPolicyService(reads);
     this.#wallets = wallets;
     this.#settings = settings;
   }
 
-  async simulate(mission: MissionContractPreview): Promise<MissionSimulationPreview> {
+  async simulate(mission: MissionContractPreview, sessionSettings: TransactionSettings = this.#settings.get()): Promise<MissionSimulationPreview> {
     const base = { id: crypto.randomUUID(), missionId: mission.id, transactionSigned: false as const, broadcastAttempted: false as const, simulatedAt: new Date().toISOString() };
     try {
-      const refreshed = await this.#policy.preview({
+      const policy = new MissionPolicyService(this.#reads, { get: () => sessionSettings });
+      const refreshed = await policy.preview({
         goal: mission.goal, walletAddress: mission.walletAddress, inputMint: mission.inputMint, outputMint: mission.outputMint,
         inputAmount: mission.inputAmount, maxSlippageBps: mission.maxSlippageBps, deadlineAt: mission.deadlineAt, stopConditions: mission.stopConditions,
       });
       if (refreshed.status !== "ready-for-review" || refreshed.quote === null) return result(base, "blocked", null, null, [], null, null, [], "Mission policy no longer passes against current Mainnet evidence.");
-      const priority = this.#settings.get().priority;
+      const priority = sessionSettings.priority;
       const order = await this.#reads.buildUnsignedSwapOrder(mission.inputMint, mission.outputMint, mission.inputAmount, mission.walletAddress, mission.maxSlippageBps, priority);
       const minimumOut = BigInt(refreshed.quote.outAmount) * BigInt(10_000 - mission.maxSlippageBps) / 10_000n;
       if (BigInt(order.outAmount) < minimumOut) return result(base, "blocked", order.router, order.outAmount, [], null, null, [], "Unsigned order output fell below the mission slippage floor.");
       const programIds = inspectUnsignedTransaction(order.transaction, mission.walletAddress);
       const simulation = await this.#reads.simulateUnsignedTransaction(order.transaction);
-      const fee = await evaluateFeeGuard(this.#reads, this.#settings, mission, simulation.feeLamports);
+      const fee = await evaluateFeeGuard(this.#reads, { get: () => sessionSettings }, mission, simulation.feeLamports);
       if (simulation.err !== null) return result(base, "failed", order.router, order.outAmount, programIds, simulation.unitsConsumed, simulation.feeLamports, simulation.logs, `Simulation failed: ${safeJson(simulation.err)}`, fee);
       if (!fee.feeGuardPassed) return result(base, "blocked", order.router, order.outAmount, programIds, simulation.unitsConsumed, simulation.feeLamports, simulation.logs, fee.feeGuardMessage ?? "Fee guard blocked execution.", fee);
       this.#purgeExpired();
-      this.#prepared.set(base.id, { mission, order, expiresAt: Date.now() + 90_000 });
+      this.#prepared.set(base.id, { mission, order, settings: sessionSettings, expiresAt: Date.now() + 90_000 });
       return result(base, "passed", order.router, order.outAmount, programIds, simulation.unitsConsumed, simulation.feeLamports, simulation.logs, null, fee);
     } catch (error) {
       return result(base, "blocked", null, null, [], null, null, [], error instanceof Error ? error.message.slice(0, 500) : "Simulation was blocked safely.");
@@ -65,7 +64,8 @@ export class MissionSimulationService {
     this.#prepared.delete(simulationId);
     if (prepared === undefined || prepared.mission.id !== mission.id) throw new Error("Simulation approval expired; run a new simulation");
     if (prepared.expiresAt < Date.now() || Date.parse(mission.deadlineAt) <= Date.now()) throw new Error("Mission or simulation approval expired");
-    const refreshed = await this.#policy.preview({
+    const policy = new MissionPolicyService(this.#reads, { get: () => prepared.settings });
+    const refreshed = await policy.preview({
       goal: mission.goal, walletAddress: mission.walletAddress, inputMint: mission.inputMint, outputMint: mission.outputMint,
       inputAmount: mission.inputAmount, maxSlippageBps: mission.maxSlippageBps, deadlineAt: mission.deadlineAt, stopConditions: mission.stopConditions,
     });
@@ -77,7 +77,7 @@ export class MissionSimulationService {
     if (finalSimulation.err !== null) {
       throw new Error(`${friendlySwapFailure(prepared.order.router, safeJson(finalSimulation.err), finalSimulation.logs)} No transaction was signed or broadcast.`);
     }
-    const finalFee = await evaluateFeeGuard(this.#reads, this.#settings, mission, finalSimulation.feeLamports);
+    const finalFee = await evaluateFeeGuard(this.#reads, { get: () => prepared.settings }, mission, finalSimulation.feeLamports);
     if (!finalFee.feeGuardPassed) throw new Error(`${finalFee.feeGuardMessage ?? "Fee guard blocked execution."} No transaction was signed or broadcast.`);
     const decoded = getTransactionDecoder().decode(Buffer.from(prepared.order.transaction, "base64"));
     const signedTransaction = await this.#wallets.withWalletSigner(mission.walletAddress, async (signer) => {

@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { address as solanaAddress, getAddressEncoder, getBase58Decoder, getProgramDerivedAddress } from "@solana/kit";
 import type { SecretName } from "../storage/keystore.js";
+import { ProviderCircuitBreaker } from "./provider-circuit-breaker.js";
 import { extractPumpActivitySignals, extractPumpCandidateMints, extractPumpEventSignals, extractPumpMintSignals, MainnetReadService, PUMP_PROGRAM_ID, PUMP_SWAP_PROGRAM_ID } from "./read-only.js";
 
 const WALLET = "11111111111111111111111111111111";
@@ -322,6 +323,40 @@ test("transaction receipt verification distinguishes missing and failed signatur
   assert.match(verification.error ?? "", /InstructionError/u);
 });
 
+test("Jupiter requests stop after bounded provider failures and recover only after cooldown", async () => {
+  const secrets = new Secrets();
+  secrets.values.set("jupiter-api-key", "jupiter-private-key");
+  let now = 0;
+  let requests = 0;
+  const circuit = new ProviderCircuitBreaker({
+    name: "Jupiter provider",
+    failureThreshold: 2,
+    cooldownMs: 1_000,
+    now: () => now,
+  });
+  const service = new MainnetReadService({
+    secrets,
+    wallets: { listWallets: async () => [] },
+    jupiterCircuit: circuit,
+    fetch: async () => {
+      requests += 1;
+      return requests <= 2
+        ? Response.json({ error: "temporary" }, { status: 503 })
+        : Response.json({ [MINT]: { usdPrice: 150 } });
+    },
+  });
+
+  await assert.rejects(() => service.prices([MINT]), /Jupiter price request failed/u);
+  await assert.rejects(() => service.prices([MINT]), /Jupiter price request failed/u);
+  await assert.rejects(() => service.prices([MINT]), /temporarily unavailable/u);
+  assert.equal(requests, 2);
+
+  now = 1_000;
+  const prices = await service.prices([MINT]);
+  assert.equal(prices.get(MINT)?.usdPrice, 150);
+  assert.equal(requests, 3);
+});
+
 test("transaction receipt verification retries timeouts with bounded read-only backoff", async () => {
   let attempts = 0;
   const delays: number[] = [];
@@ -390,6 +425,95 @@ test("finalized Pump settlement exposes exact-mint raw delta and token-account f
   assert.equal(settlement.tokenRawDelta, "250000");
   assert.equal(settlement.accountCreationFundingLamports, 2_039_280);
   assert.equal(settlement.walletPostLamports, "96955720");
+});
+
+test("finalized Token Launch settlement proves a newly funded mint and exact creator outflow", async () => {
+  const creator = WALLET;
+  const mint = PUMP_MINT;
+  const bondingCurve = "AY8Ti7Tr7iUGksWJ7GjYy3vkE2YBv6qj9BnE8HtYCf8f";
+  let commitment = "";
+  const service = new MainnetReadService({
+    secrets: new Secrets(),
+    wallets: { listWallets: async () => [] },
+    fetch: async (_input, init) => {
+      const request = JSON.parse(String(init?.body)) as { params: [string, { commitment: string }] };
+      commitment = request.params[1].commitment;
+      return Response.json({ jsonrpc: "2.0", id: 1, result: {
+        slot: 99,
+        meta: {
+          err: null,
+          fee: 5_000,
+          preBalances: [100_000_000, 0, 0],
+          postBalances: [96_955_720, 1_461_600, 1_577_680],
+        },
+        transaction: { message: { accountKeys: [
+          { pubkey: creator, signer: true, writable: true },
+          { pubkey: mint, signer: true, writable: true },
+          { pubkey: bondingCurve, signer: false, writable: true },
+        ] } },
+      } });
+    },
+  });
+  const settlement = await service.pumpLaunchTransactionSettlement("1".repeat(64), creator, mint);
+  assert.equal(commitment, "finalized");
+  assert.equal(settlement.slot, 99);
+  assert.equal(settlement.feeLamports, 5_000);
+  assert.equal(settlement.accountCreationFundingLamports, 3_039_280);
+  assert.equal(settlement.walletOutflowLamports, "3044280");
+  assert.equal(settlement.walletPreLamports, "100000000");
+  assert.equal(settlement.walletPostLamports, "96955720");
+});
+
+test("Token Launch settlement rejects a mint account that was already funded", async () => {
+  const creator = WALLET;
+  const mint = PUMP_MINT;
+  const service = new MainnetReadService({
+    secrets: new Secrets(),
+    wallets: { listWallets: async () => [] },
+    fetch: async () => Response.json({ jsonrpc: "2.0", id: 1, result: {
+      slot: 100,
+      meta: {
+        err: null,
+        fee: 5_000,
+        preBalances: [100_000_000, 1_461_600],
+        postBalances: [99_995_000, 1_461_600],
+      },
+      transaction: { message: { accountKeys: [
+        { pubkey: creator, signer: true, writable: true },
+        { pubkey: mint, signer: true, writable: true },
+      ] } },
+    } }),
+  });
+
+  await assert.rejects(
+    () => service.pumpLaunchTransactionSettlement("1".repeat(64), creator, mint),
+    /does not prove creator outflow and a newly funded mint/,
+  );
+});
+
+test("Token Launch settlement rejects a finalized transaction with an on-chain error", async () => {
+  const service = new MainnetReadService({
+    secrets: new Secrets(),
+    wallets: { listWallets: async () => [] },
+    fetch: async () => Response.json({ jsonrpc: "2.0", id: 1, result: {
+      slot: 101,
+      meta: {
+        err: { InstructionError: [0, "Custom"] },
+        fee: 5_000,
+        preBalances: [100_000_000, 0],
+        postBalances: [99_995_000, 1_461_600],
+      },
+      transaction: { message: { accountKeys: [
+        { pubkey: WALLET, signer: true, writable: true },
+        { pubkey: PUMP_MINT, signer: true, writable: true },
+      ] } },
+    } }),
+  });
+
+  await assert.rejects(
+    () => service.pumpLaunchTransactionSettlement("1".repeat(64), WALLET, PUMP_MINT),
+    /invalid finalized Token Launch settlement details/,
+  );
 });
 
 test("Jupiter token search returns bounded verification evidence without exposing the API key", async () => {

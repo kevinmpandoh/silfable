@@ -51,6 +51,20 @@ test("mission policy blocks insufficient balance and excessive slippage", async 
   assert.equal(preview.checks.find((check) => check.code === "slippage_within_limit")?.status, "fail");
 });
 
+test("transaction maximum slippage blocks a wider AI or session proposal", async () => {
+  const reads = {
+    portfolio: async () => ({ address: WALLET, slot: 1, solBalance: "1.5", solUsdPrice: 150, totalUsd: 225, assets: [], verifiedAt: new Date().toISOString() }),
+    swapQuote: async () => ({ inputMint: SOL, outputMint: USDC, inAmount: "100000000", outAmount: "15000000", router: "metis", mode: "ultra", feeBps: 2, feeMint: SOL, quoteOnly: true as const, verifiedAt: new Date().toISOString() }),
+  } as unknown as MainnetReadService;
+  const preview = await new MissionPolicyService(reads, { get: () => ({ maxSlippageBps: 50 }) }).preview({
+    goal: "Do not widen the configured maximum", walletAddress: WALLET, inputMint: SOL, outputMint: USDC,
+    inputAmount: "100000000", maxSlippageBps: 51, deadlineAt: new Date(Date.now() + 60 * 60_000).toISOString(), stopConditions: ["Stop on policy failure"],
+  });
+  assert.equal(preview.status, "blocked");
+  assert.equal(preview.checks.find((check) => check.code === "slippage_within_limit")?.status, "fail");
+  assert.match(preview.checks.find((check) => check.code === "slippage_within_limit")?.message ?? "", /configured maximum of 50 bps/u);
+});
+
 test("limit-order policy creates a persisted preview without execution authority", async () => {
   const reads = {
     portfolio: async () => ({ address: WALLET, slot: 1, solBalance: "1.5", solUsdPrice: 150, totalUsd: 225, assets: [], verifiedAt: new Date().toISOString() }),

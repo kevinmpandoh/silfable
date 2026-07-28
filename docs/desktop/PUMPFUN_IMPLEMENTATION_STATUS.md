@@ -1,8 +1,40 @@
-# Pump.fun Implementation Status
+# Legacy Pump.fun / PumpSwap Trading Pilot Status
 
-Last reviewed: 2026-07-27
+Last reviewed: 2026-07-28
 
-## Product status
+## Product status and redesign note
+
+This document covers the **legacy exact-mint Pump.fun/PumpSwap buy/sell pilot**. It is no longer the target definition of Pump.fun in Silfable. The target product treats Pump.fun as a **Token Launch** lane; Solana asset exchange is handled by Jupiter, EVM asset exchange by a verified Uniswap-compatible deployment, and cross-chain movement by Bridge. The redesign and migration rules are authoritative in [Venue product architecture](../VENUE_PRODUCT_ARCHITECTURE.md).
+
+Do not use the legacy trading pilot in this document as proof of Token Launch readiness. The desktop now has a separate restricted Pump.fun `create_v2` Token Launch implementation, including strict inspection, unsigned simulation, fresh final revalidation, local creator-plus-mint signing, one broadcast attempt, and encrypted receipt recovery. It has not completed controlled low-value Mainnet acceptance or external security review and is therefore not production-cleared. The web metadata route publishes through the system-managed Pinata/IPFS boundary; the desktop Cloudflare R2 path is a legacy experimental metadata publisher, not the target publication flow.
+
+## Token Launch metadata storage (current target: Pinata/IPFS)
+
+The web Token Launch draft can publish public token metadata and an image through system-managed Pinata/IPFS. This is deliberately separate from the Pump.fun launch flow:
+
+1. The user supplies name, symbol, description, optional public links, and an accepted image file in the web Token Launch flow.
+2. The server validates the image and metadata, uploads the public image first, then uploads immutable `metadata.json` through the configured Pinata account. The Pinata credential remains server-side and is never returned to the browser.
+3. The route returns the immutable `ipfs://` metadata URI, gateway URLs, CIDs, and a SHA-256 digest for user review.
+4. The user can independently inspect that URI before any future launch review. Publishing metadata does not construct a transaction, connect a signer, create a mint, spend SOL/USDC, or open a broadcast path.
+
+The current web implementation accepts a bounded image file and creates immutable public IPFS objects. It does not accept credentials from the AI model. The desktop app does not receive the browser authentication cookie or the Pinata credential; a device-link upload capability is still required before desktop can use this target publication flow.
+
+## Token Launch restricted execution boundary
+
+The desktop Token Launch card can run a launch-specific unsigned Mainnet preflight after a public metadata URI exists. The current conservative slice:
+
+- uses a production-local `create_v2` codec with byte-for-byte parity tests against pinned Pump SDK `1.36.0`;
+- supports SOL pairing with zero initial purchase only;
+- generates a fresh, non-extractable mint signer in volatile main-process memory;
+- verifies exact creator and mint signers, account count, discriminator, program, and lookup-free v0 transaction;
+- simulates the unsigned transaction and checks invoked-program allowlist, finalized balance, fee, priority fee, created-account rent, creator outflow cap, compute units, and evidence slots;
+- persists only the mint address, digest, costs, checks, slots, and expiry in encrypted session history;
+- never exposes transaction bytes or the non-extractable mint signer to the renderer;
+- discards the volatile, non-extractable mint signer on expiry, replacement, vault lock, window close/minimize, suspend, or application quit.
+
+After preflight, a separate final review repeats the exact digest, signer, blockhash, fee, balance, program-allowlist, and simulation checks. The user must supply the current master password, type `LAUNCH TOKEN MAINNET`, acknowledge irreversibility, and click the final action. The main process consumes the cached transaction once, signs locally with the selected creator wallet and volatile mint signer, deletes the mint signer, encrypts the locally derived signature into session history, and then makes one broadcast attempt with RPC retries disabled. A timeout remains `broadcast-unknown`; recovery checks only that signature and never rebroadcasts it. A finalized receipt additionally requires the exact mint account to be newly funded and owned by Token-2022. Independent finalized settlement evidence records the actual network fee, aggregate funding of newly created accounts, creator balance before and after, total creator outflow, slot, and verification time.
+
+The implementation is exercised with mocked RPC evidence only. No real token was launched by the automated test suite. Controlled low-value Mainnet acceptance and external security review remain mandatory before production release.
 
 The desktop Pump.fun path is now **code-complete for a restricted manual Mainnet pilot on an active Pump bonding curve or a canonically verified migrated PumpSwap pool**.
 
@@ -130,7 +162,7 @@ The emergency-stop boundary is implemented, but durable DCA/scheduled autonomous
 
 ## Not available
 
-- token creation or migration;
+- signed/broadcast token creation or migration (the AI can only prepare an unsaved text draft; it cannot publish metadata, create a mint, sign, or broadcast);
 - automatic candidate selection and buy;
 - unattended signing;
 - live auto-DCA;

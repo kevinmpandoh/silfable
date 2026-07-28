@@ -9,6 +9,8 @@ const RAW_AMOUNT_PATTERN = /^[1-9]\d*$/u;
 const MAX_U64 = 18_446_744_073_709_551_615n;
 const MAX_SLIPPAGE_BPS = 300;
 
+type TransactionPolicySettings = { get(): { maxSlippageBps?: number } };
+const DEFAULT_POLICY_SETTINGS: TransactionPolicySettings = { get: () => ({ maxSlippageBps: MAX_SLIPPAGE_BPS }) };
 type DraftInput = {
   goal: string;
   walletAddress: string;
@@ -22,9 +24,11 @@ type DraftInput = {
 
 export class MissionPolicyService {
   readonly #reads: MainnetReadService;
+  readonly #settings: TransactionPolicySettings;
 
-  constructor(reads: MainnetReadService) {
+  constructor(reads: MainnetReadService, settings: TransactionPolicySettings = DEFAULT_POLICY_SETTINGS) {
     this.#reads = reads;
+    this.#settings = settings;
   }
 
   async preview(input: DraftInput): Promise<MissionContractPreview> {
@@ -34,8 +38,9 @@ export class MissionPolicyService {
     checks.push(check("token_pair_valid", tokenPairValid, tokenPairValid ? "Input and output mints are distinct valid Solana addresses." : "Input and output mints must be distinct valid Solana addresses."));
     const amountValid = RAW_AMOUNT_PATTERN.test(input.inputAmount) && BigInt(input.inputAmount) <= MAX_U64;
     checks.push(check("amount_valid", amountValid, amountValid ? "Input amount is a positive unsigned 64-bit raw amount." : "Input amount must be a positive unsigned 64-bit raw amount."));
-    const slippageValid = Number.isInteger(input.maxSlippageBps) && input.maxSlippageBps >= 0 && input.maxSlippageBps <= MAX_SLIPPAGE_BPS;
-    checks.push(check("slippage_within_limit", slippageValid, slippageValid ? `Slippage limit is ${input.maxSlippageBps} bps.` : `Slippage exceeds the guarded ${MAX_SLIPPAGE_BPS} bps ceiling.`));
+    const slippageCeiling = this.#slippageCeiling();
+    const slippageValid = Number.isInteger(input.maxSlippageBps) && input.maxSlippageBps >= 0 && input.maxSlippageBps <= slippageCeiling;
+    checks.push(check("slippage_within_limit", slippageValid, slippageValid ? `Slippage limit is ${input.maxSlippageBps} bps (maximum ${slippageCeiling} bps).` : `Slippage exceeds the configured maximum of ${slippageCeiling} bps.`));
     const deadlineMs = Date.parse(input.deadlineAt);
     const deadlineValid = Number.isFinite(deadlineMs) && deadlineMs >= now + 5 * 60_000 && deadlineMs <= now + 30 * 24 * 60 * 60_000;
     checks.push(check("deadline_valid", deadlineValid, deadlineValid ? "Deadline is between five minutes and thirty days from now." : "Deadline must be between five minutes and thirty days from now."));
@@ -96,8 +101,9 @@ export class MissionPolicyService {
     checks.push(limitCheck("amount_valid", amountValid, amountValid ? "Input amount is a positive unsigned 64-bit raw amount." : "Input amount must be a positive unsigned 64-bit raw amount."));
     const triggerValid = ADDRESS_PATTERN.test(input.triggerMint) && (input.triggerMint === input.inputMint || input.triggerMint === input.outputMint) && Number.isFinite(input.triggerPriceUsd) && input.triggerPriceUsd > 0;
     checks.push(limitCheck("trigger_valid", triggerValid, triggerValid ? `Trigger watches ${input.triggerCondition} $${input.triggerPriceUsd}.` : "Trigger mint must belong to the pair and its USD price must be positive."));
-    const slippageValid = Number.isInteger(input.maxSlippageBps) && input.maxSlippageBps >= 0 && input.maxSlippageBps <= MAX_SLIPPAGE_BPS;
-    checks.push(limitCheck("slippage_within_limit", slippageValid, slippageValid ? `Slippage limit is ${input.maxSlippageBps} bps.` : `Slippage exceeds the guarded ${MAX_SLIPPAGE_BPS} bps ceiling.`));
+    const slippageCeiling = this.#slippageCeiling();
+    const slippageValid = Number.isInteger(input.maxSlippageBps) && input.maxSlippageBps >= 0 && input.maxSlippageBps <= slippageCeiling;
+    checks.push(limitCheck("slippage_within_limit", slippageValid, slippageValid ? `Slippage limit is ${input.maxSlippageBps} bps (maximum ${slippageCeiling} bps).` : `Slippage exceeds the configured maximum of ${slippageCeiling} bps.`));
     const expiryMs = Date.parse(input.expiresAt);
     const expiryValid = Number.isFinite(expiryMs) && expiryMs >= now + 15 * 60_000 && expiryMs <= now + 30 * 24 * 60 * 60_000;
     checks.push(limitCheck("expiry_valid", expiryValid, expiryValid ? "Expiry is between fifteen minutes and thirty days from now." : "Expiry must be between fifteen minutes and thirty days from now."));
@@ -144,8 +150,9 @@ export class MissionPolicyService {
       && (input.side === "sell" ? input.maxSolExposureLamports === "0" : amountValid && BigInt(input.inputAmount) <= BigInt(input.maxSolExposureLamports));
     checks.push(pumpCheck("sol_exposure_within_limit", exposureValid, exposureValid ? `Maximum SOL exposure is ${input.maxSolExposureLamports} lamports.` : "Buy input must fit the maximum SOL exposure; sell proposals must use zero additional SOL exposure."));
     const minimumOutputValid = RAW_AMOUNT_PATTERN.test(input.minimumOutputAmount) && BigInt(input.minimumOutputAmount) <= MAX_U64;
-    const slippageValid = Number.isInteger(input.maxSlippageBps) && input.maxSlippageBps >= 0 && input.maxSlippageBps <= MAX_SLIPPAGE_BPS;
-    checks.push(pumpCheck("slippage_within_limit", slippageValid, slippageValid ? `Slippage limit is ${input.maxSlippageBps} bps.` : `Slippage exceeds the guarded ${MAX_SLIPPAGE_BPS} bps ceiling.`));
+    const slippageCeiling = this.#slippageCeiling();
+    const slippageValid = Number.isInteger(input.maxSlippageBps) && input.maxSlippageBps >= 0 && input.maxSlippageBps <= slippageCeiling;
+    checks.push(pumpCheck("slippage_within_limit", slippageValid, slippageValid ? `Slippage limit is ${input.maxSlippageBps} bps (maximum ${slippageCeiling} bps).` : `Slippage exceeds the configured maximum of ${slippageCeiling} bps.`));
     const deadlineMs = Date.parse(input.deadlineAt);
     const deadlineValid = Number.isFinite(deadlineMs) && deadlineMs >= now + 5 * 60_000 && deadlineMs <= now + 24 * 60 * 60_000;
     checks.push(pumpCheck("deadline_valid", deadlineValid, deadlineValid ? "Deadline is between five minutes and twenty-four hours from now." : "Pump proposals require a deadline between five minutes and twenty-four hours from now."));
@@ -201,6 +208,11 @@ export class MissionPolicyService {
       inspectionBoundary: pumpInspectorBoundary(analysis?.venue ?? "unknown", input.side),
       quote, checks, executionAllowed: false, lifecycle: "proposal-only", createdAt: new Date(now).toISOString(),
     });
+  }
+
+  #slippageCeiling(): number {
+    const configured = this.#settings.get().maxSlippageBps;
+    return typeof configured === "number" && Number.isInteger(configured) && configured >= 0 && configured <= MAX_SLIPPAGE_BPS ? configured : MAX_SLIPPAGE_BPS;
   }
 }
 

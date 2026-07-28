@@ -2,7 +2,7 @@
 
 ## Product boundary
 
-The desktop application has one runtime profile: `mainnet-guarded`. It provides secure local configuration, wallet identity, verified Mainnet balances, optional integrations, OpenRouter-backed AI chat, typed mission contracts, explicitly approved simulations, restricted Jupiter swap execution, and manually approved restricted Pump v2 active-curve/PumpSwap pilots. Pump execution requires deterministic policy, unsigned simulation, fresh final revalidation, master-password verification, an exact confirmation phrase, and one explicit user action. A guarded Full Access session profile permits broader typed planning but never bypasses policy, simulation, signing, password, or final approval. It does not provide unattended/autonomous execution, faucet access, or Devnet simulation.
+The desktop application has one runtime profile: `mainnet-guarded`. It provides secure local configuration, wallet identity, verified Mainnet balances, optional integrations, OpenRouter-backed AI chat, typed mission contracts, explicitly approved simulations, restricted Jupiter swap execution, and a conservative restricted Pump.fun Token Launch implementation. The target product model is Token Launch through Pump.fun, Solana swaps through Jupiter, EVM swaps through a verified Uniswap-compatible deployment, and bridge transfers; see [Venue product architecture](../VENUE_PRODUCT_ARCHITECTURE.md). Token Launch currently supports SOL pairing with zero initial purchase and is not production-cleared until controlled Mainnet acceptance and external security review are complete. The existing manually approved Pump v2/PumpSwap buy/sell code is an isolated legacy pilot and is not the Token Launch feature. A guarded Full Access session profile permits broader typed planning but never bypasses policy, simulation, signing, password, or final approval. It does not provide unattended/autonomous execution, faucet access, or Devnet simulation.
 
 The detailed Pump.fun capability matrix and remaining safety gates are maintained in [Pump.fun implementation status](PUMPFUN_IMPLEMENTATION_STATUS.md).
 
@@ -12,8 +12,8 @@ This distinction is intentional. Selecting or importing a wallet gives a session
 
 1. **System check** verifies the desktop runtime and its fixed Mainnet safety boundary.
 2. **Security** creates or unlocks the encrypted local vault.
-3. **Wallets** creates or imports one or more Solana Mainnet wallets. Mnemonic and private-key import are supported; secrets are encrypted before persistence.
-4. **Integrations** stores optional Jupiter and Tavily API keys in the vault.
+3. **Wallets** creates or imports one or more Solana Mainnet wallets. Mnemonic and private-key import are supported; secrets are encrypted before persistence. The advanced Robinhood/EVM settings can likewise retain up to 20 encrypted EVM wallets created from a recovery phrase or imported from a private key; the first wallet remains the displayed primary wallet.
+4. **Integrations** stores the optional Jupiter key in the vault. Advanced EVM RPC and 0x credentials remain in the EVM settings and are not an execution grant.
 5. **Agent core** configures context, output, temperature, and advanced subagent limits.
 6. **Provider** validates an OpenRouter key, loads available models, and persists the selected model.
 7. **Review** summarizes configuration and becomes the settings hub after onboarding.

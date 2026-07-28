@@ -71,6 +71,23 @@ export type PumpV2FinalizedBuildEvidence = {
   verifiedAt: string;
 };
 
+export type PumpGlobalLaunchReadiness = {
+  initialized: boolean;
+  createV2Enabled: boolean;
+  mayhemModeEnabled: boolean;
+  isCashbackEnabled: boolean;
+};
+
+export function decodePumpGlobalLaunchReadiness(data: Uint8Array): PumpGlobalLaunchReadiness {
+  const global = decodeGlobal(data);
+  return {
+    initialized: global.initialized,
+    createV2Enabled: global.createV2Enabled,
+    mayhemModeEnabled: global.mayhemModeEnabled,
+    isCashbackEnabled: global.isCashbackEnabled,
+  };
+}
+
 export async function resolvePumpV2FinalizedBuildEvidence(
   reader: PumpFinalizedAccountReader,
   mintAddress: string,
@@ -191,12 +208,12 @@ function decodeGlobal(data: Uint8Array) {
   const feeRecipients = cursor.pubkeys(7);
   cursor.pubkey();
   cursor.pubkey();
-  cursor.bool();
+  const createV2Enabled = cursor.bool();
   cursor.pubkey();
   cursor.pubkey();
-  cursor.bool();
+  const mayhemModeEnabled = cursor.bool();
   cursor.pubkeys(7);
-  cursor.bool();
+  const isCashbackEnabled = cursor.bool();
   const buybackFeeRecipients = cursor.pubkeys(8);
   const buybackBasisPoints = cursor.u64();
   cursor.u64();
@@ -210,6 +227,9 @@ function decodeGlobal(data: Uint8Array) {
     feeRecipients,
     buybackFeeRecipients,
     buybackBasisPoints,
+    createV2Enabled,
+    mayhemModeEnabled,
+    isCashbackEnabled,
   };
 }
 

@@ -1,109 +1,132 @@
-# Silfable: Cross-Chain EVM & Robinhood Chain Implementation Roadmap
+# Silfable EVM Swap & Bridge Roadmap
 
-## 1. Pendahuluan
-Dokumen ini adalah peta jalan (roadmap) teknis yang komprehensif untuk mengimplementasikan dukungan **Cross-Chain EVM** pada project Silfable, sesuai dengan visi di Whitepaper. Saat ini, Silfable beroperasi secara eksklusif di ekosistem Solana (Solana Mainnet, Jupiter Swap, Pump.fun). 
+Last updated: 2026-07-28
+Status: restricted Robinhood Chain/0x desktop execution pipeline implemented but release-locked; Bridge execution remains disabled.
 
-Dengan ekspansi EVM, Silfable akan mampu melakukan trading otonom 24/7 di jaringan Layer-2 terkemuka seperti **Robinhood Chain**, Arbitrum, Base, dan Ethereum Mainnet. Dokumen ini memastikan implementasi terarah, aman, dan selaras dengan arsitektur *Ephemeral Vault* saat ini.
+This roadmap implements the [Venue Product Architecture](VENUE_PRODUCT_ARCHITECTURE.md). The product lanes are deliberately separate:
 
----
+- Pump.fun — Token Launch;
+- Jupiter — Solana Swap;
+- verified Uniswap-compatible deployment — EVM Swap;
+- route-specific provider — Bridge.
 
-## 2. Arsitektur: Solana vs EVM (Robinhood Chain)
+Robinhood Chain is the first implemented EVM pilot target. The desktop uses 0x Swap API firm quotes for chain `4663`; it does not assume that an Ethereum Uniswap address exists on Robinhood Chain and it never hardcodes the 0x settlement target.
 
-### Kondisi Saat Ini (Solana-First)
-- **Kriptografi:** Ed25519 Keypairs (`@solana/web3.js`).
-- **Routing:** Jupiter v6 Aggregator.
-- **Satuan Nilai:** Lamports (1 SOL = 10^9 Lamports).
-- **Kecepatan & Finality:** ~400ms block time, polling RPC langsung untuk rekonsiliasi.
+## 1. Target EVM boundary
 
-### Target Arsitektur (Cross-Chain EVM)
-- **Kriptografi:** Secp256k1 Private Keys / Mnemonic (`viem` atau `ethers.js`).
-- **Routing:** Uniswap V3 Router, 1inch Aggregator, atau DEX Native di Robinhood Chain.
-- **Satuan Nilai:** Wei (1 ETH = 10^18 Wei). Perlu kewaspadaan tinggi karena EVM menggunakan presisi 18 desimal (BigInt) dibandingkan Solana yang 9 desimal.
-- **Kecepatan & Finality:** Tergantung Layer-2 (misal Robinhood Chain menggunakan Arbitrum stack dengan ~100ms block time, tapi finality ke L1 butuh waktu).
+The first EVM MVP supports exactly **Robinhood Chain (`4663`) through a verified 0x firm-quote boundary**. It does not add a generic EVM execute endpoint, Cloud Worker signing, automatic trading, or an unlimited ERC-20 approval.
 
----
+The desktop main process must own EVM construction, policy, simulation, signing, broadcast, and receipt recovery. Web uses a connected browser wallet and each transaction requires wallet approval. Cloud Worker stays monitor/proposal-only.
 
-## 3. Pembaruan Skema Database (Prisma)
-Agar tidak merusak kompatibilitas Solana, model database harus dibuat polimorfik atau ditambahkan field spesifik rantai jaringan.
+The desktop product flow now starts inside an EVM wallet-scoped **Mission** session:
 
-### `AgentSession` (Pembaruan)
-Penyimpanan *Ephemeral Vault* harus mendukung kunci EVM.
-```prisma
-model AgentSession {
-  // ... field lama ...
-  network                String     @default("SOLANA") // Opsi: "SOLANA", "ROBINHOOD_CHAIN", "ARBITRUM", "BASE"
-  
-  // Vault EVM
-  encryptedEvmPrivateKey String?    // AES-256-GCM
-  evmIv                  String?
-  
-  // Limitasi (Ubah nama variabel atau gunakan standar abstrak)
-  maxAllocationBaseUnit  String     // Menggantikan maxAllocationLamports (Bisa berupa Wei atau Lamports)
-  peakBalanceBaseUnit    String     @default("0")
-  currentBalanceBaseUnit String     @default("0")
-}
-```
-*Catatan:* Variabel berakhiran `Lamports` secara bertahap diganti dengan `BaseUnit` agar fleksibel antara Wei (EVM) dan Lamports (Solana).
+1. the user supplies the exact sell-token contract, buy-token contract, and raw sell amount in chat;
+2. the AI may call only the typed `robinhood_swap_quote` tool and stores a quote-only proposal in encrypted session history;
+3. the proposal card asks the main process to prepare a fresh firm 0x review and one-time preflight;
+4. if allowance is insufficient, the user reviews and confirms a separate exact ERC-20 approval;
+5. after approval, the original preflight is consumed and the user must prepare a fresh quote/preflight;
+6. the swap receives its own password, exact confirmation phrase, and irreversible acknowledgement;
+7. typed approval/swap receipts are persisted with the session while the encrypted receipt service remains the recovery source of truth.
 
-### `TradeLog` & `PositionStrategy`
-Tambahkan field `network` atau `chainId` untuk pelacakan receipt yang akurat. Kolom `txHash` pada EVM memiliki format `0x...` yang berbeda dari Base58 Solana.
+Settings are configuration-only: EVM wallets, Robinhood RPC, 0x API key, and global Transaction Settings. Settings do not initiate or authorize a trade.
 
----
+## 2. Required contract and data model
 
-## 4. Perombakan Cloud Worker & Task Queue
-Cloud Worker (Node.js daemon) saat ini sangat terikat erat dengan eksekusi Solana. 
+Introduce a lane-specific `evm-swap` contract rather than adding ad-hoc fields to an existing Solana session:
 
-### Modul Eksekusi (*Execution Engine*)
-Sistem perlu menggunakan **Strategy Pattern** untuk *Transaction Builder*:
-1. **SolanaEngine:** Menggunakan `@solana/web3.js` & `VersionedTransaction`.
-2. **EvmEngine:** Menggunakan `viem` `createWalletClient` & `http` transport.
+- selected chain ID and verified RPC identity;
+- EVM wallet address;
+- exact input/output ERC-20 contracts and decimals;
+- pinned router, factory, quoter, wrapped-native asset, and code-hash evidence;
+- raw input amount, minimum output, slippage, expiry, native gas reserve;
+- maximum gas units, maximum fee per gas, maximum total native fee, and maximum fee percentage;
+- exact allowance policy and transaction/receipt lifecycle.
 
-### Alur Eksekusi Intent AI
-1. AI membaca intent (misal: "Beli $10 token RWA di Robinhood Chain").
-2. AI menghasilkan JSON Contract dengan spesifikasi `network: "ROBINHOOD_CHAIN"`.
-3. Cloud Worker memparsing JSON. Jika `network !== "SOLANA"`, worker meneruskan payload ke `EvmEngine`.
-4. `EvmEngine` mendekripsi `encryptedEvmPrivateKey` di memori, membangun transaksi (via Router DEX terkait), melakukan *gas estimation*, dan *sign*.
-5. Transaksi di-broadcast ke RPC Robinhood Chain.
-6. Worker melakukan *polling* (menunggu *receipt* dengan `viem` `waitForTransactionReceipt`).
+All amounts are string base units with decimal metadata. Never globally rename existing `lamports` fields without an explicit migration. EVM key material is held only in the desktop local vault; it is never stored in a database, chat history, renderer state, Cloud Worker, or browser server. The current desktop vault supports up to 20 EVM wallets generated from a mnemonic or imported by private key, with the first wallet retained as primary. A session may select any registered EVM wallet; quote, preflight, and local signer resolution are rebound to that exact address in the main process.
 
----
+The restricted execution pipeline is now wired end to end in code:
 
-## 5. Fitur Utama & Fase Implementasi
+1. verify Robinhood RPC chain ID `4663`;
+2. resolve only allowlisted official Robinhood asset contracts;
+3. request a 0x firm quote and require confirmed liquidity, a valid transaction target, and a single non-conflicting allowance spender;
+4. bind wallet, sell token, quote, expiry, allowance state, and gas ceiling in a one-time preflight;
+5. submit a separate exact ERC-20 approval when needed, then require a fresh quote/preflight;
+6. recheck allowance, nonce, chain, gas, emergency stop, master password, and release gate before local signing;
+7. broadcast once and persist an encrypted `unknown` receipt before waiting for confirmation;
+8. reconcile an unknown receipt by transaction hash without rebroadcast.
 
-### Fase 1: Fondasi Kriptografi EVM & Database
-- **Tugas:** Menambahkan fungsionalitas pembuatan Wallet EVM secara acak saat *Agent Session* dimulai.
-- **Tugas:** Menerapkan fungsi enkripsi/dekripsi AES-256-GCM untuk Secp256k1 (private key `0x...`).
-- **Tugas:** Migrasi skema Prisma (`Lamports` ke `BaseUnit`).
+Renderer input never supplies the spender, transaction target, calldata, or approval amount. Those values remain main-process-only and are derived from the validated one-time quote.
 
-### Fase 2: Integrasi Robinhood Chain RPC & Viem
-- **Tugas:** Menginisiasi klien `viem` dengan custom RPC URL untuk Robinhood Chain.
-- **Tugas:** Mengimplementasikan pengecekan saldo asli (ETH/Gas) dan ERC20 balances.
-- **Tugas:** Pembuatan sistem batas *Slippage* dan *Gas Price / Priority Fee Ceiling* khusus EVM (mencegah *gas spike*).
+## 3. EVM implementation phases
 
-### Fase 3: Integrasi DEX & Swapper L2
-- **Tugas:** Riset DEX likuiditas utama di Robinhood Chain (kemungkinan *fork* Uniswap V2/V3).
-- **Tugas:** Implementasi pemanggilan fungsi `swapExactTokensForTokens` atau `exactInputSingle`.
-- **Tugas:** Simulasi transaksi (`eth_call` / `estimateGas`) sebelum penandatanganan final (mencegah *revert*).
+### Phase A — Chain and deployment attestation
 
-### Fase 4: Frontend UI (Web Client)
-- **Tugas:** Menambahkan *Network Switcher* di halaman `/trade` (Solana, Robinhood Chain, dll).
-- **Tugas:** Memperbarui antarmuka dompet (mendukung `0x...` address selain Base58 Solana).
-- **Tugas:** Menyesuaikan UI *Trade History* agar terhubung dengan Block Explorer Robinhood Chain / Arbitrum.
+1. Select a single target chain.
+2. Verify RPC chain ID, genesis/block context, and explorer URL.
+3. Independently verify and pin router/factory/quoter/wrapped-native addresses plus bytecode hashes and supported pool version.
+4. Store reviewer, timestamp, evidence digest, and revocation state in Main-process-only readiness state.
+5. Fail closed if any pin, code hash, chain ID, or RPC evidence changes.
 
----
+### Phase B — Read-only assets and quotes
 
-## 6. Manajemen Risiko (Risk Management) EVM
-Penting untuk menerapkan *Kill Switch* yang sama seperti pada Solana:
-1. **Max Drawdown:** Hitung PnL harian dalam USD (memerlukan *Oracle* atau *Price Feed* yang mendukung ERC20 di Robinhood Chain).
-2. **Tx Approval Allowance:** Pada EVM, token ERC20 harus di-`approve` ke DEX sebelum ditukar. Agen AI **HANYA** boleh melakukan `approve` dengan jumlah yang sama persis dengan yang akan ditukar (*Exact Approval*), **JANGAN PERNAH** melakukan `Max Uint256 Approval` untuk meminimalisir risiko eksploitasi DEX L2.
-3. **Gas Limit Ceiling:** Cegah transaksi gagal dengan menetapkan batas atas *baseFee* dan *maxPriorityFeePerGas*.
+1. Read native and ERC-20 balances with exact decimals.
+2. Resolve only user-provided exact token addresses; symbol lookup is display-only.
+3. Obtain route/quote evidence from the verified quoter.
+4. Show route, expected/minimum output, price impact, token tax/unsupported-token warnings, and separated gas estimate.
+5. No transaction builder or signer at this phase.
 
----
+### Phase C — Restricted swap
 
-## 7. Hasil yang Diharapkan
-- Pengguna dapat menyetor aset ke **EVM Ephemeral Vault**.
-- AI dapat membaca data harga dan tren di jaringan Robinhood Chain.
-- AI dapat secara otonom melakukan eksekusi swap token 24/7 di Robinhood Chain menggunakan antrean tugas (*task queue*) di latar belakang, sepenuhnya terisolasi dan dibatasi oleh parameter risiko (*Max Drawdown*).
-- Riwayat transaksi (termasuk biaya gas L2) tercatat presisi di Cloud Database.
+1. Construct the exact calldata only for the attested router/version.
+2. Run `eth_call`, `estimateGas`, and all deterministic allowance, balance, nonce, deadline, gas, fee, and allowlist checks.
+3. If an allowance is needed, construct a **separate exact allowance** transaction. Never use `uint256.max` approval.
+4. Present approval and swap as separate irreversible actions, each with an explicit user confirmation.
+5. Revalidate quote, nonce, gas, code hashes, allowance, and all policy evidence immediately before signing.
+6. Broadcast once, persist hash before awaiting RPC, and reconcile confirmed/reverted/replaced/unknown receipts without blind retry.
 
-Dengan roadmap ini, pengembangan akan tetap fokus, modular, dan tidak merusak fungsionalitas inti Solana yang sudah berjalan stabil.
+### Phase D — Recovery and production acceptance
+
+1. Reconcile nonce replacement, dropped transaction, reorg, and partial allowance outcomes.
+2. Provide allowance revoke/cleanup guidance and receipt detail.
+3. Complete controlled minimal-value real-wallet acceptance in a signed desktop build.
+4. Complete external review of signer scope, contract pins, calldata inspector, key storage, logs, dependency chain, and recovery behavior.
+
+## 4. Bridge boundary
+
+Bridge is not an EVM swap. A bridge contract must bind:
+
+- source and destination chain IDs;
+- source asset/amount and destination asset/minimum amount;
+- destination recipient address;
+- provider route and evidence digest;
+- source gas, provider fee, relayer fee, destination fee, total fee cap, and expiry;
+- timeout, refund, and destination-delivery lifecycle.
+
+Implementation order:
+
+1. Choose one provider and one chain pair.
+2. Verify provider route schema and provenance; keep malformed/unavailable route responses fail-closed.
+3. Display quote-only route, complete fee split, route expiry, destination address, and refund terms.
+4. Add source transaction inspection/simulation and explicit signing only after the provider's source contract is pinned.
+5. Persist a two-stage receipt: source finality and destination delivery/refund. Do not mark success from source broadcast alone.
+6. Add stuck-transfer escalation, timeout polling, and no-rebroadcast recovery before production acceptance.
+
+## 5. Shared controls
+
+Every EVM Swap and Bridge action requires:
+
+- emergency stop and revocation checks;
+- per-venue readiness attestation;
+- immutable typed policy and spend limits;
+- fresh simulation and fee guard;
+- explicit final user approval;
+- one signing/broadcast attempt;
+- structured human-readable receipt and independent recovery.
+
+`Full Access`, autonomous trading, scheduled work, DCA, and TP/SL do not bypass any of these controls and are excluded from the EVM/Bridge MVP.
+
+## 6. Definition of done
+
+EVM Swap is not production-ready yet. The code path is complete through quote, exact approval, local signing, one-time broadcast, and encrypted receipt reconciliation, but `VenueReadinessService` deliberately keeps broadcast disabled until independent evidence is recorded. Remaining release work is signed-build minimal-value approval/swap acceptance, negative cases, dropped/replaced/reorg recovery, external security review, evidence attestation, and code-signed installer acceptance.
+
+Bridge is not production-ready until one chain pair has passed source and destination lifecycle validation, timeout/refund recovery, fee disclosure, independent receipt reconciliation, external review, and controlled signed-build acceptance.

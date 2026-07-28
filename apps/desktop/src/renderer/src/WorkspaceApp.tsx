@@ -3,6 +3,9 @@ import logoUrl from "../../assets/logo.png";
 
 import type {
   EmergencyStopStatus,
+  EvmSessionExecutionReceipt,
+  EvmSwapPreflightEvidence,
+  EvmSwapProposal,
   LimitOrderCancelSimulation,
   LimitOrderContractPreview,
   LimitOrderExecutionReceipt,
@@ -14,6 +17,12 @@ import type {
   PortfolioSnapshot,
   PumpExecutionRecord,
   PumpFinalRevalidation,
+  PumpLaunchDraft,
+  PumpLaunchDraftInput,
+  PumpLaunchMetadataPackage,
+  PumpLaunchPreflight,
+  PumpLaunchFinalRevalidation,
+  PumpLaunchExecutionRecord,
   PumpRiskSettings,
   PumpSimulationArtifact,
   PumpTokenIntelligence,
@@ -49,6 +58,7 @@ type SetupState = {
   maxNetworkFeeLamports: number;
   maxFeePercent: number;
   defaultSlippageBps: number;
+  maxSlippageBps: number;
   defaultDeadlineMinutes: number;
   transactionPriority: TransactionSettings["priority"];
 };
@@ -57,6 +67,7 @@ type SessionMode = SessionRecord["mode"];
 type Permission = SessionRecord["permission"];
 type SessionWorkspace = NonNullable<SessionRecord["workspace"]>;
 type PumpSessionConfig = NonNullable<SessionRecord["pumpConfig"]>;
+type SessionWalletScope = NonNullable<SessionRecord["walletScope"]>;
 type SessionFilter = "all" | SessionMode | "pump";
 type WalletSummary = { address: string; primary: boolean };
 type ChatMessage = SessionRecord["messages"][number];
@@ -89,6 +100,7 @@ const DEFAULT_SETUP: SetupState = {
   maxNetworkFeeLamports: 200_000,
   maxFeePercent: 5,
   defaultSlippageBps: 50,
+  maxSlippageBps: 300,
   defaultDeadlineMinutes: 30,
   transactionPriority: "standard",
 };
@@ -96,11 +108,25 @@ const DEFAULT_SETUP: SetupState = {
 const SETUP_STEPS = [
   "Security",
   "Wallets",
-  "API keys",
+  "Integrations",
   "Agent core",
   "Provider",
   "Review",
 ];
+
+function sessionIntentLabel(session: SessionRecord): string {
+  if (session.workspace === "pump") return "Legacy Pump pilot";
+  if (session.walletScope === "solana") return "Solana workspace";
+  if (session.walletScope === "evm") return "EVM workspace";
+  switch (session.intent) {
+    case "token-launch": return "Token launch";
+    case "solana-swap": return "Solana swap";
+    case "evm-swap": return "EVM swap";
+    case "bridge": return "Bridge";
+    case "research": return "Research";
+    default: return session.mode === "mission" ? "Mission" : "Agent";
+  }
+}
 
 export function WorkspaceApp() {
   const [setup, setSetup] = useState<SetupState>(() => readSetup());
@@ -860,7 +886,9 @@ function WalletStep({
     Array<{ address: string; primary: boolean }>
   >([]);
   const [evmMnemonic, setEvmMnemonic] = useState("");
+  const [evmPrivateKey, setEvmPrivateKey] = useState("");
   const [evmAddress, setEvmAddress] = useState<string | null>(null);
+  const [evmWallets, setEvmWallets] = useState<Array<{ address: string; primary: boolean }>>([]);
   const [evmRecovery, setEvmRecovery] = useState<string | null>(null);
   const [evmMessage, setEvmMessage] = useState<string | null>(null);
   const [walletTab, setWalletTab] = useState<"solana" | "evm">("solana");
@@ -875,8 +903,16 @@ function WalletStep({
       );
   }, [configured]);
   useEffect(() => {
-    window.silfable.getRobinhoodWallet().then((result) => setEvmAddress(result.address)).catch(() => undefined);
+    window.silfable.getRobinhoodWallet().then((result) => {
+      setEvmAddress(result.address);
+      setEvmWallets(result.wallets);
+    }).catch(() => undefined);
   }, []);
+  async function refreshEvmWallets(): Promise<void> {
+    const result = await window.silfable.getRobinhoodWallet();
+    setEvmAddress(result.address);
+    setEvmWallets(result.wallets);
+  }
   async function onboard(): Promise<void> {
     setBusy(true);
     setMessage(null);
@@ -923,16 +959,24 @@ function WalletStep({
     setBusy(true); setEvmMessage(null); setEvmRecovery(null);
     try {
       const result = await window.silfable.createRobinhoodWallet({ schemaVersion: 1, requestId: crypto.randomUUID(), acknowledgedHotWalletRisk: true });
-      setEvmAddress(result.address); setEvmRecovery(result.recoveryMnemonic); setEvmMessage("Robinhood Chain EVM wallet created and encrypted locally.");
-    } catch { setEvmMessage("EVM wallet could not be created. A wallet may already be configured."); }
+      await refreshEvmWallets(); setEvmRecovery(result.recoveryMnemonic); setEvmMessage("Robinhood Chain EVM wallet created and encrypted locally.");
+    } catch { setEvmMessage("EVM wallet could not be created. Check the vault and wallet limit."); }
     finally { setBusy(false); }
   }
   async function importEvmWallet(): Promise<void> {
     setBusy(true); setEvmMessage(null); setEvmRecovery(null);
     try {
       const result = await window.silfable.importRobinhoodWalletMnemonic({ schemaVersion: 1, requestId: crypto.randomUUID(), mnemonic: evmMnemonic, acknowledgedHotWalletRisk: true });
-      setEvmMnemonic(""); setEvmAddress(result.address); setEvmMessage("Robinhood Chain EVM wallet imported and encrypted locally.");
+      setEvmMnemonic(""); await refreshEvmWallets(); setEvmMessage("Robinhood Chain EVM wallet imported and encrypted locally.");
     } catch { setEvmMessage("EVM recovery phrase could not be imported."); }
+    finally { setBusy(false); }
+  }
+  async function importEvmPrivateKey(): Promise<void> {
+    setBusy(true); setEvmMessage(null); setEvmRecovery(null);
+    try {
+      await window.silfable.importRobinhoodWalletPrivateKey({ schemaVersion: 1, requestId: crypto.randomUUID(), privateKey: evmPrivateKey, acknowledgedHotWalletRisk: true });
+      setEvmPrivateKey(""); await refreshEvmWallets(); setEvmMessage("EVM private key imported and encrypted locally.");
+    } catch { setEvmMessage("EVM private key could not be imported. Use a 32-byte hexadecimal key."); }
     finally { setBusy(false); }
   }
   return (
@@ -1040,6 +1084,7 @@ function WalletStep({
       <section className="advanced transactionGuardSettings">
         <strong>Robinhood Chain EVM wallet</strong>
         <small className="providerHint">Separate from Solana. Creating or importing this wallet never enables a transaction.</small>
+        {evmWallets.length > 0 && <div className="walletList">{evmWallets.map((wallet, index) => <div key={wallet.address}><span>0{index + 1}</span><strong>{shorten(wallet.address)}</strong>{wallet.primary && <StatusPill tone="success">Primary</StatusPill>}<button onClick={() => void copyWalletAddress(wallet.address)}>Copy</button></div>)}</div>}
         {evmAddress ? (
           <div className="configuredReceipt"><span>âœ“</span><div><strong>EVM wallet configured</strong><small>{evmAddress}</small></div></div>
         ) : (
@@ -1049,6 +1094,13 @@ function WalletStep({
             <button className="secondaryButton" disabled={busy} onClick={() => void createEvmWallet()}>{busy ? "Creating…" : "Create new EVM wallet"}</button>
           </>
         )}
+        {evmAddress && <>
+          <Field label="Import another EVM recovery phrase"><textarea value={evmMnemonic} onChange={(event) => setEvmMnemonic(event.target.value)} rows={3} spellCheck={false} placeholder="12 or 24 recovery words" /></Field>
+          <button className="secondaryButton" disabled={busy || evmMnemonic.trim().length < 32} onClick={() => void importEvmWallet()}>{busy ? "Importing…" : "Import another EVM wallet"}</button>
+          <button className="secondaryButton" disabled={busy} onClick={() => void createEvmWallet()}>{busy ? "Creating…" : "Generate another EVM wallet"}</button>
+        </>}
+        <Field label="Import EVM private key"><textarea value={evmPrivateKey} onChange={(event) => setEvmPrivateKey(event.target.value)} rows={3} spellCheck={false} placeholder="0x followed by 64 hexadecimal characters" /></Field>
+        <button className="secondaryButton" disabled={busy || evmPrivateKey.trim().length < 64} onClick={() => void importEvmPrivateKey()}>{busy ? "Importing…" : "Import EVM private key"}</button>
         {evmRecovery && <Notice tone="danger" title="Write down this EVM recovery phrase">{evmRecovery}</Notice>}
         {evmMessage && <p className="inlineMessage">{evmMessage}</p>}
       </section>
@@ -1072,54 +1124,55 @@ function IntegrationStep({
   setup: SetupState;
   onBack: () => void;
   onContinue: (
-    value: Pick<SetupState, "jupiterConfigured" | "tavilyConfigured">,
+    value: Pick<SetupState, "jupiterConfigured">,
   ) => void;
 }) {
   const [jupiterKey, setJupiterKey] = useState("");
-  const [tavilyKey, setTavilyKey] = useState("");
+  const [r2AccountId, setR2AccountId] = useState("");
+  const [r2Bucket, setR2Bucket] = useState("");
+  const [r2PublicBaseUrl, setR2PublicBaseUrl] = useState("");
+  const [r2AccessKeyId, setR2AccessKeyId] = useState("");
+  const [r2SecretAccessKey, setR2SecretAccessKey] = useState("");
   const [solanaRpcUrl, setSolanaRpcUrl] = useState("");
   const [robinhoodRpcUrl, setRobinhoodRpcUrl] = useState("");
   const [zeroExKey, setZeroExKey] = useState("");
-  const [robinhoodWalletAddress, setRobinhoodWalletAddress] = useState<string | null>(null);
-  const [robinhoodSellToken, setRobinhoodSellToken] = useState("");
-  const [robinhoodBuyToken, setRobinhoodBuyToken] = useState("");
-  const [robinhoodSellAmount, setRobinhoodSellAmount] = useState("");
-  const [robinhoodQuote, setRobinhoodQuote] = useState<{ sellAmount: string; buyAmount: string; minBuyAmount: string | null; zeroExFeeAmount: string | null; liquidityAvailable: boolean; sellTokenSymbol: string; buyTokenSymbol: string } | null>(null);
-  const [robinhoodPreflight, setRobinhoodPreflight] = useState<{ allowanceRequired: boolean; currentAllowance: string; gasLimit: string; maxGasCostWei: string; expiresAt: string; expectedBuyAmount: string; minimumBuyAmount: string } | null>(null);
   const [robinhoodReceipts, setRobinhoodReceipts] = useState<Array<{ id: string; transactionHash: string; kind: "approval" | "swap"; status: "confirmed" | "reverted" | "unknown"; reconciledAt: string }>>([]);
   const [jupiterConfigured, setJupiterConfigured] = useState(
     setup.jupiterConfigured,
   );
-  const [tavilyConfigured, setTavilyConfigured] = useState(
-    setup.tavilyConfigured,
-  );
   const [rpcConfigured, setRpcConfigured] = useState(false);
+  const [r2Ready, setR2Ready] = useState(false);
   const [robinhoodRpcConfigured, setRobinhoodRpcConfigured] = useState(false);
   const [zeroExConfigured, setZeroExConfigured] = useState(false);
+  const [robinhoodExecutionEnabled, setRobinhoodExecutionEnabled] = useState(false);
   const [robinhoodExecutionMissing, setRobinhoodExecutionMissing] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
     Promise.all([
       window.silfable.getJupiterSettings(),
-      window.silfable.getTavilySettings(),
       window.silfable.getSolanaRpcSettings(),
       window.silfable.getRobinhoodSettings(),
-      window.silfable.getRobinhoodWallet(),
       window.silfable.listRobinhoodReceipts(),
+      window.silfable.getR2Settings(),
     ])
-      .then(([jupiter, tavily, rpc, robinhood, robinhoodWallet, receipts]) => {
+      .then(([jupiter, rpc, robinhood, receipts, r2]) => {
         setJupiterConfigured(jupiter.configured);
-        setTavilyConfigured(tavily.configured);
         if (rpc.rpcUrl) {
           setSolanaRpcUrl(rpc.rpcUrl);
           setRpcConfigured(true);
         }
         setRobinhoodRpcConfigured(robinhood.rpcConfigured);
         setZeroExConfigured(robinhood.zeroExConfigured);
+        setRobinhoodExecutionEnabled(robinhood.executionEnabled);
         setRobinhoodExecutionMissing(robinhood.executionMissing);
-        setRobinhoodWalletAddress(robinhoodWallet.address);
         setRobinhoodReceipts(receipts.receipts);
+        setR2Ready(r2.ready);
+        if (r2.settings) {
+          setR2AccountId(r2.settings.accountId);
+          setR2Bucket(r2.settings.bucket);
+          setR2PublicBaseUrl(r2.settings.publicBaseUrl);
+        }
       })
       .catch(() => undefined);
   }, []);
@@ -1140,36 +1193,46 @@ function IntegrationStep({
       setBusy(false);
     }
   }
-  async function saveKey(provider: "jupiter" | "tavily"): Promise<void> {
+  async function saveKey(): Promise<void> {
     setBusy(true);
     setMessage(null);
     try {
-      if (provider === "jupiter") {
-        await window.silfable.saveJupiterKey({
-          schemaVersion: 1,
-          requestId: crypto.randomUUID(),
-          apiKey: jupiterKey,
-          acknowledgedMainnetMarketData: true,
-        });
-        setJupiterKey("");
-        setJupiterConfigured(true);
-      } else {
-        await window.silfable.saveTavilyKey({
-          schemaVersion: 1,
-          requestId: crypto.randomUUID(),
-          apiKey: tavilyKey,
-          acknowledgedExternalProcessing: true,
-        });
-        setTavilyKey("");
-        setTavilyConfigured(true);
-      }
-      setMessage(
-        `${provider === "jupiter" ? "Jupiter" : "Tavily"} key encrypted in the local vault.`,
-      );
+      await window.silfable.saveJupiterKey({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        apiKey: jupiterKey,
+        acknowledgedMainnetMarketData: true,
+      });
+      setJupiterKey("");
+      setJupiterConfigured(true);
+      setMessage("Jupiter key encrypted in the local vault.");
     } catch {
-      setMessage(
-        `${provider === "jupiter" ? "Jupiter" : "Tavily"} key could not be stored. Unlock the vault and try again.`,
-      );
+      setMessage("Jupiter key could not be stored. Unlock the vault and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveR2Settings(testOnly = false): Promise<void> {
+    setBusy(true);
+    setMessage(null);
+    try {
+      if (testOnly) {
+        const result = await window.silfable.testR2Settings({ schemaVersion: 1, requestId: crypto.randomUUID() });
+        setMessage(`Cloudflare R2 bucket ${result.bucket} is reachable.`);
+      } else {
+        await window.silfable.saveR2Settings({
+          schemaVersion: 1,
+          requestId: crypto.randomUUID(),
+          settings: { accountId: r2AccountId.trim(), bucket: r2Bucket.trim(), publicBaseUrl: r2PublicBaseUrl.trim() },
+          ...(r2AccessKeyId.trim() || r2SecretAccessKey.trim() ? { accessKeyId: r2AccessKeyId.trim(), secretAccessKey: r2SecretAccessKey.trim() } : {}),
+        });
+        setR2AccessKeyId("");
+        setR2SecretAccessKey("");
+        setR2Ready(true);
+        setMessage("Cloudflare R2 credentials were encrypted in the local vault. Metadata publishing remains a separate manual step.");
+      }
+    } catch {
+      setMessage(testOnly ? "Cloudflare R2 could not be reached. Check bucket permissions and the saved credentials." : "Cloudflare R2 settings could not be saved. Use your account ID, bucket, custom HTTPS domain, access key ID, and secret access key.");
     } finally {
       setBusy(false);
     }
@@ -1225,37 +1288,6 @@ function IntegrationStep({
       setBusy(false);
     }
   }
-  async function getRobinhoodQuote(): Promise<void> {
-    setBusy(true);
-    setMessage(null);
-    setRobinhoodQuote(null);
-    try {
-      const result = await window.silfable.getRobinhoodIndicativePrice({
-        schemaVersion: 1,
-        requestId: crypto.randomUUID(),
-        sellToken: robinhoodSellToken.trim(),
-        buyToken: robinhoodBuyToken.trim(),
-        sellAmount: robinhoodSellAmount.trim(),
-        slippageBps: 100,
-        acknowledgedReadOnlyQuote: true,
-      });
-      setRobinhoodQuote(result.quote);
-      setMessage("Indicative 0x quote received. It is read-only and cannot be executed.");
-    } catch {
-      setMessage("Robinhood quote could not be retrieved. Verify the EVM wallet, 0x key, token contracts, amount, and liquidity.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function prepareRobinhoodTrade(): Promise<void> {
-    setBusy(true); setMessage(null); setRobinhoodPreflight(null);
-    try {
-      const result = await window.silfable.prepareRobinhoodTrade({ schemaVersion: 1, requestId: crypto.randomUUID(), sellToken: robinhoodSellToken.trim(), buyToken: robinhoodBuyToken.trim(), sellAmount: robinhoodSellAmount.trim(), slippageBps: 100, acknowledgedReadOnlyQuote: true });
-      setRobinhoodPreflight({ ...result.preflight, expectedBuyAmount: result.expectedBuyAmount, minimumBuyAmount: result.minimumBuyAmount });
-      setMessage("Trade preflight is ready for review. No approval or swap has been submitted.");
-    } catch { setMessage("Robinhood preflight could not be prepared. Check allowance, liquidity, policy, and gas settings."); }
-    finally { setBusy(false); }
-  }
   async function refreshRobinhoodReceipts(reconcile = false): Promise<void> {
     setBusy(true); setMessage(null);
     try {
@@ -1277,7 +1309,7 @@ function IntegrationStep({
       <ProviderCard
         name="Solana RPC Node"
         tag={rpcConfigured ? "Custom RPC" : "Default RPC"}
-        description="Custom HTTPS RPC URL for fast, unthrottled Solana Mainnet & Pump.fun scanning."
+        description="Custom HTTPS RPC URL for reliable, high-throughput Solana Mainnet reads."
       >
         <Field label="Custom RPC Endpoint URL (Helius, QuickNode, Triton, etc.)">
           <div className="inputWithAction">
@@ -1296,7 +1328,7 @@ function IntegrationStep({
           </div>
         </Field>
         <small className="providerHint">
-          Stored locally. Leave blank to use default public RPC. Custom RPC endpoints bypass rate limits during Pump.fun scans.
+          Stored locally. Leave blank to use the default public RPC. A custom endpoint improves reliability but never changes transaction authority.
         </small>
       </ProviderCard>
       <ProviderCard
@@ -1319,7 +1351,7 @@ function IntegrationStep({
             />
             <button
               disabled={busy || jupiterKey.trim().length < 8}
-              onClick={() => void saveKey("jupiter")}
+              onClick={() => void saveKey()}
             >
               {busy ? "Saving" : "Save key"}
             </button>
@@ -1331,8 +1363,8 @@ function IntegrationStep({
       </ProviderCard>
       <ProviderCard
         name="Robinhood Chain"
-        tag={robinhoodRpcConfigured && zeroExConfigured ? "Configured · execution locked" : "Optional"}
-        description="Personal Robinhood Chain RPC and 0x quote credentials for future manual EVM trading. Saving these credentials never enables trading."
+        tag={robinhoodExecutionEnabled ? "Restricted execution ready" : robinhoodRpcConfigured && zeroExConfigured ? "Configured · release locked" : "Optional"}
+        description="Configure the RPC and 0x quote provider here. EVM quote, review, approval, and swap actions now live only inside an EVM Mission session."
       >
         <Field label="Robinhood Chain HTTPS RPC URL (Alchemy recommended)">
           <div className="inputWithAction">
@@ -1368,21 +1400,12 @@ function IntegrationStep({
             </button>
           </div>
         </Field>
-        <Field label="Robinhood trade preview (read-only, advanced)">
-          <div className="advancedGrid">
-            <input value={robinhoodSellToken} onChange={(event) => setRobinhoodSellToken(event.target.value)} placeholder="Sell token contract (advanced: 0x...)" autoComplete="off" />
-            <input value={robinhoodBuyToken} onChange={(event) => setRobinhoodBuyToken(event.target.value)} placeholder="Buy token contract (advanced: 0x...)" autoComplete="off" />
-            <input inputMode="numeric" value={robinhoodSellAmount} onChange={(event) => setRobinhoodSellAmount(event.target.value)} placeholder="Raw token units (advanced)" />
-          </div>
-          <button disabled={busy || !robinhoodWalletAddress || !zeroExConfigured || !robinhoodSellToken.trim() || !robinhoodBuyToken.trim() || !robinhoodSellAmount.trim()} onClick={() => void getRobinhoodQuote()}>
-            {busy ? "Fetching" : "Get read-only quote"}
-          </button>
-          <button disabled={busy || !robinhoodWalletAddress || !zeroExConfigured || !robinhoodSellToken.trim() || !robinhoodBuyToken.trim() || !robinhoodSellAmount.trim()} onClick={() => void prepareRobinhoodTrade()}>
-            {busy ? "Preparing" : "Prepare trade review"}
-          </button>
-          {robinhoodQuote && <small className="providerHint">Sell: {robinhoodQuote.sellAmount} {robinhoodQuote.sellTokenSymbol} · Expected buy: {robinhoodQuote.buyAmount} {robinhoodQuote.buyTokenSymbol} · Minimum: {robinhoodQuote.minBuyAmount ?? "unavailable"} · 0x fee: {robinhoodQuote.zeroExFeeAmount ?? "none"} · Liquidity: {robinhoodQuote.liquidityAvailable ? "available" : "not confirmed"}</small>}
-          {robinhoodPreflight && <small className="providerHint">Preflight: expected {robinhoodPreflight.expectedBuyAmount} · minimum {robinhoodPreflight.minimumBuyAmount} · allowance {robinhoodPreflight.currentAllowance} · approval {robinhoodPreflight.allowanceRequired ? "required" : "not required"} · gas {robinhoodPreflight.gasLimit} · expires {new Date(robinhoodPreflight.expiresAt).toLocaleTimeString()}</small>}
-        </Field>
+        <Notice tone="info" title="Trading moved to chat">
+          Create a Mission session with an encrypted EVM wallet. Supply both exact
+          token contracts and the raw sell amount in chat. The session stores the
+          quote, fresh preflight, separate exact approval when required, swap
+          confirmation, and bounded receipt evidence.
+        </Notice>
         <small className="providerHint">
           Credentials are encrypted locally and never shown again. Router and token policy remain release-controlled; no key grants signing or broadcast authority.
         </small>
@@ -1394,48 +1417,43 @@ function IntegrationStep({
           )}
         </Field>
         {robinhoodExecutionMissing.length > 0 && (
-          <Notice tone="info" title="Manual trading is intentionally locked">
+          <Notice tone="info" title="Restricted EVM execution is release-locked">
             Remaining release evidence: {robinhoodExecutionMissing.join(", ")}.
           </Notice>
         )}
       </ProviderCard>
       <ProviderCard
-        name="Tavily"
-        tag={tavilyConfigured ? "Configured" : "Optional"}
-        description="Read-only web and finance research for Agent or Mission sessions."
+        name="Cloudflare R2 launch storage"
+        tag={r2Ready ? "Configured" : "Optional"}
+        description="Your own S3-compatible storage for immutable token-launch metadata. It never creates a coin or authorizes a transaction."
       >
-        <Field label="Tavily API key">
+        <Field label="Cloudflare account ID">
+          <input value={r2AccountId} onChange={(event) => setR2AccountId(event.target.value)} placeholder="32-character Cloudflare account ID" autoComplete="off" />
+        </Field>
+        <Field label="R2 bucket name">
+          <input value={r2Bucket} onChange={(event) => setR2Bucket(event.target.value)} placeholder="silfable-launches" autoComplete="off" />
+        </Field>
+        <Field label="Public custom HTTPS domain">
+          <input type="url" value={r2PublicBaseUrl} onChange={(event) => setR2PublicBaseUrl(event.target.value)} placeholder="https://assets.example.com" autoComplete="off" />
+        </Field>
+        <Field label="R2 S3 access key ID">
+          <input type="password" value={r2AccessKeyId} onChange={(event) => setR2AccessKeyId(event.target.value)} placeholder={r2Ready ? "Enter only to replace saved credentials" : "Enter R2 access key ID"} autoComplete="new-password" />
+        </Field>
+        <Field label="R2 S3 secret access key">
           <div className="inputWithAction">
-            <input
-              type="password"
-              value={tavilyKey}
-              onChange={(event) => setTavilyKey(event.target.value)}
-              placeholder={
-                tavilyConfigured ? "Replace saved key" : "Enter Tavily API key"
-              }
-              autoComplete="new-password"
-            />
-            <button
-              disabled={busy || tavilyKey.trim().length < 8}
-              onClick={() => void saveKey("tavily")}
-            >
-              {busy ? "Saving" : "Save key"}
-            </button>
+            <input type="password" value={r2SecretAccessKey} onChange={(event) => setR2SecretAccessKey(event.target.value)} placeholder={r2Ready ? "Enter only to replace saved credentials" : "Enter R2 secret access key"} autoComplete="new-password" />
+            <button disabled={busy || !r2AccountId.trim() || !r2Bucket.trim() || !r2PublicBaseUrl.trim() || (!r2Ready && (!r2AccessKeyId.trim() || !r2SecretAccessKey.trim()))} onClick={() => void saveR2Settings()}>{busy ? "Saving" : "Save R2"}</button>
+            <button disabled={busy || !r2Ready} onClick={() => void saveR2Settings(true)}>{busy ? "Checking" : "Test R2"}</button>
           </div>
         </Field>
-        <small className="providerHint">
-          The AI may invoke this read-only search tool. Search queries leave
-          this device; credentials never enter the prompt.
-        </small>
+        <small className="providerHint">Use a bucket-scoped Object Read &amp; Write API token and a custom public domain. `r2.dev` is not accepted for production. Keys are encrypted locally and never shown again.</small>
       </ProviderCard>
       {message && <p className="inlineMessage">{message}</p>}
       <SetupActions
         step={3}
         onBack={onBack}
-        onContinue={() => onContinue({ jupiterConfigured, tavilyConfigured })}
-        secondaryLabel={
-          !jupiterConfigured && !tavilyConfigured ? "Skip optional" : undefined
-        }
+        onContinue={() => onContinue({ jupiterConfigured })}
+        secondaryLabel={!jupiterConfigured ? "Skip optional" : undefined}
       />
     </SetupCard>
   );
@@ -1458,6 +1476,7 @@ type TuningValues = Pick<
   | "maxNetworkFeeLamports"
   | "maxFeePercent"
   | "defaultSlippageBps"
+  | "maxSlippageBps"
   | "defaultDeadlineMinutes"
   | "transactionPriority"
 >;
@@ -1504,6 +1523,7 @@ function TuningStep({
   const [solPriceUsd, setSolPriceUsd] = useState<number | null>(null);
   const [maxFeePercent, setMaxFeePercent] = useState(String(setup.maxFeePercent));
   const [defaultSlippageBps, setDefaultSlippageBps] = useState(String(setup.defaultSlippageBps));
+  const [maxSlippageBps, setMaxSlippageBps] = useState(String(setup.maxSlippageBps));
   const [defaultDeadlineMinutes, setDefaultDeadlineMinutes] = useState(String(setup.defaultDeadlineMinutes));
   const [transactionPriority, setTransactionPriority] = useState<TransactionSettings["priority"]>(setup.transactionPriority);
   const [pumpRisk, setPumpRisk] = useState({
@@ -1524,6 +1544,7 @@ function TuningStep({
       setMaxNetworkFeeLamports(String(settings.maxNetworkFeeLamports));
       setMaxFeePercent(String(settings.maxFeePercent));
       setDefaultSlippageBps(String(settings.defaultSlippageBps));
+      setMaxSlippageBps(String(settings.maxSlippageBps));
       setDefaultDeadlineMinutes(String(settings.defaultDeadlineMinutes));
       setTransactionPriority(settings.priority);
     }).catch(() => undefined);
@@ -1555,6 +1576,7 @@ function TuningStep({
     maxNetworkFeeLamports: Number(maxNetworkFeeLamports),
     maxFeePercent: Number(maxFeePercent),
     defaultSlippageBps: Number(defaultSlippageBps),
+    maxSlippageBps: Number(maxSlippageBps),
     defaultDeadlineMinutes: Number(defaultDeadlineMinutes),
   };
   const valid =
@@ -1595,6 +1617,7 @@ function TuningStep({
   const transactionValid = Number.isInteger(numeric.maxNetworkFeeLamports) && numeric.maxNetworkFeeLamports >= 5_000 && numeric.maxNetworkFeeLamports <= 10_000_000
     && Number.isFinite(numeric.maxFeePercent) && numeric.maxFeePercent >= 0.1 && numeric.maxFeePercent <= 100
     && Number.isInteger(numeric.defaultSlippageBps) && numeric.defaultSlippageBps >= 0 && numeric.defaultSlippageBps <= 300
+    && Number.isInteger(numeric.maxSlippageBps) && numeric.maxSlippageBps >= numeric.defaultSlippageBps && numeric.maxSlippageBps <= 300
     && Number.isInteger(numeric.defaultDeadlineMinutes) && numeric.defaultDeadlineMinutes >= 5 && numeric.defaultDeadlineMinutes <= 43_200;
   const pumpSettings: PumpRiskSettings = {
     maxTradingFeeBps: Number(pumpRisk.maxTradingFeeBps),
@@ -1627,6 +1650,7 @@ function TuningStep({
           maxNetworkFeeLamports: numeric.maxNetworkFeeLamports,
           maxFeePercent: numeric.maxFeePercent,
           defaultSlippageBps: numeric.defaultSlippageBps,
+          maxSlippageBps: numeric.maxSlippageBps,
           defaultDeadlineMinutes: numeric.defaultDeadlineMinutes,
           priority: transactionPriority,
         },
@@ -1648,7 +1672,7 @@ function TuningStep({
         subagentTimeoutMs: numeric.subagentTimeoutMs, maxToolCallsPerTurn: numeric.maxToolCallsPerTurn,
         missionMaxSteps: numeric.missionMaxSteps, retryLimit: numeric.retryLimit,
         maxNetworkFeeLamports: numeric.maxNetworkFeeLamports, maxFeePercent: numeric.maxFeePercent,
-        defaultSlippageBps: numeric.defaultSlippageBps, defaultDeadlineMinutes: numeric.defaultDeadlineMinutes,
+        defaultSlippageBps: numeric.defaultSlippageBps, maxSlippageBps: numeric.maxSlippageBps, defaultDeadlineMinutes: numeric.defaultDeadlineMinutes,
         transactionPriority,
       });
     } catch { setSaveMessage("Transaction settings could not be saved."); }
@@ -1755,7 +1779,11 @@ function TuningStep({
           </Field>
           <Field label="Default slippage (bps)">
             <input inputMode="numeric" value={defaultSlippageBps} onChange={(event) => setDefaultSlippageBps(event.target.value)} />
-            <small>Used as the recommended mission default; hard maximum is 300 bps.</small>
+            <small>Used as the recommended mission default.</small>
+          </Field>
+          <Field label="Maximum slippage (bps)">
+            <input inputMode="numeric" value={maxSlippageBps} onChange={(event) => setMaxSlippageBps(event.target.value)} />
+            <small>Hard ceiling for AI drafts, simulations, Pump proposals, and limit orders. Must be at least the default and no more than 300 bps.</small>
           </Field>
           <Field label="Default deadline (minutes)">
             <input inputMode="numeric" value={defaultDeadlineMinutes} onChange={(event) => setDefaultDeadlineMinutes(event.target.value)} />
@@ -2067,14 +2095,11 @@ function ReviewStep({
       ok: runtime?.wallet === "configured",
     },
     {
-      title: "API keys",
-      state:
-        setup.jupiterConfigured || setup.tavilyConfigured
-          ? "Configured"
-          : "Optional missing",
-      detail: `Jupiter ${setup.jupiterConfigured ? "configured" : "not set"} · Tavily ${setup.tavilyConfigured ? "configured" : "not set"}`,
+      title: "Trading integrations",
+      state: setup.jupiterConfigured ? "Configured" : "Optional missing",
+      detail: `Jupiter ${setup.jupiterConfigured ? "configured" : "not set"}. EVM RPC and 0x are optional advanced integrations.`,
       step: 3,
-      ok: setup.jupiterConfigured || setup.tavilyConfigured,
+      ok: setup.jupiterConfigured,
     },
     {
       title: "Agent core",
@@ -2119,8 +2144,9 @@ function ReviewStep({
       <Notice tone="warning" title="Mainnet safety status">
         Verified reads and restricted Jupiter swaps are available. Every swap
         requires a mission contract, passed simulation, master-password recheck,
-        and explicit final confirmation. Autonomous execution, EVM, and Full
-        Access remain unavailable.
+        and explicit final confirmation. A restricted Robinhood Chain EVM
+        execution path is available only after its independent release gate is
+        satisfied. Autonomous execution and Full Access remain unavailable.
       </Notice>
       {editing && <EmergencyStopPanel />}
       {editing ? (
@@ -2160,6 +2186,7 @@ function MainWorkspace({
 }) {
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [wallets, setWallets] = useState<WalletSummary[]>([]);
+  const [evmWallets, setEvmWallets] = useState<WalletSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [sessionFilter, setSessionFilter] = useState<SessionFilter>("all");
   const [thinkingIds, setThinkingIds] = useState<string[]>([]);
@@ -2198,6 +2225,17 @@ function MainWorkspace({
     preview: MissionContractPreview;
     simulation: MissionSimulationPreview;
   } | null>(null);
+  const [evmExecutionApproval, setEvmExecutionApproval] = useState<{
+    sessionId: string;
+    messageId: string;
+    proposal: EvmSwapProposal;
+    preflight: EvmSwapPreflightEvidence;
+    action: "approval" | "swap";
+  } | null>(null);
+  const [preparingEvmIds, setPreparingEvmIds] = useState<string[]>([]);
+  const [executingEvmIds, setExecutingEvmIds] = useState<string[]>([]);
+  const [evmExecutionEnabled, setEvmExecutionEnabled] = useState(false);
+  const [evmExecutionMissing, setEvmExecutionMissing] = useState<string[]>([]);
   const [executingMissionIds, setExecutingMissionIds] = useState<string[]>([]);
   const [verifyingReceiptIds, setVerifyingReceiptIds] = useState<string[]>([]);
   const [limitSimulationApproval, setLimitSimulationApproval] = useState<{
@@ -2269,6 +2307,21 @@ function MainWorkspace({
       })
       .catch(() => undefined);
     window.silfable
+      .getRobinhoodWallet()
+      .then((response) => {
+        if (activeRequest) setEvmWallets(response.wallets);
+      })
+      .catch(() => undefined);
+    window.silfable
+      .getRobinhoodSettings()
+      .then((response) => {
+        if (activeRequest) {
+          setEvmExecutionEnabled(response.executionEnabled);
+          setEvmExecutionMissing(response.executionMissing);
+        }
+      })
+      .catch(() => undefined);
+    window.silfable
       .listSessions()
       .then((response) => {
         if (activeRequest) setSessions(response.sessions);
@@ -2301,8 +2354,12 @@ function MainWorkspace({
       const latestRuntime = await window.silfable.getRuntimeStatus();
       setRuntime(latestRuntime);
       if (latestRuntime.keystore !== "unlocked") return;
-      const response = await window.silfable.listWallets();
-      setWallets(response.wallets);
+      const [solanaResponse, evmResponse] = await Promise.all([
+        window.silfable.listWallets(),
+        window.silfable.getRobinhoodWallet().catch(() => null),
+      ]);
+      setWallets(solanaResponse.wallets);
+      if (evmResponse) setEvmWallets(evmResponse.wallets);
       setModalOpen(true);
     } catch {
       // Keep the last trusted wallet list. A concurrent vault lock is handled
@@ -2314,7 +2371,7 @@ function MainWorkspace({
     mode: SessionMode;
     permission: Permission;
     workspace: SessionWorkspace;
-    pumpConfig?: PumpSessionConfig;
+    walletScope?: SessionWalletScope;
     walletAddress: string | null;
     prompt: string;
   }): Promise<void> {
@@ -2326,7 +2383,7 @@ function MainWorkspace({
       mode: input.mode,
       permission: input.permission,
       workspace: input.workspace,
-      ...(input.pumpConfig ? { pumpConfig: input.pumpConfig } : {}),
+      ...(input.walletScope ? { walletScope: input.walletScope } : {}),
       walletAddress: input.walletAddress,
       startedAt: now,
       usage: { input: 0, output: 0, total: 0, cost: null },
@@ -2392,6 +2449,9 @@ function MainWorkspace({
         ...(response.limitOrderPreview
           ? { limitOrderPreview: response.limitOrderPreview }
           : {}),
+        ...(response.evmSwapProposal
+          ? { evmSwapProposal: response.evmSwapProposal }
+          : {}),
       };
       setAnimatedMessageIds((current) => [...current, assistant.id]);
       setSessions((current) =>
@@ -2429,6 +2489,139 @@ function MainWorkspace({
       );
     } finally {
       setThinkingIds((current) => current.filter((id) => id !== target.id));
+    }
+  }
+  async function prepareEvmSwap(input: {
+    sessionId: string;
+    messageId: string;
+    proposal: EvmSwapProposal;
+  }): Promise<void> {
+    setPreparingEvmIds((current) => [...new Set([...current, input.proposal.id])]);
+    try {
+      const result = await window.silfable.prepareRobinhoodTrade({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        walletAddress: input.proposal.walletAddress,
+        sellToken: input.proposal.quote.sellToken,
+        buyToken: input.proposal.quote.buyToken,
+        sellAmount: input.proposal.quote.sellAmount,
+        slippageBps: input.proposal.slippageBps,
+        acknowledgedReadOnlyQuote: true,
+      });
+      const preflight: EvmSwapPreflightEvidence = {
+        ...result.preflight,
+        expectedBuyAmount: result.expectedBuyAmount,
+        minimumBuyAmount: result.minimumBuyAmount,
+        preparedAt: new Date().toISOString(),
+      };
+      setSessions((current) =>
+        current.map((session) => {
+          if (session.id !== input.sessionId) return session;
+          const next = {
+            ...session,
+            messages: session.messages.map((message) =>
+              message.id === input.messageId
+                ? { ...message, evmSwapPreflight: preflight }
+                : message,
+            ),
+          };
+          void persistSession(next);
+          return next;
+        }),
+      );
+    } catch {
+      setSessions((current) =>
+        current.map((session) => {
+          if (session.id !== input.sessionId) return session;
+          const next = {
+            ...session,
+            messages: session.messages.map((message) =>
+              message.id === input.messageId
+                ? {
+                    ...message,
+                    text: `${message.text.slice(0, 11_400)}\n\nThe EVM trade review could not be prepared safely. Verify the saved RPC, 0x key, official token contracts, liquidity, allowance, and gas policy.`.slice(0, 12_000),
+                  }
+                : message,
+            ),
+          };
+          void persistSession(next);
+          return next;
+        }),
+      );
+    } finally {
+      setPreparingEvmIds((current) => current.filter((id) => id !== input.proposal.id));
+    }
+  }
+  async function executeEvmAction(
+    approval: NonNullable<typeof evmExecutionApproval>,
+    credentials: { masterPassword: string; confirmation: string },
+  ): Promise<void> {
+    const expectedConfirmation = approval.action === "approval"
+      ? "APPROVE ROBINHOOD MAINNET"
+      : "EXECUTE ROBINHOOD MAINNET SWAP";
+    if (credentials.confirmation !== expectedConfirmation) return;
+    setEvmExecutionApproval(null);
+    setExecutingEvmIds((current) => [...new Set([...current, approval.proposal.id])]);
+    try {
+      const base = {
+        schemaVersion: 1 as const,
+        requestId: crypto.randomUUID(),
+        walletAddress: approval.proposal.walletAddress,
+        preflightId: approval.preflight.id,
+        masterPassword: credentials.masterPassword,
+        acknowledgedIrreversible: true as const,
+      };
+      const result = approval.action === "approval"
+        ? await window.silfable.executeRobinhoodApproval({
+            ...base,
+            confirmation: "APPROVE ROBINHOOD MAINNET",
+          })
+        : await window.silfable.executeRobinhoodSwap({
+            ...base,
+            confirmation: "EXECUTE ROBINHOOD MAINNET SWAP",
+          });
+      setSessions((current) =>
+        current.map((session) => {
+          if (session.id !== approval.sessionId) return session;
+          const next = {
+            ...session,
+            messages: session.messages.map((message) => {
+              if (message.id !== approval.messageId) return message;
+              const { evmSwapPreflight: _consumed, ...rest } = message;
+              return {
+                ...rest,
+                evmExecutionReceipts: [
+                  ...(message.evmExecutionReceipts ?? []),
+                  result.receipt,
+                ].slice(-4),
+              };
+            }),
+          };
+          void persistSession(next);
+          return next;
+        }),
+      );
+    } catch {
+      setSessions((current) =>
+        current.map((session) => {
+          if (session.id !== approval.sessionId) return session;
+          const next = {
+            ...session,
+            messages: session.messages.map((message) =>
+              message.id === approval.messageId
+                ? {
+                    ...message,
+                    text: `${message.text.slice(0, 11_400)}\n\nThe ${approval.action} was not submitted. No success is assumed. Verify the release gate, password, preflight expiry, emergency stop, and gas policy.`.slice(0, 12_000),
+                  }
+                : message,
+            ),
+          };
+          void persistSession(next);
+          return next;
+        }),
+      );
+    } finally {
+      setExecutingEvmIds((current) => current.filter((id) => id !== approval.proposal.id));
     }
   }
   async function runSimulation(input: {
@@ -2523,6 +2716,157 @@ function MainWorkspace({
           }));
     } finally {
       setRevalidatingPumpIds((current) => current.filter((id) => id !== input.preview.id));
+    }
+  }
+  async function createPumpLaunchDraft(
+    target: SessionItem,
+    input: PumpLaunchDraftInput,
+  ): Promise<void> {
+    const response = await window.silfable.createPumpLaunchDraft({
+      schemaVersion: 1,
+      requestId: crypto.randomUUID(),
+      sessionId: target.id,
+      input,
+    });
+    const current = sessions.find((item) => item.id === target.id);
+    if (current === undefined) throw new Error("Session is unavailable");
+    const message: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      at: new Date().toISOString(),
+      text: "Token Launch draft prepared for review. No metadata was uploaded and no Pump.fun transaction was created, signed, or broadcast.",
+      pumpLaunchDraft: response.draft,
+    };
+    const next = { ...current, messages: [...current.messages, message] };
+    setSessions((items) => items.map((item) => item.id === next.id ? next : item));
+    await persistSession(next);
+  }
+  async function openPumpLaunchOfficialCreate(
+    target: SessionItem,
+    draft: PumpLaunchDraft,
+  ): Promise<void> {
+    await window.silfable.openPumpLaunchOfficialCreate({
+      schemaVersion: 1,
+      requestId: crypto.randomUUID(),
+      sessionId: target.id,
+      draftId: draft.id,
+    });
+  }
+  async function publishPumpLaunchMetadata(target: SessionItem, launchDraft: PumpLaunchDraft): Promise<void> {
+    const response = await window.silfable.publishPumpLaunchMetadata({
+      schemaVersion: 1,
+      requestId: crypto.randomUUID(),
+      sessionId: target.id,
+      draftId: launchDraft.id,
+    });
+    const current = sessions.find((item) => item.id === target.id);
+    if (current === undefined) throw new Error("Session is unavailable");
+    const next = {
+      ...current,
+      messages: current.messages.map((message) => message.pumpLaunchDraft?.id === launchDraft.id
+        ? { ...message, pumpLaunchMetadataPackage: response.metadataPackage }
+        : message),
+    };
+    setSessions((items) => items.map((item) => item.id === next.id ? next : item));
+    await persistSession(next);
+  }
+  async function preflightPumpLaunch(target: SessionItem, launchDraft: PumpLaunchDraft): Promise<void> {
+    const response = await window.silfable.preflightPumpLaunch({
+      schemaVersion: 1,
+      requestId: crypto.randomUUID(),
+      sessionId: target.id,
+      draftId: launchDraft.id,
+      acknowledgedNoExecution: true,
+    });
+    const current = sessions.find((item) => item.id === target.id);
+    if (current === undefined) throw new Error("Session is unavailable");
+    const next = {
+      ...current,
+      messages: current.messages.map((message) => message.pumpLaunchDraft?.id === launchDraft.id
+        ? { ...message, pumpLaunchPreflight: response.preflight }
+        : message),
+    };
+    setSessions((items) => items.map((item) => item.id === next.id ? next : item));
+    await persistSession(next);
+  }
+  async function finalRevalidatePumpLaunch(
+    target: SessionItem,
+    launchDraft: PumpLaunchDraft,
+    preflight: PumpLaunchPreflight,
+  ): Promise<void> {
+    const response = await window.silfable.finalRevalidatePumpLaunch({
+      schemaVersion: 1,
+      requestId: crypto.randomUUID(),
+      sessionId: target.id,
+      draftId: launchDraft.id,
+      preflightId: preflight.id,
+      acknowledgedNoExecution: true,
+    });
+    const current = sessions.find((item) => item.id === target.id);
+    if (current === undefined) throw new Error("Session is unavailable");
+    const next = {
+      ...current,
+      messages: current.messages.map((message) => message.pumpLaunchDraft?.id === launchDraft.id
+        ? { ...message, pumpLaunchFinalRevalidation: response.revalidation }
+        : message),
+    };
+    setSessions((items) => items.map((item) => item.id === next.id ? next : item));
+    await persistSession(next);
+  }
+  async function executePumpLaunch(
+    target: SessionItem,
+    launchDraft: PumpLaunchDraft,
+    preflight: PumpLaunchPreflight,
+    revalidation: PumpLaunchFinalRevalidation,
+    credentials: { masterPassword: string },
+  ): Promise<void> {
+    const response = await window.silfable.executePumpLaunch({
+      schemaVersion: 1,
+      requestId: crypto.randomUUID(),
+      sessionId: target.id,
+      draftId: launchDraft.id,
+      preflightId: preflight.id,
+      revalidationId: revalidation.id,
+      masterPassword: credentials.masterPassword,
+      confirmation: "LAUNCH TOKEN MAINNET",
+      acknowledgedIrreversibleLaunch: true,
+    });
+    const current = sessions.find((item) => item.id === target.id);
+    if (current === undefined) throw new Error("Session is unavailable");
+    const next = {
+      ...current,
+      messages: current.messages.map((message) => message.pumpLaunchDraft?.id === launchDraft.id
+        ? { ...message, pumpLaunchExecution: response.execution }
+        : message),
+    };
+    setSessions((items) => items.map((item) => item.id === next.id ? next : item));
+    await persistSession(next);
+    setPortfolioRefresh((value) => value + 1);
+  }
+  async function verifyPumpLaunchExecution(
+    target: SessionItem,
+    launchDraft: PumpLaunchDraft,
+    execution: PumpLaunchExecutionRecord,
+  ): Promise<void> {
+    const response = await window.silfable.verifyPumpLaunchExecution({
+      schemaVersion: 1,
+      requestId: crypto.randomUUID(),
+      sessionId: target.id,
+      draftId: launchDraft.id,
+      executionId: execution.id,
+    });
+    const current = sessions.find((item) => item.id === target.id);
+    if (current === undefined) throw new Error("Session is unavailable");
+    const next = {
+      ...current,
+      messages: current.messages.map((message) => message.pumpLaunchDraft?.id === launchDraft.id
+        ? { ...message, pumpLaunchExecution: response.execution }
+        : message),
+    };
+    setSessions((items) => items.map((item) => item.id === next.id ? next : item));
+    await persistSession(next);
+    if (response.execution.status === "finalized") {
+      setPortfolioRefresh((value) => value + 1);
     }
   }
 
@@ -2737,6 +3081,7 @@ function MainWorkspace({
       const response = await window.silfable.executeLimitOrderCancel({
         schemaVersion: 1,
         requestId: crypto.randomUUID(),
+        sessionId: input.sessionId,
         walletAddress: input.walletAddress,
         orderId: input.orderId,
         simulationId: input.simulation.id,
@@ -3018,7 +3363,7 @@ function MainWorkspace({
                 <div>
                   <strong>{session.title}</strong>
                   <small>
-                    {session.workspace === "pump" ? "pump.fun" : session.mode} ·{" "}
+                    {sessionIntentLabel(session)} ·{" "}
                     {session.permission}
                   </small>
                 </div>
@@ -3092,6 +3437,13 @@ function MainWorkspace({
             onSend={() =>
               draft.trim() && void sendMessage(active, draft.trim())
             }
+            onCreatePumpLaunchDraft={(input) => createPumpLaunchDraft(active, input)}
+            onOpenPumpLaunchOfficialCreate={(launchDraft) => openPumpLaunchOfficialCreate(active, launchDraft)}
+            onPublishPumpLaunchMetadata={(launchDraft) => publishPumpLaunchMetadata(active, launchDraft)}
+            onPreflightPumpLaunch={(launchDraft) => preflightPumpLaunch(active, launchDraft)}
+            onFinalRevalidatePumpLaunch={(launchDraft, preflight) => finalRevalidatePumpLaunch(active, launchDraft, preflight)}
+            onExecutePumpLaunch={(launchDraft, preflight, revalidation, credentials) => executePumpLaunch(active, launchDraft, preflight, revalidation, credentials)}
+            onVerifyPumpLaunchExecution={(launchDraft, execution) => verifyPumpLaunchExecution(active, launchDraft, execution)}
             thinking={thinkingIds.includes(active.id)}
             animatedMessageIds={animatedMessageIds}
             onAnimationComplete={(id) =>
@@ -3111,6 +3463,26 @@ function MainWorkspace({
             cancellingLimitIds={cancellingLimitIds}
             verifyingLimitExecutionIds={verifyingLimitExecutionIds}
             verifyingLimitCancelIds={verifyingLimitCancelIds}
+            preparingEvmIds={preparingEvmIds}
+            executingEvmIds={executingEvmIds}
+            evmExecutionEnabled={evmExecutionEnabled}
+            evmExecutionMissing={evmExecutionMissing}
+            onPrepareEvmSwap={(messageId, proposal) =>
+              void prepareEvmSwap({
+                sessionId: active.id,
+                messageId,
+                proposal,
+              })
+            }
+            onRequestEvmExecution={(messageId, proposal, preflight) =>
+              setEvmExecutionApproval({
+                sessionId: active.id,
+                messageId,
+                proposal,
+                preflight,
+                action: preflight.allowanceRequired ? "approval" : "swap",
+              })
+            }
             onRequestLimitSimulation={(messageId, preview) =>
               setLimitSimulationApproval({
                 sessionId: active.id,
@@ -3250,6 +3622,7 @@ function MainWorkspace({
         <SessionModal
           prompt={pendingPrompt}
           wallets={wallets}
+          evmWallets={evmWallets}
           onCancel={() => setModalOpen(false)}
           onCreate={(value) => void createSession(value)}
         />
@@ -3268,6 +3641,17 @@ function MainWorkspace({
           onCancel={() => setExecutionApproval(null)}
           onConfirm={(credentials) =>
             runExecution(executionApproval, credentials)
+          }
+        />
+      )}
+      {evmExecutionApproval && (
+        <EvmExecutionApprovalModal
+          action={evmExecutionApproval.action}
+          proposal={evmExecutionApproval.proposal}
+          preflight={evmExecutionApproval.preflight}
+          onCancel={() => setEvmExecutionApproval(null)}
+          onConfirm={(credentials) =>
+            executeEvmAction(evmExecutionApproval, credentials)
           }
         />
       )}
@@ -3387,6 +3771,13 @@ function Conversation({
   draft,
   setDraft,
   onSend,
+  onCreatePumpLaunchDraft,
+  onOpenPumpLaunchOfficialCreate,
+  onPublishPumpLaunchMetadata,
+  onPreflightPumpLaunch,
+  onFinalRevalidatePumpLaunch,
+  onExecutePumpLaunch,
+  onVerifyPumpLaunchExecution,
   thinking,
   animatedMessageIds,
   onAnimationComplete,
@@ -3402,6 +3793,12 @@ function Conversation({
   cancellingLimitIds,
   verifyingLimitExecutionIds,
   verifyingLimitCancelIds,
+  preparingEvmIds,
+  executingEvmIds,
+  evmExecutionEnabled,
+  evmExecutionMissing,
+  onPrepareEvmSwap,
+  onRequestEvmExecution,
   onRequestLimitSimulation,
   onRequestLimitExecution,
   onRequestLimitCancel,
@@ -3420,6 +3817,18 @@ function Conversation({
   draft: string;
   setDraft: (value: string) => void;
   onSend: () => void;
+  onCreatePumpLaunchDraft: (input: PumpLaunchDraftInput) => Promise<void>;
+  onOpenPumpLaunchOfficialCreate: (draft: PumpLaunchDraft) => Promise<void>;
+  onPublishPumpLaunchMetadata: (draft: PumpLaunchDraft) => Promise<void>;
+  onPreflightPumpLaunch: (draft: PumpLaunchDraft) => Promise<void>;
+  onFinalRevalidatePumpLaunch: (draft: PumpLaunchDraft, preflight: PumpLaunchPreflight) => Promise<void>;
+  onExecutePumpLaunch: (
+    draft: PumpLaunchDraft,
+    preflight: PumpLaunchPreflight,
+    revalidation: PumpLaunchFinalRevalidation,
+    credentials: { masterPassword: string },
+  ) => Promise<void>;
+  onVerifyPumpLaunchExecution: (draft: PumpLaunchDraft, execution: PumpLaunchExecutionRecord) => Promise<void>;
   thinking: boolean;
   animatedMessageIds: string[];
   onAnimationComplete: (id: string) => void;
@@ -3435,6 +3844,16 @@ function Conversation({
   cancellingLimitIds: string[];
   verifyingLimitExecutionIds: string[];
   verifyingLimitCancelIds: string[];
+  preparingEvmIds: string[];
+  executingEvmIds: string[];
+  evmExecutionEnabled: boolean;
+  evmExecutionMissing: string[];
+  onPrepareEvmSwap: (messageId: string, proposal: EvmSwapProposal) => void;
+  onRequestEvmExecution: (
+    messageId: string,
+    proposal: EvmSwapProposal,
+    preflight: EvmSwapPreflightEvidence,
+  ) => void;
   onRequestLimitSimulation: (
     messageId: string,
     preview: LimitOrderContractPreview,
@@ -3507,7 +3926,23 @@ function Conversation({
           <span className="liveDot" />{" "}
           {session.workspace === "pump"
             ? "Pump.fun · manual restricted"
-            : session.mode === "mission"
+            : session.walletScope === "solana"
+              ? session.mode === "mission"
+                ? "Solana workspace · mission"
+                : "Solana workspace · agent"
+              : session.walletScope === "evm"
+                ? session.mode === "mission"
+                  ? "EVM workspace · restricted mission"
+                  : "EVM workspace · restricted agent"
+            : session.intent === "token-launch"
+              ? "Token launch planning"
+              : session.intent === "solana-swap"
+                ? "Solana swap preparing"
+                : session.intent === "evm-swap"
+                  ? "EVM swap planning · release gated"
+                  : session.intent === "bridge"
+                    ? "Bridge planning · quote only"
+                    : session.mode === "mission"
               ? "Mission preparing"
               : "Agent active"}
         </div>
@@ -3533,6 +3968,27 @@ function Conversation({
                 />
               ) : (
                 <MarkdownMessage text={message.text} />
+              )}
+              {message.evmSwapProposal && (
+                <EvmSwapProposalCard
+                  proposal={message.evmSwapProposal}
+                  preflight={message.evmSwapPreflight ?? null}
+                  receipts={message.evmExecutionReceipts ?? []}
+                  preparing={preparingEvmIds.includes(message.evmSwapProposal.id)}
+                  executing={executingEvmIds.includes(message.evmSwapProposal.id)}
+                  executionEnabled={evmExecutionEnabled}
+                  executionMissing={evmExecutionMissing}
+                  onPrepare={() =>
+                    onPrepareEvmSwap(message.id, message.evmSwapProposal!)
+                  }
+                  onExecute={() =>
+                    onRequestEvmExecution(
+                      message.id,
+                      message.evmSwapProposal!,
+                      message.evmSwapPreflight!,
+                    )
+                  }
+                />
               )}
               {message.missionPreview && (
                 <MissionPreviewCard
@@ -3598,6 +4054,19 @@ function Conversation({
                     : undefined}
                 />
               )}
+              {message.pumpLaunchDraft && <PumpLaunchDraftCard
+                draft={message.pumpLaunchDraft}
+                metadataPackage={message.pumpLaunchMetadataPackage}
+                preflight={message.pumpLaunchPreflight}
+                revalidation={message.pumpLaunchFinalRevalidation}
+                execution={message.pumpLaunchExecution}
+                onPublishMetadata={onPublishPumpLaunchMetadata}
+                onPreflight={onPreflightPumpLaunch}
+                onFinalRevalidate={onFinalRevalidatePumpLaunch}
+                onExecute={onExecutePumpLaunch}
+                onVerify={onVerifyPumpLaunchExecution}
+                onOpenOfficialCreate={onOpenPumpLaunchOfficialCreate}
+              />}
               {message.pumpTradePreview && message.pumpExecution && (
                 <PumpExecutionCard
                   execution={message.pumpExecution}
@@ -3692,6 +4161,8 @@ function Conversation({
                 <div className="evidenceTag">
                   {message.pumpExecution
                     ? `Pump Mainnet execution: ${message.pumpExecution.status}`
+                    : message.evmExecutionReceipts?.length
+                      ? `EVM Mainnet execution: ${message.evmExecutionReceipts.at(-1)!.kind} ${message.evmExecutionReceipts.at(-1)!.status}`
                     : message.missionExecution
                     ? `Mainnet execution: ${message.missionExecution.status}`
                     : "No execution attempted"}
@@ -3721,6 +4192,12 @@ function Conversation({
         )}
       </div>
       <div className="conversationComposer">
+        {session.walletScope === "solana" && session.walletAddress !== null && (
+          <PumpLaunchDraftForm
+            creatorWallet={session.walletAddress}
+            onCreate={onCreatePumpLaunchDraft}
+          />
+        )}
         <Notice tone="warning" title="Restricted Mainnet session">
           Every mutating action requires a validated contract, passed
           simulation, password recheck, and explicit approval.
@@ -3734,6 +4211,136 @@ function Conversation({
         />
       </div>
     </div>
+  );
+}
+
+function EvmSwapProposalCard({
+  proposal,
+  preflight,
+  receipts,
+  preparing,
+  executing,
+  executionEnabled,
+  executionMissing,
+  onPrepare,
+  onExecute,
+}: {
+  proposal: EvmSwapProposal;
+  preflight: EvmSwapPreflightEvidence | null;
+  receipts: EvmSessionExecutionReceipt[];
+  preparing: boolean;
+  executing: boolean;
+  executionEnabled: boolean;
+  executionMissing: string[];
+  onPrepare: () => void;
+  onExecute: () => void;
+}) {
+  const latestReceipt = receipts.at(-1) ?? null;
+  const swapConfirmed = receipts.some(
+    (receipt) => receipt.kind === "swap" && receipt.status === "confirmed",
+  );
+  const approvalConfirmed = receipts.some(
+    (receipt) => receipt.kind === "approval" && receipt.status === "confirmed",
+  );
+  return (
+    <section className={`missionPreview ${proposal.quote.liquidityAvailable ? "ready" : "blocked"}`}>
+      <header>
+        <div>
+          <span>Robinhood Chain · quote only</span>
+          <strong>
+            {proposal.quote.sellTokenSymbol} → {proposal.quote.buyTokenSymbol}
+          </strong>
+        </div>
+        <StatusPill tone={proposal.quote.liquidityAvailable ? "success" : "warning"}>
+          {proposal.quote.liquidityAvailable ? "Liquidity found" : "Blocked"}
+        </StatusPill>
+      </header>
+      <div className="previewGrid">
+        <div><span>Raw input</span><strong>{proposal.quote.sellAmount}</strong></div>
+        <div><span>Expected output</span><strong>{proposal.quote.buyAmount}</strong></div>
+        <div><span>Minimum output</span><strong>{proposal.quote.minBuyAmount ?? "Unavailable"}</strong></div>
+        <div><span>Slippage limit</span><strong>{proposal.slippageBps} bps</strong></div>
+        <div><span>0x fee</span><strong>{proposal.quote.zeroExFeeAmount ?? "None reported"}</strong></div>
+        <div><span>Chain</span><strong>Robinhood · 4663</strong></div>
+      </div>
+      <div className="contractRows">
+        <div><span>Wallet</span><strong>{shorten(proposal.walletAddress)}</strong></div>
+        <div><span>Sell contract</span><strong>{shorten(proposal.quote.sellToken)}</strong></div>
+        <div><span>Buy contract</span><strong>{shorten(proposal.quote.buyToken)}</strong></div>
+      </div>
+      {preflight && (
+        <div className="simulationSummary">
+          <div><span>Allowance</span><strong>{preflight.currentAllowance}</strong></div>
+          <div><span>Approval</span><strong>{preflight.allowanceRequired ? "Required" : "Not required"}</strong></div>
+          <div><span>Gas limit</span><strong>{preflight.gasLimit}</strong></div>
+          <div><span>Maximum gas</span><strong>{preflight.maxGasCostWei} wei</strong></div>
+          <div><span>Firm minimum</span><strong>{preflight.minimumBuyAmount}</strong></div>
+          <div><span>Expires</span><strong>{new Date(preflight.expiresAt).toLocaleTimeString()}</strong></div>
+        </div>
+      )}
+      {receipts.length > 0 && (
+        <div className="activityList">
+          {receipts.map((receipt) => (
+            <div key={receipt.id}>
+              <span className={receipt.status === "confirmed" ? "success" : "failed"}>
+                {receipt.status}
+              </span>
+              <div>
+                <strong>{receipt.kind} · {shorten(receipt.transactionHash)}</strong>
+                <small>{new Date(receipt.reconciledAt).toLocaleString()}</small>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {!executionEnabled && (
+        <Notice tone="info" title="EVM release gate remains locked">
+          {executionMissing.length > 0
+            ? `Missing evidence: ${executionMissing.join(", ")}.`
+            : "Independent EVM release evidence has not been recorded."}
+        </Notice>
+      )}
+      {latestReceipt?.status === "unknown" && (
+        <Notice tone="warning" title="Broadcast status unknown">
+          Reconcile this transaction from Settings before preparing another action.
+        </Notice>
+      )}
+      <footer>
+        <span>
+          {swapConfirmed
+            ? "Swap confirmed"
+            : approvalConfirmed && !preflight
+              ? "Approval confirmed · fresh review required"
+              : "No signing authority granted"}
+        </span>
+        {!swapConfirmed && latestReceipt?.status !== "unknown" && !preflight && (
+          <button
+            className="primaryButton"
+            disabled={preparing || !proposal.quote.liquidityAvailable}
+            onClick={onPrepare}
+          >
+            {preparing
+              ? "Preparing…"
+              : approvalConfirmed
+                ? "Prepare fresh swap review"
+                : "Prepare trade review"}
+          </button>
+        )}
+        {!swapConfirmed && preflight && (
+          <button
+            className="dangerButton"
+            disabled={executing || !executionEnabled}
+            onClick={onExecute}
+          >
+            {executing
+              ? "Submitting…"
+              : preflight.allowanceRequired
+                ? "Review exact approval"
+                : "Review restricted swap"}
+          </button>
+        )}
+      </footer>
+    </section>
   );
 }
 
@@ -4638,6 +5245,299 @@ function calculateActualSlippageBps(expectedOutput: string, actualOutput: string
   return Number(((expected - actual) * 10_000n) / expected);
 }
 
+function PumpLaunchDraftForm({
+  creatorWallet,
+  onCreate,
+}: {
+  creatorWallet: string;
+  onCreate: (input: PumpLaunchDraftInput) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [symbol, setSymbol] = useState("");
+  const [description, setDescription] = useState("");
+  const [imageUri, setImageUri] = useState("");
+  const [metadataUri, setMetadataUri] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
+  const [xUrl, setXUrl] = useState("");
+  const [telegramUrl, setTelegramUrl] = useState("");
+  const [quoteAsset, setQuoteAsset] = useState<PumpLaunchDraft["quoteAsset"]>("SOL");
+  const [initialPurchase, setInitialPurchase] = useState("0");
+  const [outflow, setOutflow] = useState("10000000");
+  const [priorityFee, setPriorityFee] = useState("100000");
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const deadline = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  if (!open) {
+    return (
+      <button className="launchDraftToggle" onClick={() => setOpen(true)}>
+        Prepare Pump.fun token launch draft
+      </button>
+    );
+  }
+  const submit = async (): Promise<void> => {
+    if (!name.trim() || !symbol.trim() || !imageUri.trim() || !acknowledged) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onCreate({
+        creatorWallet,
+        metadata: {
+          name: name.trim(),
+          symbol: symbol.trim(),
+          description: description.trim(),
+          imageUri: imageUri.trim(),
+          metadataUri: metadataUri.trim() || null,
+          websiteUrl: websiteUrl.trim() || null,
+          xUrl: xUrl.trim() || null,
+          telegramUrl: telegramUrl.trim() || null,
+        },
+        quoteAsset,
+        initialPurchaseAmount: initialPurchase,
+        maxCreatorOutflowLamports: outflow,
+        maxPriorityFeeLamports: priorityFee,
+        deadlineAt: deadline,
+        acknowledgedIrreversiblePublication: true,
+      });
+      setOpen(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The launch draft could not be saved.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  return (
+    <section className="launchDraftForm">
+      <header>
+        <div>
+          <span>Token launch</span>
+          <strong>Prepare a review-only Pump.fun draft</strong>
+        </div>
+        <StatusPill tone="warning">No execution</StatusPill>
+      </header>
+      <p>Metadata upload, transaction construction, signing, and broadcast are unavailable at this stage.</p>
+      <div className="launchDraftGrid">
+        <label>Name<input value={name} maxLength={32} onChange={(event) => setName(event.target.value)} /></label>
+        <label>Symbol<input value={symbol} maxLength={10} onChange={(event) => setSymbol(event.target.value.toUpperCase())} /></label>
+        <label className="wide">HTTPS image URL<input value={imageUri} placeholder="https://..." onChange={(event) => setImageUri(event.target.value)} /></label>
+        <label className="wide">Hosted metadata JSON URL (required before launch)<input value={metadataUri} placeholder="https://.../metadata.json" onChange={(event) => setMetadataUri(event.target.value)} /></label>
+        <label className="wide">Description<textarea value={description} maxLength={500} onChange={(event) => setDescription(event.target.value)} /></label>
+        <label>Website (optional)<input value={websiteUrl} placeholder="https://..." onChange={(event) => setWebsiteUrl(event.target.value)} /></label>
+        <label>X profile (optional)<input value={xUrl} placeholder="https://x.com/..." onChange={(event) => setXUrl(event.target.value)} /></label>
+        <label className="wide">Telegram (optional)<input value={telegramUrl} placeholder="https://t.me/..." onChange={(event) => setTelegramUrl(event.target.value)} /></label>
+        <label>Quote asset<select value={quoteAsset} onChange={(event) => setQuoteAsset(event.target.value as PumpLaunchDraft["quoteAsset"])}><option value="SOL">SOL</option><option value="USDC">USDC</option></select></label>
+        <label>Initial purchase (raw {quoteAsset})<input inputMode="numeric" value={initialPurchase} onChange={(event) => setInitialPurchase(event.target.value.replace(/\D/gu, ""))} /></label>
+        <label>Max creator outflow (lamports)<input inputMode="numeric" value={outflow} onChange={(event) => setOutflow(event.target.value.replace(/\D/gu, ""))} /></label>
+        <label>Max priority fee (lamports)<input inputMode="numeric" value={priorityFee} onChange={(event) => setPriorityFee(event.target.value.replace(/\D/gu, ""))} /></label>
+      </div>
+      <label className="launchDraftAcknowledgement"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /> I understand this draft is not a launch and any future publication would be irreversible.</label>
+      {error && <p className="launchDraftError">{error}</p>}
+      <footer><button disabled={submitting} onClick={() => setOpen(false)}>Cancel</button><button className="primary" disabled={submitting || !name.trim() || !symbol.trim() || !imageUri.trim() || !acknowledged} onClick={() => void submit()}>{submitting ? "Saving..." : "Save launch draft"}</button></footer>
+    </section>
+  );
+}
+
+function PumpLaunchDraftCard({
+  draft,
+  metadataPackage,
+  preflight,
+  revalidation,
+  execution,
+  onPublishMetadata,
+  onPreflight,
+  onFinalRevalidate,
+  onExecute,
+  onVerify,
+  onOpenOfficialCreate,
+}: {
+  draft: PumpLaunchDraft;
+  metadataPackage: PumpLaunchMetadataPackage | undefined;
+  preflight: PumpLaunchPreflight | undefined;
+  revalidation: PumpLaunchFinalRevalidation | undefined;
+  execution: PumpLaunchExecutionRecord | undefined;
+  onPublishMetadata: (draft: PumpLaunchDraft) => Promise<void>;
+  onPreflight: (draft: PumpLaunchDraft) => Promise<void>;
+  onFinalRevalidate: (draft: PumpLaunchDraft, preflight: PumpLaunchPreflight) => Promise<void>;
+  onExecute: (
+    draft: PumpLaunchDraft,
+    preflight: PumpLaunchPreflight,
+    revalidation: PumpLaunchFinalRevalidation,
+    credentials: { masterPassword: string },
+  ) => Promise<void>;
+  onVerify: (draft: PumpLaunchDraft, execution: PumpLaunchExecutionRecord) => Promise<void>;
+  onOpenOfficialCreate: (draft: PumpLaunchDraft) => Promise<void>;
+}) {
+  const [opening, setOpening] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [simulating, setSimulating] = useState(false);
+  const [revalidating, setRevalidating] = useState(false);
+  const [executing, setExecuting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [masterPassword, setMasterPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const handoff = async (): Promise<void> => {
+    setOpening(true);
+    setError(null);
+    try {
+      await onOpenOfficialCreate(draft);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The official Pump.fun page could not be opened.");
+    } finally {
+      setOpening(false);
+    }
+  };
+  const publish = async (): Promise<void> => {
+    setPublishing(true);
+    setError(null);
+    try {
+      await onPublishMetadata(draft);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Metadata could not be published to Cloudflare R2.");
+    } finally {
+      setPublishing(false);
+    }
+  };
+  const simulate = async (): Promise<void> => {
+    setSimulating(true);
+    setError(null);
+    try {
+      await onPreflight(draft);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Token Launch preflight failed safely.");
+    } finally {
+      setSimulating(false);
+    }
+  };
+  const finalRevalidate = async (): Promise<void> => {
+    if (preflight === undefined) return;
+    setRevalidating(true);
+    setError(null);
+    try {
+      await onFinalRevalidate(draft, preflight);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Final Token Launch revalidation failed safely.");
+    } finally {
+      setRevalidating(false);
+    }
+  };
+  const execute = async (): Promise<void> => {
+    if (preflight === undefined || revalidation === undefined) return;
+    setExecuting(true);
+    setError(null);
+    try {
+      await onExecute(draft, preflight, revalidation, { masterPassword });
+      setMasterPassword("");
+      setConfirmation("");
+      setAcknowledged(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Token Launch execution failed safely.");
+    } finally {
+      setExecuting(false);
+    }
+  };
+  const verify = async (): Promise<void> => {
+    if (execution === undefined) return;
+    setVerifying(true);
+    setError(null);
+    try {
+      await onVerify(draft, execution);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Token Launch verification is temporarily unavailable.");
+    } finally {
+      setVerifying(false);
+    }
+  };
+  const metadataReady = metadataPackage !== undefined || Boolean(draft.metadata.metadataUri);
+  return (
+    <section className="launchDraftCard">
+      <header><div><span>Token launch draft</span><strong>{draft.metadata.name} (${draft.metadata.symbol})</strong></div><StatusPill tone={execution?.status === "finalized" ? "success" : execution?.status === "failed" ? "danger" : preflight ? "success" : "warning"}>{execution?.status ?? (preflight ? "Preflight passed" : "Draft only")}</StatusPill></header>
+      <dl>
+        <div><dt>Creator</dt><dd>{shorten(draft.creatorWallet)}</dd></div>
+        <div><dt>Pairing</dt><dd>{draft.quoteAsset}</dd></div>
+        <div><dt>Initial purchase</dt><dd>{draft.initialPurchaseAmount} raw {draft.quoteAsset}</dd></div>
+        <div><dt>Metadata JSON</dt><dd>{metadataPackage ? "Published" : draft.metadata.metadataUri ? "Provided" : "Not published"}</dd></div>
+        <div><dt>Outflow cap</dt><dd>{draft.maxCreatorOutflowLamports} lamports</dd></div>
+        <div><dt>Priority cap</dt><dd>{draft.maxPriorityFeeLamports} lamports</dd></div>
+      </dl>
+      <p>{metadataPackage ? `Metadata URI: ${metadataPackage.uri}` : draft.metadata.metadataUri ? "Hosted metadata JSON is recorded for a future preflight." : "Publish the metadata JSON to your configured Cloudflare R2 bucket, or supply your own hosted metadata URL."} No transaction, signing, or broadcast occurred.</p>
+      {!metadataPackage && !draft.metadata.metadataUri && <button className="launchDraftHandoff" disabled={publishing} onClick={() => void publish()}>{publishing ? "Publishing..." : "Publish metadata JSON to Cloudflare R2"}</button>}
+      {metadataReady && (
+        <button className="launchDraftHandoff" disabled={simulating} onClick={() => void simulate()}>
+          {simulating ? "Simulating unsigned launch..." : preflight ? "Refresh unsigned Mainnet preflight" : "Run unsigned Mainnet preflight"}
+        </button>
+      )}
+      {preflight && (
+        <div className="launchPreflightReview">
+          <strong>Unsigned create_v2 review</strong>
+          <dl>
+            <div><dt>Mint</dt><dd>{shorten(preflight.mintAddress)}</dd></div>
+            <div><dt>Simulation slot</dt><dd>{preflight.simulationSlot.toLocaleString()}</dd></div>
+            <div><dt>Compute</dt><dd>{preflight.computeUnitsConsumed?.toLocaleString() ?? "Unavailable"} CU</dd></div>
+            <div><dt>Network fee</dt><dd>{preflight.networkFeeLamports} lamports</dd></div>
+            <div><dt>Priority fee</dt><dd>{preflight.priorityFeeLamports} lamports</dd></div>
+            <div><dt>Account rent</dt><dd>{preflight.rentLamports} lamports</dd></div>
+            <div><dt>Total estimate</dt><dd>{preflight.totalEstimatedOutflowLamports} lamports</dd></div>
+            <div><dt>Expires</dt><dd>{new Date(preflight.expiresAt).toLocaleTimeString()}</dd></div>
+          </dl>
+          <p>Digest: {preflight.transactionDigest.slice(0, 16)}… · {preflight.checks.length}/{preflight.checks.length} checks passed. The non-extractable mint signer exists only in volatile main-process memory and is discarded on expiry or lock.</p>
+        </div>
+      )}
+      {preflight && execution === undefined && (
+        <button className="launchDraftHandoff" disabled={revalidating} onClick={() => void finalRevalidate()}>
+          {revalidating ? "Revalidating..." : revalidation ? "Refresh final Mainnet checks" : "Run final Mainnet checks"}
+        </button>
+      )}
+      {revalidation?.status === "blocked" && execution === undefined && (
+        <div className="launchDraftError">
+          Final approval is blocked. Run a new unsigned preflight before trying again.
+        </div>
+      )}
+      {revalidation?.status === "ready-for-password" && execution === undefined && (
+        <div className="launchPreflightReview">
+          <strong>Irreversible Mainnet approval</strong>
+          <p>{revalidation.checks.filter((check) => check.passed).length}/{revalidation.checks.length} final checks passed. This action creates a real token mint and cannot be undone.</p>
+          <label>Master password<input type="password" autoComplete="current-password" value={masterPassword} onChange={(event) => setMasterPassword(event.target.value)} /></label>
+          <label>Type LAUNCH TOKEN MAINNET<input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>
+          <label className="launchDraftAcknowledgement"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /> I approve one local signing operation and one Mainnet broadcast attempt for this exact digest.</label>
+          <button
+            className="executeButton"
+            disabled={executing || !masterPassword || confirmation !== "LAUNCH TOKEN MAINNET" || !acknowledged}
+            onClick={() => void execute()}
+          >
+            {executing ? "Signing and submitting..." : "Launch token on Mainnet"}
+          </button>
+        </div>
+      )}
+      {execution && (
+        <div className="launchPreflightReview">
+          <strong>Encrypted Token Launch receipt</strong>
+          <dl>
+            <div><dt>Status</dt><dd>{execution.status}</dd></div>
+            <div><dt>Mint</dt><dd>{shorten(execution.mintAddress)}</dd></div>
+            <div><dt>Network fee estimate</dt><dd>{execution.networkFeeLamports} lamports</dd></div>
+            <div><dt>Rent estimate</dt><dd>{execution.rentLamports} lamports</dd></div>
+            <div><dt>Actual network fee</dt><dd>{execution.actualNetworkFeeLamports === null ? "Pending" : `${execution.actualNetworkFeeLamports.toLocaleString()} lamports`}</dd></div>
+            <div><dt>Actual account funding</dt><dd>{execution.actualAccountFundingLamports === null ? "Pending" : `${execution.actualAccountFundingLamports.toLocaleString()} lamports`}</dd></div>
+            <div><dt>Actual wallet outflow</dt><dd>{execution.actualWalletOutflowLamports === null ? "Pending" : `${execution.actualWalletOutflowLamports} lamports`}</dd></div>
+            <div><dt>Finalized slot</dt><dd>{execution.finalizedSlot?.toLocaleString() ?? "Pending"}</dd></div>
+          </dl>
+          <p>Signature: {shorten(execution.signature)}. {execution.error ?? "No RPC error is recorded."}</p>
+          {execution.status !== "finalized" && execution.status !== "failed" && (
+            <button className="launchDraftHandoff" disabled={verifying} onClick={() => void verify()}>
+              {verifying ? "Checking on-chain..." : "Verify on-chain"}
+            </button>
+          )}
+        </div>
+      )}
+      <button className="launchDraftHandoff" disabled={opening} onClick={() => void handoff()}>{opening ? "Opening..." : "Open official Pump.fun create page"}</button>
+      {error && <p className="launchDraftError">{error}</p>}
+    </section>
+  );
+}
+
 function MissionPreviewCard({
   preview,
   simulation,
@@ -5462,6 +6362,118 @@ function LimitOrderFinalModal({
   );
 }
 
+function EvmExecutionApprovalModal({
+  action,
+  proposal,
+  preflight,
+  onCancel,
+  onConfirm,
+}: {
+  action: "approval" | "swap";
+  proposal: EvmSwapProposal;
+  preflight: EvmSwapPreflightEvidence;
+  onCancel: () => void;
+  onConfirm: (credentials: {
+    masterPassword: string;
+    confirmation: string;
+  }) => Promise<void>;
+}) {
+  const [masterPassword, setMasterPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const expectedConfirmation = action === "approval"
+    ? "APPROVE ROBINHOOD MAINNET"
+    : "EXECUTE ROBINHOOD MAINNET SWAP";
+  const ready =
+    masterPassword.length >= 8 &&
+    confirmation === expectedConfirmation &&
+    acknowledged;
+  async function submit(): Promise<void> {
+    if (!ready) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onConfirm({ masterPassword, confirmation });
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : `The EVM ${action} was not submitted.`,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="modalBackdrop" role="presentation">
+      <section
+        className="simulationApproval executionApproval"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="evm-execution-approval-title"
+      >
+        <p className="kicker">Final Robinhood Mainnet authorization</p>
+        <h2 id="evm-execution-approval-title">
+          {action === "approval" ? "Approve this exact token amount" : "Execute this exact EVM swap"}
+        </h2>
+        <p>
+          {action === "approval"
+            ? "This is a separate ERC-20 approval transaction. A confirmed approval does not execute the swap; a fresh trade review is required afterward."
+            : "The firm 0x transaction will be signed locally and submitted once. An unknown broadcast must be reconciled before any retry."}
+        </p>
+        <dl>
+          <div><dt>Wallet</dt><dd>{proposal.walletAddress}</dd></div>
+          <div><dt>Pair</dt><dd>{proposal.quote.sellTokenSymbol} → {proposal.quote.buyTokenSymbol}</dd></div>
+          <div><dt>Raw input</dt><dd>{proposal.quote.sellAmount}</dd></div>
+          <div><dt>Expected output</dt><dd>{preflight.expectedBuyAmount}</dd></div>
+          <div><dt>Minimum output</dt><dd>{preflight.minimumBuyAmount}</dd></div>
+          <div><dt>Maximum gas</dt><dd>{preflight.maxGasCostWei} wei</dd></div>
+          <div><dt>Preflight expiry</dt><dd>{new Date(preflight.expiresAt).toLocaleString()}</dd></div>
+        </dl>
+        <Notice tone="danger" title="Irreversible Mainnet transaction">
+          Verify the wallet, exact token contracts, raw amount, minimum output,
+          and gas ceiling before continuing.
+        </Notice>
+        <Field label="Master password">
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={masterPassword}
+            onChange={(event) => setMasterPassword(event.target.value)}
+          />
+        </Field>
+        <Field label={`Type "${expectedConfirmation}"`}>
+          <input
+            value={confirmation}
+            onChange={(event) => setConfirmation(event.target.value)}
+          />
+        </Field>
+        <label className="riskCheck">
+          <input
+            type="checkbox"
+            checked={acknowledged}
+            onChange={(event) => setAcknowledged(event.target.checked)}
+          />
+          <span>I authorize this exact EVM Mainnet {action} and understand it uses real funds.</span>
+        </label>
+        {error && <p className="executionError">{error}</p>}
+        <footer>
+          <button disabled={busy} onClick={onCancel}>Cancel</button>
+          <button
+            className="dangerButton"
+            disabled={!ready || busy}
+            onClick={() => void submit()}
+          >
+            {busy ? "Signing and submitting…" : action === "approval" ? "Approve exact amount" : "Execute real swap"}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function ExecutionApprovalModal({
   preview,
   simulation,
@@ -5753,18 +6765,20 @@ function PumpExecutionApprovalModal({
 function SessionModal({
   prompt,
   wallets,
+  evmWallets,
   onCancel,
   onCreate,
 }: {
   prompt: string;
   wallets: WalletSummary[];
+  evmWallets: WalletSummary[];
   onCancel: () => void;
   onCreate: (value: {
     title: string;
     mode: SessionMode;
     permission: Permission;
     workspace: SessionWorkspace;
-    pumpConfig?: PumpSessionConfig;
+    walletScope?: SessionWalletScope;
     walletAddress: string | null;
     prompt: string;
   }) => void;
@@ -5775,6 +6789,7 @@ function SessionModal({
   const [mode, setMode] = useState<SessionMode>("agent");
   const [permission, setPermission] = useState<Permission>("restricted");
   const [workspace, setWorkspace] = useState<SessionWorkspace>("general");
+  const [walletScope, setWalletScope] = useState<SessionWalletScope>("solana");
   const [pumpObjective, setPumpObjective] = useState<PumpSessionConfig["objective"]>("monitor");
   const [pumpScope, setPumpScope] = useState<PumpSessionConfig["scope"]>("exact-mint");
   const [pumpMint, setPumpMint] = useState("");
@@ -5783,10 +6798,26 @@ function SessionModal({
   const [walletAddress, setWalletAddress] = useState<string>(
     wallets.find((wallet) => wallet.primary)?.address ?? "",
   );
+  const scopedWallets = walletScope === "evm" ? evmWallets : wallets;
   useEffect(() => {
-    if (!walletAddress)
-      setWalletAddress(wallets.find((wallet) => wallet.primary)?.address ?? "");
-  }, [wallets, walletAddress]);
+    if (!scopedWallets.some((wallet) => wallet.address === walletAddress)) {
+      setWalletAddress(
+        scopedWallets.find((wallet) => wallet.primary)?.address ??
+          scopedWallets[0]?.address ??
+          "",
+      );
+    }
+  }, [scopedWallets, walletAddress]);
+  function selectWalletScope(scope: SessionWalletScope): void {
+    setWalletScope(scope);
+    setWorkspace("general");
+    const nextWallets = scope === "evm" ? evmWallets : wallets;
+    setWalletAddress(
+      nextWallets.find((wallet) => wallet.primary)?.address ??
+        nextWallets[0]?.address ??
+        "",
+    );
+  }
   const pumpMintValid = SOLANA_ADDRESS_PATTERN.test(pumpMint.trim());
   const pumpWatchlistMints = [...new Set(pumpWatchlistText
     .split(/[\s,;]+/u)
@@ -5833,31 +6864,36 @@ function SessionModal({
           <section className="sessionConfigSection">
             <div className="sectionLegend">
               <span>01</span>
-              <strong>Workspace</strong>
-              <small>Choose the market context for this session.</small>
+              <strong>Wallet network</strong>
+              <small>The selected wallet determines the actions available inside this session.</small>
             </div>
             <div className="choiceGrid">
               <button
-                className={workspace === "general" ? "active" : ""}
-                onClick={() => {
-                  setWorkspace("general");
-                  setMode("agent");
-                }}
+                className={walletScope === "solana" ? "active" : ""}
+                onClick={() => selectWalletScope("solana")}
               >
                 <span className="choiceNumber">01</span>
-                <strong>General agent</strong>
-                <small>Wallet analysis, research, and ordinary restricted Mainnet planning.</small>
+                <strong>Solana Mainnet wallet</strong>
+                <small>Available inside the session: Jupiter swap, Pump.fun Token Launch planning, Solana-to-EVM bridge planning, and research.</small>
               </button>
               <button
-                className={workspace === "pump" ? "active pumpChoice" : "pumpChoice"}
-                onClick={() => {
-                  setWorkspace("pump");
-                  setMode("mission");
-                }}
+                className={
+                  evmWallets.length === 0
+                    ? "unavailableChoice"
+                    : walletScope === "evm"
+                      ? "active"
+                      : ""
+                }
+                disabled={evmWallets.length === 0}
+                onClick={() => selectWalletScope("evm")}
               >
                 <span className="choiceNumber">02</span>
-                <strong>Pump.fun agent</strong>
-                <small>Exact-mint monitoring, restricted Pump analysis, and manually approved Pump/PumpSwap execution.</small>
+                <strong>Robinhood Chain EVM wallet</strong>
+                <small>
+                  {evmWallets.length === 0
+                    ? "Configure an encrypted EVM wallet in Settings first."
+                    : "Restricted 0x-routed swap review. Execution remains locked until the EVM release gate passes."}
+                </small>
               </button>
             </div>
           </section>
@@ -5893,8 +6929,7 @@ function SessionModal({
             </div>
             <div className="choiceGrid">
               <button
-                className={workspace === "pump" ? "unavailableChoice" : mode === "agent" ? "active" : ""}
-                disabled={workspace === "pump"}
+                className={mode === "agent" ? "active" : ""}
                 onClick={() => setMode("agent")}
               >
                 <span className="choiceNumber">01</span>
@@ -5911,9 +6946,7 @@ function SessionModal({
                 <span className="choiceNumber">02</span>
                 <strong>Mission</strong>
                 <small>
-                  {workspace === "pump"
-                    ? "Required for a durable Pump.fun token scope and explicit safety boundary."
-                    : "Goal-driven workflow with explicit limits, checkpoints, and stop conditions."}
+                  Goal-driven workflow with explicit limits, checkpoints, and stop conditions.
                 </small>
               </button>
             </div>
@@ -6025,14 +7058,15 @@ function SessionModal({
                 </small>
               </button>
               <button
-                className={permission === "full" ? "active" : ""}
+                className="unavailableChoice"
+                disabled
                 onClick={() => setPermission("full")}
               >
                 <span className="choiceNumber">02 · Guarded MVP</span>
                 <strong>Full access</strong>
                 <small>
-                  Prepare broader multi-step proposals. Signing, policy checks,
-                  and final transaction approval remain mandatory.
+                  Not available for new sessions. Full Access never bypasses
+                  signing, policy checks, or final transaction approval.
                 </small>
               </button>
             </div>
@@ -6040,18 +7074,22 @@ function SessionModal({
           <section className="sessionConfigSection">
             <div className="sectionLegend">
               <span>{workspace === "pump" ? "06" : "05"}</span>
-              <strong>Wallet scope</strong>
-              <small>Optional and locked for this session.</small>
+              <strong>Wallet</strong>
+              <small>Locked for this session after it is created.</small>
             </div>
             <div className="walletSelectBlock">
-              <label htmlFor="session-wallet">Solana Mainnet wallet</label>
+              <label htmlFor="session-wallet">
+                {walletScope === "evm"
+                  ? "Robinhood Chain EVM wallet"
+                  : "Solana Mainnet wallet"}
+              </label>
               <select
                 id="session-wallet"
                 value={walletAddress}
                 onChange={(event) => setWalletAddress(event.target.value)}
               >
                 <option value="">No wallet · chat only</option>
-                {wallets.map((wallet) => (
+                {scopedWallets.map((wallet) => (
                   <option key={wallet.address} value={wallet.address}>
                     {wallet.primary ? "Primary · " : ""}
                     {shorten(wallet.address)}
@@ -6059,9 +7097,9 @@ function SessionModal({
                 ))}
               </select>
               <small>
-                {wallets.length === 0
-                  ? "No wallet is configured. Add one in Settings → Wallets."
-                  : `${wallets.length} encrypted wallet${wallets.length === 1 ? "" : "s"} available on this device.`}
+                {scopedWallets.length === 0
+                  ? `No ${walletScope === "evm" ? "EVM" : "Solana"} wallet is configured. Add one in Settings → Wallets.`
+                  : `${scopedWallets.length} encrypted ${walletScope === "evm" ? "EVM" : "Solana"} wallet${scopedWallets.length === 1 ? "" : "s"} available on this device.`}
               </small>
             </div>
           </section>
@@ -6082,25 +7120,14 @@ function SessionModal({
             <button onClick={onCancel}>Cancel</button>
             <button
               className="primaryButton"
-              disabled={!title.trim() || (workspace === "pump" && (!pumpAnalysisAmountValid || (pumpScope === "exact-mint" ? !pumpMintValid : pumpScope === "watchlist" ? !pumpWatchlistValid : false)))}
+              disabled={!title.trim()}
               onClick={() =>
                 onCreate({
                   title: title.trim(),
-                  mode: workspace === "pump" ? "mission" : mode,
-                  permission,
-                  workspace,
-                  ...(workspace === "pump"
-                    ? {
-                        pumpConfig: {
-                          scope: pumpScope,
-                          objective: pumpScope === "exact-mint" ? pumpObjective : "monitor",
-                          tokenMint: pumpScope === "exact-mint" ? pumpMint.trim() : null,
-                          ...(pumpScope === "watchlist" ? { watchlistMints: pumpWatchlistMints } : {}),
-                          analysisBuyLamports: pumpAnalysisBuyLamports,
-                          lifecycle: "proposal-only",
-                        } satisfies PumpSessionConfig,
-                      }
-                    : {}),
+                  mode,
+                  permission: "restricted",
+                  workspace: "general",
+                  walletScope,
                   walletAddress: walletAddress || null,
                   prompt,
                 })
@@ -6132,9 +7159,10 @@ function RightRail({
   onAnalyzePump?: ((mint: string) => void) | undefined;
   onScanPump?: (() => void) | undefined;
 }) {
+  const isEvmSession = session?.walletScope === "evm";
   const visibleWallet =
     session?.walletAddress ??
-    wallets.find((wallet) => wallet.primary)?.address ??
+    (session ? null : wallets.find((wallet) => wallet.primary)?.address) ??
     null;
   const [portfolio, setPortfolio] = useState<PortfolioSnapshot | null>(null);
   const [portfolioState, setPortfolioState] = useState<
@@ -6180,7 +7208,7 @@ function RightRail({
   }, 0) ?? 0, [session]);
   useEffect(() => {
     let active = true;
-    if (!visibleWallet) {
+    if (!visibleWallet || isEvmSession) {
       setPortfolio(null);
       setPortfolioState("idle");
       return () => {
@@ -6210,11 +7238,11 @@ function RightRail({
     return () => {
       active = false;
     };
-  }, [visibleWallet, refreshToken, minimumPortfolioSlot, portfolioRetry]);
+  }, [visibleWallet, isEvmSession, refreshToken, minimumPortfolioSlot, portfolioRetry]);
   useEffect(() => {
     let active = true;
     setActivity(null);
-    if (!session || !visibleWallet) {
+    if (!session || !visibleWallet || isEvmSession) {
       setActivityState("idle");
       return () => {
         active = false;
@@ -6240,7 +7268,7 @@ function RightRail({
     return () => {
       active = false;
     };
-  }, [session?.id, visibleWallet, refreshToken]);
+  }, [session?.id, visibleWallet, isEvmSession, refreshToken]);
   const emptyVerifiedPortfolio =
     portfolio !== null &&
     Number(portfolio.solBalance) === 0 &&
@@ -6556,7 +7584,34 @@ function RightRail({
           )}
         </>
       )}
-      {!pumpConfig && (
+      {!pumpConfig && isEvmSession && (
+        <RailSection title="EVM position">
+          <span className="totalLabel">Robinhood Chain session wallet</span>
+          <strong className="portfolioTotal">Restricted</strong>
+          <small>
+            Native and ERC-20 portfolio reads are not yet exposed in this rail.
+            Use the verified quote and restricted execution review in Mission chat.
+          </small>
+          {visibleWallet ? (
+            <div className="portfolioWallets">
+              <div className="walletLine selected">
+                <span>◇ SESSION WALLET</span>
+                <strong>{shorten(visibleWallet)}</strong>
+                <button onClick={() => copyAddress(visibleWallet)}>
+                  {copiedAddress === visibleWallet ? "Copied" : "Copy"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p>No EVM wallet is bound to this session.</p>
+          )}
+          <p className="pumpUnavailable">
+            Creating a session never authorizes an approval, signature, or
+            broadcast.
+          </p>
+        </RailSection>
+      )}
+      {!pumpConfig && !isEvmSession && (
       <RailSection title={session ? "Positions" : "Portfolio"}>
         <span className="totalLabel">
           {session ? "Session wallet value" : "Verified portfolio"}
@@ -6616,7 +7671,7 @@ function RightRail({
         </div>
       </RailSection>
       )}
-      {session && (
+      {session && !isEvmSession && (
         <RailSection title="Recent activity">
           {activityState === "loading" ? (
             <p>Reading finalized wallet signatures…</p>

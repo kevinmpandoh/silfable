@@ -220,7 +220,7 @@ test("P2 reverse swap blocks insufficient USDC before construction or signing", 
 test("fee guard blocks an excessive simulated fee before the signer can be reached", async () => {
   const transaction = unsignedTransaction("11111111111111111111111111111111");
   const reads = passingReads(transaction, { slot: 2, err: null, logs: [], unitsConsumed: 500, feeLamports: 250_000 });
-  const settings = { get: () => ({ maxNetworkFeeLamports: 200_000, maxFeePercent: 5, defaultSlippageBps: 50, defaultDeadlineMinutes: 30, priority: "standard" as const }) };
+  const settings = { get: () => ({ maxNetworkFeeLamports: 200_000, maxFeePercent: 5, defaultSlippageBps: 50, maxSlippageBps: 300, defaultDeadlineMinutes: 30, priority: "standard" as const }) };
   const result = await new MissionSimulationService(reads, WALLETS, settings).simulate(missionFor(SELECTED_WALLET));
   assert.equal(result.status, "blocked");
   assert.equal(result.feeRisk, "extreme");
@@ -539,11 +539,27 @@ test("mission simulation forwards configured transaction priority setting to ord
       return { transaction, requestId: "private-order-id", lastValidBlockHeight: "12345", outAmount: "15000000", router: "metis", mode: "ultra" };
     },
   } as unknown as MainnetReadService;
-  const settings = { get: () => ({ maxNetworkFeeLamports: 200_000, maxFeePercent: 5, defaultSlippageBps: 50, defaultDeadlineMinutes: 30, priority: "fast" as const }) };
+  const settings = { get: () => ({ maxNetworkFeeLamports: 200_000, maxFeePercent: 5, defaultSlippageBps: 50, maxSlippageBps: 300, defaultDeadlineMinutes: 30, priority: "fast" as const }) };
   const service = new MissionSimulationService(reads, WALLETS, settings);
   const result = await service.simulate(missionFor(SELECTED_WALLET));
   assert.equal(result.status, "passed");
   assert.equal(passedPriority, "fast");
+});
+
+test("mission simulation re-enforces a tighter persisted session slippage ceiling", async () => {
+  const transaction = unsignedTransaction("11111111111111111111111111111111");
+  const reads = passingReads(transaction, { slot: 2, err: null, logs: [], unitsConsumed: 500, feeLamports: 5000 });
+  const service = new MissionSimulationService(reads, WALLETS);
+  const result = await service.simulate(missionFor(SELECTED_WALLET), {
+    maxNetworkFeeLamports: 200_000,
+    maxFeePercent: 5,
+    defaultSlippageBps: 25,
+    maxSlippageBps: 25,
+    defaultDeadlineMinutes: 30,
+    priority: "standard",
+  });
+  assert.equal(result.status, "blocked");
+  assert.match(result.error ?? "", /Mission policy no longer passes/i);
 });
 
 function missionFor(walletAddress: string): MissionContractPreview {

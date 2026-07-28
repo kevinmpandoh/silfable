@@ -50,7 +50,8 @@ Still required:
 - [x] Show actual slippage in both raw amount and basis points.
 - [x] Show estimated fee, actual network fee, account/rent funding, and total wallet outflow separately.
 - [x] Convert known router/program failures into human-readable explanations; retain bounded raw evidence only behind the attached bounded logs/details.
-- [x] Ensure every successful, failed, and unknown swap, Pump, limit-order deposit, and limit-order cancellation receipt can be reopened from encrypted session history. Unknown limit-order receipts expose signature copy, Explorer, and read-only on-chain verification controls that never rebroadcast.
+- [x] Ensure every successful, failed, and unknown swap, Pump, limit-order deposit, and limit-order cancellation receipt can be reopened from encrypted session history. On session recovery, unknown Jupiter swaps and Trigger receipts are reconciled by signature through read-only RPC verification only; they never rebroadcast. Unknown receipts expose signature copy, Explorer, and read-only on-chain verification controls.
+- [x] Persist Jupiter Trigger V2 create/cancel receipts from the Main process before returning them to the renderer, so a renderer crash after broadcast cannot be the only persistence boundary.
 - [x] Hold portfolio refresh until its finalized snapshot slot reaches the confirmed receipt slot.
 
 ### P0.4 Transaction settings — Partial
@@ -60,7 +61,7 @@ Still required:
 - [x] Persist a default slippage limit and apply it automatically to AI-created swap and limit-order drafts when the user did not provide an explicit value.
 - [x] Persist a default mission deadline and apply it automatically to AI-created swap deadlines and limit-order expiry defaults when the user did not provide an explicit value.
 - [x] Apply priority presets `Economy`, `Standard`, and `Fast` during Jupiter transaction construction; the selected preference is sent to the Jupiter order builder and the resulting simulated fee is shown before approval.
-- Per-session overrides that can only become stricter than the configured safety ceiling.
+- [x] A per-session maximum-slippage override can only tighten the device ceiling. It is encrypted with the session, applied to AI proposal defaults, and enforced again in unsigned simulation and final pre-sign revalidation.
 - Restricted execution and explicit final approval remain mandatory.
 
 ## P1 — Production hardening and release readiness
@@ -114,7 +115,8 @@ Completed:
 
 Still required:
 
-- Add provider-wide rate budgets/circuit breakers for sustained partial outages.
+- [x] Jupiter price, quote-only order, unsigned-order, and execute requests share an in-process fail-closed circuit breaker: after bounded consecutive provider failures, new requests are paused until cooldown and no fallback quote/order is invented.
+- Add provider-wide rate budgets for sustained partial outages.
 - Define reconciliation behavior when provider and finalized RPC evidence contradict each other.
 - Complete a manual audit of logs, crash reports, Windows event artifacts, and packaged diagnostics for keys, seed phrases, passwords, signed transactions, and provider credentials.
 - Add sanitized structured logging with an explicit field allowlist and retention policy.
@@ -145,6 +147,8 @@ Remaining validation work:
 - **Packaged application**: repeat the above critical paths in the signed Windows build, not only the development runtime.
 
 The packaged Windows procedure, isolated-profile launcher, evidence rules, and case-by-case pass criteria are documented in [Windows P2 Mainnet acceptance](P2_WINDOWS_ACCEPTANCE.md). Run `npm.cmd run qa:desktop:p2:win` only after producing the audited unpacked QA application; the launcher never configures, signs, approves, or broadcasts a transaction. The NSIS installer remains exclusive to the certificate-enforced production build.
+
+For the constrained manual Solana MVP sequence, user-owned final approvals, and live-test evidence, use [Solana Desktop MVP acceptance](SOLANA_MVP_ACCEPTANCE.md).
 
 ## P3 — Guarded AI trading missions
 
@@ -347,11 +351,25 @@ Implemented slices: persisted Pump workspace identity; exact-mint copy/analysis 
 
 ## P4 — Additional venues and chains
 
-These are independent projects and must not reuse Solana assumptions without new policy and security reviews.
+These are independent projects and must not reuse Solana assumptions without new policy and security reviews. The current target product lanes are defined in [Venue product architecture](../VENUE_PRODUCT_ARCHITECTURE.md): Pump.fun is Token Launch, Jupiter is Solana Swap, a verified Uniswap-compatible deployment is EVM Swap, and Bridge is a distinct cross-chain lifecycle. Existing Pump/PumpSwap buy/sell work below is legacy pilot work, not the Token Launch feature.
 
-### P4.1 Pump.fun and PumpSwap trading — In progress (priority track)
+### P4.1 Legacy Pump.fun and PumpSwap trading pilot — Isolated
 
-Goal: allow the AI agent to research and propose trades for Pump.fun-origin tokens, then support restricted buy/sell execution only after the venue-specific safety boundary is complete.
+Goal: retain and safely isolate existing exact-mint research/proposal/buy-sell pilot artifacts while the new Pump.fun Token Launch lane is designed separately. Do not extend this section as a token-creation implementation.
+
+### Pump.fun Token Launch — Restricted implementation; acceptance pending
+
+- [x] Introduce a strict launch-only contract that cannot be confused with a legacy Pump/PumpSwap trade: exact creator wallet, immutable public metadata, SOL/USDC quote choice, initial-purchase declaration, cost and priority-fee caps, deadline, and an irreversible-publication acknowledgement.
+- [x] Keep the draft artifact itself non-authorizing (`executionAllowed: false`). Metadata publication, preflight, final revalidation, and execution are separate typed stages with independent gates.
+- [x] Expose the draft form in a Solana wallet workspace and persist the resulting typed review artifact with the encrypted session history.
+- [x] Bind optional website/X/Telegram links and initial-purchase intent to the immutable draft. For SOL pairing, initial purchase plus the priority-fee cap may not exceed the creator outflow cap.
+- [x] Add an explicit user-click handoff from a saved draft to the official Pump.fun creation page. It opens only the public page; no draft field is transmitted and no transaction authority is granted.
+- [ ] Add Mayhem Mode, cashback, banner, or tokenized-agent options only after each current Pump.fun option has an official, version-pinned on-chain specification and its own policy review. They must not be inferred from the public website UI.
+- [x] Expose the launch-draft form and immutable user review in the desktop workspace.
+- [x] Pin and verify the official Pump.fun program, `create_v2` discriminator/accounts, Token-2022 mint owner, SDK parity, and immutable metadata binding before building a transaction.
+- [x] Add an isolated metadata boundary, deterministic launch inspector, unsigned simulation, final revalidation, local two-signer signing, and one-broadcast encrypted receipt/recovery.
+- [x] Reconcile finalized settlement independently: exact mint creation, actual network fee, newly funded accounts, creator before/after balance, and total creator outflow are persisted in the encrypted receipt.
+- [ ] Complete controlled low-value Mainnet acceptance and external security review before production release.
 
 Phased scope:
 

@@ -47,6 +47,25 @@ import {
   PumpFinalRevalidateResponseSchema,
   PumpExecuteRequestSchema,
   PumpExecuteResponseSchema,
+  PumpLaunchDraftRequestSchema,
+  PumpLaunchDraftResponseSchema,
+  PumpLaunchPreflightRequestSchema,
+  PumpLaunchPreflightResponseSchema,
+  PumpLaunchFinalRevalidateRequestSchema,
+  PumpLaunchFinalRevalidateResponseSchema,
+  PumpLaunchExecuteRequestSchema,
+  PumpLaunchExecuteResponseSchema,
+  PumpLaunchVerifyExecutionRequestSchema,
+  PumpLaunchVerifyExecutionResponseSchema,
+  PumpLaunchOpenOfficialCreateRequestSchema,
+  PumpLaunchOpenOfficialCreateResponseSchema,
+  R2PublishLaunchMetadataRequestSchema,
+  R2PublishLaunchMetadataResponseSchema,
+  R2SaveSettingsRequestSchema,
+  R2SettingsMutationResponseSchema,
+  R2SettingsResponseSchema,
+  R2TestSettingsRequestSchema,
+  R2TestSettingsResponseSchema,
   PumpVerifyExecutionRequestSchema,
   PumpVerifyExecutionResponseSchema,
   PumpSimulateRequestSchema,
@@ -81,10 +100,14 @@ import {
   RobinhoodWalletCreateResponseSchema,
   RobinhoodWalletGetResponseSchema,
   RobinhoodWalletImportMnemonicRequestSchema,
+  RobinhoodWalletImportPrivateKeyRequestSchema,
   RobinhoodWalletImportResponseSchema,
   RobinhoodIndicativePriceRequestSchema,
   RobinhoodIndicativePriceResponseSchema,
   RobinhoodPrepareTradeResponseSchema,
+  RobinhoodExecuteApprovalRequestSchema,
+  RobinhoodExecuteSwapRequestSchema,
+  RobinhoodExecutionResponseSchema,
   RobinhoodReceiptsResponseSchema,
   RobinhoodReconcileReceiptsResponseSchema,
   TransactionSettingsMutationResponseSchema,
@@ -120,6 +143,15 @@ import {
   type PortfolioGetRequest,
   type PumpFinalRevalidateRequest,
   type PumpExecuteRequest,
+  type PumpLaunchDraftRequest,
+  type PumpLaunchPreflightRequest,
+  type PumpLaunchFinalRevalidateRequest,
+  type PumpLaunchExecuteRequest,
+  type PumpLaunchVerifyExecutionRequest,
+  type PumpLaunchOpenOfficialCreateRequest,
+  type R2PublishLaunchMetadataRequest,
+  type R2SaveSettingsRequest,
+  type R2TestSettingsRequest,
   type PumpVerifyExecutionRequest,
   type PumpSimulateRequest,
   type PumpRiskSettingsSaveRequest,
@@ -128,7 +160,10 @@ import {
   type RobinhoodSaveZeroXKeyRequest,
   type RobinhoodWalletCreateRequest,
   type RobinhoodWalletImportMnemonicRequest,
+  type RobinhoodWalletImportPrivateKeyRequest,
   type RobinhoodIndicativePriceRequest,
+  type RobinhoodExecuteApprovalRequest,
+  type RobinhoodExecuteSwapRequest,
   type TavilySaveKeyRequest,
   type TransactionSettingsSaveRequest,
   type WalletCreateRequest,
@@ -211,6 +246,36 @@ const api = {
   },
   async chatWithAi(request: AiChatRequest) {
     return AiChatResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.aiChat, AiChatRequestSchema.parse(request)));
+  },
+  async createPumpLaunchDraft(request: PumpLaunchDraftRequest) {
+    return PumpLaunchDraftResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.pumpLaunchDraft, PumpLaunchDraftRequestSchema.parse(request)));
+  },
+  async preflightPumpLaunch(request: PumpLaunchPreflightRequest) {
+    return PumpLaunchPreflightResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.pumpLaunchPreflight, PumpLaunchPreflightRequestSchema.parse(request)));
+  },
+  async finalRevalidatePumpLaunch(request: PumpLaunchFinalRevalidateRequest) {
+    return PumpLaunchFinalRevalidateResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.pumpLaunchFinalRevalidate, PumpLaunchFinalRevalidateRequestSchema.parse(request)));
+  },
+  async executePumpLaunch(request: PumpLaunchExecuteRequest) {
+    return PumpLaunchExecuteResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.pumpLaunchExecute, PumpLaunchExecuteRequestSchema.parse(request)));
+  },
+  async verifyPumpLaunchExecution(request: PumpLaunchVerifyExecutionRequest) {
+    return PumpLaunchVerifyExecutionResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.pumpLaunchVerifyExecution, PumpLaunchVerifyExecutionRequestSchema.parse(request)));
+  },
+  async openPumpLaunchOfficialCreate(request: PumpLaunchOpenOfficialCreateRequest) {
+    return PumpLaunchOpenOfficialCreateResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.pumpLaunchOpenOfficialCreate, PumpLaunchOpenOfficialCreateRequestSchema.parse(request)));
+  },
+  async getR2Settings() {
+    return R2SettingsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.r2GetSettings));
+  },
+  async saveR2Settings(request: R2SaveSettingsRequest) {
+    return R2SettingsMutationResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.r2SaveSettings, R2SaveSettingsRequestSchema.parse(request)));
+  },
+  async testR2Settings(request: R2TestSettingsRequest) {
+    return R2TestSettingsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.r2TestSettings, R2TestSettingsRequestSchema.parse(request)));
+  },
+  async publishPumpLaunchMetadata(request: R2PublishLaunchMetadataRequest) {
+    return R2PublishLaunchMetadataResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.r2PublishLaunchMetadata, R2PublishLaunchMetadataRequestSchema.parse(request)));
   },
   async simulateMission(request: MissionSimulateRequest) {
     return MissionSimulateResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.missionSimulate, MissionSimulateRequestSchema.parse(request)));
@@ -308,11 +373,20 @@ const api = {
   async importRobinhoodWalletMnemonic(request: RobinhoodWalletImportMnemonicRequest) {
     return RobinhoodWalletImportResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.robinhoodWalletImportMnemonic, RobinhoodWalletImportMnemonicRequestSchema.parse(request)));
   },
+  async importRobinhoodWalletPrivateKey(request: RobinhoodWalletImportPrivateKeyRequest) {
+    return RobinhoodWalletImportResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.robinhoodWalletImportPrivateKey, RobinhoodWalletImportPrivateKeyRequestSchema.parse(request)));
+  },
   async getRobinhoodIndicativePrice(request: RobinhoodIndicativePriceRequest) {
     return RobinhoodIndicativePriceResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.robinhoodGetIndicativePrice, RobinhoodIndicativePriceRequestSchema.parse(request)));
   },
   async prepareRobinhoodTrade(request: RobinhoodIndicativePriceRequest) {
     return RobinhoodPrepareTradeResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.robinhoodPrepareTrade, RobinhoodIndicativePriceRequestSchema.parse(request)));
+  },
+  async executeRobinhoodApproval(request: RobinhoodExecuteApprovalRequest) {
+    return RobinhoodExecutionResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.robinhoodExecuteApproval, RobinhoodExecuteApprovalRequestSchema.parse(request)));
+  },
+  async executeRobinhoodSwap(request: RobinhoodExecuteSwapRequest) {
+    return RobinhoodExecutionResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.robinhoodExecuteSwap, RobinhoodExecuteSwapRequestSchema.parse(request)));
   },
   async listRobinhoodReceipts() {
     return RobinhoodReceiptsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.robinhoodListReceipts));

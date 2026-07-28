@@ -4,6 +4,7 @@ import { LimitOrderCancelReceiptSchema, LimitOrderCancelSimulationSchema, LimitO
 import type { MainnetReadService, SignatureVerification } from "../integrations/read-only.js";
 import type { JupiterTriggerV2Client, TriggerDeposit, TriggerVault } from "../integrations/trigger-v2.js";
 import type { WalletOnboardingService } from "../wallet/onboarding.js";
+import type { TransactionSettingsService } from "./transaction-settings.js";
 import { MissionPolicyService } from "./policy.js";
 
 const ALLOWED_VAULT_PROGRAMS = new Set([
@@ -20,8 +21,8 @@ export class LimitOrderService {
   readonly #prepared = new Map<string, { preview: LimitOrderContractPreview; deposit: TriggerDeposit; vault: TriggerVault; expiresAt: number }>();
   readonly #preparedCancellations = new Map<string, { walletAddress: string; orderId: string; transaction: string; requestId: string; expiresAt: number }>();
 
-  constructor(input: { reads: MainnetReadService; wallets: WalletOnboardingService; trigger: JupiterTriggerV2Client }) {
-    this.#reads = input.reads; this.#wallets = input.wallets; this.#trigger = input.trigger; this.#policy = new MissionPolicyService(input.reads);
+  constructor(input: { reads: MainnetReadService; wallets: WalletOnboardingService; trigger: JupiterTriggerV2Client; transactionSettings?: Pick<TransactionSettingsService, "get"> }) {
+    this.#reads = input.reads; this.#wallets = input.wallets; this.#trigger = input.trigger; this.#policy = new MissionPolicyService(input.reads, input.transactionSettings);
   }
 
   async simulate(preview: LimitOrderContractPreview): Promise<LimitOrderSimulationPreview> {

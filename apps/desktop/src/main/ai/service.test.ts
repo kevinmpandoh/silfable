@@ -35,7 +35,52 @@ test("unconfigured OpenRouter cannot start a chat", async () => {
   await assert.rejects(() => service.chat({ prompt: "hello", mode: "agent", walletAddress: null }), /not configured/u);
 });
 
-test("swap mission preview uses Transaction Settings defaults for omitted slippage and deadline", { concurrency: false }, async () => {
+test("EVM wallet-scoped sessions receive only the typed EVM quote proposal from the trading tool surface", { concurrency: false }, async () => {
+  const secrets = new MemorySecrets();
+  secrets.values.set("openrouter-api-key", "sk-or-test");
+  secrets.values.set("jupiter-api-key", "jup-test");
+  let requestBody = "";
+  globalThis.fetch = async (_input, init) => {
+    requestBody = String(init?.body);
+    return Response.json({ choices: [{ message: { content: "This lane is not enabled." } }], usage: {} });
+  };
+  const service = new AiService({
+    keystore: secrets,
+    settings: new MemorySettings(),
+    readService: {} as MainnetReadService,
+    evmSwapQuotes: { quote: async () => { throw new Error("The model did not request a quote"); } },
+  });
+  await service.chat({ prompt: "Swap on EVM", mode: "mission", walletAddress: `0x${"11".repeat(20)}`, walletScope: "evm" });
+  const body = JSON.parse(requestBody) as { tools?: Array<{ function?: { name?: string } }> };
+  const names = body.tools?.map((tool) => tool.function?.name) ?? [];
+  assert.equal(names.includes("robinhood_swap_quote"), true);
+  assert.equal(names.includes("mission_contract_preview"), false);
+  assert.equal(names.includes("jupiter_swap_quote"), false);
+  assert.equal(names.includes("pump_trade_contract_preview"), false);
+  assert.equal(names.includes("pump_token_analysis"), false);
+});
+
+test("new Solana wallet sessions expose Jupiter preparation but not legacy Pump or limit-order proposals", { concurrency: false }, async () => {
+  const secrets = new MemorySecrets();
+  secrets.values.set("openrouter-api-key", "sk-or-test");
+  secrets.values.set("jupiter-api-key", "jup-test");
+  let requestBody = "";
+  globalThis.fetch = async (_input, init) => {
+    requestBody = String(init?.body);
+    return Response.json({ choices: [{ message: { content: "Solana workspace ready." } }], usage: {} });
+  };
+  const service = new AiService({ keystore: secrets, settings: new MemorySettings(), readService: {} as MainnetReadService });
+  await service.chat({ prompt: "Plan a swap", mode: "mission", walletAddress: "11111111111111111111111111111111", walletScope: "solana" });
+  const body = JSON.parse(requestBody) as { tools?: Array<{ function?: { name?: string } }> };
+  const names = body.tools?.map((tool) => tool.function?.name) ?? [];
+  assert.equal(names.includes("mission_contract_preview"), true);
+  assert.equal(names.includes("jupiter_swap_quote"), true);
+  assert.equal(names.includes("pump_trade_contract_preview"), false);
+  assert.equal(names.includes("pump_token_analysis"), false);
+  assert.equal(names.includes("limit_order_contract_preview"), false);
+});
+
+test("swap mission preview applies a stricter session slippage default when omitted", { concurrency: false }, async () => {
   const secrets = new MemorySecrets();
   secrets.values.set("openrouter-api-key", "sk-or-test");
   secrets.values.set("jupiter-api-key", "jup-test");
@@ -58,15 +103,20 @@ test("swap mission preview uses Transaction Settings defaults for omitted slippa
   const service = new AiService({
     keystore: secrets,
     settings: new MemorySettings(),
-    transactionSettings: { get: () => ({ maxNetworkFeeLamports: 200_000, maxFeePercent: 5, defaultSlippageBps: 40, defaultDeadlineMinutes: 45, priority: "economy" }) },
+    transactionSettings: { get: () => ({ maxNetworkFeeLamports: 200_000, maxFeePercent: 5, defaultSlippageBps: 40, maxSlippageBps: 80, defaultDeadlineMinutes: 45, priority: "economy" }) },
     readService: {
       portfolio: async () => ({ address: wallet, slot: 1, solBalance: "1", solUsdPrice: 150, totalUsd: 150, assets: [], verifiedAt: new Date().toISOString() }),
       swapQuote: async () => ({ inputMint: sol, outputMint: usdc, inAmount: "1000000", outAmount: "80000", router: "metis", mode: "ultra", feeBps: 2, feeMint: sol, quoteOnly: true, verifiedAt: new Date().toISOString() }),
     } as unknown as MainnetReadService,
   });
   const started = Date.now();
-  const result = await service.chat({ prompt: "Swap 0.001 SOL to USDC", mode: "mission", walletAddress: wallet });
-  assert.equal(result.missionPreview?.maxSlippageBps, 40);
+  const result = await service.chat({
+    prompt: "Swap 0.001 SOL to USDC",
+    mode: "mission",
+    walletAddress: wallet,
+    transactionSettings: { maxNetworkFeeLamports: 200_000, maxFeePercent: 5, defaultSlippageBps: 20, maxSlippageBps: 25, defaultDeadlineMinutes: 45, priority: "economy" },
+  });
+  assert.equal(result.missionPreview?.maxSlippageBps, 20);
   assert.equal(result.missionPreview?.status, "ready-for-review");
   assert.ok(Date.parse(result.missionPreview!.deadlineAt) >= started + 44 * 60_000);
 });

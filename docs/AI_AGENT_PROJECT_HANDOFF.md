@@ -1,6 +1,6 @@
 # Silfable AI Agent Handoff Brief
 
-Last updated: 2026-07-27
+Last updated: 2026-07-28
 Audience: external AI coding agent, e.g. Gemini  
 Repository: `D:\Web3\silfable-web`
 
@@ -15,22 +15,24 @@ Do not turn any "proposal", "simulation", "final revalidation", "read-only scann
 Current safe description:
 
 - Desktop has a guarded Mainnet Jupiter swap execution path with local encrypted wallet, master-password approval, simulation, signing, broadcast, receipt, and verification.
-- Desktop has extensive Pump.fun/PumpSwap research, proposal, unsigned simulation, final revalidation, and restricted manual execution foundations.
-- Pump.fun active-bonding-curve and canonically verified PumpSwap manual signing/one-attempt broadcast are implemented for a controlled desktop pilot; autonomous execution remains unavailable.
+- The target product lanes are **Token Launch via Pump.fun**, **Solana Swap via Jupiter**, **EVM Swap via a verified Uniswap-compatible deployment**, and **Bridge**. Read [venue product architecture](VENUE_PRODUCT_ARCHITECTURE.md) before adding or changing a lane.
+- New desktop sessions are wallet-scoped (`solana` or `evm`). New Session does not ask for a product intent or per-session slippage: the user requests a task in-session and global Transaction Settings provide safety defaults. Existing intent-tagged and `workspace: "pump"` records remain legacy-compatible; no migration may reinterpret their buy/sell proposals as a token launch.
+- Token Launch via Pump.fun has a typed desktop draft and a restricted `create_v2` Mainnet path for SOL pairing with no initial buy. Its production-local codec is checked byte-for-byte against pinned Pump SDK `1.36.0`; it pins the program/instruction/signers, estimates fee and rent, checks balance/outflow, performs a fresh final simulation, requires the master password plus `LAUNCH TOKEN MAINNET`, signs with the local creator and volatile mint signers, persists the derived signature before one broadcast attempt, and recovers by signature without rebroadcast. Finalization additionally proves that the exact mint is newly funded under Token-2022 and persists independent settlement evidence for the actual network fee, newly funded accounts, creator before/after balance, total creator outflow, slot, and verification time. Mocked tests do not spend Mainnet funds. Controlled low-value Mainnet acceptance and external security review remain pending, so this must not be called production-ready. Existing Pump.fun/PumpSwap buy/sell pilot code is legacy experimental functionality; it must not be relabelled as token launch.
+- Desktop now has a restricted Robinhood Chain (`4663`) EVM swap pipeline backed by 0x firm quotes. The user works in an EVM wallet-scoped Mission chat: the AI can return only a typed quote proposal, then a deterministic chat card performs firm review, one-time wallet/token/quote preflight, confirmed-liquidity checks, exact allowance as a separate transaction, mandatory fresh quote after approval, master-password recheck, local EIP-1559 signing, single broadcast, and encrypted receipt reconciliation. Quote, preflight, and signer selection are bound to the exact registered wallet selected by the session. Settings are configuration-only for EVM wallets, RPC, 0x API key, and transaction limits. Renderer/AI input cannot choose the spender, calldata, transaction target, or approval amount. Broadcast remains release-locked until independent `VenueReadinessService` evidence is complete, so this is not production-cleared and must not be described as a generic Uniswap integration.
 - A guarded Full Access session profile is implemented for broader typed planning. It does not bypass policy, simulation, password, final approval, signer scope, or receipt verification.
 - Bridge quotes are provider-backed only: unavailable or malformed responses fail closed rather than becoming synthetic routes. Bridge signing and broadcast remain disabled.
 - Repeated bridge-quote and Hyperliquid-metadata failures open a bounded local circuit breaker; it recovers after cooldown and never produces a fallback quote or market response.
 - Desktop reconciliation logging accepts only structured, bounded audit fields. Never reintroduce free-form provider errors, decrypted state, signed payloads, wallet addresses, passwords, seed phrases, or credentials into diagnostics.
 - `VenueExecutionGate` is the shared fail-closed production boundary for Bridge, EVM, Hyperliquid, DCA, TP/SL, and Full Access. It requires isolated custody, deterministic policy, fresh simulation, receipt reconciliation, recovery, audit, controlled Mainnet acceptance, final approval, kill switch/revocation, and spend limits. EVM raw broadcast already requires this gate; future venue execution must do the same with persisted trusted evidence, never an AI or renderer Boolean.
 - `VenueReadinessService` persists normalized Main-process-only venue attestation with a SHA-256 evidence digest, reviewer, and timestamp. It has no renderer IPC; tampered or incomplete state fails closed and invalidation immediately closes the venue. Future work must feed it independently generated evidence, not manual UI flags.
-- Robinhood Chain RPC reads are chain-ID-gated to `4663`. Trading remains fail-closed until a deployment-specific router or aggregator address and its policy/allowlist evidence are independently verified; the code no longer assumes an Ethereum Uniswap router address exists on Robinhood Chain.
+- Robinhood Chain RPC reads, estimates, and broadcasts are chain-ID-gated to `4663`. 0x supplies the firm transaction target and allowance spender; the main process validates and binds them to a one-time preflight and never hardcodes Settler or an Ethereum router address. Execution still fails closed until independently attested venue readiness is complete.
 - Hyperliquid metadata is venue-validated, while generic order execution fails closed until canonical asset IDs, venue signing, nonce/expiry, API-wallet approval, margin policy, and receipt reconciliation are implemented.
 - Desktop now has a persistent global emergency stop. Engage is immediate; release requires the master password. While engaged it clears prepared Pump transactions, stops the local observation loop, blocks Pump final revalidation and supported execution handlers, and still permits signature verification/reconciliation without rebroadcast.
 - Web `/trade` is **Restricted Mainnet only**. Opening the workspace requires a one-time, expiring Solana wallet challenge signature. The resulting opaque session is stored in an HttpOnly, SameSite=Strict cookie, while only hashes are persisted server-side. The connected browser wallet retains transaction signing authority and every transaction requires explicit wallet approval.
 - Web settings now include a second, exact-policy wallet signature for a 24-hour `monitor-propose` grant. The signed payload binds capabilities, mint scope, proposal/allocation limits, network-fee ceiling, slippage, start/expiry, and immutable `signingAllowed=false`, `broadcastAllowed=false`, `executionAllowed=false` fields. The authenticated wallet can revoke all active grants or engage a one-way emergency stop.
 - Cloud signing, autonomous broadcast, DCA execution, TP/SL execution, and discovery-to-buy are frozen; the cloud process is monitor/proposal infrastructure only. Legacy scheduler endpoints and worker entry points fail closed and perform no database mutation, queue dispatch, signing, or broadcast.
 - The legacy queue drain now reads the latest monitor-only grant and wallet kill switch only to explain why a queued execution is blocked. It still has no signer, builder, or broadcast path.
-- Scheduled unattended execution, Auto-DCA, take-profit live execution, Bridge, EVM live trading, and Hyperliquid live trading remain blocked.
+- Scheduled unattended execution, Auto-DCA, take-profit live execution, Bridge, production-cleared EVM trading, and Hyperliquid live trading remain blocked. Desktop Token Launch and restricted EVM code paths exist but remain behind their documented release gates pending controlled Mainnet acceptance and security evidence. The web can publish reviewed token-launch metadata through an authenticated system-managed Pinata/IPFS boundary; this publication path builds, signs, or broadcasts no Pump.fun transaction. The earlier desktop BYO-R2 implementation is legacy experimental infrastructure, not the target flow.
 
 If a future task asks to "make it production", do not claim production-ready until the P1 release/security gates and P2 signed-build validation matrix are complete.
 
@@ -42,6 +44,7 @@ Important workspaces:
 - `apps/web` - Next.js web app, landing/docs/whitepaper/trade workspace.
 - `packages/contracts` - shared Zod contracts and typed IPC/API payloads.
 - `docs/desktop` - desktop roadmap and Pump.fun status docs.
+- `docs/VENUE_PRODUCT_ARCHITECTURE.md` - authoritative target product lanes and migration rules.
 - `scripts` - bundle audits, Windows signing checks, artifact audits, release checksums.
 
 Important docs:
@@ -220,8 +223,10 @@ Completed receipt recovery:
 
 - Successful, failed, and unknown swap, Pump, limit-order deposit, and limit-order cancellation receipts reopen from encrypted session history.
 - Unknown limit-order receipts can be checked again by their existing signature. The renderer calls read-only verification IPC; the verifier never calls Jupiter write methods and never rebroadcasts.
+- On application restart/session listing, unknown Jupiter swap receipts are automatically reconciled by their persisted signature through the same read-only verification path. This recovery path cannot sign, construct, or rebroadcast a transaction.
 - Priority presets are applied to Jupiter construction and the simulated fee is shown before approval.
 - A timed-out Jupiter broadcast retains the signature derived from the exact locally signed transaction. The unknown receipt survives encrypted restart and can be checked by signature without another broadcast attempt.
+- General and Pump session creation supports an optional maximum-slippage override. It is a one-way safety ratchet: it can reduce, but never expand, the current device-level maximum; the effective value is applied to AI drafting and the persisted unsigned-simulation/pre-sign boundary.
 - Automated P2 tests cover USDC→SOL unsigned simulation and insufficient USDC before construction/signing.
 - Windows packaged acceptance uses `scripts/start-windows-p2-qa.ps1` and `docs/desktop/P2_WINDOWS_ACCEPTANCE.md`; the launcher creates an isolated profile/evidence manifest but grants no transaction authority.
 - `npm.cmd run dist:desktop:win:qa` produces an unsigned, audited `win-unpacked` application for internal acceptance. It deliberately does not build an unsigned NSIS bootstrapper because host Application Control can block that intermediate executable. The production NSIS path remains `npm.cmd run dist:desktop:win` and still requires valid signing credentials.
@@ -442,7 +447,7 @@ Implemented/changed across earlier work:
 - Password policy relaxed to accept practical 9-character mixed passwords.
 - Password errors should be user-friendly, not raw JSON/Zod output.
 - Forgot-password reset path exists and requires irreversible acknowledgement.
-- Wallet onboarding supports generate/import/restore and multiple wallets on desktop.
+- Wallet onboarding supports generate/import/restore and multiple wallets on desktop. This includes advanced EVM wallet setup: up to 20 encrypted EVM wallets may be generated from a recovery phrase or imported by private key; the first is primary. EVM storage alone never enables EVM signing or broadcast.
 - Sessions persist across app restart.
 - Sidebar has session list, filters, Memory, Missions, Settings.
 - Right rail switches from initial Portfolio to session Positions when a session is active.

@@ -114,6 +114,16 @@ export const IPC_CHANNELS = {
   aiPreviewOpenRouterModels: "ai:preview-openrouter-models",
   aiSaveProvider: "ai:save-provider",
   aiChat: "ai:chat",
+  pumpLaunchDraft: "pump:launch-draft",
+  pumpLaunchPreflight: "pump:launch-preflight",
+  pumpLaunchFinalRevalidate: "pump:launch-final-revalidate",
+  pumpLaunchExecute: "pump:launch-execute",
+  pumpLaunchVerifyExecution: "pump:launch-verify-execution",
+  r2GetSettings: "storage:get-cloudflare-settings",
+  r2SaveSettings: "storage:save-cloudflare-settings",
+  r2TestSettings: "storage:test-cloudflare-settings",
+  r2PublishLaunchMetadata: "storage:publish-cloudflare-launch-metadata",
+  pumpLaunchOpenOfficialCreate: "pump:launch-open-official-create",
   pumpSimulate: "pump:simulate",
   pumpFinalRevalidate: "pump:final-revalidate",
   pumpExecute: "pump:execute",
@@ -146,8 +156,11 @@ export const IPC_CHANNELS = {
   robinhoodWalletGet: "robinhood:get-wallet",
   robinhoodWalletCreate: "robinhood:create-wallet",
   robinhoodWalletImportMnemonic: "robinhood:import-wallet-mnemonic",
+  robinhoodWalletImportPrivateKey: "robinhood:import-wallet-private-key",
   robinhoodGetIndicativePrice: "robinhood:get-indicative-price",
   robinhoodPrepareTrade: "robinhood:prepare-trade",
+  robinhoodExecuteApproval: "robinhood:execute-approval",
+  robinhoodExecuteSwap: "robinhood:execute-swap",
   robinhoodListReceipts: "robinhood:list-receipts",
   robinhoodReconcileReceipts: "robinhood:reconcile-receipts",
 } as const;
@@ -289,6 +302,307 @@ export const PumpTradeContractPreviewSchema = z.object({
   executionAllowed: z.literal(false), lifecycle: z.literal("proposal-only"), createdAt: z.string().datetime(),
 }).strict();
 export type PumpTradeContractPreview = z.infer<typeof PumpTradeContractPreviewSchema>;
+
+/**
+ * Pump.fun is a token-creation lane in the target product. This contract is
+ * intentionally separate from the legacy Pump/PumpSwap buy-and-sell schema
+ * above: a historical trade must never be reinterpreted as a token launch.
+ * It is a review artifact only and never grants transaction authority.
+ */
+export const PumpLaunchUrlSchema = z.string().trim().url().max(512).refine(
+  (value) => value.startsWith("https://"),
+  "Launch metadata URLs must use HTTPS",
+);
+export const PumpLaunchMetadataUriSchema = z.string().trim().max(512).refine((value) => {
+  if (value.startsWith("ipfs://")) {
+    return /^ipfs:\/\/[A-Za-z0-9]+(?:\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+)?$/u.test(value);
+  }
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && parsed.username === "" && parsed.password === "";
+  } catch {
+    return false;
+  }
+}, "Launch metadata URI must use HTTPS or IPFS");
+export const PumpLaunchMetadataSchema = z.object({
+  name: z.string().trim().min(1).max(32),
+  symbol: z.string().trim().regex(/^[A-Za-z0-9]{1,10}$/u, "Symbol must contain 1–10 letters or digits"),
+  description: z.string().trim().max(500),
+  imageUri: PumpLaunchUrlSchema,
+  // A Pump create instruction references hosted metadata JSON. It is optional
+  // while drafting so old encrypted drafts remain readable, but will be
+  // mandatory for any future preflight.
+  metadataUri: PumpLaunchMetadataUriSchema.nullable().optional(),
+  websiteUrl: PumpLaunchUrlSchema.nullable(),
+  xUrl: PumpLaunchUrlSchema.nullable(),
+  telegramUrl: PumpLaunchUrlSchema.nullable(),
+}).strict();
+export const PumpLaunchDraftInputSchema = z.object({
+  creatorWallet: SolanaAddressSchema,
+  metadata: PumpLaunchMetadataSchema,
+  quoteAsset: z.enum(["SOL", "USDC"]),
+  initialPurchaseAmount: z.string().regex(/^\d+$/u),
+  maxCreatorOutflowLamports: z.string().regex(/^[1-9]\d*$/u),
+  maxPriorityFeeLamports: z.string().regex(/^\d+$/u),
+  deadlineAt: z.string().datetime(),
+  acknowledgedIrreversiblePublication: z.literal(true),
+}).strict();
+export type PumpLaunchDraftInput = z.infer<typeof PumpLaunchDraftInputSchema>;
+export const PumpLaunchDraftSchema = PumpLaunchDraftInputSchema.extend({
+  id: z.string().uuid(),
+  lifecycle: z.literal("draft-only"),
+  executionAllowed: z.literal(false),
+  createdAt: z.string().datetime(),
+}).strict();
+export type PumpLaunchMetadata = z.infer<typeof PumpLaunchMetadataSchema>;
+export type PumpLaunchDraft = z.infer<typeof PumpLaunchDraftSchema>;
+export const PumpLaunchDraftRequestSchema = RequestBaseSchema.extend({
+  sessionId: z.string().uuid(),
+  input: PumpLaunchDraftInputSchema,
+}).strict();
+export const PumpLaunchDraftResponseSchema = RequestBaseSchema.extend({
+  draft: PumpLaunchDraftSchema,
+}).strict();
+export type PumpLaunchDraftRequest = z.infer<typeof PumpLaunchDraftRequestSchema>;
+export type PumpLaunchDraftResponse = z.infer<typeof PumpLaunchDraftResponseSchema>;
+export const PumpLaunchOpenOfficialCreateRequestSchema = RequestBaseSchema.extend({
+  sessionId: z.string().uuid(),
+  draftId: z.string().uuid(),
+}).strict();
+export const PumpLaunchOpenOfficialCreateResponseSchema = RequestBaseSchema.extend({
+  opened: z.literal(true),
+}).strict();
+export type PumpLaunchOpenOfficialCreateRequest = z.infer<typeof PumpLaunchOpenOfficialCreateRequestSchema>;
+export type PumpLaunchOpenOfficialCreateResponse = z.infer<typeof PumpLaunchOpenOfficialCreateResponseSchema>;
+export const PumpLaunchPreflightCheckSchema = z.object({
+  id: z.enum([
+    "draft",
+    "metadata",
+    "global",
+    "instruction",
+    "signers",
+    "simulation",
+    "programs",
+    "fee",
+    "outflow",
+    "balance",
+    "no-execution",
+  ]),
+  status: z.enum(["pass", "fail"]),
+  message: z.string().min(1).max(240),
+}).strict();
+export const PumpLaunchPreflightSchema = z.object({
+  id: z.string().uuid(),
+  draftId: z.string().uuid(),
+  creatorWallet: SolanaAddressSchema,
+  mintAddress: SolanaAddressSchema,
+  metadataUri: PumpLaunchMetadataUriSchema,
+  programId: SolanaAddressSchema,
+  instructionName: z.literal("create_v2"),
+  sdkVersion: z.literal("1.36.0"),
+  signerAddresses: z.tuple([SolanaAddressSchema, SolanaAddressSchema]),
+  transactionDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  recentBlockhash: SolanaAddressSchema,
+  lastValidBlockHeight: z.number().int().positive(),
+  simulationSlot: z.number().int().positive(),
+  computeUnitLimit: z.number().int().positive(),
+  computeUnitsConsumed: z.number().int().nonnegative().nullable(),
+  networkFeeLamports: z.string().regex(/^\d+$/u),
+  priorityFeeLamports: z.string().regex(/^\d+$/u),
+  rentLamports: z.string().regex(/^\d+$/u),
+  totalEstimatedOutflowLamports: z.string().regex(/^\d+$/u),
+  invokedPrograms: z.array(SolanaAddressSchema).max(16),
+  checks: z.array(PumpLaunchPreflightCheckSchema).min(1).max(16),
+  lifecycle: z.literal("unsigned-preflight"),
+  signed: z.literal(false),
+  broadcastAttempted: z.literal(false),
+  executionAllowed: z.literal(false),
+  expiresAt: z.string().datetime(),
+  simulatedAt: z.string().datetime(),
+}).strict();
+export type PumpLaunchPreflight = z.infer<typeof PumpLaunchPreflightSchema>;
+export const PumpLaunchPreflightRequestSchema = RequestBaseSchema.extend({
+  sessionId: z.string().uuid(),
+  draftId: z.string().uuid(),
+  acknowledgedNoExecution: z.literal(true),
+}).strict();
+export const PumpLaunchPreflightResponseSchema = RequestBaseSchema.extend({
+  preflight: PumpLaunchPreflightSchema,
+}).strict();
+export type PumpLaunchPreflightRequest = z.infer<typeof PumpLaunchPreflightRequestSchema>;
+export type PumpLaunchPreflightResponse = z.infer<typeof PumpLaunchPreflightResponseSchema>;
+
+export const PumpLaunchFinalRevalidationSchema = z.object({
+  id: z.string().uuid(),
+  draftId: z.string().uuid(),
+  preflightId: z.string().uuid(),
+  creatorWallet: SolanaAddressSchema,
+  mintAddress: SolanaAddressSchema,
+  transactionDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  status: z.enum(["ready-for-password", "blocked"]),
+  finalSimulationSlot: z.number().int().positive(),
+  currentBlockHeight: z.number().int().positive(),
+  checks: z.array(z.object({
+    id: z.enum(["cache-binding", "draft-binding", "wallet-binding", "mint-binding", "digest-binding", "blockhash-live", "final-simulation", "program-allowlist", "fee-cap", "balance", "unsigned", "one-shot"]),
+    passed: z.boolean(),
+    message: z.string().min(1).max(240),
+  }).strict()).length(12),
+  requiresMasterPassword: z.literal(true),
+  requiredConfirmation: z.literal("LAUNCH TOKEN MAINNET"),
+  signingAttempted: z.literal(false),
+  broadcastAttempted: z.literal(false),
+  executionAllowed: z.literal(false),
+  evaluatedAt: z.string().datetime(),
+  expiresAt: z.string().datetime(),
+}).strict().superRefine((value, context) => {
+  const ready = value.checks.every((check) => check.passed);
+  if ((value.status === "ready-for-password") !== ready) {
+    context.addIssue({ code: "custom", message: "Token launch final revalidation status must match every deterministic check" });
+  }
+});
+export type PumpLaunchFinalRevalidation = z.infer<typeof PumpLaunchFinalRevalidationSchema>;
+
+export const PumpLaunchExecutionRecordSchema = z.object({
+  id: z.string().uuid(),
+  draftId: z.string().uuid(),
+  preflightId: z.string().uuid(),
+  revalidationId: z.string().uuid(),
+  signature: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{64,88}$/u),
+  creatorWallet: SolanaAddressSchema,
+  mintAddress: SolanaAddressSchema,
+  transactionDigest: z.string().regex(/^[a-f0-9]{64}$/u),
+  lastValidBlockHeight: z.number().int().positive(),
+  status: z.enum(["signed-not-broadcast", "broadcast-unknown", "failed", "finalized"]),
+  networkFeeLamports: z.number().int().nonnegative(),
+  rentLamports: z.number().int().nonnegative(),
+  totalEstimatedOutflowLamports: z.string().regex(/^\d+$/u),
+  finalizedSlot: z.number().int().positive().nullable(),
+  mintAccountVerified: z.boolean(),
+  actualNetworkFeeLamports: z.number().int().nonnegative().nullable().default(null),
+  actualAccountFundingLamports: z.number().int().nonnegative().nullable().default(null),
+  walletPreLamports: z.string().regex(/^\d+$/u).nullable().default(null),
+  walletPostLamports: z.string().regex(/^\d+$/u).nullable().default(null),
+  actualWalletOutflowLamports: z.string().regex(/^\d+$/u).nullable().default(null),
+  settlementVerified: z.boolean().default(false),
+  finalizedAt: z.string().datetime().nullable().default(null),
+  error: z.string().min(1).max(500).nullable(),
+  signedLocally: z.literal(true),
+  broadcastAttempted: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+}).strict().superRefine((value, context) => {
+  if (value.status === "finalized" && (
+    !value.mintAccountVerified
+    || !value.settlementVerified
+    || value.finalizedSlot === null
+    || value.finalizedAt === null
+    || value.actualNetworkFeeLamports === null
+    || value.actualAccountFundingLamports === null
+    || value.walletPreLamports === null
+    || value.walletPostLamports === null
+    || value.actualWalletOutflowLamports === null
+  )) {
+    context.addIssue({ code: "custom", message: "A finalized token launch must prove its mint account, settlement, costs, and finalized slot" });
+  }
+  if (value.status === "signed-not-broadcast" && value.broadcastAttempted) {
+    context.addIssue({ code: "custom", message: "A signed-not-broadcast token launch cannot report a broadcast attempt" });
+  }
+});
+export type PumpLaunchExecutionRecord = z.infer<typeof PumpLaunchExecutionRecordSchema>;
+
+export const PumpLaunchFinalRevalidateRequestSchema = RequestBaseSchema.extend({
+  sessionId: z.string().uuid(),
+  draftId: z.string().uuid(),
+  preflightId: z.string().uuid(),
+  acknowledgedNoExecution: z.literal(true),
+}).strict();
+export const PumpLaunchFinalRevalidateResponseSchema = RequestBaseSchema.extend({
+  revalidation: PumpLaunchFinalRevalidationSchema,
+}).strict();
+export type PumpLaunchFinalRevalidateRequest = z.infer<typeof PumpLaunchFinalRevalidateRequestSchema>;
+export type PumpLaunchFinalRevalidateResponse = z.infer<typeof PumpLaunchFinalRevalidateResponseSchema>;
+
+export const PumpLaunchExecuteRequestSchema = RequestBaseSchema.extend({
+  sessionId: z.string().uuid(),
+  draftId: z.string().uuid(),
+  preflightId: z.string().uuid(),
+  revalidationId: z.string().uuid(),
+  masterPassword: z.string().min(1).max(256),
+  confirmation: z.literal("LAUNCH TOKEN MAINNET"),
+  acknowledgedIrreversibleLaunch: z.literal(true),
+}).strict();
+export const PumpLaunchExecuteResponseSchema = RequestBaseSchema.extend({
+  execution: PumpLaunchExecutionRecordSchema,
+}).strict();
+export type PumpLaunchExecuteRequest = z.infer<typeof PumpLaunchExecuteRequestSchema>;
+export type PumpLaunchExecuteResponse = z.infer<typeof PumpLaunchExecuteResponseSchema>;
+
+export const PumpLaunchVerifyExecutionRequestSchema = RequestBaseSchema.extend({
+  sessionId: z.string().uuid(),
+  draftId: z.string().uuid(),
+  executionId: z.string().uuid(),
+}).strict();
+export const PumpLaunchVerifyExecutionResponseSchema = RequestBaseSchema.extend({
+  execution: PumpLaunchExecutionRecordSchema,
+}).strict();
+export type PumpLaunchVerifyExecutionRequest = z.infer<typeof PumpLaunchVerifyExecutionRequestSchema>;
+export type PumpLaunchVerifyExecutionResponse = z.infer<typeof PumpLaunchVerifyExecutionResponseSchema>;
+
+const R2BucketNameSchema = z.string().trim().regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/u, "R2 bucket name is invalid");
+const R2AccountIdSchema = z.string().trim().regex(/^[a-f0-9]{32}$/iu, "Cloudflare account ID is invalid");
+export const R2PublicBaseUrlSchema = z.string().trim().url().max(512).refine((value) => {
+  const url = new URL(value);
+  return url.protocol === "https:" && url.username === "" && url.password === "" && !url.hostname.endsWith(".r2.dev");
+}, "Use an HTTPS custom domain for the public R2 URL; r2.dev is not accepted for production");
+export const R2SettingsSchema = z.object({
+  accountId: R2AccountIdSchema,
+  bucket: R2BucketNameSchema,
+  publicBaseUrl: R2PublicBaseUrlSchema,
+}).strict();
+export const R2SettingsResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  settings: R2SettingsSchema.nullable(),
+  credentialsConfigured: z.boolean(),
+  ready: z.boolean(),
+}).strict();
+export const R2SaveSettingsRequestSchema = RequestBaseSchema.extend({
+  settings: R2SettingsSchema,
+  accessKeyId: z.string().trim().min(8).max(256).optional(),
+  secretAccessKey: z.string().trim().min(16).max(512).optional(),
+}).strict();
+export const R2SettingsMutationResponseSchema = RequestBaseSchema.extend({
+  settings: R2SettingsSchema,
+  ready: z.literal(true),
+}).strict();
+export const R2TestSettingsRequestSchema = RequestBaseSchema.extend({}).strict();
+export const R2TestSettingsResponseSchema = RequestBaseSchema.extend({
+  reachable: z.literal(true),
+  bucket: R2BucketNameSchema,
+}).strict();
+export const PumpLaunchMetadataPackageSchema = z.object({
+  id: z.string().uuid(),
+  draftId: z.string().uuid(),
+  storage: z.literal("cloudflare-r2"),
+  uri: PumpLaunchUrlSchema,
+  sha256: z.string().regex(/^[a-f0-9]{64}$/u),
+  publishedAt: z.string().datetime(),
+}).strict();
+export const R2PublishLaunchMetadataRequestSchema = RequestBaseSchema.extend({
+  sessionId: z.string().uuid(),
+  draftId: z.string().uuid(),
+}).strict();
+export const R2PublishLaunchMetadataResponseSchema = RequestBaseSchema.extend({
+  metadataPackage: PumpLaunchMetadataPackageSchema,
+}).strict();
+export type R2Settings = z.infer<typeof R2SettingsSchema>;
+export type R2SettingsResponse = z.infer<typeof R2SettingsResponseSchema>;
+export type R2SaveSettingsRequest = z.infer<typeof R2SaveSettingsRequestSchema>;
+export type R2SettingsMutationResponse = z.infer<typeof R2SettingsMutationResponseSchema>;
+export type R2TestSettingsRequest = z.infer<typeof R2TestSettingsRequestSchema>;
+export type R2TestSettingsResponse = z.infer<typeof R2TestSettingsResponseSchema>;
+export type PumpLaunchMetadataPackage = z.infer<typeof PumpLaunchMetadataPackageSchema>;
+export type R2PublishLaunchMetadataRequest = z.infer<typeof R2PublishLaunchMetadataRequestSchema>;
+export type R2PublishLaunchMetadataResponse = z.infer<typeof R2PublishLaunchMetadataResponseSchema>;
 export const PumpResearchEligibilityCheckSchema = z.object({
   id: z.enum(["canonical-venue", "token-program", "authorities-revoked", "holder-concentration", "quote-reserves", "reference-buy-path", "reference-sell-path", "price-impact", "freshness", "no-execution-authority"]),
   passed: z.boolean(),
@@ -505,7 +819,7 @@ export const LimitOrderCancelReceiptSchema = z.object({
 export type LimitOrderCancelReceipt = z.infer<typeof LimitOrderCancelReceiptSchema>;
 export const LimitOrderCancelSimulateRequestSchema = RequestBaseSchema.extend({ walletAddress: z.string().min(32).max(44), orderId: z.string().min(8).max(128), acknowledgedWithdrawalSimulationOnly: z.literal(true) }).strict();
 export const LimitOrderCancelSimulateResponseSchema = RequestBaseSchema.extend({ simulation: LimitOrderCancelSimulationSchema }).strict();
-export const LimitOrderCancelExecuteRequestSchema = RequestBaseSchema.extend({ walletAddress: z.string().min(32).max(44), orderId: z.string().min(8).max(128), simulationId: z.string().uuid(), masterPassword: z.string().min(1).max(256), confirmation: z.literal("CANCEL LIMIT ORDER"), acknowledgedVaultWithdrawal: z.literal(true) }).strict();
+export const LimitOrderCancelExecuteRequestSchema = RequestBaseSchema.extend({ sessionId: z.string().uuid(), walletAddress: z.string().min(32).max(44), orderId: z.string().min(8).max(128), simulationId: z.string().uuid(), masterPassword: z.string().min(1).max(256), confirmation: z.literal("CANCEL LIMIT ORDER"), acknowledgedVaultWithdrawal: z.literal(true) }).strict();
 export const LimitOrderCancelExecuteResponseSchema = RequestBaseSchema.extend({ receipt: LimitOrderCancelReceiptSchema }).strict();
 export type LimitOrderListRequest = z.infer<typeof LimitOrderListRequestSchema>;
 export type LimitOrderListResponse = z.infer<typeof LimitOrderListResponseSchema>;
@@ -551,6 +865,9 @@ export const TransactionSettingsSchema = z.object({
   maxNetworkFeeLamports: z.number().int().min(5_000).max(10_000_000),
   maxFeePercent: z.number().finite().min(0.1).max(100),
   defaultSlippageBps: z.number().int().min(0).max(300),
+  // A hard safety ceiling, distinct from the default suggested to AI/session drafts.
+  // The default makes existing persisted settings forward-compatible.
+  maxSlippageBps: z.number().int().min(0).max(300).default(300),
   defaultDeadlineMinutes: z.number().int().min(5).max(43_200),
   priority: TransactionPrioritySchema,
 }).strict();
@@ -915,14 +1232,70 @@ export type PumpVerifyExecutionRequest = z.infer<typeof PumpVerifyExecutionReque
 export type PumpVerifyExecutionResponse = z.infer<typeof PumpVerifyExecutionResponseSchema>;
 
 
+const SessionEvmAddressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/u);
+export const EvmSwapQuoteEvidenceSchema = z.object({
+  sellToken: SessionEvmAddressSchema,
+  buyToken: SessionEvmAddressSchema,
+  sellAmount: z.string().regex(/^[1-9]\d*$/u),
+  buyAmount: z.string().regex(/^[1-9]\d*$/u),
+  minBuyAmount: z.string().regex(/^[1-9]\d*$/u).nullable(),
+  blockNumber: z.string().regex(/^[1-9]\d*$/u).nullable(),
+  zeroExFeeAmount: z.string().regex(/^[1-9]\d*$/u).nullable(),
+  zeroExFeeToken: SessionEvmAddressSchema.nullable(),
+  liquidityAvailable: z.boolean(),
+  sellTokenSymbol: z.string().min(1).max(32),
+  buyTokenSymbol: z.string().min(1).max(32),
+  sellTokenMultiplier: z.string().min(1).max(64),
+  buyTokenMultiplier: z.string().min(1).max(64),
+}).strict();
+export const EvmSwapProposalSchema = z.object({
+  id: z.string().uuid(),
+  chainId: z.literal(4663),
+  walletAddress: SessionEvmAddressSchema,
+  slippageBps: z.number().int().min(0).max(1_000),
+  quote: EvmSwapQuoteEvidenceSchema,
+  status: z.literal("quote-only"),
+  createdAt: z.string().datetime(),
+}).strict();
+export const EvmSwapPreflightEvidenceSchema = z.object({
+  id: z.string().uuid(),
+  expiresAt: z.string().datetime(),
+  allowanceRequired: z.boolean(),
+  currentAllowance: z.string().regex(/^\d+$/u),
+  gasLimit: z.string().regex(/^[1-9]\d*$/u),
+  maxFeePerGas: z.string().regex(/^[1-9]\d*$/u),
+  maxGasCostWei: z.string().regex(/^\d+$/u),
+  expectedBuyAmount: z.string().regex(/^[1-9]\d*$/u),
+  minimumBuyAmount: z.string().regex(/^[1-9]\d*$/u),
+  preparedAt: z.string().datetime(),
+}).strict();
+export const EvmSessionExecutionReceiptSchema = z.object({
+  id: z.string().uuid(),
+  transactionHash: z.string().regex(/^0x[0-9a-fA-F]+$/u),
+  kind: z.enum(["approval", "swap"]),
+  status: z.enum(["confirmed", "reverted", "unknown"]),
+  reconciledAt: z.string().datetime(),
+}).strict();
+export type EvmSwapQuoteEvidence = z.infer<typeof EvmSwapQuoteEvidenceSchema>;
+export type EvmSwapProposal = z.infer<typeof EvmSwapProposalSchema>;
+export type EvmSwapPreflightEvidence = z.infer<typeof EvmSwapPreflightEvidenceSchema>;
+export type EvmSessionExecutionReceipt = z.infer<typeof EvmSessionExecutionReceiptSchema>;
+
+const AiToolNameSchema = z.enum(["wallet_portfolio", "wallet_activity", "jupiter_prices", "jupiter_token_search", "jupiter_swap_quote", "pump_token_analysis", "pump_recent_candidates", "pump_trade_contract_preview", "mission_contract_preview", "limit_order_contract_preview", "robinhood_swap_quote", "tavily_search"]);
+
 export const SessionMessageSchema = z.object({
   id: z.string().uuid(),
   role: z.enum(["user", "assistant"]),
   text: z.string().min(1).max(12_000),
   at: z.string().datetime(),
-  toolsUsed: z.array(z.enum(["wallet_portfolio", "wallet_activity", "jupiter_prices", "jupiter_token_search", "jupiter_swap_quote", "pump_token_analysis", "pump_recent_candidates", "pump_trade_contract_preview", "mission_contract_preview", "limit_order_contract_preview", "tavily_search"])).max(8).optional(),
+  toolsUsed: z.array(AiToolNameSchema).max(8).optional(),
   missionPreview: MissionContractPreviewSchema.optional(),
   pumpTradePreview: PumpTradeContractPreviewSchema.optional(),
+  pumpLaunchDraft: PumpLaunchDraftSchema.optional(),
+  pumpLaunchMetadataPackage: PumpLaunchMetadataPackageSchema.optional(),
+  pumpLaunchPreflight: PumpLaunchPreflightSchema.optional(),
+  pumpLaunchFinalRevalidation: PumpLaunchFinalRevalidationSchema.optional(),
+  pumpLaunchExecution: PumpLaunchExecutionRecordSchema.optional(),
   pumpSimulation: PumpSimulationArtifactSchema.optional(),
   pumpExecution: PumpExecutionRecordSchema.optional(),
   pumpTokenIntelligence: PumpTokenIntelligenceSchema.optional(),
@@ -934,12 +1307,39 @@ export const SessionMessageSchema = z.object({
   limitOrderCancelReceipt: LimitOrderCancelReceiptSchema.optional(),
   missionSimulation: MissionSimulationPreviewSchema.optional(),
   missionExecution: MissionExecutionReceiptSchema.optional(),
+  evmSwapProposal: EvmSwapProposalSchema.optional(),
+  evmSwapPreflight: EvmSwapPreflightEvidenceSchema.optional(),
+  evmExecutionReceipts: z.array(EvmSessionExecutionReceiptSchema).max(4).optional(),
 }).strict();
+// A session may only narrow a global trading guard. It has no execution
+// authority and cannot widen the device-level maximum configured in Settings.
+export const SessionSafetyOverridesSchema = z.object({
+  maxSlippageBps: z.number().int().min(0).max(300),
+}).strict();
+export type SessionSafetyOverrides = z.infer<typeof SessionSafetyOverridesSchema>;
+// Intent is retained for transitional and legacy sessions. New sessions are
+// wallet-scoped; a future lane-specific proposal carries the immutable action
+// intent, rather than making the entire conversation an execution lane.
+export const SessionIntentSchema = z.enum([
+  "research",
+  "token-launch",
+  "solana-swap",
+  "evm-swap",
+  "bridge",
+  "legacy-pump-pilot",
+]);
+export type SessionIntent = z.infer<typeof SessionIntentSchema>;
+// New sessions are wallet-scoped. The EVM value is reserved until the local
+// EVM vault exists; legacy sessions may omit this field.
+export const SessionWalletScopeSchema = z.enum(["solana", "evm"]);
+export type SessionWalletScope = z.infer<typeof SessionWalletScopeSchema>;
 export const SessionRecordSchema = z.object({
   id: z.string().uuid(),
   title: z.string().trim().min(1).max(80),
   mode: z.enum(["agent", "mission"]),
   permission: z.enum(["restricted", "full"]),
+  intent: SessionIntentSchema.optional(),
+  walletScope: SessionWalletScopeSchema.optional(),
   workspace: z.enum(["general", "pump"]).optional(),
   pumpConfig: z.object({
     scope: z.enum(["exact-mint", "watchlist", "discovery"]),
@@ -949,6 +1349,7 @@ export const SessionRecordSchema = z.object({
     analysisBuyLamports: z.string().regex(/^[1-9]\d*$/u).optional(),
     lifecycle: z.literal("proposal-only"),
   }).strict().optional(),
+  safetyOverrides: SessionSafetyOverridesSchema.optional(),
   walletAddress: z.string().min(32).max(44).nullable(),
   messages: z.array(SessionMessageSchema).max(200),
   startedAt: z.string().datetime(),
@@ -970,6 +1371,20 @@ export const SessionRecordSchema = z.object({
   }
   if (session.workspace !== "pump" && session.pumpConfig !== undefined) {
     context.addIssue({ code: "custom", path: ["pumpConfig"], message: "Pump configuration requires a Pump workspace" });
+  }
+  if (session.intent === "legacy-pump-pilot" && session.workspace !== "pump") {
+    context.addIssue({ code: "custom", path: ["intent"], message: "Legacy Pump intent requires a legacy Pump workspace" });
+  }
+  if (session.workspace === "pump" && session.intent !== undefined && session.intent !== "legacy-pump-pilot") {
+    context.addIssue({ code: "custom", path: ["intent"], message: "Legacy Pump workspaces cannot be reclassified as a new product lane" });
+  }
+  if (session.intent !== undefined && session.intent !== "research" && session.intent !== "legacy-pump-pilot") {
+    if (session.mode !== "mission" || session.permission !== "restricted") {
+      context.addIssue({ code: "custom", path: ["intent"], message: "Mutable venue intents require a restricted Mission session" });
+    }
+  }
+  if (session.walletScope === "evm" && session.workspace === "pump") {
+    context.addIssue({ code: "custom", path: ["walletScope"], message: "Legacy Pump sessions are Solana-only" });
   }
   if (session.pumpConfig?.scope === "exact-mint" && session.pumpConfig.tokenMint === null) {
     context.addIssue({ code: "custom", path: ["pumpConfig", "tokenMint"], message: "Exact-mint Pump sessions require a token mint" });
@@ -1149,12 +1564,13 @@ export const AiChatResponseSchema = RequestBaseSchema.extend({
     totalTokens: z.number().int().nonnegative(),
     costUsd: z.number().nonnegative().nullable(),
   }).strict(),
-  toolsUsed: z.array(z.enum(["wallet_portfolio", "wallet_activity", "jupiter_prices", "jupiter_token_search", "jupiter_swap_quote", "pump_token_analysis", "pump_recent_candidates", "pump_trade_contract_preview", "mission_contract_preview", "limit_order_contract_preview", "tavily_search"])).max(8),
+  toolsUsed: z.array(AiToolNameSchema).max(8),
   missionPreview: MissionContractPreviewSchema.nullable(),
   pumpTradePreview: PumpTradeContractPreviewSchema.nullable(),
   pumpTokenIntelligence: PumpTokenIntelligenceSchema.nullable(),
   pumpDiscoverySnapshot: PumpDiscoverySnapshotSchema.nullable(),
   limitOrderPreview: LimitOrderContractPreviewSchema.nullable(),
+  evmSwapProposal: EvmSwapProposalSchema.nullable(),
 }).strict();
 export type AiChatRequest = z.infer<typeof AiChatRequestSchema>;
 export type AiChatResponse = z.infer<typeof AiChatResponseSchema>;
@@ -1191,8 +1607,8 @@ export const RobinhoodSettingsResponseSchema = z.object({
   schemaVersion: z.literal(1),
   zeroExConfigured: z.boolean(),
   rpcConfigured: z.boolean(),
-  executionEnabled: z.literal(false),
-  executionMissing: z.array(z.string().min(1).max(128)).min(1).max(10),
+  executionEnabled: z.boolean(),
+  executionMissing: z.array(z.string().min(1).max(128)).max(10),
 }).strict();
 export const RobinhoodSaveZeroXKeyRequestSchema = RequestBaseSchema.extend({
   apiKey: z.string().trim().min(8).max(512),
@@ -1205,7 +1621,15 @@ export const RobinhoodKeyMutationResponseSchema = RequestBaseSchema.extend({ con
 export const RobinhoodRpcMutationResponseSchema = RequestBaseSchema.extend({ configured: z.literal(true) }).strict();
 export const RobinhoodTestRpcResponseSchema = RequestBaseSchema.extend({ chainId: z.literal(4663) }).strict();
 export const RobinhoodTestZeroXResponseSchema = RequestBaseSchema.extend({ chainId: z.literal(4663) }).strict();
-export const RobinhoodWalletGetResponseSchema = z.object({ schemaVersion: z.literal(1), address: z.string().regex(/^0x[0-9a-fA-F]{40}$/u).nullable() }).strict();
+export const EvmWalletSummarySchema = z.object({
+  address: z.string().regex(/^0x[0-9a-fA-F]{40}$/u),
+  primary: z.boolean(),
+}).strict();
+export const RobinhoodWalletGetResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  address: z.string().regex(/^0x[0-9a-fA-F]{40}$/u).nullable(),
+  wallets: z.array(EvmWalletSummarySchema).max(20),
+}).strict();
 export const RobinhoodWalletCreateRequestSchema = RequestBaseSchema.extend({ acknowledgedHotWalletRisk: z.literal(true) }).strict();
 export const RobinhoodWalletCreateResponseSchema = RequestBaseSchema.extend({
   address: z.string().regex(/^0x[0-9a-fA-F]{40}$/u),
@@ -1216,9 +1640,14 @@ export const RobinhoodWalletImportMnemonicRequestSchema = RequestBaseSchema.exte
   mnemonic: z.string().min(32).max(512),
   acknowledgedHotWalletRisk: z.literal(true),
 }).strict();
+export const RobinhoodWalletImportPrivateKeyRequestSchema = RequestBaseSchema.extend({
+  privateKey: z.string().trim().regex(/^(0x)?[0-9a-fA-F]{64}$/u, "EVM private key must be 32-byte hexadecimal"),
+  acknowledgedHotWalletRisk: z.literal(true),
+}).strict();
 export const RobinhoodWalletImportResponseSchema = RequestBaseSchema.extend({ address: z.string().regex(/^0x[0-9a-fA-F]{40}$/u) }).strict();
 const EvmAddressSchema = z.string().regex(/^0x[0-9a-fA-F]{40}$/u);
 export const RobinhoodIndicativePriceRequestSchema = RequestBaseSchema.extend({
+  walletAddress: EvmAddressSchema.optional(),
   sellToken: EvmAddressSchema,
   buyToken: EvmAddressSchema,
   sellAmount: z.string().regex(/^[1-9]\d*$/u),
@@ -1246,6 +1675,23 @@ export const RobinhoodPrepareTradeResponseSchema = RequestBaseSchema.extend({
   sellTokenSymbol: z.string().min(1).max(32), buyTokenSymbol: z.string().min(1).max(32), expectedBuyAmount: z.string().regex(/^[1-9]\d*$/u), minimumBuyAmount: z.string().regex(/^[1-9]\d*$/u),
 }).strict();
 export const RobinhoodExecutionReceiptSchema = z.object({ id: z.string().uuid(), transactionHash: z.string().regex(/^0x[0-9a-fA-F]+$/u), kind: z.enum(["approval", "swap"]), status: z.enum(["confirmed", "reverted", "unknown"]), reconciledAt: z.string().datetime() }).strict();
+export const RobinhoodExecuteApprovalRequestSchema = RequestBaseSchema.extend({
+  walletAddress: EvmAddressSchema.optional(),
+  preflightId: z.string().uuid(),
+  masterPassword: z.string().min(8).max(256),
+  confirmation: z.literal("APPROVE ROBINHOOD MAINNET"),
+  acknowledgedIrreversible: z.literal(true),
+}).strict();
+export const RobinhoodExecuteSwapRequestSchema = RequestBaseSchema.extend({
+  walletAddress: EvmAddressSchema.optional(),
+  preflightId: z.string().uuid(),
+  masterPassword: z.string().min(8).max(256),
+  confirmation: z.literal("EXECUTE ROBINHOOD MAINNET SWAP"),
+  acknowledgedIrreversible: z.literal(true),
+}).strict();
+export const RobinhoodExecutionResponseSchema = RequestBaseSchema.extend({
+  receipt: RobinhoodExecutionReceiptSchema,
+}).strict();
 export const RobinhoodReceiptsResponseSchema = z.object({ schemaVersion: z.literal(1), receipts: z.array(RobinhoodExecutionReceiptSchema).max(500) }).strict();
 export const RobinhoodReconcileReceiptsResponseSchema = z.object({ schemaVersion: z.literal(1), reconciled: z.array(RobinhoodExecutionReceiptSchema).max(500) }).strict();
 export type RobinhoodSettingsResponse = z.infer<typeof RobinhoodSettingsResponseSchema>;
@@ -1256,15 +1702,20 @@ export type RobinhoodRpcMutationResponse = z.infer<typeof RobinhoodRpcMutationRe
 export type RobinhoodTestRpcResponse = z.infer<typeof RobinhoodTestRpcResponseSchema>;
 export type RobinhoodTestZeroXResponse = z.infer<typeof RobinhoodTestZeroXResponseSchema>;
 export type RobinhoodWalletGetResponse = z.infer<typeof RobinhoodWalletGetResponseSchema>;
+export type EvmWalletSummary = z.infer<typeof EvmWalletSummarySchema>;
 export type RobinhoodWalletCreateRequest = z.infer<typeof RobinhoodWalletCreateRequestSchema>;
 export type RobinhoodWalletCreateResponse = z.infer<typeof RobinhoodWalletCreateResponseSchema>;
 export type RobinhoodWalletImportMnemonicRequest = z.infer<typeof RobinhoodWalletImportMnemonicRequestSchema>;
+export type RobinhoodWalletImportPrivateKeyRequest = z.infer<typeof RobinhoodWalletImportPrivateKeyRequestSchema>;
 export type RobinhoodWalletImportResponse = z.infer<typeof RobinhoodWalletImportResponseSchema>;
 export type RobinhoodIndicativePriceRequest = z.infer<typeof RobinhoodIndicativePriceRequestSchema>;
 export type RobinhoodIndicativePrice = z.infer<typeof RobinhoodIndicativePriceSchema>;
 export type RobinhoodIndicativePriceResponse = z.infer<typeof RobinhoodIndicativePriceResponseSchema>;
 export type RobinhoodPrepareTradeResponse = z.infer<typeof RobinhoodPrepareTradeResponseSchema>;
 export type RobinhoodExecutionReceipt = z.infer<typeof RobinhoodExecutionReceiptSchema>;
+export type RobinhoodExecuteApprovalRequest = z.infer<typeof RobinhoodExecuteApprovalRequestSchema>;
+export type RobinhoodExecuteSwapRequest = z.infer<typeof RobinhoodExecuteSwapRequestSchema>;
+export type RobinhoodExecutionResponse = z.infer<typeof RobinhoodExecutionResponseSchema>;
 export type RobinhoodReceiptsResponse = z.infer<typeof RobinhoodReceiptsResponseSchema>;
 export type RobinhoodReconcileReceiptsResponse = z.infer<typeof RobinhoodReconcileReceiptsResponseSchema>;
 

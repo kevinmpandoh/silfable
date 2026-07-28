@@ -35,6 +35,9 @@ test("restricted Mainnet chat exposes no tool surface when none is configured", 
   assert.match(bodyText, /desktop app can execute a restricted Jupiter swap, or one exact verified Pump active-curve/u);
   assert.match(bodyText, /canonical PumpSwap buy\/sell/u);
   assert.match(bodyText, /autonomous trading, and unattended signing are not enabled/u);
+  assert.match(bodyText, /UNSAVED TOKEN LAUNCH DRAFT/u);
+  assert.match(bodyText, /never publish metadata, create a mint, construct a launch transaction, sign, or broadcast/u);
+  assert.match(bodyText, /Token Launch form/u);
   assert.match(bodyText, /You cannot sign, execute, broadcast, approve, or bypass/u);
   assert.match(bodyText, /explicitly asks to create a swap mission/u);
   assert.match(bodyText, /Do not invent missing token, wallet, amount, trigger, or Pump fields/u);
@@ -72,6 +75,58 @@ test("restricted Mainnet chat executes an allowlisted read-only tool once", { co
   assert.equal(JSON.stringify(requestBodies[0]).includes("wallet_portfolio"), true);
   assert.equal(JSON.stringify(requestBodies[1]).includes("solBalance"), true);
   assert.equal(JSON.stringify(requestBodies).includes("sk-or-private-value"), false);
+});
+
+test("Robinhood quote tool output is returned as typed EVM session evidence", { concurrency: false }, async () => {
+  let calls = 0;
+  const walletAddress = `0x${"11".repeat(20)}`;
+  const sellToken = `0x${"22".repeat(20)}`;
+  const buyToken = `0x${"33".repeat(20)}`;
+  const proposal = {
+    id: crypto.randomUUID(),
+    chainId: 4663 as const,
+    walletAddress,
+    slippageBps: 50,
+    quote: {
+      sellToken,
+      buyToken,
+      sellAmount: "1000000",
+      buyAmount: "990000",
+      minBuyAmount: "985050",
+      blockNumber: "123",
+      zeroExFeeAmount: null,
+      zeroExFeeToken: null,
+      liquidityAvailable: true,
+      sellTokenSymbol: "AAPL",
+      buyTokenSymbol: "TSLA",
+      sellTokenMultiplier: "1000000",
+      buyTokenMultiplier: "1000000",
+    },
+    status: "quote-only" as const,
+    createdAt: new Date().toISOString(),
+  };
+  globalThis.fetch = async () => {
+    calls += 1;
+    if (calls === 1) return Response.json({
+      choices: [{ message: { content: null, tool_calls: [{
+        id: "evm-quote",
+        type: "function",
+        function: { name: "robinhood_swap_quote", arguments: JSON.stringify({ sellToken, buyToken, sellAmount: "1000000" }) },
+      }] } }],
+      usage: {},
+    });
+    return Response.json({ choices: [{ message: { content: "Quote prepared for review." } }], usage: {} });
+  };
+  const result = await callOpenRouterChat({
+    apiKey: "sk-or-private-value",
+    model: "vendor/safe",
+    prompt: "Quote this EVM swap",
+    mode: "mission",
+    walletAddress,
+    tools: [{ name: "robinhood_swap_quote", description: "quote", parameters: { type: "object" }, execute: async () => proposal }],
+  });
+  assert.deepEqual(result.evmSwapProposal, proposal);
+  assert.deepEqual(result.toolsUsed, ["robinhood_swap_quote"]);
 });
 
 test("Pump token intelligence is returned as typed session evidence", { concurrency: false }, async () => {

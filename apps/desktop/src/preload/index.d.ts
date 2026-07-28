@@ -30,10 +30,14 @@ import type {
   RobinhoodWalletCreateResponse,
   RobinhoodWalletGetResponse,
   RobinhoodWalletImportMnemonicRequest,
+  RobinhoodWalletImportPrivateKeyRequest,
   RobinhoodWalletImportResponse,
   RobinhoodIndicativePriceRequest,
   RobinhoodIndicativePriceResponse,
   RobinhoodPrepareTradeResponse,
+  RobinhoodExecuteApprovalRequest,
+  RobinhoodExecuteSwapRequest,
+  RobinhoodExecutionResponse,
   RobinhoodReceiptsResponse,
   RobinhoodReconcileReceiptsResponse,
   LimitOrderExecuteRequest,
@@ -62,6 +66,25 @@ import type {
   PumpFinalRevalidateResponse,
   PumpExecuteRequest,
   PumpExecuteResponse,
+  PumpLaunchDraftRequest,
+  PumpLaunchDraftResponse,
+  PumpLaunchPreflightRequest,
+  PumpLaunchPreflightResponse,
+  PumpLaunchFinalRevalidateRequest,
+  PumpLaunchFinalRevalidateResponse,
+  PumpLaunchExecuteRequest,
+  PumpLaunchExecuteResponse,
+  PumpLaunchVerifyExecutionRequest,
+  PumpLaunchVerifyExecutionResponse,
+  PumpLaunchOpenOfficialCreateRequest,
+  PumpLaunchOpenOfficialCreateResponse,
+  R2PublishLaunchMetadataRequest,
+  R2PublishLaunchMetadataResponse,
+  R2SaveSettingsRequest,
+  R2SettingsMutationResponse,
+  R2SettingsResponse,
+  R2TestSettingsRequest,
+  R2TestSettingsResponse,
   PumpVerifyExecutionRequest,
   PumpVerifyExecutionResponse,
   PumpSimulateRequest,
@@ -121,6 +144,16 @@ declare global {
       previewOpenRouterModels(request: AiPreviewOpenRouterModelsRequest): Promise<AiPreviewOpenRouterModelsResponse>;
       saveAiProvider(request: AiSaveProviderRequest): Promise<AiProviderMutationResponse>;
       chatWithAi(request: AiChatRequest): Promise<AiChatResponse>;
+      createPumpLaunchDraft(request: PumpLaunchDraftRequest): Promise<PumpLaunchDraftResponse>;
+      preflightPumpLaunch(request: PumpLaunchPreflightRequest): Promise<PumpLaunchPreflightResponse>;
+      finalRevalidatePumpLaunch(request: PumpLaunchFinalRevalidateRequest): Promise<PumpLaunchFinalRevalidateResponse>;
+      executePumpLaunch(request: PumpLaunchExecuteRequest): Promise<PumpLaunchExecuteResponse>;
+      verifyPumpLaunchExecution(request: PumpLaunchVerifyExecutionRequest): Promise<PumpLaunchVerifyExecutionResponse>;
+      openPumpLaunchOfficialCreate(request: PumpLaunchOpenOfficialCreateRequest): Promise<PumpLaunchOpenOfficialCreateResponse>;
+      getR2Settings(): Promise<R2SettingsResponse>;
+      saveR2Settings(request: R2SaveSettingsRequest): Promise<R2SettingsMutationResponse>;
+      testR2Settings(request: R2TestSettingsRequest): Promise<R2TestSettingsResponse>;
+      publishPumpLaunchMetadata(request: R2PublishLaunchMetadataRequest): Promise<R2PublishLaunchMetadataResponse>;
       simulateMission(request: MissionSimulateRequest): Promise<MissionSimulateResponse>;
       simulatePumpTrade(request: PumpSimulateRequest): Promise<PumpSimulateResponse>;
       finalRevalidatePumpTrade(request: PumpFinalRevalidateRequest): Promise<PumpFinalRevalidateResponse>;
@@ -153,8 +186,11 @@ declare global {
       getRobinhoodWallet(): Promise<RobinhoodWalletGetResponse>;
       createRobinhoodWallet(request: RobinhoodWalletCreateRequest): Promise<RobinhoodWalletCreateResponse>;
       importRobinhoodWalletMnemonic(request: RobinhoodWalletImportMnemonicRequest): Promise<RobinhoodWalletImportResponse>;
+      importRobinhoodWalletPrivateKey(request: RobinhoodWalletImportPrivateKeyRequest): Promise<RobinhoodWalletImportResponse>;
       getRobinhoodIndicativePrice(request: RobinhoodIndicativePriceRequest): Promise<RobinhoodIndicativePriceResponse>;
       prepareRobinhoodTrade(request: RobinhoodIndicativePriceRequest): Promise<RobinhoodPrepareTradeResponse>;
+      executeRobinhoodApproval(request: RobinhoodExecuteApprovalRequest): Promise<RobinhoodExecutionResponse>;
+      executeRobinhoodSwap(request: RobinhoodExecuteSwapRequest): Promise<RobinhoodExecutionResponse>;
       listRobinhoodReceipts(): Promise<RobinhoodReceiptsResponse>;
       reconcileRobinhoodReceipts(): Promise<RobinhoodReconcileReceiptsResponse>;
       getActivePositions(): Promise<{ positions: any[] }>;

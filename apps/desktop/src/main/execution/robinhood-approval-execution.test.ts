@@ -10,9 +10,10 @@ test("Robinhood approval rejects missing final confirmation before signing", asy
   const service = new RobinhoodApprovalExecutionService(
     { verify: async () => true } as never,
     { assertExecutionAllowed: () => undefined } as never,
+    {} as never,
   );
   await assert.rejects(() => service.execute({
-    masterPassword: "irrelevant", confirmation: "NO" as never, wallet: ADDRESS, token: ADDRESS, spender: ADDRESS, exactAmount: 1n,
+    masterPassword: "irrelevant", confirmation: "NO" as never, preflightId: crypto.randomUUID(), wallet: ADDRESS,
     engine: {} as never, withSigner: async () => { throw new Error("must not sign"); },
   }), /confirmation is required/u);
 });
@@ -21,9 +22,10 @@ test("Robinhood approval refuses an incorrect master password before signing", a
   const service = new RobinhoodApprovalExecutionService(
     { verify: async () => false } as never,
     { assertExecutionAllowed: () => undefined } as never,
+    {} as never,
   );
   await assert.rejects(() => service.execute({
-    masterPassword: "wrong", confirmation: "APPROVE ROBINHOOD MAINNET", wallet: ADDRESS, token: ADDRESS, spender: ADDRESS, exactAmount: 1n,
+    masterPassword: "wrong", confirmation: "APPROVE ROBINHOOD MAINNET", preflightId: crypto.randomUUID(), wallet: ADDRESS,
     engine: {} as never, withSigner: async () => { throw new Error("must not sign"); },
   }), /Master password is incorrect/u);
 });
@@ -34,10 +36,11 @@ test("Robinhood approval signs an exact approval, waits for a successful receipt
   const service = new RobinhoodApprovalExecutionService(
     { verify: async () => true } as never,
     { assertExecutionAllowed: () => undefined } as never,
+    { takeForApproval: () => ({ token: ADDRESS, spender: ADDRESS, exactAmount: 17n }) } as never,
     { save: async (receipt) => { persisted.push({ status: receipt.status, id: receipt.id }); } },
   );
   const result = await service.execute({
-    masterPassword: "StrongPass1!", confirmation: "APPROVE ROBINHOOD MAINNET", wallet: ADDRESS, token: ADDRESS, spender: ADDRESS, exactAmount: 17n,
+    masterPassword: "StrongPass1!", confirmation: "APPROVE ROBINHOOD MAINNET", preflightId: crypto.randomUUID(), wallet: ADDRESS,
     engine: {
       getChainId: () => 4663,
       getPendingNonce: async () => 7,

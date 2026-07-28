@@ -1,6 +1,6 @@
 # Silfable
 
-Silfable is a local-first desktop workspace for configuring and operating a restricted AI agent on Solana Mainnet. Wallet material and API credentials stay encrypted locally. Restricted Jupiter swaps are available only after deterministic policy checks, simulation, master-password verification, and explicit final approval; autonomous execution is not connected.
+Silfable is a local-first desktop workspace for operating a restricted AI agent. Wallet material and API credentials stay encrypted locally. Its product architecture is organized into Token Launch (Pump.fun), Solana Swap (Jupiter), EVM Swap, and Bridge lanes. The guarded desktop Jupiter path and conservative Pump.fun Token Launch path have restricted manual execution implementations. A restricted Robinhood Chain/0x EVM pipeline is also wired through exact approval, local signing, and encrypted receipt recovery, but remains release-locked pending independent Mainnet acceptance and security evidence. Bridge remains quote-only.
 
 ## Workspace
 
@@ -45,11 +45,11 @@ Settings reopens the review screen so each section can be edited and then return
 - Windows QA launches the packaged executable with an isolated profile and verifies that the React renderer and restricted preload bridge start successfully.
 - The signed-release workflow additionally requires a valid Authenticode result. Certificates and passwords are supplied through CI secrets and never committed.
 
-See [the current desktop architecture](docs/desktop/MAINNET_DESKTOP_ARCHITECTURE.md) before adding privileged capabilities.
+See [the Phase 0 baseline](docs/PHASE_0_BASELINE.md), [the venue product architecture](docs/VENUE_PRODUCT_ARCHITECTURE.md), and [the current desktop architecture](docs/desktop/MAINNET_DESKTOP_ARCHITECTURE.md) before adding privileged capabilities.
 
 Future work is tracked in the [prioritized Mainnet product roadmap](docs/desktop/MAINNET_PRODUCT_ROADMAP.md). It places fee and state correctness, security review, recovery, and signed-release gates ahead of scheduled or autonomous trading features.
 
-Pump.fun progress and its exact live-trading boundary are tracked separately in [Pump.fun implementation status](docs/desktop/PUMPFUN_IMPLEMENTATION_STATUS.md).
+The legacy Pump/PumpSwap pilot is documented separately in [Pump.fun implementation status](docs/desktop/PUMPFUN_IMPLEMENTATION_STATUS.md). It is not the new Token Launch lane.
 
 ## Requirements
 

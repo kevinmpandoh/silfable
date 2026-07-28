@@ -159,6 +159,8 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .providerCard > header { display: flex; align-items: center; justify-content: space-between; }
 .providerCard p { margin: 9px 0 12px; color: var(--muted); font-size: 11px; line-height: 1.55; }
 .providerHint { display: block; margin-top: 8px; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.checkboxRow { display: flex; align-items: flex-start; gap: 10px; margin: 12px 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.checkboxRow input { width: 14px; min-width: 14px; height: 14px; margin-top: 1px; accent-color: var(--blue); }
 .detailsGrid { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
 .detailsGrid > div { display: flex; flex-direction: column; gap: 7px; padding: 13px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .detailsGrid span { color: var(--muted); font: 8px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
@@ -341,6 +343,33 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .conversationComposer .notice { width: min(720px, 100%); padding: 9px 12px; }
 .conversationComposer .notice strong { font-size: 10px; }
 .conversationComposer .notice p { display: none; }
+.launchDraftToggle { width: min(720px, 100%); border: 1px solid #274dbb; background: #111b4f; color: #dbe4ff; padding: 10px 14px; border-radius: 10px; font: inherit; cursor: pointer; }
+.launchDraftForm, .launchDraftCard { width: min(720px, 100%); border: 1px solid #263047; background: #0d1225; border-radius: 12px; padding: 14px; box-sizing: border-box; }
+.launchDraftForm header, .launchDraftCard header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.launchDraftForm header span, .launchDraftCard header span { display: block; color: #8ca6f5; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+.launchDraftForm header strong, .launchDraftCard header strong { display: block; margin-top: 4px; }
+.launchDraftForm > p, .launchDraftCard > p { color: #9ba7c8; font-size: 12px; line-height: 1.45; }
+.launchDraftGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.launchDraftGrid label { display: grid; gap: 5px; color: #a6b5df; font-size: 11px; }
+.launchDraftGrid .wide { grid-column: 1 / -1; }
+.launchDraftGrid input, .launchDraftGrid textarea, .launchDraftGrid select { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid #293556; background: #080c1c; color: #eef2ff; border-radius: 7px; padding: 8px; font: inherit; }
+.launchDraftGrid textarea { min-height: 54px; resize: vertical; }
+.launchDraftAcknowledgement { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; color: #aeb9d5; font-size: 12px; line-height: 1.35; }
+.launchDraftError { color: #ff8c99 !important; margin: 10px 0 0; }
+.launchDraftForm footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.launchDraftForm footer button { border: 1px solid #2b3b65; background: transparent; color: #dbe4ff; padding: 8px 12px; border-radius: 7px; cursor: pointer; }
+.launchDraftForm footer .primary { background: #3054ff; border-color: #3054ff; }
+.launchDraftForm footer button:disabled { opacity: .45; cursor: not-allowed; }
+.launchDraftHandoff { border: 1px solid #3154d7; background: transparent; color: #b9c9ff; border-radius: 7px; padding: 8px 10px; cursor: pointer; }
+.launchDraftHandoff:disabled { opacity: .45; cursor: not-allowed; }
+.launchDraftCard dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.launchDraftCard dl div { border: 1px solid #202a43; padding: 8px; }
+.launchDraftCard dt { color: #8290b8; font-size: 10px; text-transform: uppercase; }
+.launchDraftCard dd { margin: 4px 0 0; font-size: 12px; color: #eef2ff; }
+.launchPreflightReview { margin-top: 12px; border: 1px solid #167755; background: #081b1b; border-radius: 9px; padding: 12px; }
+.launchPreflightReview > strong { color: #66edba; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.launchPreflightReview > p { margin: 8px 0 0; color: #9bc7bd; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+@media (max-width: 680px) { .launchDraftGrid { grid-template-columns: 1fr; } .launchDraftGrid .wide { grid-column: auto; } .launchDraftCard dl { grid-template-columns: 1fr; } }
 .utilityView { display: flex; height: 100%; flex-direction: column; justify-content: center; align-items: flex-start; padding: clamp(40px, 9vw, 120px); }
 .utilityView h1 { max-width: 720px; margin: 8px 0 18px; font-size: clamp(42px, 5vw, 80px); letter-spacing: -.055em; line-height: .95; }
 .utilityView > p:not(.kicker) { max-width: 620px; color: var(--muted); line-height: 1.7; }

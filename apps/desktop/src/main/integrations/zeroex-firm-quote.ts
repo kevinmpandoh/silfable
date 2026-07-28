@@ -18,8 +18,20 @@ export async function getRobinhoodFirmQuote(input: { apiKey: string; taker: Addr
 function parseFirmQuote(value: unknown): ZeroExFirmQuote {
   if (typeof value !== "object" || value === null) throw new Error("0x returned an invalid firm quote");
   const quote = value as Record<string, unknown>;
+  if (quote.liquidityAvailable !== true) throw new Error("0x did not confirm liquidity for this trade");
   const transaction = typeof quote.transaction === "object" && quote.transaction !== null ? quote.transaction as Record<string, unknown> : null;
-  const allowanceTarget = address(quote.allowanceTarget);
+  const issues = typeof quote.issues === "object" && quote.issues !== null ? quote.issues as Record<string, unknown> : null;
+  const allowanceIssue = issues !== null && typeof issues.allowance === "object" && issues.allowance !== null
+    ? issues.allowance as Record<string, unknown>
+    : null;
+  const issueSpender = allowanceIssue === null ? null : address(allowanceIssue.spender);
+  const legacyAllowanceTarget = address(quote.allowanceTarget);
+  if (issueSpender !== null && legacyAllowanceTarget !== null && issueSpender.toLowerCase() !== legacyAllowanceTarget.toLowerCase()) {
+    throw new Error("0x returned conflicting allowance targets");
+  }
+  const allowanceTarget = issueSpender ?? legacyAllowanceTarget;
+  if (issues?.balance !== undefined && issues.balance !== null) throw new Error("0x reports an insufficient sell-token balance");
+  if (issues?.simulationIncomplete === true) throw new Error("0x could not complete transaction simulation");
   const to = transaction === null ? null : address(transaction.to);
   const data = transaction === null || typeof transaction.data !== "string" || !/^0x[0-9a-fA-F]*$/u.test(transaction.data) ? null : transaction.data as Hex;
   const valueWei = transaction === null ? null : positiveOrZero(transaction.value);

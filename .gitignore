@@ -21,6 +21,10 @@
 **/build
 **/dist
 **/release
+# Local Electron packaging and smoke-test output. These folders can contain
+# unpacked applications hundreds of megabytes in size and are never source.
+apps/desktop/release-qa/
+apps/desktop/release-qa-*/
 
 # misc
 .DS_Store

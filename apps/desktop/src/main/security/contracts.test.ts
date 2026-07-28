@@ -11,6 +11,8 @@ import {
   EmergencyStopStatusSchema,
   IPC_CHANNELS,
   JupiterSaveKeyRequestSchema,
+  LimitOrderCancelExecuteRequestSchema,
+  LimitOrderExecuteRequestSchema,
   RobinhoodSaveRpcUrlRequestSchema,
   RobinhoodSaveZeroXKeyRequestSchema,
   RobinhoodWalletCreateRequestSchema,
@@ -20,6 +22,9 @@ import {
   MissionVerifyExecutionRequestSchema,
   PumpFinalRevalidateRequestSchema,
   PumpExecuteRequestSchema,
+  PumpLaunchFinalRevalidateRequestSchema,
+  PumpLaunchExecuteRequestSchema,
+  PumpLaunchVerifyExecutionRequestSchema,
   PumpVerifyExecutionRequestSchema,
   PumpSimulateRequestSchema,
   PumpDiscoverySnapshotSchema,
@@ -66,9 +71,18 @@ test("vault reset requires the irreversible acknowledgement and exact phrase", (
 test("persisted sessions reject unexpected execution authority", () => {
   const session = { id: requestId, title: "Review wallet", mode: "agent", permission: "restricted", walletAddress: null, messages: [], startedAt: "2026-07-21T00:00:00.000Z", usage: { input: 0, output: 0, total: 0, cost: null } };
   assert.equal(SessionUpsertRequestSchema.safeParse({ schemaVersion: 1, requestId, session }).success, true);
+  assert.equal(SessionUpsertRequestSchema.safeParse({ schemaVersion: 1, requestId, session: { ...session, walletScope: "solana" } }).success, true);
+  assert.equal(SessionUpsertRequestSchema.safeParse({ schemaVersion: 1, requestId, session: { ...session, walletScope: "evm" } }).success, true);
   assert.equal(SessionUpsertRequestSchema.safeParse({ schemaVersion: 1, requestId, session: { ...session, executionEnabled: true } }).success, false);
+  assert.equal(SessionUpsertRequestSchema.safeParse({ schemaVersion: 1, requestId, session: { ...session, intent: "research" } }).success, true);
+  assert.equal(SessionUpsertRequestSchema.safeParse({ schemaVersion: 1, requestId, session: { ...session, mode: "mission", intent: "solana-swap" } }).success, true);
+  assert.equal(SessionUpsertRequestSchema.safeParse({ schemaVersion: 1, requestId, session: { ...session, intent: "solana-swap" } }).success, false);
+  assert.equal(SessionUpsertRequestSchema.safeParse({ schemaVersion: 1, requestId, session: { ...session, mode: "mission", permission: "full", intent: "bridge" } }).success, false);
   const pumpConfig = { scope: "exact-mint", objective: "monitor", tokenMint: "So11111111111111111111111111111111111111112", lifecycle: "proposal-only" };
   assert.equal(SessionUpsertRequestSchema.safeParse({ schemaVersion: 1, requestId, session: { ...session, mode: "mission", workspace: "pump", pumpConfig } }).success, true);
+  assert.equal(SessionUpsertRequestSchema.safeParse({ schemaVersion: 1, requestId, session: { ...session, mode: "mission", workspace: "pump", pumpConfig, intent: "legacy-pump-pilot" } }).success, true);
+  assert.equal(SessionUpsertRequestSchema.safeParse({ schemaVersion: 1, requestId, session: { ...session, mode: "mission", workspace: "pump", pumpConfig, walletScope: "evm" } }).success, false);
+  assert.equal(SessionUpsertRequestSchema.safeParse({ schemaVersion: 1, requestId, session: { ...session, mode: "mission", workspace: "pump", pumpConfig, intent: "token-launch" } }).success, false);
   assert.equal(SessionUpsertRequestSchema.safeParse({ schemaVersion: 1, requestId, session: { ...session, workspace: "pump", pumpConfig } }).success, false);
   assert.equal(SessionUpsertRequestSchema.safeParse({ schemaVersion: 1, requestId, session: { ...session, mode: "mission", permission: "full", workspace: "pump", pumpConfig } }).success, false);
   assert.equal(SessionUpsertRequestSchema.safeParse({ schemaVersion: 1, requestId, session: { ...session, workspace: "pump" } }).success, false);
@@ -158,6 +172,45 @@ test("Pump execution request is an exact restricted Mainnet manual approval gate
   assert.equal(PumpExecuteRequestSchema.safeParse({ ...base, unsignedOnly: true }).success, false);
 });
 
+test("Token Launch execution requires the exact draft, preflight, approval, password, and phrase", () => {
+  const finalReview = {
+    schemaVersion: 1,
+    requestId,
+    sessionId: requestId,
+    draftId: requestId,
+    preflightId: requestId,
+    acknowledgedNoExecution: true,
+  };
+  assert.equal(PumpLaunchFinalRevalidateRequestSchema.safeParse(finalReview).success, true);
+  assert.equal(PumpLaunchFinalRevalidateRequestSchema.safeParse({ ...finalReview, sign: true }).success, false);
+
+  const execute = {
+    schemaVersion: 1,
+    requestId,
+    sessionId: requestId,
+    draftId: requestId,
+    preflightId: requestId,
+    revalidationId: requestId,
+    masterPassword: "StrongPass1!",
+    confirmation: "LAUNCH TOKEN MAINNET",
+    acknowledgedIrreversibleLaunch: true,
+  };
+  assert.equal(PumpLaunchExecuteRequestSchema.safeParse(execute).success, true);
+  assert.equal(PumpLaunchExecuteRequestSchema.safeParse({ ...execute, confirmation: "LAUNCH TOKEN" }).success, false);
+  assert.equal(PumpLaunchExecuteRequestSchema.safeParse({ ...execute, acknowledgedIrreversibleLaunch: false }).success, false);
+  assert.equal(PumpLaunchExecuteRequestSchema.safeParse({ ...execute, skipPassword: true }).success, false);
+
+  const verify = {
+    schemaVersion: 1,
+    requestId,
+    sessionId: requestId,
+    draftId: requestId,
+    executionId: requestId,
+  };
+  assert.equal(PumpLaunchVerifyExecutionRequestSchema.safeParse(verify).success, true);
+  assert.equal(PumpLaunchVerifyExecutionRequestSchema.safeParse({ ...verify, rebroadcast: true }).success, false);
+});
+
 test("emergency stop can be engaged immediately but release requires an explicit password boundary", () => {
   const engage = { schemaVersion: 1, requestId, reason: "Manual safety halt", acknowledgedImmediateHalt: true };
   assert.equal(EmergencyStopEngageRequestSchema.safeParse(engage).success, true);
@@ -199,6 +252,37 @@ test("Mainnet execution requires password, exact phrase, and irreversible acknow
   assert.equal(MissionExecuteRequestSchema.safeParse({ ...base, confirmation: "execute" }).success, false);
   assert.equal(MissionExecuteRequestSchema.safeParse({ ...base, acknowledgedIrreversibleMainnetExecution: false }).success, false);
   assert.equal(MissionExecuteRequestSchema.safeParse({ ...base, skipPassword: true }).success, false);
+});
+
+test("Jupiter Trigger mutations bind their final authorization to an encrypted session", () => {
+  const create = {
+    schemaVersion: 1,
+    requestId,
+    sessionId: requestId,
+    previewId: "00000000-0000-4000-8000-000000000002",
+    simulationId: "00000000-0000-4000-8000-000000000003",
+    masterPassword: "StrongPass1!",
+    confirmation: "CREATE LIMIT ORDER",
+    acknowledgedCustodialVaultDeposit: true,
+  };
+  assert.equal(LimitOrderExecuteRequestSchema.safeParse(create).success, true);
+  assert.equal(LimitOrderExecuteRequestSchema.safeParse({ ...create, confirmation: "create" }).success, false);
+
+  const cancellation = {
+    schemaVersion: 1,
+    requestId,
+    sessionId: requestId,
+    walletAddress: "So11111111111111111111111111111111111111112",
+    orderId: "order-123456",
+    simulationId: "00000000-0000-4000-8000-000000000004",
+    masterPassword: "StrongPass1!",
+    confirmation: "CANCEL LIMIT ORDER",
+    acknowledgedVaultWithdrawal: true,
+  };
+  assert.equal(LimitOrderCancelExecuteRequestSchema.safeParse(cancellation).success, true);
+  const { sessionId: _sessionId, ...unboundCancellation } = cancellation;
+  assert.equal(LimitOrderCancelExecuteRequestSchema.safeParse(unboundCancellation).success, false);
+  assert.equal(LimitOrderCancelExecuteRequestSchema.safeParse({ ...cancellation, acknowledgedVaultWithdrawal: false }).success, false);
 });
 
 test("receipt verification and transaction utilities accept identifiers only, never arbitrary URLs", () => {

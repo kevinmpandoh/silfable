@@ -23,7 +23,8 @@ linux:
         - x64
         - arm64
 win:
-  icon: resources/icon.png
+  # Valid native ICO avoids runtime image conversion during Windows packaging.
+  icon: resources/icon-256.ico
   target:
     - target: nsis
       arch:

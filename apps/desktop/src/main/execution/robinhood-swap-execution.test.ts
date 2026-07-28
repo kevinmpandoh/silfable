@@ -17,15 +17,15 @@ async function prepared(): Promise<{ service: RobinhoodSwapExecutionService; id:
 test("Robinhood swap consumes a preflight exactly once and broadcasts only after fresh allowance and gas checks", async () => {
   const { service, id } = await prepared(); let sent = false;
   const result = await service.execute({
-    masterPassword: "StrongPass1!", confirmation: "EXECUTE ROBINHOOD MAINNET SWAP", preflightId: id, wallet: address, sellToken: address,
+    masterPassword: "StrongPass1!", confirmation: "EXECUTE ROBINHOOD MAINNET SWAP", preflightId: id, wallet: address,
     engine: { getChainId: () => 4663, getErc20Allowance: async () => 100n, getPendingNonce: async () => 1, estimateGasAndFees: async () => ({ gasLimit: 21_000n, maxFeePerGas: 1n, maxPriorityFeePerGas: 1n }), sendRawTransaction: async () => { sent = true; return "0x1234"; }, waitForReceipt: async () => ({ status: "success" }) },
     withSigner: async (operation) => await operation(new EvmSignerService(new Uint8Array(32).fill(1))),
   });
   assert.equal(result.hash, "0x1234"); assert.equal(sent, true);
-  await assert.rejects(() => service.execute({ masterPassword: "StrongPass1!", confirmation: "EXECUTE ROBINHOOD MAINNET SWAP", preflightId: id, wallet: address, sellToken: address, engine: {} as never, withSigner: async () => { throw new Error("must not sign"); } }), /unavailable/u);
+  await assert.rejects(() => service.execute({ masterPassword: "StrongPass1!", confirmation: "EXECUTE ROBINHOOD MAINNET SWAP", preflightId: id, wallet: address, engine: {} as never, withSigner: async () => { throw new Error("must not sign"); } }), /unavailable/u);
 });
 
 test("Robinhood swap rejects insufficient allowance before signing or broadcast", async () => {
   const { service, id } = await prepared();
-  await assert.rejects(() => service.execute({ masterPassword: "StrongPass1!", confirmation: "EXECUTE ROBINHOOD MAINNET SWAP", preflightId: id, wallet: address, sellToken: address, engine: { getChainId: () => 4663, getErc20Allowance: async () => 99n } as never, withSigner: async () => { throw new Error("must not sign"); } }), /requires a confirmed exact/u);
+  await assert.rejects(() => service.execute({ masterPassword: "StrongPass1!", confirmation: "EXECUTE ROBINHOOD MAINNET SWAP", preflightId: id, wallet: address, engine: { getChainId: () => 4663, getErc20Allowance: async () => 99n } as never, withSigner: async () => { throw new Error("must not sign"); } }), /requires a confirmed exact/u);
 });
