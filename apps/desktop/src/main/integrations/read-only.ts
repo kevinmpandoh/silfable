@@ -53,7 +53,15 @@ type RawPortfolio = {
   assets: Array<{ mint: string; amount: string; decimals: number }>;
 };
 export type UnsignedSwapOrder = { transaction: string; requestId: string; lastValidBlockHeight: string | null; outAmount: string; router: string; mode: string };
-export type RawSimulationResult = { slot: number; err: unknown; logs: string[]; unitsConsumed: number | null; feeLamports: number | null; accountCreationFundingLamports: number | null };
+export type RawSimulationResult = {
+  slot: number;
+  err: unknown;
+  logs: string[];
+  unitsConsumed: number | null;
+  feeLamports: number | null;
+  accountCreationFundingLamports: number | null;
+  estimatedWalletOutflowLamports: string | null;
+};
 export type JupiterExecutionResult = { status: "Success" | "Failed"; signature: string | null; code: number | null; totalInputAmount: string | null; totalOutputAmount: string | null; error: string | null };
 export type SignatureVerification = {
   state: "finalized" | "confirmed" | "processed" | "not-found" | "failed";
@@ -335,23 +343,85 @@ export class MainnetReadService {
     return { transaction: value.transaction, requestId: value.requestId, lastValidBlockHeight, outAmount: value.outAmount, router: value.router, mode: value.mode };
   }
 
-  async simulateUnsignedTransaction(transaction: string): Promise<RawSimulationResult> {
+  async simulateUnsignedTransaction(
+    transaction: string,
+    walletScope?: { walletAddress: string; solInputLamports: string | null },
+  ): Promise<RawSimulationResult> {
     validateBase64Transaction(transaction);
-    const body = await this.#rpc("simulateTransaction", [transaction, { encoding: "base64", commitment: "confirmed", replaceRecentBlockhash: true, sigVerify: false, innerInstructions: true }]);
+    if (
+      walletScope !== undefined
+      && (
+        !ADDRESS_PATTERN.test(walletScope.walletAddress)
+        || (walletScope.solInputLamports !== null && !/^\d+$/u.test(walletScope.solInputLamports))
+      )
+    ) {
+      throw new Error("Simulation wallet scope is invalid");
+    }
+    const walletBefore = walletScope === undefined
+      ? null
+      : parseContextValue(await this.#rpc("getBalance", [
+        walletScope.walletAddress,
+        { commitment: "confirmed" },
+      ]));
+    if (
+      walletBefore !== null
+      && (
+        typeof walletBefore.value !== "number"
+        || !Number.isSafeInteger(walletBefore.value)
+        || walletBefore.value < 0
+      )
+    ) {
+      throw new Error("Solana returned an invalid pre-simulation wallet balance");
+    }
+    const simulationConfig = {
+      encoding: "base64" as const,
+      commitment: "confirmed" as const,
+      replaceRecentBlockhash: true,
+      sigVerify: false,
+      innerInstructions: true,
+      ...(walletScope === undefined || walletBefore === null
+        ? {}
+        : {
+          minContextSlot: walletBefore.slot,
+          accounts: {
+            encoding: "base64" as const,
+            addresses: [walletScope.walletAddress],
+          },
+        }),
+    };
+    const body = await this.#rpc("simulateTransaction", [transaction, simulationConfig]);
     if (typeof body !== "object" || body === null) throw new Error("Solana returned an invalid simulation result");
     const envelope = body as { context?: { slot?: unknown }; value?: unknown };
     if (typeof envelope.context?.slot !== "number" || !Number.isSafeInteger(envelope.context.slot) || envelope.context.slot < 0
       || typeof envelope.value !== "object" || envelope.value === null) throw new Error("Solana returned an invalid simulation result");
-    const value = envelope.value as { err?: unknown; logs?: unknown; unitsConsumed?: unknown; fee?: unknown };
+    const value = envelope.value as {
+      err?: unknown;
+      logs?: unknown;
+      unitsConsumed?: unknown;
+      fee?: unknown;
+      accounts?: unknown;
+    };
     const allLogs = Array.isArray(value.logs) ? value.logs.filter((log): log is string => typeof log === "string") : [];
     const logs = (allLogs.length <= 20 ? allLogs : [...allLogs.slice(0, 10), ...allLogs.slice(-10)]).map((log) => log.slice(0, 240));
+    const feeLamports = typeof value.fee === "number" && Number.isSafeInteger(value.fee) && value.fee >= 0
+      ? value.fee
+      : null;
+    const simulationError = value.err ?? null;
+    const walletImpact = walletScope === undefined || walletBefore === null || simulationError !== null
+      ? { accountCreationFundingLamports: null, estimatedWalletOutflowLamports: null }
+      : simulatedWalletImpact(
+        walletBefore.value as number,
+        value.accounts,
+        feeLamports,
+        walletScope.solInputLamports,
+      );
     return {
       slot: envelope.context.slot,
-      err: value.err ?? null,
+      err: simulationError,
       logs,
       unitsConsumed: typeof value.unitsConsumed === "number" && Number.isSafeInteger(value.unitsConsumed) && value.unitsConsumed >= 0 ? value.unitsConsumed : null,
-      feeLamports: typeof value.fee === "number" && Number.isSafeInteger(value.fee) && value.fee >= 0 ? value.fee : null,
-      accountCreationFundingLamports: null,
+      feeLamports,
+      ...walletImpact,
     };
   }
 
@@ -1412,4 +1482,41 @@ function boundedInteger(value: unknown, minimum: number, maximum: number): numbe
 function safeRpcError(value: unknown): string {
   try { return JSON.stringify(value).slice(0, 500); }
   catch { return "Solana reported that the transaction failed"; }
+}
+
+function simulatedWalletImpact(
+  walletPreLamports: number,
+  accounts: unknown,
+  feeLamports: number | null,
+  solInputLamports: string | null,
+): Pick<RawSimulationResult, "accountCreationFundingLamports" | "estimatedWalletOutflowLamports"> {
+  if (!Array.isArray(accounts) || accounts.length !== 1) {
+    throw new Error("Solana simulation omitted the selected wallet balance evidence");
+  }
+  const wallet = accounts[0];
+  if (
+    typeof wallet !== "object"
+    || wallet === null
+    || !Number.isSafeInteger((wallet as { lamports?: unknown }).lamports)
+    || (wallet as { lamports: number }).lamports < 0
+  ) {
+    throw new Error("Solana returned invalid simulated wallet balance evidence");
+  }
+  const walletPostLamports = (wallet as { lamports: number }).lamports;
+  const totalOutflow = BigInt(Math.max(walletPreLamports - walletPostLamports, 0));
+  if (feeLamports === null) {
+    return {
+      accountCreationFundingLamports: null,
+      estimatedWalletOutflowLamports: totalOutflow.toString(),
+    };
+  }
+  const tradeInput = solInputLamports === null ? 0n : BigInt(solInputLamports);
+  const residual = totalOutflow - BigInt(feeLamports) - tradeInput;
+  if (residual > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error("Simulated account funding exceeds the supported range");
+  }
+  return {
+    accountCreationFundingLamports: Number(residual > 0n ? residual : 0n),
+    estimatedWalletOutflowLamports: totalOutflow.toString(),
+  };
 }

@@ -35,6 +35,26 @@ This checklist validates the packaged desktop application. Automated tests remai
    ```
 
 The launcher only starts the application. It does not configure credentials, approve, sign, or broadcast a transaction.
+It creates a host-path-free `manifest.json` bound to the executable SHA-256 and
+a `cases.json` template containing P2-01 through P2-09. Record only the bounded
+case status, UTC timestamp, public transaction signatures, relative screenshot
+names, and a short redacted note.
+
+Validate the evidence structure at any time:
+
+```powershell
+npm.cmd run qa:desktop:p2:validate -- artifacts/p2-windows/<timestamp>
+```
+
+After all cases pass, enforce the completion gate:
+
+```powershell
+npm.cmd run qa:desktop:p2:validate -- artifacts/p2-windows/<timestamp> --complete
+```
+
+The validator rejects build mismatches, host paths, unsafe artifact paths, and
+credential-shaped notes. Screenshots must still be inspected manually because
+image content is intentionally not parsed by the evidence tool.
 
 ### Application Control on unsigned QA builds
 
@@ -108,6 +128,9 @@ Record only status, timestamp, build hash, public address/signature, and redacte
 ### P2-09 — Fee and account-funding evidence
 
 - Confirm simulation separates network fee from token-account creation/rent funding.
+- Confirm estimated total SOL wallet outflow includes the SOL input, network fee, and account funding without treating token input as an additional SOL fee.
+- Repeat the exact final pre-sign simulation with a controlled higher account-funding or wallet-outflow fixture.
+- Expected: any increase above the reviewed values blocks before the vault signer opens.
 - Confirm fee is shown in lamports and SOL; USD and percentage appear when price evidence is available.
 - Confirm configured fee ceilings block execution before signing.
 

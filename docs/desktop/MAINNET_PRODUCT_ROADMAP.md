@@ -138,7 +138,7 @@ Still required:
 
 ## P2 — Remaining validation matrix
 
-Automated tests already cover both SOL→USDC and USDC→SOL simulation, insufficient SOL/SPL balance before construction, changed evidence before execution, unknown broadcast status, encrypted session persistence, and the final pre-sign re-simulation boundary. A timed-out Jupiter broadcast now persists the locally derived signature before returning an unknown receipt; subsequent checks are read-only and never rebroadcast. Do not duplicate those as wholly missing features.
+Automated tests already cover both SOL→USDC and USDC→SOL simulation, insufficient SOL/SPL balance before construction, changed evidence before execution, unknown broadcast status, encrypted session persistence, and the final pre-sign re-simulation boundary. A timed-out Jupiter broadcast now persists the locally derived signature before returning an unknown receipt; subsequent checks are read-only and never rebroadcast. Scoped Jupiter simulation also separates network fee, SOL input, residual account/rent funding, and total wallet outflow; missing evidence or a final increase blocks before signer access. Do not duplicate those as wholly missing features.
 
 Remaining validation work:
 
@@ -146,11 +146,11 @@ Remaining validation work:
 - **Portfolio reconciliation**: verify SOL, SPL balances, rent-bearing account creation, and receipt slot after restart.
 - **RPC timeout**: automated tests now prove bounded retry for read, simulation, and signature-verification calls, while a timed-out broadcast is attempted exactly once. Repeat these cases in the signed QA build.
 - **Unknown broadcast recovery**: encrypted restart persistence, signature-only recovery, friendly pending evidence, and the no-rebroadcast boundary are covered in code/tests. Re-run the complete path in the signed QA build.
-- **Fee ceiling**: prove excessive network fee and excessive fee percentage both block before signer access.
-- **Account-creation estimate**: prove first-time SPL receipt shows rent separately and a later swap does not incorrectly charge it again.
+- **Fee ceiling**: automated absolute-fee and percentage-fee tests prove both block before signer access; repeat them in the packaged Windows build.
+- **Account-creation estimate**: automated pre-sign wallet-impact evidence and final-increase blocking are complete. The packaged/live matrix must still prove first-time SPL rent separately and confirm a later swap does not incorrectly charge it again.
 - **Packaged application**: repeat the above critical paths in the signed Windows build, not only the development runtime.
 
-The packaged Windows procedure, isolated-profile launcher, evidence rules, and case-by-case pass criteria are documented in [Windows P2 Mainnet acceptance](P2_WINDOWS_ACCEPTANCE.md). Run `npm.cmd run qa:desktop:p2:win` only after producing the audited unpacked QA application; the launcher never configures, signs, approves, or broadcasts a transaction. The NSIS installer remains exclusive to the certificate-enforced production build.
+The packaged Windows procedure, isolated-profile launcher, build-bound evidence schema, evidence validator, and case-by-case pass criteria are documented in [Windows P2 Mainnet acceptance](P2_WINDOWS_ACCEPTANCE.md). Run `npm.cmd run qa:desktop:p2:win` only after producing the audited unpacked QA application; the launcher never configures, signs, approves, or broadcasts a transaction. The NSIS installer remains exclusive to the certificate-enforced production build. The code-complete versus manual boundary is summarized in [Phase 2 validation matrix](../PHASE_2_VALIDATION_MATRIX.md).
 
 For the constrained manual Solana MVP sequence, user-owned final approvals, and live-test evidence, use [Solana Desktop MVP acceptance](SOLANA_MVP_ACCEPTANCE.md).
 

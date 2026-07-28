@@ -230,6 +230,83 @@ test("fee guard blocks an excessive simulated fee before the signer can be reach
   assert.equal(result.broadcastAttempted, false);
 });
 
+test("P2 percentage fee ceiling blocks before signer access even below the absolute ceiling", async () => {
+  const transaction = unsignedTransaction("11111111111111111111111111111111");
+  const reads = passingReads(transaction, { slot: 2, err: null, logs: [], unitsConsumed: 500, feeLamports: 150_000 });
+  let signerAttempts = 0;
+  const wallets = {
+    withWalletSigner: async () => {
+      signerAttempts += 1;
+      throw new Error("signer must remain sealed");
+    },
+  } as unknown as WalletOnboardingService;
+  const settings = { get: () => ({ maxNetworkFeeLamports: 200_000, maxFeePercent: 0.1, defaultSlippageBps: 50, maxSlippageBps: 300, defaultDeadlineMinutes: 30, priority: "standard" as const }) };
+  const service = new MissionSimulationService(reads, wallets, settings);
+  const mission = missionFor(SELECTED_WALLET);
+  const simulation = await service.simulate(mission);
+  assert.equal(simulation.status, "blocked");
+  assert.equal(simulation.feeRisk, "extreme");
+  assert.equal(simulation.feeGuardPassed, false);
+  assert.match(simulation.feeGuardMessage ?? "", /0\.15%/u);
+  await assert.rejects(() => service.execute(mission, simulation.id), /approval expired/u);
+  assert.equal(signerAttempts, 0);
+});
+
+test("P2 simulation exposes account funding and estimated SOL wallet outflow separately", async () => {
+  const transaction = unsignedTransaction("11111111111111111111111111111111");
+  const reads = passingReads(transaction, {
+    slot: 2,
+    err: null,
+    logs: [],
+    unitsConsumed: 500,
+    feeLamports: 5_000,
+    accountCreationFundingLamports: 2_039_280,
+    estimatedWalletOutflowLamports: "102044280",
+  });
+  const result = await new MissionSimulationService(reads, WALLETS).simulate(missionFor(SELECTED_WALLET));
+  assert.equal(result.status, "passed");
+  assert.equal(result.feeLamports, 5_000);
+  assert.equal(result.accountFundingLamports, 2_039_280);
+  assert.equal(result.estimatedWalletOutflowLamports, "102044280");
+});
+
+test("P2 final wallet impact increase blocks before the vault signer is opened", async () => {
+  const signer = await createKeyPairSignerFromPrivateKeyBytes(Uint8Array.from({ length: 32 }, (_, index) => index + 1));
+  const mission = missionFor(signer.address);
+  const transaction = unsignedTransactionFor(signer.address, "11111111111111111111111111111111");
+  let simulationAttempts = 0;
+  let signerAttempts = 0;
+  const reads = {
+    portfolio: async () => ({ address: signer.address, slot: 1, solBalance: "1000000000", solUsdPrice: 150, totalUsd: 150, assets: [], verifiedAt: new Date().toISOString() }),
+    swapQuote: async () => ({ inputMint: SOL, outputMint: USDC, inAmount: mission.inputAmount, outAmount: "15000000", router: "metis", mode: "ultra", feeBps: 2, feeMint: SOL, quoteOnly: true as const, verifiedAt: new Date().toISOString() }),
+    buildUnsignedSwapOrder: async () => ({ transaction, requestId: "private-order-id", lastValidBlockHeight: "12345", outAmount: "15000000", router: "metis", mode: "ultra" }),
+    simulateUnsignedTransaction: async () => {
+      simulationAttempts += 1;
+      return {
+        slot: simulationAttempts,
+        err: null,
+        logs: [],
+        unitsConsumed: 500,
+        feeLamports: 5_000,
+        accountCreationFundingLamports: simulationAttempts === 1 ? 2_039_280 : 3_039_280,
+        estimatedWalletOutflowLamports: simulationAttempts === 1 ? "102044280" : "103044280",
+      };
+    },
+  } as unknown as MainnetReadService;
+  const wallets = {
+    withWalletSigner: async () => {
+      signerAttempts += 1;
+      throw new Error("signer must remain sealed");
+    },
+  } as unknown as WalletOnboardingService;
+  const service = new MissionSimulationService(reads, wallets);
+  const simulation = await service.simulate(mission);
+  assert.equal(simulation.status, "passed");
+  await assert.rejects(() => service.execute(mission, simulation.id), /account funding exceeds the reviewed simulation/u);
+  assert.equal(simulationAttempts, 2);
+  assert.equal(signerAttempts, 0);
+});
+
 test("mission simulation blocks a transaction containing a non-allowlisted program before RPC simulation", async () => {
   let simulated = false;
   const transaction = unsignedTransaction("Vote111111111111111111111111111111111111111");
@@ -593,7 +670,15 @@ test("mission simulation blocks when network fee exceeds configured ceiling", as
   assert.match(result.error ?? "", /Fee guard/i);
 });
 
-function passingReads(transaction: string, simulation: { slot: number; err: unknown; logs: string[]; unitsConsumed: number; feeLamports: number } | null, onSimulate?: () => void): MainnetReadService {
+function passingReads(transaction: string, simulation: {
+  slot: number;
+  err: unknown;
+  logs: string[];
+  unitsConsumed: number;
+  feeLamports: number;
+  accountCreationFundingLamports?: number | null;
+  estimatedWalletOutflowLamports?: string | null;
+} | null, onSimulate?: () => void): MainnetReadService {
   return {
     portfolio: async () => ({ address: SELECTED_WALLET, slot: 1, solBalance: "1000000000", solUsdPrice: 150, totalUsd: 150, assets: [], verifiedAt: new Date().toISOString() }),
     swapQuote: async () => ({ inputMint: SOL, outputMint: USDC, inAmount: "100000000", outAmount: "15000000", router: "metis", mode: "ultra", feeBps: 2, feeMint: SOL, quoteOnly: true as const, verifiedAt: new Date().toISOString() }),

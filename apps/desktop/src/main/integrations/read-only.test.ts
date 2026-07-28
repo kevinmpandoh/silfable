@@ -270,6 +270,95 @@ test("unsigned simulation uses replaceable blockhash without signature verificat
   assert.equal(simulation.err, null);
 });
 
+test("scoped unsigned simulation separates account funding from SOL input and network fee", async () => {
+  const transaction = Buffer.from([1, 2, 3]).toString("base64");
+  const requests: Array<{ method?: string; params?: unknown[] }> = [];
+  const service = new MainnetReadService({
+    secrets: new Secrets(),
+    wallets: { listWallets: async () => [] },
+    fetch: async (_input, init) => {
+      const request = JSON.parse(String(init?.body)) as { method?: string; params?: unknown[] };
+      requests.push(request);
+      if (request.method === "getBalance") {
+        return Response.json({ jsonrpc: "2.0", id: 1, result: { context: { slot: 120 }, value: 100_000_000 } });
+      }
+      return Response.json({
+        jsonrpc: "2.0",
+        id: 2,
+        result: {
+          context: { slot: 123 },
+          value: {
+            err: null,
+            logs: [],
+            unitsConsumed: 10,
+            fee: 5_000,
+            accounts: [{ lamports: 96_955_720, data: ["", "base64"], owner: WALLET, executable: false, rentEpoch: 0 }],
+          },
+        },
+      });
+    },
+  });
+  const simulation = await service.simulateUnsignedTransaction(transaction, {
+    walletAddress: WALLET,
+    solInputLamports: "1000000",
+  });
+  assert.deepEqual(requests.map((request) => request.method), ["getBalance", "simulateTransaction"]);
+  assert.deepEqual((requests[1]?.params?.[1] as { accounts?: unknown; minContextSlot?: unknown }), {
+    encoding: "base64",
+    commitment: "confirmed",
+    replaceRecentBlockhash: true,
+    sigVerify: false,
+    innerInstructions: true,
+    minContextSlot: 120,
+    accounts: { encoding: "base64", addresses: [WALLET] },
+  });
+  assert.equal(simulation.feeLamports, 5_000);
+  assert.equal(simulation.accountCreationFundingLamports, 2_039_280);
+  assert.equal(simulation.estimatedWalletOutflowLamports, "3044280");
+});
+
+test("scoped unsigned simulation blocks when RPC omits post-simulation wallet evidence", async () => {
+  const transaction = Buffer.from([1, 2, 3]).toString("base64");
+  const service = new MainnetReadService({
+    secrets: new Secrets(),
+    wallets: { listWallets: async () => [] },
+    fetch: async (_input, init) => {
+      const request = JSON.parse(String(init?.body)) as { method?: string };
+      return request.method === "getBalance"
+        ? Response.json({ jsonrpc: "2.0", id: 1, result: { context: { slot: 120 }, value: 100_000_000 } })
+        : Response.json({ jsonrpc: "2.0", id: 2, result: { context: { slot: 123 }, value: { err: null, logs: [], unitsConsumed: 10, fee: 5_000 } } });
+    },
+  });
+  await assert.rejects(
+    () => service.simulateUnsignedTransaction(transaction, {
+      walletAddress: WALLET,
+      solInputLamports: null,
+    }),
+    /omitted the selected wallet balance evidence/u,
+  );
+});
+
+test("scoped unsigned simulation preserves a program failure even when post-balance evidence is absent", async () => {
+  const transaction = Buffer.from([1, 2, 3]).toString("base64");
+  const service = new MainnetReadService({
+    secrets: new Secrets(),
+    wallets: { listWallets: async () => [] },
+    fetch: async (_input, init) => {
+      const request = JSON.parse(String(init?.body)) as { method?: string };
+      return request.method === "getBalance"
+        ? Response.json({ jsonrpc: "2.0", id: 1, result: { context: { slot: 120 }, value: 100_000_000 } })
+        : Response.json({ jsonrpc: "2.0", id: 2, result: { context: { slot: 123 }, value: { err: { InstructionError: [2, "Custom"] }, logs: [], unitsConsumed: 10, fee: 5_000 } } });
+    },
+  });
+  const simulation = await service.simulateUnsignedTransaction(transaction, {
+    walletAddress: WALLET,
+    solInputLamports: null,
+  });
+  assert.deepEqual(simulation.err, { InstructionError: [2, "Custom"] });
+  assert.equal(simulation.accountCreationFundingLamports, null);
+  assert.equal(simulation.estimatedWalletOutflowLamports, null);
+});
+
 test("Jupiter execution posts a signed transaction and request id without leaking the API key", async () => {
   const secrets = new Secrets();
   secrets.values.set("jupiter-api-key", "jupiter-private-key");

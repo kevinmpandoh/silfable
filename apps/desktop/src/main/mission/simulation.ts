@@ -1,7 +1,7 @@
 import { getCompiledTransactionMessageDecoder, getSignatureFromTransaction, getTransactionDecoder, getTransactionEncoder, partiallySignTransaction } from "@solana/kit";
 import { MissionExecutionReceiptSchema, MissionSimulationPreviewSchema, type MissionContractPreview, type MissionExecutionReceipt, type MissionSimulationPreview, type TransactionSettings } from "@silfable/contracts";
 
-import type { MainnetReadService, SignatureVerification, TransactionSettlement, UnsignedSwapOrder } from "../integrations/read-only.js";
+import type { MainnetReadService, RawSimulationResult, SignatureVerification, TransactionSettlement, UnsignedSwapOrder } from "../integrations/read-only.js";
 import { allowedSolanaPrograms } from "../security/solana-program-policy.js";
 import { writeSafeAuditLog } from "../telemetry/safe-audit-log.js";
 import type { WalletOnboardingService } from "../wallet/onboarding.js";
@@ -16,7 +16,14 @@ export class MissionSimulationService {
   readonly #reads: MainnetReadService;
   readonly #wallets: WalletOnboardingService;
   readonly #settings: Pick<TransactionSettingsService, "get">;
-  readonly #prepared = new Map<string, { mission: MissionContractPreview; order: UnsignedSwapOrder; settings: TransactionSettings; expiresAt: number }>();
+  readonly #prepared = new Map<string, {
+    mission: MissionContractPreview;
+    order: UnsignedSwapOrder;
+    settings: TransactionSettings;
+    accountFundingLamports: number | null;
+    estimatedWalletOutflowLamports: string | null;
+    expiresAt: number;
+  }>();
 
   constructor(reads: MainnetReadService, wallets: WalletOnboardingService, settings: Pick<TransactionSettingsService, "get"> = { get: () => ({ ...DEFAULT_TRANSACTION_SETTINGS }) }) {
     this.#reads = reads;
@@ -38,13 +45,20 @@ export class MissionSimulationService {
       const minimumOut = BigInt(refreshed.quote.outAmount) * BigInt(10_000 - mission.maxSlippageBps) / 10_000n;
       if (BigInt(order.outAmount) < minimumOut) return result(base, "blocked", order.router, order.outAmount, [], null, null, [], "Unsigned order output fell below the mission slippage floor.");
       const programIds = inspectUnsignedTransaction(order.transaction, mission.walletAddress);
-      const simulation = await this.#reads.simulateUnsignedTransaction(order.transaction);
+      const simulation = await this.#reads.simulateUnsignedTransaction(order.transaction, simulationWalletScope(mission));
+      const walletImpact = simulationWalletImpact(simulation);
       const fee = await evaluateFeeGuard(this.#reads, { get: () => sessionSettings }, mission, simulation.feeLamports);
-      if (simulation.err !== null) return result(base, "failed", order.router, order.outAmount, programIds, simulation.unitsConsumed, simulation.feeLamports, simulation.logs, `Simulation failed: ${safeJson(simulation.err)}`, fee);
-      if (!fee.feeGuardPassed) return result(base, "blocked", order.router, order.outAmount, programIds, simulation.unitsConsumed, simulation.feeLamports, simulation.logs, fee.feeGuardMessage ?? "Fee guard blocked execution.", fee);
+      if (simulation.err !== null) return result(base, "failed", order.router, order.outAmount, programIds, simulation.unitsConsumed, simulation.feeLamports, simulation.logs, `Simulation failed: ${safeJson(simulation.err)}`, fee, walletImpact);
+      if (!fee.feeGuardPassed) return result(base, "blocked", order.router, order.outAmount, programIds, simulation.unitsConsumed, simulation.feeLamports, simulation.logs, fee.feeGuardMessage ?? "Fee guard blocked execution.", fee, walletImpact);
       this.#purgeExpired();
-      this.#prepared.set(base.id, { mission, order, settings: sessionSettings, expiresAt: Date.now() + 90_000 });
-      return result(base, "passed", order.router, order.outAmount, programIds, simulation.unitsConsumed, simulation.feeLamports, simulation.logs, null, fee);
+      this.#prepared.set(base.id, {
+        mission,
+        order,
+        settings: sessionSettings,
+        ...walletImpact,
+        expiresAt: Date.now() + 90_000,
+      });
+      return result(base, "passed", order.router, order.outAmount, programIds, simulation.unitsConsumed, simulation.feeLamports, simulation.logs, null, fee, walletImpact);
     } catch (error) {
       return result(base, "blocked", null, null, [], null, null, [], error instanceof Error ? error.message.slice(0, 500) : "Simulation was blocked safely.");
     }
@@ -65,12 +79,13 @@ export class MissionSimulationService {
     const minimumOut = BigInt(refreshed.quote.outAmount) * BigInt(10_000 - mission.maxSlippageBps) / 10_000n;
     if (BigInt(prepared.order.outAmount) < minimumOut) throw new Error("Approved transaction is now below the mission slippage floor");
     inspectUnsignedTransaction(prepared.order.transaction, mission.walletAddress);
-    const finalSimulation = await this.#reads.simulateUnsignedTransaction(prepared.order.transaction);
+    const finalSimulation = await this.#reads.simulateUnsignedTransaction(prepared.order.transaction, simulationWalletScope(mission));
     if (finalSimulation.err !== null) {
       throw new Error(`${friendlySwapFailure(prepared.order.router, safeJson(finalSimulation.err), finalSimulation.logs)} No transaction was signed or broadcast.`);
     }
     const finalFee = await evaluateFeeGuard(this.#reads, { get: () => prepared.settings }, mission, finalSimulation.feeLamports);
     if (!finalFee.feeGuardPassed) throw new Error(`${finalFee.feeGuardMessage ?? "Fee guard blocked execution."} No transaction was signed or broadcast.`);
+    assertFinalWalletImpact(prepared, simulationWalletImpact(finalSimulation));
     const decoded = getTransactionDecoder().decode(Buffer.from(prepared.order.transaction, "base64"));
     const signedTransaction = await this.#wallets.withWalletSigner(mission.walletAddress, async (signer) => {
       const signed = await partiallySignTransaction([signer.keyPair], decoded);
@@ -207,11 +222,70 @@ function result(
   status: MissionSimulationPreview["status"], router: string | null, expectedOutAmount: string | null, programIds: string[],
   unitsConsumed: number | null, feeLamports: number | null, logs: string[], error: string | null,
   fee: FeeEvaluation = unavailableFee("Network fee is unavailable."),
+  walletImpact: SimulationWalletImpact = {
+    accountFundingLamports: null,
+    estimatedWalletOutflowLamports: null,
+  },
 ): MissionSimulationPreview {
-  return MissionSimulationPreviewSchema.parse({ ...base, status, router, expectedOutAmount, programIds, unitsConsumed, feeLamports, logs, error, ...fee });
+  return MissionSimulationPreviewSchema.parse({
+    ...base,
+    status,
+    router,
+    expectedOutAmount,
+    programIds,
+    unitsConsumed,
+    feeLamports,
+    logs,
+    error,
+    ...fee,
+    ...walletImpact,
+  });
 }
 
 type FeeEvaluation = Pick<MissionSimulationPreview, "feeSol" | "feeUsd" | "feePercent" | "feeRisk" | "feeGuardPassed" | "feeGuardMessage">;
+type SimulationWalletImpact = {
+  accountFundingLamports: number | null;
+  estimatedWalletOutflowLamports: string | null;
+};
+
+function simulationWalletScope(mission: MissionContractPreview): {
+  walletAddress: string;
+  solInputLamports: string | null;
+} {
+  return {
+    walletAddress: mission.walletAddress,
+    solInputLamports: mission.inputMint === SOL_MINT ? mission.inputAmount : null,
+  };
+}
+
+function simulationWalletImpact(simulation: RawSimulationResult): SimulationWalletImpact {
+  return {
+    accountFundingLamports: simulation.accountCreationFundingLamports ?? null,
+    estimatedWalletOutflowLamports: simulation.estimatedWalletOutflowLamports ?? null,
+  };
+}
+
+function assertFinalWalletImpact(
+  reviewed: SimulationWalletImpact,
+  current: SimulationWalletImpact,
+): void {
+  if (reviewed.accountFundingLamports !== null) {
+    if (current.accountFundingLamports === null) {
+      throw new Error("Final account-funding evidence is unavailable. No transaction was signed or broadcast.");
+    }
+    if (current.accountFundingLamports > reviewed.accountFundingLamports) {
+      throw new Error("Final account funding exceeds the reviewed simulation. Run a new simulation before signing.");
+    }
+  }
+  if (reviewed.estimatedWalletOutflowLamports !== null) {
+    if (current.estimatedWalletOutflowLamports === null) {
+      throw new Error("Final wallet-outflow evidence is unavailable. No transaction was signed or broadcast.");
+    }
+    if (BigInt(current.estimatedWalletOutflowLamports) > BigInt(reviewed.estimatedWalletOutflowLamports)) {
+      throw new Error("Final wallet outflow exceeds the reviewed simulation. Run a new simulation before signing.");
+    }
+  }
+}
 
 async function evaluateFeeGuard(reads: MainnetReadService, service: Pick<TransactionSettingsService, "get">, mission: MissionContractPreview, feeLamports: number | null): Promise<FeeEvaluation> {
   if (feeLamports === null) return unavailableFee("Network fee could not be verified, so execution is blocked.");

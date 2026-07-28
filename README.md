@@ -40,12 +40,12 @@ Settings reopens the review screen so each section can be edited and then return
 
 ## Windows release gates
 
-- `npm run dist:desktop:win:qa` creates an unsigned Windows x64 NSIS installer for internal QA, audits its PE/ASAR contents, and writes `SHA256SUMS.txt`.
+- `npm run dist:desktop:win:qa` creates and audits an unsigned Windows x64 unpacked application for internal QA. It intentionally does not create an unsigned NSIS installer.
 - `npm run dist:desktop:win` is the production path. It requires `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD`, enables electron-builder `forceCodeSigning`, audits the package, and generates checksums.
 - Windows QA launches the packaged executable with an isolated profile and verifies that the React renderer and restricted preload bridge start successfully.
 - The signed-release workflow additionally requires a valid Authenticode result. Certificates and passwords are supplied through CI secrets and never committed.
 
-See [the Phase 0 baseline](docs/PHASE_0_BASELINE.md), [Phase 1 production hardening](docs/PHASE_1_PRODUCTION_HARDENING.md), [the venue product architecture](docs/VENUE_PRODUCT_ARCHITECTURE.md), and [the current desktop architecture](docs/desktop/MAINNET_DESKTOP_ARCHITECTURE.md) before adding privileged capabilities.
+See [the Phase 0 baseline](docs/PHASE_0_BASELINE.md), [Phase 1 production hardening](docs/PHASE_1_PRODUCTION_HARDENING.md), [Phase 2 validation matrix](docs/PHASE_2_VALIDATION_MATRIX.md), [the venue product architecture](docs/VENUE_PRODUCT_ARCHITECTURE.md), and [the current desktop architecture](docs/desktop/MAINNET_DESKTOP_ARCHITECTURE.md) before adding privileged capabilities.
 
 Future work is tracked in the [prioritized Mainnet product roadmap](docs/desktop/MAINNET_PRODUCT_ROADMAP.md). It places fee and state correctness, security review, recovery, and signed-release gates ahead of scheduled or autonomous trading features.
 
