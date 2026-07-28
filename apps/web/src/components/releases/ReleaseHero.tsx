@@ -11,7 +11,7 @@ export function ReleaseHero() {
           <div>
             <div className="flex flex-wrap items-center gap-3">
               <Badge>Linux preview</Badge>
-              <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/35">Release pending</span>
+              <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/35">Preview artifacts available</span>
             </div>
             <h1 className="mt-8 font-serif text-[clamp(4.5rem,11vw,11rem)] leading-[0.75] tracking-[-0.07em]">
               Silfable <em className="block pl-[8vw] text-electric">0.1.0</em>
@@ -19,7 +19,7 @@ export function ReleaseHero() {
           </div>
           <div className="border-t border-white/15 pt-7 lg:mb-2">
             <p className="text-lg leading-8 text-white/60">
-              Safer mission recovery, faster policy compilation, and clearer proof for every rejected route.
+              A Linux preview of the restricted Mainnet foundation. Download availability does not mean every venue has production clearance.
             </p>
             <div className="mt-7 flex flex-wrap gap-x-6 gap-y-3 font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">
               <span className="flex items-center gap-2"><CheckCircle2 className="size-3.5 text-emerald-400" /> AppImage</span>

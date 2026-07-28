@@ -17,7 +17,7 @@ const articles = [
     title: "Prove",
     statement: (
       <>
-        Every decision leaves <em className="font-serif text-electric">a receipt</em> you can inspect, replay, and verify.
+        Every supported action leaves <em className="font-serif text-electric">a receipt</em> you can inspect and independently verify.
       </>
     ),
   },
@@ -26,7 +26,7 @@ const articles = [
     title: "Local",
     statement: (
       <>
-        Your keys and strategy stay <em className="font-serif text-electric">on your machine</em>, not ours.
+        Signing stays in your <em className="font-serif text-electric">local vault or connected wallet</em>, not with the AI.
       </>
     ),
   },
@@ -63,7 +63,7 @@ export function ValueProps() {
             transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
             className="max-w-[1320px] font-serif text-[clamp(3.1rem,7.1vw,7.6rem)] leading-[0.96] font-normal tracking-[-0.055em]"
           >
-            Not a blind bot. A guarded trading workspace where the agent can reason, preview, and execute only through boundaries you define.
+            Not a blind bot. A guarded workspace where AI drafts the proposal and deterministic services decide whether it may reach your approval.
           </motion.h2>
         </motion.div>
 

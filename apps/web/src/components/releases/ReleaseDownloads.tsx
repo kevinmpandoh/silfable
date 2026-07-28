@@ -18,7 +18,7 @@ export function ReleaseDownloads() {
           <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-electric">Artifacts / 0.1.0</p>
           <h2 className="mt-5 font-serif text-5xl tracking-[-0.05em] sm:text-6xl">Downloads</h2>
         </div>
-        <p className="max-w-md text-sm leading-7 text-black/50">Linux ships first as AppImage and Debian packages. macOS and Windows builds are coming soon.</p>
+        <p className="max-w-md text-sm leading-7 text-black/50">Linux preview artifacts are available as AppImage and Debian packages. They are evaluation builds; venue-specific Mainnet release gates still apply.</p>
       </div>
 
       <Table className="min-w-[50rem]">

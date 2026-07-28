@@ -14,15 +14,16 @@ import {
 export const metadata: Metadata = {
   title: "Whitepaper - Silfable",
   description:
-    "Silfable whitepaper covering the restricted Mainnet architecture, current execution scope, web and desktop differences, and Pump.fun roadmap.",
+    "Silfable whitepaper covering restricted Mainnet architecture, venue-specific release gates, web and desktop authority, Token Launch, Solana Swap, EVM Swap, and Bridge.",
 };
 
 const statusRows = [
-  ["Live", "Restricted Jupiter swap", "Solana Mainnet swap preview, deterministic simulation, wallet approval, broadcast, and verified receipt generation."],
+  ["Release-gated", "Jupiter Solana Swap", "Guarded desktop quote, policy, unsigned simulation, local approval, one-attempt broadcast, and receipt recovery are implemented. Final release acceptance remains."],
+  ["Release-gated", "Pump.fun Token Launch", "Restricted SOL-paired, zero-initial-buy desktop create_v2 path is implemented. Controlled Mainnet acceptance and security review remain."],
+  ["Pilot", "Robinhood Chain EVM Swap", "Wallet-scoped Mission chat, 0x firm quote, exact allowance, preflight, local signing, and receipt recovery are implemented but production-locked."],
+  ["Quote only", "Bridge", "Route review may be prepared, but no bridge signer or broadcast path exists."],
   ["Preview", "Cloud Monitor", "Background monitoring and proposal infrastructure without signing or Mainnet broadcast authority."],
-  ["Live", "Centralized State Sync", "User settings, active sessions, and trading histories synced across high-availability Cloud Storage for persistent cross-platform access."],
-  ["Preview", "Pump.fun Guarded Research", "Read-only intelligence, bounded discovery, proposal building, simulation, and receipt foundations. Web broadcast is disabled."],
-  ["Planned", "Cross-Chain EVM", "Layer-2 EVM bridging, execution, and Hyperliquid integrations remain in the planning phase."],
+  ["Unavailable", "Autonomous and Full Access", "No cloud signer, approval bypass, unattended trading, or Hyperliquid execution is production-authorized."],
 ] as const;
 
 const principles = [
@@ -56,10 +57,10 @@ export default function WhitepaperPage() {
           <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-electric">Whitepaper / v0.2.0</p>
           <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_0.48fr] lg:items-end">
             <h1 className="max-w-5xl font-serif text-6xl font-normal leading-[0.9] tracking-normal sm:text-7xl lg:text-8xl">
-              Guarded AI trading for Solana Mainnet.
+              Guarded AI-assisted execution across explicit Mainnet lanes.
             </h1>
             <p className="max-w-lg text-base leading-8 text-black/55 lg:justify-self-end">
-              An early-stage, open-source, Solana-first project exploring how AI agents, human users, restricted wallet approvals, cloud monitoring, and deterministic security boundaries can coordinate through a modular execution environment.
+              An early-stage, open-source project separating AI reasoning, venue policy, signing authority, and settlement evidence across Solana and carefully scoped EVM workflows.
             </p>
           </div>
         </div>
@@ -71,7 +72,7 @@ export default function WhitepaperPage() {
           <div className="space-y-6 text-sm leading-7 text-black/70">
             <p className="font-medium text-black">Silfable is an early-stage open-source project.</p>
             <p>
-              This document describes its current architecture, live components, development principles, security models, and roadmap. Some components described in this document are already represented in production-ready Solana Mainnet execution via Jupiter Swap. Other components remain planned, experimental, or dependent on future technical and security development.
+              This document distinguishes implemented code from production clearance. Guarded transaction paths exist, but each venue remains subject to its own signed-build, controlled Mainnet acceptance, recovery, and security gates. A preview artifact or passing simulation is not blanket production approval.
             </p>
             <p>Silfable is not currently:</p>
             <ul className="list-disc pl-5 space-y-2">
@@ -103,8 +104,8 @@ export default function WhitepaperPage() {
             <ul className="list-decimal pl-5 space-y-4 text-black">
               <li><strong>Intent-based research, deterministic execution:</strong> The AI may analyze markets and draft actions, but supported transactions must pass strict, hard-coded deterministic policy checks before execution.</li>
               <li><strong>Separated transaction authority:</strong> Desktop keys remain in the local encrypted vault; web signing remains in the connected browser wallet.</li>
-              <li><strong>Transparent Execution Receipts:</strong> Every quote, simulation, confirmation, rejection, and failure should be readable, verified on-chain, and persistently synced via encrypted cloud database.</li>
-              <li><strong>Restricted execution:</strong> Every production web transaction requires explicit browser-wallet approval. Full Access cloud execution is unavailable.</li>
+              <li><strong>Transparent Execution Receipts:</strong> Every quote, simulation, confirmation, rejection, and failure should be readable and independently reconciled. Desktop receipts remain encrypted locally.</li>
+              <li><strong>Restricted execution:</strong> Every supported web transaction requires explicit browser-wallet approval. Full Access cloud execution is unavailable.</li>
               <li><strong>Wallet-scoped authentication:</strong> Web access requires an expiring, one-time wallet challenge signature. It authenticates the workspace but never authorizes a transaction.</li>
             </ul>
           </div>
@@ -169,10 +170,10 @@ export default function WhitepaperPage() {
             </p>
             <p>A request may be expressed as:</p>
             <div className="bg-white border border-black/10 p-5 font-mono text-[11px] text-electric space-y-2">
-              <p>&gt; &ldquo;Monitor finalized Solana activity for tokens under $10M market cap and propose a $10 DCA entry.&rdquo;</p>
+              <p>&gt; &ldquo;Draft the immutable metadata and bounded fee plan for a Pump.fun Token Launch.&rdquo;</p>
               <p>&gt; &ldquo;Prepare a USDC-to-SOL swap proposal with slippage capped at 1%.&rdquo;</p>
             </div>
-            <p>Silfable aims to perfectly coordinate the human requester, the AI intelligence provider (LLM), the deterministic policy engine, the ephemeral wallet, the Solana program, and the resulting receipt.</p>
+            <p>Silfable coordinates the human requester, AI provider, deterministic venue policy, local or browser-wallet signer, network-specific protocol, and independently verified receipt without treating AI output as transaction authority.</p>
           </div>
         </div>
       </section>
@@ -226,16 +227,16 @@ export default function WhitepaperPage() {
 
       <section className="border-b border-black/15 bg-black/[0.02]">
         <div className="section-shell grid gap-10 py-16 lg:grid-cols-[18rem_1fr] lg:py-20">
-          <SectionLabel number="07" title="Pump.fun Roadmap" />
+          <SectionLabel number="07" title="Venue Model" />
           <div>
             <p className="max-w-3xl text-lg leading-8 text-black/60">
-              Pump.fun introduces unique risks due to extreme volatility, frequent rug-pulls, and custom bonding-curve smart contracts. Live execution remains in preview until the following gates are met.
+              Pump.fun is the Token Launch lane, not a generic AI auto-trading venue. Existing assets swap through Jupiter on Solana; the restricted EVM pilot uses a pinned Robinhood Chain and 0x configuration; Bridge remains a separate quote-only lifecycle.
             </p>
             <div className="mt-10 grid gap-4 md:grid-cols-3">
               {[
-                ["Preview", "Token discovery, mint validation, spend limits, take profit, stop loss, and DCA settings."],
-                ["Guard", "Program allowlist, transaction inspection, fee ceiling, slippage bounds, rent visibility, and route freshness."],
-                ["Execute", "Explicit final approval, wallet-adapter signing, broadcast reconciliation, and persisted success or failure receipt."],
+                ["Token Launch", "AI may help draft public metadata, but the user confirms exact immutable content, creator wallet, fee caps, and the final launch approval."],
+                ["Swap", "Solana and EVM swaps use separate typed contracts, provider evidence, policy, signer boundaries, and receipt recovery."],
+                ["Bridge", "Cross-chain review separates source and destination state. Signing and broadcast stay disabled until bridge-specific recovery is complete."],
               ].map(([title, text]) => (
                 <div key={title} className="border-t border-black/20 pt-5">
                   <h3 className="font-serif text-2xl font-normal tracking-normal">{title}</h3>
@@ -254,13 +255,13 @@ export default function WhitepaperPage() {
             <div className="border border-black/15 p-6 bg-white">
               <h2 className="font-serif text-3xl font-normal tracking-normal">Desktop</h2>
               <p className="mt-4 text-sm leading-7 text-black/55">
-                Best for local vault workflows, encrypted receipts, main setup, and stricter machine-level control. It is the reference surface for production hardening.
+                The reference surface for encrypted local-vault signing, guarded Jupiter Swap, Pump.fun Token Launch, and the release-locked Robinhood Chain/0x pilot.
               </p>
             </div>
             <div className="border border-black/15 p-6 bg-white">
               <h2 className="font-serif text-3xl font-normal tracking-normal">Web</h2>
               <p className="mt-4 text-sm leading-7 text-black/55">
-                Best for browser-wallet restricted execution, cloud-backed state synchronization, and shared UI parity. Autonomous cloud signing is not available.
+                Uses the single connected browser wallet for approval. It does not collect a secret key and does not yet provide execution parity with every desktop venue.
               </p>
             </div>
           </div>

@@ -2,23 +2,18 @@ import { AlertTriangle, ArrowRight, Check, KeyRound, Monitor, ShieldCheck, Termi
 
 import { CodeBlock } from "@/components/docs/CodeBlock";
 
-const deskRuleExample = `mission: rebalance_silf_usdc
-market: SOL / USDC
-max_position: $2,500.00
-max_slippage: 0.40%
-daily_loss: -$180.00
-require: verified_liquidity
-on_violation: HALT + NOTIFY`;
-
-const cliExample = `silfable mission create ./missions/rebalance.yaml
-silfable rule apply ./rules/desk-rule.silf
-silfable mission start rebalance_silf_usdc
-silfable receipts tail --mission rebalance_silf_usdc`;
+const deskRuleExample = `network: mainnet
+permission: restricted
+max_slippage_bps: 50
+max_network_fee_lamports: 250000
+priority: economy
+deadline_minutes: 30
+on_unknown_state: BLOCK`;
 
 const concepts = [
-  { icon: TerminalSquare, title: "Agent", text: "The local AI operator that evaluates conditions and proposes actions." },
-  { icon: ArrowRight, title: "Mission", text: "A measurable objective, stop condition, and execution scope." },
-  { icon: ShieldCheck, title: "Desk Rule", text: "The non-negotiable policy checked before every signed action." },
+  { icon: TerminalSquare, title: "Agent", text: "Researches, explains, and drafts typed proposals without receiving signing authority." },
+  { icon: ArrowRight, title: "Session", text: "Locks a wallet network and preserves conversation, proposal, and receipt history." },
+  { icon: ShieldCheck, title: "Policy gate", text: "Validates identity, amount, fee, route, freshness, and venue allowlists before approval." },
 ];
 
 export function DocsContent() {
@@ -30,7 +25,7 @@ export function DocsContent() {
           Silfable documentation
         </h1>
         <p className="mt-9 max-w-2xl text-lg leading-8 text-black/55">
-          Silfable is a guarded AI trading workspace for Solana Mainnet. It separates reasoning from execution authority, so the agent can plan and preview actions without receiving unlimited control.
+          Silfable is a guarded Mainnet workspace for AI-assisted Token Launch, Solana swaps, EVM swap pilots, and cross-chain route review. Reasoning, deterministic policy, signing, and receipt verification remain separate authorities.
         </p>
         <div className="mt-10 grid border-t border-l border-black/15 sm:grid-cols-3">
           {["Mainnet only", "Policy enforced", "Receipt recorded"].map((item) => (
@@ -43,13 +38,13 @@ export function DocsContent() {
 
       <section id="quick-start" className="scroll-mt-36 border-b border-black/15 py-16">
         <DocHeading number="01" title="Quick start" />
-        <p className="doc-lead">Open the desktop app or web workspace, connect a Solana wallet, configure providers, then start a restricted Mainnet session.</p>
+        <p className="doc-lead">Choose the surface that owns signing, configure only the providers required by your wallet network, then start a restricted Mainnet session.</p>
         <ol className="mt-10 space-y-7">
           {[
-            ["Install", "Use the desktop build for local vault workflows, or open the web trade workspace for browser-wallet approval."],
-            ["Connect", "Connect one Solana Mainnet wallet. Web sessions use the connected wallet as the only visible wallet."],
-            ["Configure", "Add RPC, Jupiter, Tavily, and OpenRouter settings as needed. Pump.fun settings are saved for preview and future guards."],
-            ["Run", "Create a restricted session, review the proposal, approve supported actions, and inspect the receipt stream."],
+            ["Choose", "Use desktop for encrypted local-vault signing. Use web for the single connected browser wallet and explicit wallet approval."],
+            ["Configure", "Desktop stores wallet, RPC, Jupiter or 0x credentials, inference provider, and global transaction limits in Settings."],
+            ["Create", "Select a Solana or supported EVM wallet network. The task you enter determines the typed proposal; session creation does not authorize a transaction."],
+            ["Review", "Inspect exact assets, amount, route, simulation, fees, and freshness. Approve only a supported lane and verify its persisted receipt."],
           ].map(([title, text], index) => (
             <li key={title} className="grid gap-3 border-t border-black/10 pt-6 sm:grid-cols-[3rem_8rem_1fr]">
               <span className="font-mono text-[9px] text-electric">{String(index + 1).padStart(2, "0")}</span>
@@ -78,9 +73,9 @@ export function DocsContent() {
       </section>
 
       <section id="desk-rule" className="scroll-mt-36 border-b border-black/15 py-16">
-        <DocHeading number="03" title="Desk Rule" />
-        <p className="doc-lead">Policy is evaluated before signing. A mission may reason freely, but it cannot negotiate or rewrite these limits.</p>
-        <CodeBlock label="desk-rule.silf" code={deskRuleExample} />
+        <DocHeading number="03" title="Transaction settings" />
+        <p className="doc-lead">Global limits are evaluated before signing. The AI and the session cannot silently raise these values or bypass a blocked venue.</p>
+        <CodeBlock label="illustrative settings" code={deskRuleExample} />
         <div className="border-l-2 border-electric bg-blue-50 p-5 text-sm leading-7 text-blue-950">
           Rules use deny-by-default semantics. If a proposed action cannot be proven compliant, Silfable rejects it before signing.
         </div>
@@ -91,11 +86,11 @@ export function DocsContent() {
         <p className="doc-lead">Every session moves through explicit states. State changes are written to its receipt stream.</p>
         <div className="mt-10 space-y-0 border-t border-black/15">
           {[
-            ["Draft", "Objective and policy are editable."],
-            ["Compiled", "The runtime validates dependencies and Desk Rule syntax."],
-            ["Previewed", "The agent prepares a quote, plan, or Pump.fun preview."],
-            ["Approved", "A supported transaction receives explicit user approval."],
-            ["Recorded", "Success, rejection, or failure is saved with evidence."],
+            ["Draft", "The AI gathers exact parameters and creates a typed, venue-specific proposal."],
+            ["Checked", "Deterministic policy validates wallet, assets, amount, limits, route, and provider evidence."],
+            ["Simulated", "An unsigned transaction is inspected and simulated where the venue supports it."],
+            ["Approved", "Fresh revalidation passes and the user explicitly authorizes one signing attempt."],
+            ["Reconciled", "Success, failure, or ambiguous broadcast state is independently verified and persisted."],
           ].map(([state, description], index) => (
             <div key={state} className="grid grid-cols-[2.5rem_7rem_1fr] gap-3 border-b border-black/15 py-5 sm:grid-cols-[4rem_10rem_1fr]">
               <span className="font-mono text-[9px] text-black/25">0{index + 1}</span>
@@ -111,7 +106,7 @@ export function DocsContent() {
         <p className="doc-lead">Silfable is designed so that custody, policy, and execution evidence remain separable.</p>
         <div className="mt-10 grid gap-5 sm:grid-cols-2">
           {[
-            { icon: KeyRound, title: "Keys stay local", text: "Private keys remain in the connected wallet or encrypted local vault. They are never sent to Silfable services." },
+            { icon: KeyRound, title: "Signing is separated", text: "Desktop keys remain in the encrypted local vault; web signing remains inside the connected browser wallet." },
             { icon: ShieldCheck, title: "Least authority", text: "Each session receives only the markets, sizes, and actions explicitly allowed by its policy." },
             { icon: Monitor, title: "Local enforcement", text: "Policy evaluation happens before signing, on the machine where the runtime is installed." },
             { icon: AlertTriangle, title: "Fail closed", text: "Unavailable price data, invalid routes, or policy ambiguity halt the action instead of bypassing checks." },
@@ -130,7 +125,7 @@ export function DocsContent() {
 
       <section id="receipts" className="scroll-mt-36 border-b border-black/15 py-16">
         <DocHeading number="06" title="Receipts" />
-        <p className="doc-lead">A receipt is an append-only record of what the agent observed, proposed, proved, signed, or rejected.</p>
+        <p className="doc-lead">A receipt records what was proposed, checked, simulated, approved, broadcast, and independently reconciled. A quote or simulation is never presented as settlement.</p>
         <div className="mt-9 overflow-x-auto">
           <table className="min-w-[42rem] w-full text-left text-sm">
             <thead className="border-b border-black/20 font-mono text-[9px] uppercase tracking-[0.17em] text-black/35">
@@ -146,18 +141,30 @@ export function DocsContent() {
       </section>
 
       <section id="cli" className="scroll-mt-36 border-b border-black/15 py-16">
-        <DocHeading number="07" title="CLI reference" />
-        <p className="doc-lead">The desktop app ships with a companion CLI for scripted setup, mission control, and receipt inspection.</p>
-        <CodeBlock label="terminal" code={cliExample} />
+        <DocHeading number="07" title="Capability status" />
+        <p className="doc-lead">Implemented code is not the same as production clearance. Each mutable lane retains an independent release gate.</p>
+        <div className="mt-9 overflow-x-auto">
+          <table className="min-w-[48rem] w-full text-left text-sm">
+            <thead className="border-b border-black/20 font-mono text-[9px] uppercase tracking-[0.17em] text-black/35">
+              <tr><th className="py-4 font-normal">Lane</th><th className="py-4 font-normal">Current state</th><th className="py-4 font-normal">Release boundary</th></tr>
+            </thead>
+            <tbody className="divide-y divide-black/10 text-black/55">
+              <tr><td className="py-5 text-ink">Solana Swap</td><td>Guarded desktop Jupiter path</td><td>Signed-build, recovery, and Mainnet acceptance gates remain</td></tr>
+              <tr><td className="py-5 text-ink">Token Launch</td><td>Restricted Pump.fun desktop implementation</td><td>Controlled Mainnet acceptance and security review remain</td></tr>
+              <tr><td className="py-5 text-ink">EVM Swap</td><td>Release-locked Robinhood Chain/0x pilot</td><td>Not production-cleared</td></tr>
+              <tr><td className="py-5 text-ink">Bridge</td><td>Quote and review only</td><td>No signer or broadcast path</td></tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section id="troubleshooting" className="scroll-mt-36 py-16">
         <DocHeading number="08" title="Troubleshooting" />
         <div className="mt-10 divide-y divide-black/15 border-t border-black/15">
           {[
-            ["Mission will not compile", "Validate Desk Rule field names, numeric formats, and that every required market adapter is installed."],
+            ["A proposal is blocked", "Confirm the wallet network, exact asset identity, amount, provider configuration, deadline, and global transaction limits."],
             ["Wallet signature is not requested", "Confirm the session reached approval state and the proposed action passed every policy check."],
-            ["Runtime shows stale market data", "Refresh the wallet, verify RPC connectivity, then retry the relevant provider."],
+            ["Runtime shows stale market data", "Refresh the wallet, verify RPC connectivity, and request a new quote. Never reuse stale simulation evidence."],
             ["A receipt is missing", "Check the local workspace path and available disk space. Silfable fails closed when receipt storage is unavailable."],
           ].map(([problem, answer]) => (
             <div key={problem} className="grid gap-3 py-6 sm:grid-cols-[14rem_1fr]">

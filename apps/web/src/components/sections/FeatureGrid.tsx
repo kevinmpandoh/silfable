@@ -7,15 +7,15 @@ const features = [
   {
     eyebrow: "01 / The worker",
     title: "Agent",
-    description: "A persistent AI operator that reads the market, chooses the next action, and keeps working while you step away.",
-    detail: "Reasons continuously",
+    description: "An AI assistant that researches, asks for missing values, and drafts typed proposals. It does not receive signing authority.",
+    detail: "Drafts proposals",
     icon: Bot,
   },
   {
     eyebrow: "02 / The objective",
     title: "Mission",
-    description: "A measurable outcome with a clear finish line. The agent can plan continuously, but supported Mainnet execution remains gated.",
-    detail: "Plans continuously",
+    description: "A wallet-scoped objective with an explicit outcome. Supported Mainnet actions remain bound to deterministic venue policy.",
+    detail: "Wallet scoped",
     icon: Crosshair,
   },
   {
@@ -46,7 +46,7 @@ export function FeatureGrid() {
           className="mb-14 grid gap-7 lg:mb-20 lg:grid-cols-[1fr_0.7fr] lg:items-end"
         >
           <h2 className="max-w-4xl font-serif text-[clamp(3rem,6vw,6.5rem)] leading-[0.9] tracking-[-0.055em]">
-            Autonomy is not the absence of <em className="text-electric">control.</em>
+            Intelligence is not transaction <em className="text-electric">authority.</em>
           </h2>
           <p className="max-w-lg text-sm leading-7 text-white/50 lg:justify-self-end">
             Silfable separates who is acting, what they are trying to achieve, and exactly how much authority they receive.

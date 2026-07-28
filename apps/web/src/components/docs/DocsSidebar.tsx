@@ -4,11 +4,11 @@ const chapters = [
   { label: "Introduction", href: "#introduction" },
   { label: "Installation", href: "#quick-start" },
   { label: "Core concepts", href: "#core-concepts" },
-  { label: "Policy rules", href: "#desk-rule" },
+  { label: "Transaction settings", href: "#desk-rule" },
   { label: "Session lifecycle", href: "#mission-lifecycle" },
   { label: "Security model", href: "#security" },
   { label: "Receipts", href: "#receipts" },
-  { label: "CLI reference", href: "#cli" },
+  { label: "Capability status", href: "#cli" },
   { label: "Troubleshooting", href: "#troubleshooting" },
 ];
 

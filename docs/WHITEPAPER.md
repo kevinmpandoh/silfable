@@ -1,6 +1,6 @@
 # Silfable Whitepaper
 
-An early-stage, open-source, Solana-first project exploring how AI agents, human users, restricted wallet approvals, cloud monitoring, and deterministic security boundaries can coordinate through a modular execution environment.
+An early-stage, open-source project exploring how AI reasoning, human approval, venue-specific policy, local or browser-wallet signing, and deterministic security boundaries can coordinate across guarded Mainnet workflows.
 
 ## Contents
 
@@ -15,7 +15,7 @@ An early-stage, open-source, Solana-first project exploring how AI agents, human
 - [08] Transaction Authority and Security
 - [09] Cloud Monitoring Roadmap
 - [10] Risk Management and Automated Kill Switches
-- [11] Pump.fun and Token Discovery Roadmap
+- [11] Pump.fun Token Launch and Venue Roadmap
 - [12] Public Commitments
 - [13] Conclusion
 
@@ -27,7 +27,7 @@ Silfable is an early-stage open-source project.
 
 This document describes its current architecture, live components, development principles, security models, and roadmap. 
 
-Some components described in this document are already represented in production-ready Solana Mainnet execution via Jupiter Swap. Other components remain planned, experimental, or dependent on future technical and security development.
+Implemented code is not the same as production clearance. Guarded transaction paths exist, but every mutable venue remains subject to its own signed-build, controlled Mainnet acceptance, receipt recovery, and security gates. A preview artifact or passing simulation is not blanket production approval.
 
 Silfable is not currently:
 - A standalone blockchain.
@@ -50,7 +50,7 @@ Silfable is an open-source, Solana-first project designed to explore a shared co
 Silfable is built around four core ideas:
 1. **Intent-based research, deterministic execution:** The AI may analyze markets and draft actions, but supported transactions must pass strict, hard-coded deterministic policy checks before execution.
 2. **Separated transaction authority:** Desktop keys remain in the local encrypted vault; web signing remains in the connected browser wallet.
-3. **Transparent Execution Receipts:** Every quote, simulation, confirmation, rejection, and failure should be readable, verified on-chain, and persistently synced via encrypted cloud database.
+3. **Transparent Execution Receipts:** Every quote, simulation, confirmation, rejection, and failure should be readable and independently reconciled. Desktop receipts remain encrypted locally.
 4. **Restricted Execution:** Web transactions require browser-wallet approval. Desktop transactions require the local encrypted vault, deterministic policy checks, and explicit final confirmation. Full Access cloud execution is not available.
 5. **Wallet-Scoped Web Authentication:** A web workspace requires an expiring, one-time Solana wallet challenge signature. Authentication signatures grant access only to that wallet's application data; they never authorize a transaction.
 
@@ -58,17 +58,18 @@ Silfable is built around four core ideas:
 
 ## [02] Current Development Status
 
-The current Silfable platform is designed to demonstrate live, production-grade Solana Mainnet execution.
+The current Silfable platform contains guarded Mainnet implementations and pilots. None of these statements should be interpreted as blanket production clearance for every venue.
 
-### 2.1 Live Capabilities
-- **Restricted Jupiter Swap:** Solana Mainnet swap preview, deterministic simulation, wallet approval, broadcast, and verified receipt generation.
-- **Cloud Monitor (Preview):** Background monitoring and proposal infrastructure. It has no production signing or Mainnet broadcast authority.
-- **Pump.fun Guarded Research:** Read-only intelligence, bounded discovery, proposal building, simulation, fee guards, and receipt foundations. Web Pump.fun broadcast remains disabled.
-- **Centralized State Sync:** User settings, active sessions, and trading histories synced across high-availability Cloud Storage for persistent cross-platform access.
-- **Portfolio Snapshots:** Connected-wallet SOL balance and token activity snapshots from configured Mainnet RPC providers.
+### 2.1 Implemented, Release-Gated Capabilities
+- **Jupiter Solana Swap:** Guarded desktop quote, deterministic policy, unsigned simulation, local approval, one-attempt broadcast, and encrypted receipt recovery. Final release acceptance remains.
+- **Pump.fun Token Launch:** Restricted SOL-paired, zero-initial-buy desktop `create_v2` implementation. Controlled Mainnet acceptance, metadata operations review, and external security review remain.
+- **Robinhood Chain EVM Swap Pilot:** Wallet-scoped Mission chat, 0x firm quote, exact allowance, fresh preflight, local signing, one-time broadcast, and encrypted receipt recovery. It remains production-locked.
 
-### 2.2 Planned Capabilities
-- **Cross-Chain EVM:** Layer-2 EVM bridging, execution, and Hyperliquid integrations remain in the planning phase.
+### 2.2 Preview and Unavailable Capabilities
+- **Cloud Monitor:** Background monitoring and proposal infrastructure without signing or Mainnet broadcast authority.
+- **Bridge:** Quote and route review only. No bridge signer or broadcast path exists.
+- **Web Venue Parity:** Browser-wallet restricted execution exists, but web does not yet match every desktop venue.
+- **Autonomous, Full Access, and Hyperliquid:** No unattended signer, approval bypass, or Hyperliquid execution is production-authorized.
 
 ---
 
@@ -92,15 +93,15 @@ Crypto markets operate 24/7. Browser-based AI agents sleep when the user closes 
 Silfable aims to become an open environment where humans and software agents can express an intended outcome, research the market, and securely execute that outcome without compromising custody.
 
 A request may be expressed as:
-- *"Monitor the Solana mempool for trending tokens under $10M market cap and propose a $10 DCA entry."*
-- *"Execute a swap from USDC to SOL, ensuring slippage does not exceed 1%."*
+- *"Prepare a USDC-to-SOL swap proposal with slippage capped at 1%."*
+- *"Draft the exact immutable metadata and bounded fee plan for a Pump.fun Token Launch."*
 
 Silfable aims to coordinate:
 - The human requester.
 - The AI intelligence provider (LLM).
 - The transaction builder and deterministic policy engine.
-- The ephemeral wallet or browser wallet.
-- The Solana program (e.g., Jupiter v6).
+- The encrypted desktop vault or connected browser wallet.
+- The pinned venue program, router, or route provider.
 - The resulting receipt and persistent state.
 
 ---
@@ -131,11 +132,11 @@ The interface allows humans to:
 - Approve or reject execution.
 
 ### 6.2 Encrypted Cloud State Layer
-A high-availability cloud database that stores:
+A cloud-backed web state layer may store:
 - User preferences and global risk parameters.
 - Chat session history and AI context.
-- Encrypted service credentials required for proposal and research integrations.
-- Execution receipts and position tracking.
+- Server-side provider configuration required for proposal and research integrations.
+- Web session and proposal state. It does not become a production signer.
 
 ### 6.3 High-Throughput Task Queue
 An in-memory event and task queue intended to bridge the Web Client and the Cloud Monitor. Execution jobs are frozen; the queue must not grant signing or broadcast authority.
@@ -201,18 +202,23 @@ The target monitor may pause proposal generation when configured drawdown limits
 
 ---
 
-## [11] Pump.fun and Token Discovery Roadmap
+## [11] Pump.fun Token Launch and Venue Roadmap
 
-Pump.fun introduces unique risks due to extreme volatility, frequent rug-pulls, and custom bonding-curve smart contracts.
+The target product treats Pump.fun as a **Token Launch** lane, not as a generic AI auto-trading venue. Solana asset swaps belong to Jupiter; EVM swaps belong to a verified Uniswap-compatible deployment; cross-chain transfers belong to Bridge. The authoritative architecture is [Venue Product Architecture](VENUE_PRODUCT_ARCHITECTURE.md).
 
-### 11.1 Current Capability: Intelligence
-Silfable can read finalized Pump.fun token intelligence, including curve completion state, mint authority, and top-ten concentration. It can build proposal-only drafts for the user to review.
+Pump.fun introduces unique risks due to irreversible public metadata, custom bonding-curve contracts, rent/creation costs, and extreme volatility after launch.
 
-### 11.2 The Roadmap to Live Execution
-Pump.fun live trading will remain in Preview until the following gates are met:
-1. **Fee Guard:** Implementation of strict fee ceilings tailored to Pump.fun's custom routing.
-2. **Curve Validation:** Real-time verification that a token's bonding curve has not migrated during the 400ms broadcast window.
-3. **Receipt Recovery:** Hardened logic to recover and parse complex Pump.fun receipts to ensure accurate PnL tracking for the kill switch.
+### 11.1 Current Capability: Legacy Intelligence
+Silfable can read finalized Pump.fun token intelligence, including curve completion state, mint authority, and top-ten concentration. This legacy exact-mint research does not create tokens and does not authorize a transaction.
+
+### 11.2 Restricted Token Launch Implementation
+The conservative desktop Token Launch path is implemented in code, but production clearance remains blocked until these release gates are satisfied:
+1. **Launch Contract:** typed exact metadata, creator wallet, initial-purchase choice, creation-cost cap, priority-fee cap, and deadline.
+2. **Program and Metadata Validation:** current official Pump.fun program/IDL/account review, metadata URI integrity, content-policy boundary, and immutable final user review.
+3. **Simulation and Fee Guard:** strict creation/initial-buy cost, rent, priority-fee, account, and instruction allowlist checks on an unsigned transaction.
+4. **Receipt Recovery:** hardened launch receipt parsing and on-chain verification without automatic rebroadcast.
+
+Token launch does not include AI-selected token creation, sniping, front-running, bundled execution, or autonomous post-launch trading.
 
 ---
 

@@ -6,12 +6,12 @@ const faqs = [
   {
     question: "Can Silfable move funds without me?",
     answer:
-      "No supported production flow moves funds silently. Restricted Mainnet actions require policy checks and explicit approval before signing or broadcast.",
+      "No supported transaction flow moves funds silently. Restricted Mainnet actions require policy checks and explicit approval before signing or broadcast.",
   },
   {
     question: "Where do my private keys live?",
     answer:
-      "On your machine or inside the wallet you connect. Silfable does not upload, store, or custody your private keys. Signing remains part of your local execution flow.",
+      "Desktop keys stay in the encrypted local vault. On web, the connected browser wallet retains signing authority. Provider services and the AI do not receive a production signing key.",
   },
   {
     question: "Is Silfable a trading chatbot?",
@@ -26,7 +26,7 @@ const faqs = [
   {
     question: "Which markets and operating systems are supported?",
     answer:
-      "The current Mainnet path supports restricted Solana/Jupiter swaps. Pump.fun is preview-only on web, while bridge, EVM, Hyperliquid, autonomous signing, and Full Access remain planned.",
+      "Desktop contains guarded Jupiter swaps, a restricted Pump.fun Token Launch path, and a release-locked Robinhood Chain/0x EVM pilot. Bridge remains quote-only. Web supports browser-wallet restricted flows but does not yet match every desktop execution lane. Hyperliquid, autonomous signing, and Full Access are unavailable.",
   },
 ];
 

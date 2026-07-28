@@ -27,7 +27,7 @@ export function Hero() {
             transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
             className="mb-7 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45"
           >
-            Agentic planning / Human-defined limits
+            AI-assisted planning / Deterministic limits
           </motion.p>
 
           <motion.h1
@@ -35,8 +35,8 @@ export function Hero() {
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
             className="max-w-[1480px] font-serif text-7xl font-normal leading-[0.84] tracking-normal text-paper sm:text-8xl md:text-9xl xl:text-[8.4rem] 2xl:text-[9rem]"
           >
-            STOP BABYSITTING
-            <span className="block italic text-electric sm:pl-16 lg:pl-28">EVERY TRADE.</span>
+            PLAN WITH AI.
+            <span className="block italic text-electric sm:pl-16 lg:pl-28">APPROVE WITH PROOF.</span>
           </motion.h1>
         </motion.div>
 

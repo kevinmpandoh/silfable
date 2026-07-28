@@ -7,12 +7,12 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 const releases = [
   {
     version: "0.1.0",
-    date: "Release pending",
+    date: "Linux preview",
     status: "Preview",
     summary: "Restricted Mainnet foundation",
-    added: ["Linux AppImage and Debian builds", "Solana Mainnet wallet onboarding", "Encrypted local mission storage"],
-    changed: ["Restricted execution fails closed", "Jupiter swaps require explicit approval", "Pump.fun remains preview-only on web"],
-    fixed: ["QA coverage for Ubuntu 22.04 and 24.04", "Desktop privilege-boundary audits", "Linux package compatibility checks"],
+    added: ["Linux AppImage and Debian preview builds", "Solana Mainnet wallet onboarding", "Encrypted local session and receipt storage"],
+    changed: ["Jupiter swaps require deterministic checks and explicit approval", "Pump.fun is defined as Token Launch, not generic auto-trading", "EVM and Bridge states are shown without implying production clearance"],
+    fixed: ["Fail-closed provider and policy handling", "Desktop privilege-boundary audits", "Linux package compatibility checks"],
   },
 ] as const;
 
