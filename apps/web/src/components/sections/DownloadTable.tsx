@@ -40,9 +40,9 @@ const releases = [
 
 export function DownloadTable() {
   return (
-    <section id="download" className="border-t border-black/15 bg-paper text-ink">
+    <section id="download" className="border-t border-white/10 bg-[#080b18] text-[#eef2ff]">
       <div className="section-shell py-24 sm:py-32 lg:py-44">
-        <div className="grid gap-10 border-b border-black/20 pb-14 lg:grid-cols-[1fr_0.75fr] lg:items-end lg:pb-20">
+        <div className="grid gap-10 border-b border-white/15 pb-14 lg:grid-cols-[1fr_0.75fr] lg:items-end lg:pb-20">
           <div>
             <p className="mb-5 font-mono text-[10px] uppercase tracking-[0.24em] text-electric">
               Release 0.1.0 / Desktop
@@ -52,10 +52,10 @@ export function DownloadTable() {
             </h2>
           </div>
           <div className="max-w-lg lg:justify-self-end">
-            <p className="text-base leading-8 text-black/55">
+            <p className="text-base leading-8 text-white/55">
               Download the local runtime. Your policies, signing flow, and execution history remain under your control.
             </p>
-            <div className="mt-6 flex items-center gap-3 font-mono text-[9px] uppercase tracking-[0.18em] text-black/40">
+            <div className="mt-6 flex items-center gap-3 font-mono text-[9px] uppercase tracking-[0.18em] text-white/40">
               <PackageOpen className="size-4 text-electric" /> Linux builds available first
             </div>
           </div>
@@ -73,15 +73,15 @@ export function DownloadTable() {
           </TableHeader>
           <TableBody>
             {releases.map((release) => (
-              <TableRow key={`${release.os}-${release.build}`} className={!release.available ? "text-black/35" : undefined}>
+              <TableRow key={`${release.os}-${release.build}`} className={!release.available ? "text-white/35" : undefined}>
                 <TableCell className="py-7 sm:py-8">
                   <span className="flex items-center gap-3 font-medium">
                     <Laptop className="size-4" strokeWidth={1.5} /> {release.os}
                   </span>
                 </TableCell>
                 <TableCell className="py-7 font-serif text-xl sm:py-8 sm:text-2xl">{release.build}</TableCell>
-                <TableCell className="py-7 font-mono text-xs text-black/50 sm:py-8">{release.format}</TableCell>
-                <TableCell className="py-7 font-mono text-xs text-black/50 sm:py-8">{release.architecture}</TableCell>
+                <TableCell className="py-7 font-mono text-xs text-white/50 sm:py-8">{release.format}</TableCell>
+                <TableCell className="py-7 font-mono text-xs text-white/50 sm:py-8">{release.architecture}</TableCell>
                 <TableCell className="py-7 text-right sm:py-8">
                   {release.available && release.href ? (
                     <Button asChild variant="blue" className="h-10 px-4">
@@ -104,9 +104,9 @@ export function DownloadTable() {
           </TableBody>
         </Table>
 
-        <div className="mt-6 flex flex-col gap-2 font-mono text-[9px] uppercase tracking-[0.16em] text-black/35 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-6 flex flex-col gap-2 font-mono text-[9px] uppercase tracking-[0.16em] text-white/35 sm:flex-row sm:items-center sm:justify-between">
           <span>Linux requires a modern x86_64 distribution</span>
-          <a href="/releases" className="text-electric transition-colors hover:text-blue-800">
+          <a href="/releases" className="text-electric transition-colors hover:text-cyan-300">
             View checksums and release notes
           </a>
         </div>

@@ -14,7 +14,7 @@ const navLinks = [
 
 export function Navbar() {
   return (
-    <header className="fixed inset-x-0 top-0 z-50 border-b border-white/15 bg-ink/75 text-paper backdrop-blur-xl">
+    <header className="fixed inset-x-0 top-0 z-50 border-b border-cyan-200/15 bg-[#070914]/80 text-paper backdrop-blur-xl">
       <div className="section-shell grid h-20 grid-cols-[1fr_auto_1fr] items-center">
         <nav aria-label="Primary navigation" className="hidden items-center gap-7 lg:flex">
           {navLinks.map((link) => (
@@ -43,7 +43,7 @@ export function Navbar() {
           </Link>
           <Link
             href="/connect"
-            className="hidden h-10 items-center bg-electric px-5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white transition-colors hover:bg-blue-500 md:inline-flex"
+            className="hidden h-10 items-center bg-gradient-to-r from-[#5366e9] to-[#16b7d6] px-5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white transition hover:brightness-110 md:inline-flex"
           >
             Get started
           </Link>

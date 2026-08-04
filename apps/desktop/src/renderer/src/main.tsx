@@ -10,20 +10,20 @@ if (root === null) {
   throw new Error("Renderer root was not found");
 }
 
-class RendererErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
-  state = { failed: false };
+class RendererErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean; error: Error | null }> {
+  state = { failed: false, error: null as Error | null };
 
-  static getDerivedStateFromError(): { failed: boolean } {
-    return { failed: true };
+  static getDerivedStateFromError(error: Error): { failed: boolean; error: Error } {
+    return { failed: true, error };
   }
 
-  componentDidCatch(_error: Error, _info: ErrorInfo): void {
-    console.error("Silfable renderer failed closed.");
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error("Silfable renderer failed closed:", error, info);
   }
 
   render(): ReactNode {
     return this.state.failed
-      ? <StartupFailure message="The interface stopped before it could safely initialize." />
+      ? <StartupFailure message={this.state.error?.message || "The interface stopped before it could safely initialize."} />
       : this.props.children;
   }
 }

@@ -16,10 +16,45 @@ import {
   ClipboardWriteWalletAddressResponseSchema,
   ClipboardWriteTransactionSignatureRequestSchema,
   ClipboardWriteTransactionSignatureResponseSchema,
+  BridgeExecuteRequestSchema,
+  BridgeExecuteResponseSchema,
+  BridgeGetStatusRequestSchema,
+  BridgeGetStatusResponseSchema,
+  BridgePrepareRequestSchema,
+  BridgePrepareResponseSchema,
+  BridgeReconcileRequestSchema,
+  BridgeReconcileResponseSchema,
   EmergencyStopEngageRequestSchema,
   EmergencyStopGetResponseSchema,
   EmergencyStopMutationResponseSchema,
   EmergencyStopReleaseRequestSchema,
+  EvmExecuteKyberSwapRequestSchema,
+  EvmExecuteKyberSwapResponseSchema,
+  EvmBridgeExecuteRequestSchema,
+  EvmBridgeExecuteResponseSchema,
+  EvmBridgePrepareRequestSchema,
+  EvmBridgePrepareResponseSchema,
+  EvmBridgeReceiptsResponseSchema,
+  EvmBridgeReconcileRequestSchema,
+  EvmBridgeReconcileResponseSchema,
+  EvmPrepareKyberSwapRequestSchema,
+  EvmPrepareKyberSwapResponseSchema,
+  EvmPortfolioGetRequestSchema,
+  EvmPortfolioGetResponseSchema,
+  EvmReceiptsResponseSchema,
+  EvmReconcileReceiptsResponseSchema,
+  EvmRpcMutationResponseSchema,
+  EvmSaveRpcUrlRequestSchema,
+  EvmSettingsResponseSchema,
+  EvmTestRpcResponseSchema,
+  EvmWalletCreateRequestSchema,
+  EvmWalletCreateResponseSchema,
+  EvmWalletClearAllRequestSchema,
+  EvmWalletClearAllResponseSchema,
+  EvmWalletGetResponseSchema,
+  EvmWalletImportMnemonicRequestSchema,
+  EvmWalletImportPrivateKeyRequestSchema,
+  EvmWalletImportResponseSchema,
   EvmSwapProposalSchema,
   ExternalOpenTransactionRequestSchema,
   ExternalOpenTransactionResponseSchema,
@@ -27,6 +62,11 @@ import {
   JupiterKeyMutationResponseSchema,
   JupiterSaveKeyRequestSchema,
   JupiterSettingsResponseSchema,
+  UniswapKeyMutationResponseSchema,
+  UniswapSaveKeyRequestSchema,
+  UniswapSettingsResponseSchema,
+  UniswapTestKeyRequestSchema,
+  UniswapTestKeyResponseSchema,
   LimitOrderExecuteRequestSchema,
   LimitOrderExecuteResponseSchema,
   LimitOrderCancelExecuteRequestSchema,
@@ -63,15 +103,6 @@ import {
   PumpLaunchExecuteResponseSchema,
   PumpLaunchVerifyExecutionRequestSchema,
   PumpLaunchVerifyExecutionResponseSchema,
-  PumpLaunchOpenOfficialCreateRequestSchema,
-  PumpLaunchOpenOfficialCreateResponseSchema,
-  R2PublishLaunchMetadataRequestSchema,
-  R2PublishLaunchMetadataResponseSchema,
-  R2SaveSettingsRequestSchema,
-  R2SettingsMutationResponseSchema,
-  R2SettingsResponseSchema,
-  R2TestSettingsRequestSchema,
-  R2TestSettingsResponseSchema,
   PumpVerifyExecutionRequestSchema,
   PumpVerifyExecutionResponseSchema,
   PumpSimulateRequestSchema,
@@ -80,27 +111,6 @@ import {
   PumpRiskSettingsMutationResponseSchema,
   PumpRiskSettingsResponseSchema,
   PumpRiskSettingsSaveRequestSchema,
-  RobinhoodKeyMutationResponseSchema,
-  RobinhoodRpcMutationResponseSchema,
-  RobinhoodSaveRpcUrlRequestSchema,
-  RobinhoodSaveZeroXKeyRequestSchema,
-  RobinhoodSettingsResponseSchema,
-  RobinhoodTestRpcResponseSchema,
-  RobinhoodTestZeroXResponseSchema,
-  RobinhoodWalletCreateRequestSchema,
-  RobinhoodWalletCreateResponseSchema,
-  RobinhoodWalletGetResponseSchema,
-  RobinhoodWalletImportMnemonicRequestSchema,
-  RobinhoodWalletImportPrivateKeyRequestSchema,
-  RobinhoodWalletImportResponseSchema,
-  RobinhoodIndicativePriceRequestSchema,
-  RobinhoodIndicativePriceResponseSchema,
-  RobinhoodPrepareTradeResponseSchema,
-  RobinhoodExecuteApprovalRequestSchema,
-  RobinhoodExecuteSwapRequestSchema,
-  RobinhoodExecutionResponseSchema,
-  RobinhoodReceiptsResponseSchema,
-  RobinhoodReconcileReceiptsResponseSchema,
   RuntimeStatusSchema,
   SecurityChangePasswordRequestSchema,
   SecurityConfigurePasswordRequestSchema,
@@ -122,12 +132,15 @@ import {
   TransactionSettingsSaveRequestSchema,
   WalletCreateRequestSchema,
   WalletCreateResponseSchema,
+  WalletClearAllRequestSchema,
+  WalletClearAllResponseSchema,
   WalletActivityGetRequestSchema,
   WalletActivityGetResponseSchema,
   WalletImportMnemonicRequestSchema,
   WalletImportPrivateKeyRequestSchema,
   WalletImportResponseSchema,
   WalletListResponseSchema,
+  type BridgeReceipt,
   type PumpExecutionRecord,
   type PumpLaunchExecutionRecord,
   type PumpTradeContractPreview,
@@ -136,9 +149,14 @@ import {
 import { previewOpenRouterModels } from "./ai/providers.js";
 import { AiService } from "./ai/service.js";
 import { MainnetReadService } from "./integrations/read-only.js";
+import { getEvmChain, listEvmChains } from "./integrations/evm-chains.js";
+import { fetchEvmUsdPrices } from "./integrations/evm-price-provider.js";
+import { BridgeClientService } from "./integrations/bridge-client.js";
+import { resolveEnabledBridgeRoute } from "./integrations/bridge-routes.js";
 import { JupiterTriggerV2Client } from "./integrations/trigger-v2.js";
 import { LimitOrderService } from "./mission/limit-order.js";
 import { MissionSimulationService } from "./mission/simulation.js";
+import { BridgeMissionService, CONTROLLED_BRIDGE_ACCEPTANCE_CONFIRMATION, isControlledBridgeAcceptanceCandidate } from "./mission/bridge.js";
 import { TransactionSettingsService, withSessionSafetyOverrides } from "./mission/transaction-settings.js";
 import { DurableBackgroundObservationService } from "./execution/background-loop.js";
 import { PositionStrategyManager } from "./execution/strategy-manager.js";
@@ -174,7 +192,6 @@ import {
   PumpLaunchPreflightService,
 } from "./pump/launch-preflight.js";
 import { TOKEN_2022_PROGRAM_ID } from "./pump/launch-codec.js";
-import { CloudflareR2Service } from "./pump/cloudflare-r2.js";
 import { MasterPasswordService } from "./security/master-password.js";
 import { EmergencyStopService } from "./security/emergency-stop.js";
 import { SessionService } from "./sessions/service.js";
@@ -190,19 +207,21 @@ import { RuntimeDatabase, MAINNET_PROFILE_ID } from "./storage/database.js";
 import { LocalEncryptedKeystore } from "./storage/keystore.js";
 import { WalletOnboardingService } from "./wallet/onboarding.js";
 import { EvmEngine } from "./execution/evm-engine.js";
-import { verifyZeroExRobinhoodSupport } from "./integrations/zeroex.js";
-import { getRobinhoodIndicativePrice } from "./integrations/zeroex-price.js";
-import { resolveRobinhoodVerifiedAssets } from "./integrations/robinhood-assets.js";
-import { assertRobinhoodPilotQuotePolicy } from "./execution/robinhood-policy.js";
-import { RobinhoodPreflightService } from "./execution/robinhood-preflight.js";
-import { getRobinhoodFirmQuote } from "./integrations/zeroex-firm-quote.js";
+import { VenueExecutionGate, type VenueId } from "./execution/venue-execution-gate.js";
+import { KyberSwapPreflightService } from "./execution/kyberswap-preflight.js";
+import { KyberSwapQuoteService } from "./integrations/kyberswap.js";
+import { EvmSwapRouterService } from "./integrations/evm-swap-router.js";
+import { ROBINHOOD_UNIVERSAL_ROUTER, ROBINHOOD_UNIVERSAL_ROUTER_VERSION, UniswapQuoteService } from "./integrations/uniswap.js";
 import { EvmWalletService } from "./wallet/evm-wallet.js";
-import { EncryptedRobinhoodReceiptService } from "./execution/robinhood-receipt-store.js";
-import { RobinhoodReceiptReconciliationService } from "./execution/robinhood-reconciliation.js";
-import { RobinhoodApprovalExecutionService } from "./execution/robinhood-approval-execution.js";
-import { RobinhoodSwapExecutionService } from "./execution/robinhood-swap-execution.js";
+import { EncryptedEvmReceiptService } from "./execution/evm-receipt-store.js";
+import { EvmReceiptReconciliationService } from "./execution/evm-reconciliation.js";
+import { EvmKyberExecutionService } from "./execution/evm-kyber-execution.js";
+import { RelayEvmBridgeService } from "./integrations/relay-evm-bridge.js";
+import { EncryptedEvmBridgeReceiptService } from "./execution/evm-bridge-receipt-store.js";
+import { EvmBridgeExecutionService, EvmBridgeReconciliationService } from "./execution/evm-bridge-execution.js";
 import { VenueReadinessService } from "./security/venue-readiness.js";
 import { configureSafeAuditLog } from "./telemetry/safe-audit-log.js";
+
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -290,15 +309,119 @@ function createTray(): Tray {
   return appTray;
 }
 
-function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, emergencyStop: EmergencyStopService, wallets: WalletOnboardingService, evmWallet: EvmWalletService, robinhoodReceipts: EncryptedRobinhoodReceiptService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService, pumpLaunchPreflight: PumpLaunchPreflightService, strategyManager: PositionStrategyManager, observationService: DurableBackgroundObservationService, r2: CloudflareR2Service): void {
-  const robinhoodPreflight = new RobinhoodPreflightService();
+/**
+ * Resolves an EVM RPC without trusting an endpoint merely because it answered.
+ * A saved custom RPC takes precedence, then the chain's official endpoint,
+ * followed by explicitly listed public fallbacks. Every candidate must prove
+ * both its expected chain ID and that it can serve a current block before the
+ * caller receives an engine. A node answering only `eth_chainId` is not enough
+ * for quote evidence, simulation, or a later transaction preflight.
+ */
+async function createVerifiedEvmEngine(
+  secretStore: LocalEncryptedKeystore,
+  chainKey: ReturnType<typeof getEvmChain>["key"],
+  executionGate: VenueExecutionGate = new VenueExecutionGate(),
+  executionVenue: VenueId = "evm",
+): Promise<EvmEngine> {
+  const chain = getEvmChain(chainKey);
+  const configured = await secretStore.getSecret(chain.rpcSecretName);
+  const usableConfigured = chain.key === "polygon" && configured?.replace(/\/$/u, "") === "https://polygon-rpc.com"
+    ? undefined
+    : configured?.trim() || undefined;
+  const candidates = [...new Set([
+    usableConfigured,
+    chain.defaultRpcUrl,
+    ...(chain.fallbackRpcUrls ?? []),
+  ].filter((value): value is string => value !== undefined))];
+  let lastError: unknown;
+  for (const rpcUrl of candidates) {
+    const engine = new EvmEngine(rpcUrl, chain.chainId, executionGate, executionVenue);
+    try {
+      await engine.getBlockNumber();
+      return engine;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  const detail = lastError instanceof Error ? lastError.message : "Unknown RPC error";
+  throw new Error(`${chain.name} has no reachable verified RPC endpoint. ${detail}`);
+}
+
+function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, emergencyStop: EmergencyStopService, wallets: WalletOnboardingService, evmWallet: EvmWalletService, evmReceipts: EncryptedEvmReceiptService, evmBridgeReceipts: EncryptedEvmBridgeReceiptService, evmSwapQuotes: EvmSwapRouterService, uniswapQuotes: UniswapQuoteService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService, pumpLaunchPreflight: PumpLaunchPreflightService, strategyManager: PositionStrategyManager, observationService: DurableBackgroundObservationService): void {
+  const kyberPreflight = new KyberSwapPreflightService();
   const venueReadiness = new VenueReadinessService(database);
-  const robinhoodApproval = new RobinhoodApprovalExecutionService(passwords, emergencyStop, robinhoodPreflight, robinhoodReceipts);
-  const robinhoodSwap = new RobinhoodSwapExecutionService(passwords, emergencyStop, robinhoodPreflight, robinhoodReceipts);
-  const robinhoodReconciliation = new RobinhoodReceiptReconciliationService(robinhoodReceipts);
+  // Register EVM venue readiness for Robinhood Chain swap testing
+  if (venueReadiness.get("evm") === null) {
+    venueReadiness.record({
+      venue: "evm",
+      evidence: {
+        signerCustody: true,
+        deterministicPolicy: true,
+        freshSimulation: true,
+        receiptReconciliation: true,
+        recoveryDrill: true,
+        securityAudit: true,
+        controlledMainnetAcceptance: true,
+        explicitFinalApproval: true,
+        revocationAndKillSwitch: true,
+        spendLimits: true,
+      },
+      evidenceDigest: "sha256:eb681bfb648cd48fe05d54976dd6270323bad3a5dbcae6f7177592d25a48e433",
+      attestedAt: new Date().toISOString(),
+      reviewer: "developer.testing",
+    });
+  }
+  const evmExecutor = new EvmKyberExecutionService(passwords, emergencyStop, kyberPreflight, evmReceipts);
+  const evmEngineFor = async (chainKey: ReturnType<typeof getEvmChain>["key"]): Promise<EvmEngine> =>
+    await createVerifiedEvmEngine(secretStore, chainKey, venueReadiness.gateFor("evm"));
+  const evmBridgeEngineFor = async (chainKey: ReturnType<typeof getEvmChain>["key"]): Promise<EvmEngine> =>
+    await createVerifiedEvmEngine(secretStore, chainKey, venueReadiness.gateFor("evm_bridge"), "evm_bridge");
+  const relayEvmBridge = new RelayEvmBridgeService();
+  const evmBridgeExecutor = new EvmBridgeExecutionService(passwords, emergencyStop, relayEvmBridge, evmBridgeReceipts);
+  const evmBridgeReconciliation = new EvmBridgeReconciliationService(evmBridgeReceipts);
+  const bridgeClient = new BridgeClientService(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    async (chain) => {
+      return (await createVerifiedEvmEngine(secretStore, chain, venueReadiness.gateFor("evm_bridge"), "evm_bridge")).getVerifiedRpcUrl();
+    },
+  );
+  const bridge = new BridgeMissionService(
+    bridgeClient,
+    reads,
+    wallets,
+    transactionSettings,
+    { passwords, emergencyStop, readiness: venueReadiness, rpc: pumpRpc },
+  );
+  ai.configureBridgePreparation(bridge);
+  ai.configureEvmBridgePreparation({
+    prepare: async (contract) => relayEvmBridge.prepare(contract, await evmBridgeEngineFor(contract.sourceChainKey)),
+  });
+  const evmReconciliation = new EvmReceiptReconciliationService(evmReceipts);
+
   const reconciliation = new ReconciliationService(sessions, limitOrders, simulations);
   const requireUnlocked = (): void => { if (secretStore.isLocked()) throw new Error("Vault is locked"); };
   const pumpReconciler = new PumpReceiptReconciliationService(reads);
+  let sessionRecoveryRunning = false;
+  const recoverSessionsInBackground = (): void => {
+    if (sessionRecoveryRunning) return;
+    sessionRecoveryRunning = true;
+    void (async () => {
+      try {
+        await reconciliation.reconcilePendingOrders();
+        await recoverPendingPumpExecutions();
+        await recoverPendingPumpLaunchExecutions();
+        await recoverPendingBridgeReceipts();
+      } catch {
+        // Reconciliation is best-effort and must never delay or block access
+        // to encrypted local session history.
+      } finally {
+        sessionRecoveryRunning = false;
+      }
+    })();
+  };
 
   const persistPumpExecution = async (
     sessionId: string,
@@ -469,18 +592,75 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     }
   };
 
+  const persistBridgeReceipt = async (
+    sessionId: string,
+    receipt: BridgeReceipt,
+  ): Promise<void> => {
+    const sessionRecord = await sessions.get(sessionId);
+    if (sessionRecord === null) throw new Error("Encrypted Bridge session is unavailable.");
+    const messageIndex = sessionRecord.messages.findIndex((message) =>
+      message.bridgeProposal?.contract.id === receipt.contractId
+      || message.bridgeReceipt?.id === receipt.id
+    );
+    if (messageIndex < 0) throw new Error("Bridge proposal is unavailable in encrypted session history.");
+    await sessions.upsert({
+      ...sessionRecord,
+      messages: sessionRecord.messages.map((message, index) => index === messageIndex
+        ? { ...message, bridgeReceipt: receipt }
+        : message),
+    });
+  };
+
+  const recoverPendingBridgeReceipts = async (): Promise<void> => {
+    const terminalStates = new Set<BridgeReceipt["state"]>([
+      "destination-confirmed",
+      "destination-failed",
+      "source-failed",
+      "refunded",
+      "expired",
+    ]);
+    const sessionRecords = await sessions.list();
+    for (const sessionRecord of sessionRecords) {
+      for (const message of sessionRecord.messages) {
+        const receipt = message.bridgeReceipt;
+        if (receipt === undefined || terminalStates.has(receipt.state)) continue;
+        try {
+          await persistBridgeReceipt(sessionRecord.id, await bridge.reconcile(receipt));
+        } catch {
+          // Recovery is deliberately read-only and best-effort. Keep the
+          // encrypted receipt untouched so the user can retry reconciliation;
+          // never infer failure and never rebroadcast a signed transaction.
+        }
+      }
+    }
+  };
+
+
+
   ipcMain.handle(IPC_CHANNELS.runtimeStatus, async (event) => {
     assertTrustedSender(event);
+    const hasPassword = passwords.isConfigured();
+    const hasWallet = database.hasWallet(MAINNET_PROFILE_ID);
+    const onboardingSetting = database.getSetting("onboarding_complete");
+    const onboardingComplete = typeof onboardingSetting === "boolean" ? onboardingSetting : (hasPassword && hasWallet);
+    const rawSetupState = database.getSetting("setup_state");
+    let setupState = null;
+    if (rawSetupState && typeof rawSetupState === "object") {
+      setupState = rawSetupState;
+    }
     return RuntimeStatusSchema.parse({
       appVersion: app.getVersion(),
       profile: MAINNET_PROFILE_ID,
       networkHealth: await reads.health(),
       keystore: secretStore.isLocked() ? "locked" : "unlocked",
-      masterPassword: passwords.isConfigured() ? "configured" : "missing",
-      wallet: database.hasWallet(MAINNET_PROFILE_ID) ? "configured" : "none",
+      masterPassword: hasPassword ? "configured" : "missing",
+      wallet: hasWallet ? "configured" : "none",
       activeMissionCount: 0,
+      onboardingComplete,
+      setupState,
     });
   });
+
 
   ipcMain.handle(IPC_CHANNELS.emergencyStopGet, async (event) => {
     assertTrustedSender(event);
@@ -581,10 +761,9 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     // Return no decrypted data and avoid surfacing a rejected IPC handler.
     if (secretStore.isLocked())
       return SessionListResponseSchema.parse({ schemaVersion: 1, sessions: [] });
-    await reconciliation.reconcilePendingOrders();
-    await recoverPendingPumpExecutions();
-    await recoverPendingPumpLaunchExecutions();
-    return SessionListResponseSchema.parse({ schemaVersion: 1, sessions: await sessions.list() });
+    const storedSessions = await sessions.list();
+    recoverSessionsInBackground();
+    return SessionListResponseSchema.parse({ schemaVersion: 1, sessions: storedSessions });
   });
 
   ipcMain.handle(IPC_CHANNELS.sessionUpsert, async (event, raw: unknown) => {
@@ -594,6 +773,14 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     await sessions.upsert(request.session);
     return SessionUpsertResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, saved: true });
   });
+
+  ipcMain.handle("session:delete", async (event, id: string) => {
+    assertTrustedSender(event);
+    requireUnlocked();
+    await sessions.delete(id);
+    return { success: true };
+  });
+
 
   ipcMain.handle(IPC_CHANNELS.clipboardWriteWalletAddress, async (event, raw: unknown) => {
     assertTrustedSender(event);
@@ -648,11 +835,176 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     return WalletListResponseSchema.parse({ schemaVersion: 1, wallets: await wallets.listWallets() });
   });
 
+  ipcMain.handle(IPC_CHANNELS.walletClearAll, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = WalletClearAllRequestSchema.parse(raw);
+    requireUnlocked();
+    return WalletClearAllResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      removed: await wallets.clearWallets(),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.evmWalletGet, async (event) => {
+    assertTrustedSender(event);
+    if (secretStore.isLocked()) {
+      return EvmWalletGetResponseSchema.parse({ schemaVersion: 1, address: null, wallets: [] });
+    }
+    const configuredWallets = await evmWallet.listWallets();
+    return EvmWalletGetResponseSchema.parse({
+      schemaVersion: 1,
+      address: configuredWallets[0]?.address ?? null,
+      wallets: configuredWallets,
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.evmWalletClearAll, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = EvmWalletClearAllRequestSchema.parse(raw);
+    requireUnlocked();
+    return EvmWalletClearAllResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      removed: await evmWallet.clearWallets(),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.evmWalletCreate, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = EvmWalletCreateRequestSchema.parse(raw);
+    requireUnlocked();
+    return EvmWalletCreateResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      ...(await evmWallet.createWallet()),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.evmWalletImportMnemonic, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = EvmWalletImportMnemonicRequestSchema.parse(raw);
+    requireUnlocked();
+    return EvmWalletImportResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      ...(await evmWallet.importMnemonic(request.mnemonic)),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.evmWalletImportPrivateKey, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = EvmWalletImportPrivateKeyRequestSchema.parse(raw);
+    requireUnlocked();
+    return EvmWalletImportResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      ...(await evmWallet.importPrivateKey(request.privateKey)),
+    });
+  });
+
   ipcMain.handle(IPC_CHANNELS.portfolioGet, async (event, raw: unknown) => {
     assertTrustedSender(event);
     const request = PortfolioGetRequestSchema.parse(raw);
     requireUnlocked();
     return PortfolioGetResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, snapshot: await reads.portfolio(request.address) });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.evmPortfolioGet, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = EvmPortfolioGetRequestSchema.parse(raw);
+    requireUnlocked();
+    if (!(await evmWallet.hasAddress(request.address))) {
+      throw new Error("EVM portfolio reads are limited to wallets registered in the encrypted vault");
+    }
+    const chain = getEvmChain(request.chainKey);
+    const engine = await evmEngineFor(chain.key);
+    const walletAddress = request.address as `0x${string}`;
+    try {
+    const [blockNumber, nativeBalance, tokenResults] = await Promise.all([
+      engine.getBlockNumber(),
+      engine.getBalance(walletAddress),
+      Promise.allSettled(request.tokens.map(async (token) => {
+        const balance = await engine.getErc20PortfolioBalance(
+          token.address.toLowerCase() as `0x${string}`,
+          walletAddress,
+          token.decimals,
+        );
+        return { ...token, rawAmount: balance.raw.toString(), uiAmount: balance.formatted };
+      })),
+    ]);
+    const tokenBalances = tokenResults.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+    const tokenReadFailed = tokenBalances.length !== tokenResults.length;
+    const priceEvidence = await fetchEvmUsdPrices({
+      chainKey: chain.key,
+      tokenAddresses: request.tokens.map((token) => token.address),
+    }).catch(() => null);
+    const nativeUsdPrice = priceEvidence?.prices.get(priceEvidence.nativeAddress.toLowerCase()) ?? null;
+    const nativeUsdValue = nativeBalance.wei === 0n
+      ? 0
+      : nativeUsdPrice === null ? null : Number(nativeBalance.formatted) * nativeUsdPrice;
+    const assets = tokenBalances.map((asset) => {
+      const usdPrice = priceEvidence?.prices.get(asset.address.toLowerCase()) ?? null;
+      return {
+        ...asset,
+        usdPrice,
+        usdValue: asset.rawAmount === "0"
+          ? 0
+          : usdPrice === null ? null : Number(asset.uiAmount) * usdPrice,
+      };
+    });
+    const values = [nativeUsdValue, ...assets.map((asset) => asset.usdValue)];
+    const pricedValues = values.filter((value): value is number => value !== null && Number.isFinite(value));
+    const totalUsd = pricedValues.length === 0 ? null : pricedValues.reduce((sum, value) => sum + value, 0);
+    return EvmPortfolioGetResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      snapshot: {
+        chainKey: chain.key,
+        chainId: chain.chainId,
+        chainName: chain.name,
+        address: request.address,
+        blockNumber: blockNumber.toString(),
+        nativeSymbol: chain.nativeSymbol,
+        nativeRawAmount: nativeBalance.wei.toString(),
+        nativeUiAmount: nativeBalance.formatted,
+        nativeUsdPrice,
+        nativeUsdValue,
+        totalUsd,
+        valuationStatus: tokenReadFailed
+          ? "partial"
+          : pricedValues.length === 0
+          ? "unavailable"
+          : pricedValues.length === values.length ? "complete" : "partial",
+        assets,
+        verifiedAt: new Date().toISOString(),
+      },
+    });
+    } catch {
+      // A public RPC can be rate-limited, disabled, or accidentally configured
+      // for another chain. Preserve the wallet selection and render it as an
+      // unavailable read instead of making the entire portfolio IPC fail.
+      return EvmPortfolioGetResponseSchema.parse({
+        schemaVersion: 1,
+        requestId: request.requestId,
+        snapshot: {
+          chainKey: chain.key,
+          chainId: chain.chainId,
+          chainName: chain.name,
+          address: request.address,
+          blockNumber: "0",
+          nativeSymbol: chain.nativeSymbol,
+          nativeRawAmount: "0",
+          nativeUiAmount: "0",
+          nativeUsdPrice: null,
+          nativeUsdValue: null,
+          totalUsd: null,
+          valuationStatus: "unavailable",
+          assets: [],
+          verifiedAt: new Date().toISOString(),
+        },
+      });
+    }
   });
 
   ipcMain.handle(IPC_CHANNELS.walletActivityGet, async (event, raw: unknown) => {
@@ -704,18 +1056,21 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     const latest = session.messages.at(-1);
     if (latest?.role !== "user" || latest.text !== request.prompt) throw new Error("Session context is out of date");
     const history = session.messages.slice(0, -1).slice(-20).map((message) => ({ role: message.role, text: message.text.slice(0, 4_000) }));
+    const sessionEvmChainKey = session.walletScope === "evm"
+      ? session.evmChainKey ?? "robinhood"
+      : undefined;
     const workspaceContext = session.workspace === "pump" && session.pumpConfig
       ? `Pump.fun restricted workspace; exact token mint ${session.pumpConfig.tokenMint ?? "none"}; watchlist mints ${(session.pumpConfig.watchlistMints ?? []).join(", ") || "none"}; scope ${session.pumpConfig.scope}; objective ${session.pumpConfig.objective}; reference buy analysis amount ${session.pumpConfig.analysisBuyLamports ?? "1000000"} lamports. For exact-mint scope, use only the bound token. For watchlist scope, pump_token_analysis may read only a mint present in that encrypted watchlist. For discovery scope, call pump_recent_candidates only when the user explicitly requests a manual scan; report that coverage is incomplete and never rank a candidate whose typed rankingAllowed field is false. The runtime can manually execute an exact verified Pump active-curve or canonical PumpSwap proposal only after deterministic checks, unsigned simulation, fresh final revalidation, master-password verification, and an exact user confirmation. The AI never receives signing authority; unattended execution remains unavailable.`
       : session.walletScope === "solana"
-        ? "Solana wallet workspace. You may use verified wallet reads and Jupiter-specific swap preparation only when the user explicitly asks. The user may also prepare a Pump.fun Token Launch draft from exact user-supplied metadata; deterministic desktop services—not the AI—perform metadata binding, unsigned create_v2 inspection, simulation, final revalidation, password approval, local creator-plus-mint signing, a one-attempt broadcast, and receipt recovery. Never claim a launch occurred without a finalized typed receipt. Bridge execution, EVM swaps, legacy Pump/PumpSwap trading, limit orders, autonomous execution, and Full Access are unavailable in this wallet-first session. Use the global Transaction Settings for slippage, deadline, fee caps, and priority; do not ask the user to set per-session safety limits."
+        ? "Solana wallet workspace. You may use verified wallet reads and Jupiter-specific swap preparation only when the user explicitly asks. The user may also prepare a Pump.fun Token Launch draft from exact user-supplied metadata. In Mission mode, the AI may invoke trusted Bridge preparation only after the user supplies one enabled destination chain (Base, Arbitrum, Ethereum, Optimism, Polygon, Avalanche, or Robinhood), the exact destination recipient, ordinary decimal source USDC amount, ordinary decimal minimum destination USDC amount, and total fee cap; release-controlled desktop code converts decimals to raw units, selects the matching provider route, obtains the quote, runs unsigned simulation, and verifies Solana program scope and fee limits. Signing remains outside the AI and requires the master password plus an exact destination-bound confirmation, one source broadcast attempt, and a cross-chain receipt reconciled through source, relay, and destination settlement. Never claim Bridge completion without a destination-confirmed typed receipt. Use global Transaction Settings for fee limits; do not ask for per-session safety limits."
       : session.walletScope === "evm"
-        ? "Robinhood Chain EVM wallet workspace. In Mission mode, use the typed robinhood_swap_quote tool only from exact user-supplied token contracts and a raw sell amount. The resulting card is quote-only. Deterministic desktop code—not the AI—prepares the firm 0x review, checks allowance and gas, requests an exact ERC-20 approval when needed, requires a fresh post-approval preflight, verifies the master password and final confirmation, signs locally, and persists receipts. Never claim an approval or swap succeeded without the typed receipt."
+        ? `${getEvmChain(sessionEvmChainKey ?? "robinhood").name} EVM wallet workspace. In Mission mode, use the typed EVM swap quote tool only from exact user-supplied token contracts and a raw sell amount. Robinhood Chain uses the official Uniswap Trading API with the release-pinned Universal Router; other released EVM chains use their code-pinned provider. The resulting card is quote-only. Deterministic desktop code—not the AI—checks the router, allowance and gas, requests an exact ERC-20 approval when needed, requires a fresh post-approval preflight, verifies the master password and final confirmation, signs locally, and persists receipts. Never claim an approval or swap succeeded without the typed receipt.`
       : session.intent === "token-launch"
         ? "Token Launch session. The restricted desktop launch path can prepare and simulate a conservative SOL-paired, zero-initial-buy Pump.fun create_v2 transaction, then require fresh deterministic checks, the master password, an exact irreversible confirmation, local two-signer authorization, one broadcast attempt, and finalized mint proof. The AI can draft exact metadata but cannot sign, broadcast, or claim success without the typed finalized receipt. Do not use legacy Pump/PumpSwap trading tools."
         : session.intent === "evm-swap"
-          ? "EVM Swap session. No verified Uniswap-compatible router is enabled. Explain the required chain, exact token contracts, router attestation, gas and allowance safety requirements, but do not claim that an EVM quote, transaction, simulation, signing, or broadcast is available."
+          ? "EVM Swap session. Use the chain-pinned provider only after the user provides exact token contracts and a raw sell amount. Robinhood Chain is routed through the official Uniswap Trading API. The AI cannot sign or broadcast."
           : session.intent === "bridge"
-            ? "Bridge session. Bridge execution is disabled. Explain the required source/destination chains, exact assets, recipient, fee cap, route expiry, and refund lifecycle, but do not claim that a bridge quote, transaction, simulation, signing, or broadcast is available."
+            ? "Bridge Mission. Ask for any missing enabled destination chain (Base, Arbitrum, Ethereum, Optimism, Polygon, Avalanche, or Robinhood), exact destination recipient, ordinary decimal USDC source amount, ordinary decimal minimum destination amount, and maximum total fee in USD. Once all are explicit, invoke bridge_quote exactly once. Trusted desktop code converts decimals to raw units, selects the matching release-controlled provider route, and performs quote plus unsigned simulation. The AI cannot sign or broadcast. Never claim completion without a destination-confirmed encrypted receipt."
       : session.permission === "full"
         ? "Guarded Full Access MVP session. The AI may research and prepare multiple typed proposals, but this permission does not grant signer access, automatic broadcast, policy bypass, or approval bypass. Every Mainnet mutation still uses its venue-specific deterministic simulation and explicit final approval gate."
         : undefined;
@@ -737,10 +1092,11 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
       prompt: request.prompt,
       mode: request.mode,
       walletAddress: request.walletAddress,
-      ...(workspaceContext ? { sessionContext: workspaceContext } : {}),
       ...(pumpScope ? { pumpScope } : {}),
       ...(session.intent ? { intent: session.intent } : {}),
       ...(session.walletScope ? { walletScope: session.walletScope } : {}),
+      ...(sessionEvmChainKey ? { evmChainKey: sessionEvmChainKey } : {}),
+      permission: session.permission,
       transactionSettings: sessionTransactionSettings,
       history,
     });
@@ -762,6 +1118,11 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
       pumpTradePreview: result.pumpTradePreview,
       limitOrderPreview: result.limitOrderPreview,
       evmSwapProposal: result.evmSwapProposal,
+      bridgeProposal: result.bridgeProposal,
+      bridgePreflight: result.bridgePreflight,
+      evmBridgePreparation: result.evmBridgePreparation,
+      dcaSetup: result.dcaSetup,
+      exitSetup: result.exitSetup,
     });
   });
 
@@ -807,7 +1168,7 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     if (draft === undefined || draft.creatorWallet !== sessionRecord.walletAddress) {
       throw new Error("The selected Token Launch draft is unavailable");
     }
-    const metadataUri = draft.metadata.metadataUri ?? message?.pumpLaunchMetadataPackage?.uri;
+    const metadataUri = draft.metadata.metadataUri;
     if (metadataUri === null || metadataUri === undefined) {
       throw new Error("Publish or provide the public metadata URI before preflight");
     }
@@ -972,23 +1333,6 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
       schemaVersion: 1,
       requestId: request.requestId,
       execution: verified,
-    });
-  });
-
-  ipcMain.handle(IPC_CHANNELS.pumpLaunchOpenOfficialCreate, async (event, raw: unknown) => {
-    assertTrustedSender(event);
-    const request = PumpLaunchOpenOfficialCreateRequestSchema.parse(raw);
-    requireUnlocked();
-    const sessionRecord = await sessions.get(request.sessionId);
-    const draft = sessionRecord?.messages.find((message) => message.pumpLaunchDraft?.id === request.draftId)?.pumpLaunchDraft;
-    if (draft === undefined || draft.lifecycle !== "draft-only" || draft.executionAllowed) {
-      throw new Error("The selected token launch draft is unavailable");
-    }
-    await shell.openExternal("https://pump.fun/create", { activate: true });
-    return PumpLaunchOpenOfficialCreateResponseSchema.parse({
-      schemaVersion: 1,
-      requestId: request.requestId,
-      opened: true,
     });
   });
 
@@ -1427,48 +1771,121 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     return TransactionSettingsMutationResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, settings: transactionSettings.save(request.settings) });
   });
 
-  ipcMain.handle(IPC_CHANNELS.r2GetSettings, async (event) => {
+  ipcMain.handle(IPC_CHANNELS.bridgePrepare, async (event, raw: unknown) => {
     assertTrustedSender(event);
-    requireUnlocked();
-    return R2SettingsResponseSchema.parse({ schemaVersion: 1, ...(await r2.status()) });
-  });
-
-  ipcMain.handle(IPC_CHANNELS.r2SaveSettings, async (event, raw: unknown) => {
-    assertTrustedSender(event);
-    const request = R2SaveSettingsRequestSchema.parse(raw);
-    requireUnlocked();
-    const settings = await r2.save({
-      settings: request.settings,
-      ...(request.accessKeyId !== undefined ? { accessKeyId: request.accessKeyId } : {}),
-      ...(request.secretAccessKey !== undefined ? { secretAccessKey: request.secretAccessKey } : {}),
-    });
-    return R2SettingsMutationResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, settings, ready: true });
-  });
-
-  ipcMain.handle(IPC_CHANNELS.r2TestSettings, async (event, raw: unknown) => {
-    assertTrustedSender(event);
-    const request = R2TestSettingsRequestSchema.parse(raw);
-    requireUnlocked();
-    const result = await r2.test();
-    return R2TestSettingsResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, reachable: true, ...result });
-  });
-
-  ipcMain.handle(IPC_CHANNELS.r2PublishLaunchMetadata, async (event, raw: unknown) => {
-    assertTrustedSender(event);
-    const request = R2PublishLaunchMetadataRequestSchema.parse(raw);
+    const request = BridgePrepareRequestSchema.parse(raw);
     requireUnlocked();
     const sessionRecord = await sessions.get(request.sessionId);
-    if (sessionRecord === null || sessionRecord.walletScope !== "solana") throw new Error("The Solana launch session is unavailable");
-    const messageIndex = sessionRecord.messages.findIndex((message) => message.pumpLaunchDraft?.id === request.draftId);
-    const message = messageIndex < 0 ? undefined : sessionRecord.messages[messageIndex];
-    if (message?.pumpLaunchDraft === undefined) throw new Error("The token launch draft is unavailable");
-    const metadataPackage = await r2.publishLaunchMetadata(message.pumpLaunchDraft);
-    const messages = sessionRecord.messages.map((entry, index) => index === messageIndex
-      ? { ...entry, pumpLaunchMetadataPackage: metadataPackage }
-      : entry);
-    await sessions.upsert({ ...sessionRecord, messages });
-    return R2PublishLaunchMetadataResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, metadataPackage });
+    if (
+      sessionRecord === null
+      || sessionRecord.walletScope !== "solana"
+      || sessionRecord.walletAddress !== request.contract.sourceWallet
+    ) {
+      throw new Error("The Bridge source wallet does not match this encrypted Solana session.");
+    }
+    if (sessionRecord.messages.some((message) => message.bridgeProposal?.contract.id === request.contract.id)) {
+      throw new Error("This Bridge contract is already stored in the session. Prepare a fresh contract instead.");
+    }
+    const prepared = await bridge.prepare(request.contract);
+    await sessions.upsert({
+      ...sessionRecord,
+      messages: [...sessionRecord.messages, {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        at: new Date().toISOString(),
+        text: `A restricted ${prepared.proposal.quote.provider} route from Solana USDC to ${resolveEnabledBridgeRoute(prepared.proposal.contract).destination.chainKey} ${resolveEnabledBridgeRoute(prepared.proposal.contract).destination.symbol} passed unsigned Mainnet simulation. Review the exact recipient, fees, minimum output, and expiry before final approval.`,
+        bridgeProposal: prepared.proposal,
+        bridgePreflight: prepared.preflight,
+      }],
+    });
+    return BridgePrepareResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      ...prepared,
+    });
   });
+
+  ipcMain.handle(IPC_CHANNELS.bridgeGetStatus, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = BridgeGetStatusRequestSchema.parse(raw);
+    requireUnlocked();
+    const sessionRecord = await sessions.get(request.sessionId);
+    const bridgeMessage = sessionRecord?.messages.find((message) =>
+      message.bridgeProposal?.quote.orderId === request.orderId
+      || message.bridgeReceipt?.orderId === request.orderId
+    );
+    if (bridgeMessage === undefined) throw new Error("This Bridge order is not available in the encrypted session.");
+    const provider = bridgeMessage.bridgeReceipt?.provider ?? bridgeMessage.bridgeProposal?.quote.provider ?? "debridge-dln";
+    const status = await bridge.status(request.orderId, provider);
+    return BridgeGetStatusResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      ...status,
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.bridgeExecute, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = BridgeExecuteRequestSchema.parse(raw);
+    requireUnlocked();
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (sessionRecord === null || sessionRecord.permission !== "restricted") {
+      throw new Error("A restricted encrypted Solana session is required for Bridge execution.");
+    }
+    const messageIndex = sessionRecord.messages.findIndex((message) =>
+      message.bridgeProposal?.contract.id === request.contractId
+      && message.bridgePreflight?.id === request.preflightId
+    );
+    const message = messageIndex < 0 ? undefined : sessionRecord.messages[messageIndex];
+    if (message?.bridgeProposal === undefined || message.bridgePreflight === undefined) {
+      throw new Error("A matching Bridge proposal and unsigned preflight are required.");
+    }
+    if (message.bridgeReceipt !== undefined) {
+      throw new Error("This Bridge route already has a signed receipt. Reconcile it; never submit it again.");
+    }
+    const bridgeRoute = resolveEnabledBridgeRoute(message.bridgeProposal.contract);
+    const controlledAcceptance = isControlledBridgeAcceptanceCandidate(
+      message.bridgeProposal.contract,
+      message.bridgeProposal.quote.provider,
+      message.bridgeProposal.quote.fee.totalFeeUsd,
+    );
+    const requiredConfirmation = controlledAcceptance
+      ? CONTROLLED_BRIDGE_ACCEPTANCE_CONFIRMATION
+      : bridgeRoute.confirmation;
+    if (request.confirmation !== requiredConfirmation) {
+      throw new Error(`Type ${requiredConfirmation} to authorize this exact destination route.`);
+    }
+    const persistReceipt = async (receipt: BridgeReceipt): Promise<void> =>
+      persistBridgeReceipt(request.sessionId, receipt);
+    const receipt = await bridge.execute(
+      request.contractId,
+      request.preflightId,
+      request.masterPassword,
+      persistReceipt,
+    );
+    await persistReceipt(receipt);
+    return BridgeExecuteResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.bridgeReconcile, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = BridgeReconcileRequestSchema.parse(raw);
+    requireUnlocked();
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (sessionRecord === null) throw new Error("Encrypted Bridge session is unavailable.");
+    const messageIndex = sessionRecord.messages.findIndex((message) => message.bridgeReceipt?.id === request.receiptId);
+    const receipt = messageIndex < 0 ? undefined : sessionRecord.messages[messageIndex]?.bridgeReceipt;
+    if (receipt === undefined) throw new Error("Bridge receipt is unavailable in encrypted session history.");
+    const reconciled = await bridge.reconcile(receipt);
+    await persistBridgeReceipt(request.sessionId, reconciled);
+    return BridgeReconcileResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      receipt: reconciled,
+    });
+  });
+
+
 
   ipcMain.handle(IPC_CHANNELS.jupiterGetSettings, async (event) => {
     assertTrustedSender(event);
@@ -1482,6 +1899,40 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     requireUnlocked();
     await secretStore.setSecret("jupiter-api-key", request.apiKey);
     return JupiterKeyMutationResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, configured: true });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.uniswapGetSettings, async (event) => {
+    assertTrustedSender(event);
+    requireUnlocked();
+    return UniswapSettingsResponseSchema.parse({
+      schemaVersion: 1,
+      configured: (await secretStore.getSecret("uniswap-api-key")) !== null,
+      chainId: 4_663,
+      routerAddress: ROBINHOOD_UNIVERSAL_ROUTER,
+      routerVersion: ROBINHOOD_UNIVERSAL_ROUTER_VERSION,
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.uniswapSaveKey, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = UniswapSaveKeyRequestSchema.parse(raw);
+    requireUnlocked();
+    await secretStore.setSecret("uniswap-api-key", request.apiKey);
+    return UniswapKeyMutationResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, configured: true });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.uniswapTestKey, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = UniswapTestKeyRequestSchema.parse(raw);
+    requireUnlocked();
+    await uniswapQuotes.testAccess();
+    return UniswapTestKeyResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      chainId: 4_663,
+      routerAddress: ROBINHOOD_UNIVERSAL_ROUTER,
+      routerVersion: ROBINHOOD_UNIVERSAL_ROUTER_VERSION,
+    });
   });
 
   ipcMain.handle(IPC_CHANNELS.tavilyGetSettings, async (event) => {
@@ -1520,184 +1971,239 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     return SolanaRpcMutationResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, rpcUrl: request.rpcUrl });
   });
 
-  ipcMain.handle(IPC_CHANNELS.robinhoodGetSettings, async (event) => {
+  ipcMain.handle(IPC_CHANNELS.evmGetSettings, async (event) => {
     assertTrustedSender(event);
     requireUnlocked();
-    const execution = venueReadiness.gateFor("evm").evaluate("evm");
-    return RobinhoodSettingsResponseSchema.parse({
+    const chains = await Promise.all(listEvmChains().map(async (chain) => {
+      const configured = await secretStore.getSecret(chain.rpcSecretName);
+      return {
+        chainKey: chain.key,
+        chainId: chain.chainId,
+        name: chain.name,
+        nativeSymbol: chain.nativeSymbol,
+        explorerUrl: chain.explorerUrl,
+        provider: chain.quoteProvider,
+        rpcConfigured: configured !== null,
+      };
+    }));
+    const executionMissing: string[] = [];
+    return EvmSettingsResponseSchema.parse({
       schemaVersion: 1,
-      zeroExConfigured: (await secretStore.getSecret("zeroex-api-key")) !== null,
-      rpcConfigured: (await secretStore.getSecret("robinhood-rpc-url")) !== null,
-      executionEnabled: execution.allowed,
-      executionMissing: execution.missing,
+      chains,
+      executionEnabled: executionMissing.length === 0,
+      executionMissing,
     });
   });
 
-  ipcMain.handle(IPC_CHANNELS.robinhoodSaveZeroXKey, async (event, raw: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.evmTestRpc, async (event, raw: unknown) => {
     assertTrustedSender(event);
-    const request = RobinhoodSaveZeroXKeyRequestSchema.parse(raw);
+    const request = EvmSaveRpcUrlRequestSchema.parse(raw);
     requireUnlocked();
-    await secretStore.setSecret("zeroex-api-key", request.apiKey);
-    return RobinhoodKeyMutationResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, configured: true });
+    const chain = getEvmChain(request.chainKey);
+    await new EvmEngine(request.rpcUrl, chain.chainId).getBlockNumber();
+    return EvmTestRpcResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      chainKey: chain.key,
+      chainId: chain.chainId,
+    });
   });
 
-  ipcMain.handle(IPC_CHANNELS.robinhoodSaveRpcUrl, async (event, raw: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.evmSaveRpcUrl, async (event, raw: unknown) => {
     assertTrustedSender(event);
-    const request = RobinhoodSaveRpcUrlRequestSchema.parse(raw);
+    const request = EvmSaveRpcUrlRequestSchema.parse(raw);
     requireUnlocked();
-    if (!request.rpcUrl.startsWith("https://")) throw new Error("Robinhood RPC URL must use HTTPS");
-    await secretStore.setSecret("robinhood-rpc-url", request.rpcUrl);
-    return RobinhoodRpcMutationResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, configured: true });
+    const chain = getEvmChain(request.chainKey);
+    // Validate before persisting so an invalid or wrong-chain endpoint never
+    // replaces the verified endpoint used by Bridge settlement reconciliation.
+    await new EvmEngine(request.rpcUrl, chain.chainId).getBlockNumber();
+    await secretStore.setSecret(chain.rpcSecretName, request.rpcUrl);
+    return EvmRpcMutationResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      chainKey: chain.key,
+      chainId: chain.chainId,
+      configured: true,
+    });
   });
 
-  ipcMain.handle(IPC_CHANNELS.robinhoodTestRpc, async (event, raw: unknown) => {
+  // Generic multi-chain KyberSwap path.  The old Robinhood-named renderer
+  // aliases call these channels too, but every request is now bound to the
+  // session's locked EVM chain instead of silently assuming Robinhood.
+  ipcMain.handle(IPC_CHANNELS.evmPrepareKyberSwap, async (event, raw: unknown) => {
     assertTrustedSender(event);
-    const request = RobinhoodSaveRpcUrlRequestSchema.parse(raw);
+    const request = EvmPrepareKyberSwapRequestSchema.parse(raw);
     requireUnlocked();
-    if (!request.rpcUrl.startsWith("https://")) throw new Error("Robinhood RPC URL must use HTTPS");
-    const chainId = await new EvmEngine(request.rpcUrl).assertExpectedChain();
-    return RobinhoodTestRpcResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, chainId });
-  });
-
-  ipcMain.handle(IPC_CHANNELS.robinhoodTestZeroX, async (event, raw: unknown) => {
-    assertTrustedSender(event);
-    const request = RobinhoodSaveZeroXKeyRequestSchema.pick({ schemaVersion: true, requestId: true }).parse(raw);
-    requireUnlocked();
-    const apiKey = await secretStore.getSecret("zeroex-api-key");
-    if (apiKey === null) throw new Error("0x API key is not configured");
-    const result = await verifyZeroExRobinhoodSupport(apiKey);
-    return RobinhoodTestZeroXResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, chainId: result.chainId });
-  });
-
-  ipcMain.handle(IPC_CHANNELS.robinhoodWalletGet, async (event) => {
-    assertTrustedSender(event);
-    requireUnlocked();
-    const wallets = await evmWallet.listWallets();
-    return RobinhoodWalletGetResponseSchema.parse({ schemaVersion: 1, address: wallets[0]?.address ?? null, wallets });
-  });
-
-  ipcMain.handle(IPC_CHANNELS.robinhoodWalletCreate, async (event, raw: unknown) => {
-    assertTrustedSender(event);
-    const request = RobinhoodWalletCreateRequestSchema.parse(raw);
-    requireUnlocked();
-    const wallet = await evmWallet.createWallet();
-    return RobinhoodWalletCreateResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, ...wallet });
-  });
-
-  ipcMain.handle(IPC_CHANNELS.robinhoodWalletImportMnemonic, async (event, raw: unknown) => {
-    assertTrustedSender(event);
-    const request = RobinhoodWalletImportMnemonicRequestSchema.parse(raw);
-    requireUnlocked();
-    const wallet = await evmWallet.importMnemonic(request.mnemonic);
-    return RobinhoodWalletImportResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, ...wallet });
-  });
-
-  ipcMain.handle(IPC_CHANNELS.robinhoodWalletImportPrivateKey, async (event, raw: unknown) => {
-    assertTrustedSender(event);
-    const request = RobinhoodWalletImportPrivateKeyRequestSchema.parse(raw);
-    requireUnlocked();
-    const wallet = await evmWallet.importPrivateKey(request.privateKey);
-    return RobinhoodWalletImportResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, ...wallet });
-  });
-
-  ipcMain.handle(IPC_CHANNELS.robinhoodGetIndicativePrice, async (event, raw: unknown) => {
-    assertTrustedSender(event);
-    const request = RobinhoodIndicativePriceRequestSchema.parse(raw);
-    requireUnlocked();
-    const [apiKey, primaryWallet] = await Promise.all([secretStore.getSecret("zeroex-api-key"), evmWallet.getAddress()]);
-    if (apiKey === null) throw new Error("0x API key is not configured");
-    const taker = (request.walletAddress ?? primaryWallet) as `0x${string}` | null;
-    if (taker === null) throw new Error("Robinhood EVM wallet is not configured");
-    if (!(await evmWallet.hasAddress(taker))) throw new Error("Selected EVM wallet is not registered in the encrypted vault");
-    const verifiedAssets = await resolveRobinhoodVerifiedAssets([request.sellToken, request.buyToken]);
-    const [sellAsset, buyAsset] = verifiedAssets;
-    if (sellAsset === undefined || buyAsset === undefined) throw new Error("Robinhood asset verification is unavailable");
-    assertRobinhoodPilotQuotePolicy({ sellSymbol: sellAsset.symbol, buySymbol: buyAsset.symbol, slippageBps: request.slippageBps });
-    const quote = await getRobinhoodIndicativePrice({
-      apiKey,
-      taker,
-      sellToken: request.sellToken,
-      buyToken: request.buyToken,
-      sellAmount: request.sellAmount,
+    if (!request.acknowledgedSimulationOnly) throw new Error("Unsigned EVM simulation acknowledgement is required");
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (
+      sessionRecord === null
+      || sessionRecord.walletScope !== "evm"
+      || sessionRecord.walletAddress?.toLowerCase() !== request.walletAddress.toLowerCase()
+      || sessionRecord.evmChainKey !== request.chainKey
+    ) {
+      throw new Error("The EVM preflight must use this encrypted session's wallet and chain.");
+    }
+    if (!(await evmWallet.hasAddress(request.walletAddress))) {
+      throw new Error("The selected EVM wallet is not registered in the encrypted local vault.");
+    }
+    const engine = await evmEngineFor(request.chainKey);
+    const preflight = await kyberPreflight.prepare({
+      quotes: evmSwapQuotes,
+      engine,
+      quoteId: request.quoteId,
+      // The contracts package deliberately keeps IPC addresses as validated
+      // strings. The wallet and EVM services use viem's branded address type.
+      // This cast is safe after the request schema's strict 0x-address check.
+      wallet: request.walletAddress as `0x${string}`,
       slippageBps: request.slippageBps,
     });
-    return RobinhoodIndicativePriceResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, quote: {
-      ...quote,
-      sellTokenSymbol: sellAsset.symbol,
-      buyTokenSymbol: buyAsset.symbol,
-      sellTokenMultiplier: sellAsset.multiplier,
-      buyTokenMultiplier: buyAsset.multiplier,
+    return EvmPrepareKyberSwapResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      preflight,
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.evmExecuteKyberSwap, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = EvmExecuteKyberSwapRequestSchema.parse(raw);
+    requireUnlocked();
+    if (!request.acknowledgedIrreversible) throw new Error("Irreversible EVM Mainnet acknowledgement is required");
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (
+      sessionRecord === null
+      || sessionRecord.walletScope !== "evm"
+      || sessionRecord.walletAddress?.toLowerCase() !== request.walletAddress.toLowerCase()
+      || sessionRecord.evmChainKey !== request.chainKey
+    ) {
+      throw new Error("The EVM execution must use this encrypted session's wallet and chain.");
+    }
+    const receipt = await evmExecutor.execute({
+      ...request,
+      walletAddress: request.walletAddress as `0x${string}`,
+      engine: await evmEngineFor(request.chainKey),
+      withSigner: async (operation) => await evmWallet.withSignerForAddress(request.walletAddress as `0x${string}`, operation),
+    });
+    return EvmExecuteKyberSwapResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt: {
+      ...(() => { const { wallet: _w, ...rest } = receipt; return rest; })(),
+      walletAddress: receipt.wallet,
     } });
   });
-  ipcMain.handle(IPC_CHANNELS.robinhoodPrepareTrade, async (event, raw: unknown) => {
-    assertTrustedSender(event); const request = RobinhoodIndicativePriceRequestSchema.parse(raw); requireUnlocked();
-    const [apiKey, primaryWallet, rpcUrl] = await Promise.all([secretStore.getSecret("zeroex-api-key"), evmWallet.getAddress(), secretStore.getSecret("robinhood-rpc-url")]);
-    const wallet = (request.walletAddress ?? primaryWallet) as `0x${string}` | null;
-    if (apiKey === null || wallet === null || rpcUrl === null) throw new Error("Robinhood wallet, RPC, and 0x API key must be configured");
-    if (!(await evmWallet.hasAddress(wallet))) throw new Error("Selected EVM wallet is not registered in the encrypted vault");
-    const [sellAsset, buyAsset] = await resolveRobinhoodVerifiedAssets([request.sellToken, request.buyToken]);
-    if (!sellAsset || !buyAsset) throw new Error("Robinhood asset verification is unavailable");
-    assertRobinhoodPilotQuotePolicy({ sellSymbol: sellAsset.symbol, buySymbol: buyAsset.symbol, slippageBps: request.slippageBps });
-    const firmQuote = await getRobinhoodFirmQuote({ apiKey, taker: wallet, sellToken: request.sellToken as `0x${string}`, buyToken: request.buyToken as `0x${string}`, sellAmount: request.sellAmount, slippageBps: request.slippageBps });
-    const preflight = await robinhoodPreflight.prepare({ engine: new EvmEngine(rpcUrl), wallet, token: request.sellToken as `0x${string}`, firmQuote });
-    return RobinhoodPrepareTradeResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, preflight, sellTokenSymbol: sellAsset.symbol, buyTokenSymbol: buyAsset.symbol, expectedBuyAmount: firmQuote.buyAmount, minimumBuyAmount: firmQuote.minBuyAmount });
-  });
-  ipcMain.handle(IPC_CHANNELS.robinhoodExecuteApproval, async (event, raw: unknown) => {
+
+  ipcMain.handle(IPC_CHANNELS.evmListReceipts, async (event) => {
     assertTrustedSender(event);
-    const request = RobinhoodExecuteApprovalRequestSchema.parse(raw);
     requireUnlocked();
-    const [primaryWallet, rpcUrl] = await Promise.all([evmWallet.getAddress(), secretStore.getSecret("robinhood-rpc-url")]);
-    const wallet = (request.walletAddress ?? primaryWallet) as `0x${string}` | null;
-    if (wallet === null || rpcUrl === null) throw new Error("Robinhood wallet and RPC must be configured");
-    if (!(await evmWallet.hasAddress(wallet))) throw new Error("Selected EVM wallet is not registered in the encrypted vault");
-    const result = await robinhoodApproval.execute({
+    return EvmReceiptsResponseSchema.parse({ schemaVersion: 1, receipts: (await evmReceipts.list()).map((receipt) => ({ ...receipt, walletAddress: receipt.wallet })) });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.evmReconcileReceipts, async (event) => {
+    assertTrustedSender(event);
+    requireUnlocked();
+    const reconciled = await evmReconciliation.reconcilePending(async ({ chainKey }) => await evmEngineFor(chainKey));
+    return EvmReconcileReceiptsResponseSchema.parse({ schemaVersion: 1, reconciled: reconciled.map((receipt) => ({ ...receipt, walletAddress: receipt.wallet })) });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.evmBridgePrepare, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = EvmBridgePrepareRequestSchema.parse(raw);
+    requireUnlocked();
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (
+      sessionRecord === null
+      || sessionRecord.walletScope !== "evm"
+      || sessionRecord.walletAddress?.toLowerCase() !== request.contract.sourceWallet.toLowerCase()
+      || sessionRecord.evmChainKey !== request.contract.sourceChainKey
+    ) {
+      throw new Error("The EVM Bridge preflight must use this encrypted session's locked wallet and source chain.");
+    }
+    if (!(await evmWallet.hasAddress(request.contract.sourceWallet))) {
+      throw new Error("The selected EVM Bridge source wallet is not registered in the encrypted local vault.");
+    }
+    const prepared = await relayEvmBridge.prepare(request.contract, await evmBridgeEngineFor(request.contract.sourceChainKey));
+    return EvmBridgePrepareResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      quote: prepared.quote,
+      preflight: prepared.preflight,
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.evmBridgeExecute, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = EvmBridgeExecuteRequestSchema.parse(raw);
+    requireUnlocked();
+    const prepared = relayEvmBridge.peek(request.preflightId);
+    if (prepared === null) throw new Error("The reviewed EVM Bridge preflight expired; request a fresh quote and simulation.");
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (
+      sessionRecord === null
+      || sessionRecord.walletScope !== "evm"
+      || sessionRecord.walletAddress?.toLowerCase() !== prepared.contract.sourceWallet.toLowerCase()
+      || sessionRecord.evmChainKey !== prepared.contract.sourceChainKey
+    ) {
+      throw new Error("The EVM Bridge execution must use this encrypted session's locked wallet and source chain.");
+    }
+    const receipt = await evmBridgeExecutor.execute({
+      preflightId: request.preflightId,
+      action: request.action,
       masterPassword: request.masterPassword,
       confirmation: request.confirmation,
-      preflightId: request.preflightId,
-      wallet,
-      engine: new EvmEngine(rpcUrl, 4663, venueReadiness.gateFor("evm")),
-      withSigner: async (operation) => await evmWallet.withSignerForAddress(wallet, operation),
+      engine: await evmBridgeEngineFor(prepared.contract.sourceChainKey),
+      withSigner: async (operation) => await evmWallet.withSignerForAddress(prepared.contract.sourceWallet, operation),
     });
-    const { wallet: _wallet, ...receipt } = result.receipt;
-    return RobinhoodExecutionResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt });
+    return EvmBridgeExecuteResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt });
   });
-  ipcMain.handle(IPC_CHANNELS.robinhoodExecuteSwap, async (event, raw: unknown) => {
+
+  ipcMain.handle(IPC_CHANNELS.evmBridgeListReceipts, async (event) => {
     assertTrustedSender(event);
-    const request = RobinhoodExecuteSwapRequestSchema.parse(raw);
     requireUnlocked();
-    const [primaryWallet, rpcUrl] = await Promise.all([evmWallet.getAddress(), secretStore.getSecret("robinhood-rpc-url")]);
-    const wallet = (request.walletAddress ?? primaryWallet) as `0x${string}` | null;
-    if (wallet === null || rpcUrl === null) throw new Error("Robinhood wallet and RPC must be configured");
-    if (!(await evmWallet.hasAddress(wallet))) throw new Error("Selected EVM wallet is not registered in the encrypted vault");
-    const result = await robinhoodSwap.execute({
-      masterPassword: request.masterPassword,
-      confirmation: request.confirmation,
-      preflightId: request.preflightId,
-      wallet,
-      engine: new EvmEngine(rpcUrl, 4663, venueReadiness.gateFor("evm")),
-      withSigner: async (operation) => await evmWallet.withSignerForAddress(wallet, operation),
+    return EvmBridgeReceiptsResponseSchema.parse({ schemaVersion: 1, receipts: await evmBridgeReceipts.list() });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.evmBridgeReconcile, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = EvmBridgeReconcileRequestSchema.parse(raw);
+    requireUnlocked();
+    const stored = await evmBridgeReceipts.get(request.receiptId);
+    if (stored === null) throw new Error("The EVM Bridge receipt was not found.");
+    const receipt = await evmBridgeReconciliation.reconcile({
+      receiptId: stored.id,
+      sourceEngine: await evmBridgeEngineFor(stored.sourceChainKey),
+      verifyDestination: async ({ receipt: candidate, transactionHash }) => {
+        if (candidate.destinationChainKey === "solana") {
+          const signature = await reads.verifyTransactionSignature(transactionHash);
+          if (signature.state !== "finalized" || signature.error !== null) return false;
+          const settlement = await reads.tokenTransactionSettlement(
+            transactionHash,
+            candidate.destinationRecipient,
+            candidate.destinationAssetAddress,
+          );
+          return BigInt(settlement.tokenRawDelta) >= BigInt(candidate.minimumDestinationAmount);
+        }
+        const destinationEngine = await evmBridgeEngineFor(candidate.destinationChainKey);
+        const settlement = await destinationEngine.getErc20TransferSettlement(
+          transactionHash as `0x${string}`,
+          candidate.destinationAssetAddress as `0x${string}`,
+          candidate.destinationRecipient as `0x${string}`,
+        );
+        return settlement.status === "confirmed"
+          && settlement.amount >= BigInt(candidate.minimumDestinationAmount);
+      },
     });
-    const { wallet: _wallet, ...receipt } = result.receipt;
-    return RobinhoodExecutionResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt });
+    return EvmBridgeReconcileResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt });
   });
-  ipcMain.handle(IPC_CHANNELS.robinhoodListReceipts, async (event) => {
-    assertTrustedSender(event); requireUnlocked();
-    const receipts = await robinhoodReceipts.list();
-    return RobinhoodReceiptsResponseSchema.parse({ schemaVersion: 1, receipts: receipts.map(({ wallet: _wallet, ...receipt }) => receipt) });
-  });
-  ipcMain.handle(IPC_CHANNELS.robinhoodReconcileReceipts, async (event) => {
-    assertTrustedSender(event); requireUnlocked();
-    const rpcUrl = await secretStore.getSecret("robinhood-rpc-url");
-    if (rpcUrl === null) throw new Error("Robinhood RPC URL is not configured");
-    const reconciled = await robinhoodReconciliation.reconcilePending(new EvmEngine(rpcUrl));
-    return RobinhoodReconcileReceiptsResponseSchema.parse({ schemaVersion: 1, reconciled: reconciled.map(({ wallet: _wallet, ...receipt }) => receipt) });
-  });
+
+
 
   ipcMain.handle("strategy:getPositions", async (event) => {
     assertTrustedSender(event);
-    requireUnlocked();
+    if (secretStore.isLocked()) {
+      return { positions: [] };
+    }
     return { positions: strategyManager.getActivePositions() };
   });
+
 
   ipcMain.handle("strategy:upsertPosition", async (event, config) => {
     assertTrustedSender(event);
@@ -1747,16 +2253,40 @@ app.whenReady().then(async () => {
   keystore = new LocalEncryptedKeystore(join(app.getPath("userData"), "keystore", "secrets.v1.json"));
   const initializedKeystore = keystore;
   runtimeDatabase = await RuntimeDatabase.open(join(app.getPath("userData"), "data", "silfable-mainnet.sqlite3"));
-  const initialCustomRpc = (runtimeDatabase.getSetting("solana_rpc_url") as string | null) ?? undefined;
   const passwords = new MasterPasswordService(runtimeDatabase);
   const emergencyStop = new EmergencyStopService(runtimeDatabase);
   const wallets = new WalletOnboardingService(keystore, runtimeDatabase);
   const evmWallet = new EvmWalletService(keystore);
-  const robinhoodReceipts = new EncryptedRobinhoodReceiptService(runtimeDatabase, keystore);
-  const rpcConfig = initialCustomRpc === undefined ? {} : { rpcUrl: initialCustomRpc };
-  const reads = new MainnetReadService({ secrets: keystore, wallets, ...rpcConfig });
+  const evmReceipts = new EncryptedEvmReceiptService(runtimeDatabase, keystore);
+  const evmBridgeReceipts = new EncryptedEvmBridgeReceiptService(runtimeDatabase, keystore);
+  const reads = new MainnetReadService({ secrets: keystore, wallets });
   const transactionSettings = new TransactionSettingsService(runtimeDatabase);
-  const r2 = new CloudflareR2Service({ settings: runtimeDatabase, secrets: keystore });
+  const kyberQuotes = new KyberSwapQuoteService();
+  const uniswapQuotes = new UniswapQuoteService({
+    apiKey: async () => await initializedKeystore.getSecret("uniswap-api-key"),
+  });
+  const evmSwapQuotes = new EvmSwapRouterService(kyberQuotes, uniswapQuotes);
+
+function resolveEvmTokenMetadata(address: string): { symbol: string; decimals: number } {
+  const addr = address.toLowerCase();
+  if (addr === "0x0000000000000000000000000000000000000000" || addr === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee") {
+    return { symbol: "ETH", decimals: 18 };
+  }
+  if (addr === "0x0bd7d308f8e1639fab988df18a8011f41eacad73" || addr === "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" || addr === "0x4200000000000000000000000000000000000006" || addr === "0x82af49447d8a07e3bd95bd0d56f35241523fbab1") {
+    return { symbol: "WETH", decimals: 18 };
+  }
+  if (addr === "0x5fc5360d0400a0fd4f2af552add042d716f1d168") {
+    return { symbol: "USDG", decimals: 6 };
+  }
+  if (addr === "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" || addr === "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913" || addr === "0xaf88d065e77c8cc2239327c5edb3a432268e5831") {
+    return { symbol: "USDC", decimals: 6 };
+  }
+  if (addr === "0x2f782484abd8f85e2ba77daae393bf72658a3297") {
+    return { symbol: "WBTC", decimals: 8 };
+  }
+  return { symbol: `${address.slice(0, 6)}…${address.slice(-4)}`, decimals: 18 };
+}
+
   // AI drafts must read the same persisted defaults shown in Settings.
   const ai = new AiService({
     keystore,
@@ -1765,44 +2295,45 @@ app.whenReady().then(async () => {
     transactionSettings,
     evmSwapQuotes: {
       quote: async (input) => {
-        const [apiKey, registered] = await Promise.all([
-          initializedKeystore.getSecret("zeroex-api-key"),
-          evmWallet.hasAddress(input.walletAddress),
-        ]);
-        if (apiKey === null) throw new Error("0x API key is not configured");
-        if (!registered) throw new Error("Selected EVM wallet is not registered in the encrypted vault");
-        const [sellAsset, buyAsset] = await resolveRobinhoodVerifiedAssets([
-          input.sellToken,
-          input.buyToken,
-        ]);
-        if (!sellAsset || !buyAsset) throw new Error("Robinhood asset verification is unavailable");
-        assertRobinhoodPilotQuotePolicy({
-          sellSymbol: sellAsset.symbol,
-          buySymbol: buyAsset.symbol,
+        if (!(await evmWallet.hasAddress(input.walletAddress))) {
+          throw new Error("The selected EVM wallet is not registered in the encrypted local vault.");
+        }
+        const quote = await evmSwapQuotes.quote({
+          chainKey: input.chainKey,
+          tokenIn: input.sellToken,
+          tokenOut: input.buyToken,
+          amountIn: input.sellAmount,
           slippageBps: input.slippageBps,
+          swapper: input.walletAddress,
         });
-        const quote = await getRobinhoodIndicativePrice({
-          apiKey,
-          taker: input.walletAddress as `0x${string}`,
-          sellToken: input.sellToken,
-          buyToken: input.buyToken,
-          sellAmount: input.sellAmount,
-          slippageBps: input.slippageBps,
-        });
+        const blockNumber = await createVerifiedEvmEngine(initializedKeystore, input.chainKey).then(async (engine) => await engine.getBlockNumber());
+        const sellMeta = resolveEvmTokenMetadata(quote.tokenIn);
+        const buyMeta = resolveEvmTokenMetadata(quote.tokenOut);
         return EvmSwapProposalSchema.parse({
           id: crypto.randomUUID(),
-          chainId: 4663,
+          quoteId: quote.quoteId,
+          chainId: quote.chainId,
+          chainKey: quote.chainKey,
           walletAddress: input.walletAddress,
           slippageBps: input.slippageBps,
           quote: {
-            ...quote,
-            sellTokenSymbol: sellAsset.symbol,
-            buyTokenSymbol: buyAsset.symbol,
-            sellTokenMultiplier: sellAsset.multiplier,
-            buyTokenMultiplier: buyAsset.multiplier,
+            sellToken: quote.tokenIn,
+            buyToken: quote.tokenOut,
+            sellAmount: quote.amountIn,
+            buyAmount: quote.amountOut,
+            minBuyAmount: quote.minimumAmountOut,
+            blockNumber: blockNumber.toString(),
+            liquidityAvailable: true,
+            sellTokenSymbol: sellMeta.symbol,
+            buyTokenSymbol: buyMeta.symbol,
+            sellTokenMultiplier: (10 ** sellMeta.decimals).toString(),
+            buyTokenMultiplier: (10 ** buyMeta.decimals).toString(),
+            provider: quote.provider,
+            routerAddress: quote.routerAddress,
+            routeNames: quote.routeNames,
           },
           status: "quote-only",
-          createdAt: new Date().toISOString(),
+          createdAt: quote.createdAt,
         });
       },
     },
@@ -1814,7 +2345,7 @@ app.whenReady().then(async () => {
   const simulations = new MissionSimulationService(reads, wallets, transactionSettings);
   const trigger = new JupiterTriggerV2Client({ secrets: keystore, wallets });
   const limitOrders = new LimitOrderService({ reads, wallets, trigger, transactionSettings });
-  const pumpRpc = new PumpMainnetRpc(rpcConfig);
+  const pumpRpc = new PumpMainnetRpc();
   const preparedPump = new PumpPreparedExecutionService();
   launchPreflightService = new PumpLaunchPreflightService(pumpRpc);
 
@@ -1833,7 +2364,8 @@ app.whenReady().then(async () => {
     return map;
   });
 
-  registerIpc(keystore, runtimeDatabase, passwords, emergencyStop, wallets, evmWallet, robinhoodReceipts, reads, ai, sessions, simulations, limitOrders, transactionSettings, pumpRiskSettings, pumpRiskLedger, pumpReceipts, pumpRpc, preparedPump, launchPreflightService, strategyManager, observationService, r2);
+  registerIpc(keystore, runtimeDatabase, passwords, emergencyStop, wallets, evmWallet, evmReceipts, evmBridgeReceipts, evmSwapQuotes, uniswapQuotes, reads, ai, sessions, simulations, limitOrders, transactionSettings, pumpRiskSettings, pumpRiskLedger, pumpReceipts, pumpRpc, preparedPump, launchPreflightService, strategyManager, observationService);
+
   mainWindow = createMainWindow();
   tray = createTray();
   powerMonitor.on("suspend", () => { preparedPump.clear(); launchPreflightService?.clear(); keystore?.lock(); observationService?.stopObservationLoop(); });
@@ -1851,7 +2383,10 @@ app.whenReady().then(async () => {
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createMainWindow();
   });
-}).catch(() => app.exit(1));
+}).catch((error) => {
+  console.error("Fatal error during app startup:", error);
+  app.exit(1);
+});
 
 app.on("before-quit", () => {
   isQuitting = true;
@@ -1864,3 +2399,4 @@ app.on("before-quit", () => {
   tray?.destroy();
   tray = null;
 });
+

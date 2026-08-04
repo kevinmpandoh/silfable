@@ -32,7 +32,7 @@ const faqs = [
 
 export function FaqSection() {
   return (
-    <section className="bg-paper text-ink">
+    <section className="bg-[#070a16] text-[#eef2ff]">
       <div className="section-shell py-24 sm:py-32 lg:py-44">
         <div className="grid gap-14 lg:grid-cols-[0.72fr_1fr] lg:gap-24">
           <div className="lg:sticky lg:top-32 lg:self-start">
@@ -40,24 +40,24 @@ export function FaqSection() {
             <h2 className="font-serif text-[clamp(3.8rem,7vw,7.8rem)] leading-[0.84] tracking-[-0.06em]">
               Read the <em className="text-electric">fine print.</em>
             </h2>
-            <p className="mt-8 max-w-sm text-sm leading-7 text-black/50">
+            <p className="mt-8 max-w-sm text-sm leading-7 text-white/50">
               Autonomy should be legible. These are the direct answers that matter before software touches a market.
             </p>
             <a
               href="#support"
-              className="mt-8 inline-flex items-center gap-3 border-b border-black/30 pb-2 text-xs font-semibold uppercase tracking-[0.15em] transition-colors hover:border-electric hover:text-electric"
+              className="mt-8 inline-flex items-center gap-3 border-b border-white/30 pb-2 text-xs font-semibold uppercase tracking-[0.15em] transition-colors hover:border-electric hover:text-electric"
             >
               Read documentation <ArrowUpRight className="size-4" />
             </a>
           </div>
 
-          <div className="border-t border-black/20">
+          <div className="border-t border-white/15">
             <Accordion type="single" collapsible className="w-full">
               {faqs.map((faq, index) => (
                 <AccordionItem key={faq.question} value={`item-${index + 1}`}>
                   <AccordionTrigger className="gap-8 py-7 text-lg tracking-[-0.02em] sm:py-8 sm:text-xl">
                     <span className="flex items-start gap-5 sm:gap-8">
-                      <span className="mt-1 font-mono text-[9px] tracking-[0.16em] text-black/30">
+                      <span className="mt-1 font-mono text-[9px] tracking-[0.16em] text-white/30">
                         {String(index + 1).padStart(2, "0")}
                       </span>
                       <span>{faq.question}</span>

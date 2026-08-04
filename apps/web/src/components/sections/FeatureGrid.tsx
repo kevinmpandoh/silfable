@@ -36,7 +36,7 @@ const features = [
 
 export function FeatureGrid() {
   return (
-    <section className="border-y border-white/15 bg-ink text-paper">
+    <section className="border-y border-cyan-200/15 bg-[#090d1d] text-paper">
       <div className="section-shell py-24 sm:py-32 lg:py-40">
         <motion.div
           initial={{ opacity: 0, y: 24 }}

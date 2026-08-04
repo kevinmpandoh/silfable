@@ -39,7 +39,7 @@ const reveal = {
 
 export function ValueProps() {
   return (
-    <section id="docs" className="bg-paper text-ink">
+    <section id="docs" className="border-y border-white/10 bg-[#080b18] text-[#eef2ff]">
       <div className="section-shell py-24 sm:py-32 lg:py-44">
         <motion.div
           initial="hidden"
@@ -50,10 +50,10 @@ export function ValueProps() {
           <motion.div
             variants={reveal}
             transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            className="mb-14 flex items-center gap-4 border-b border-black/15 pb-5 sm:mb-20"
+            className="mb-14 flex items-center gap-4 border-b border-white/10 pb-5 sm:mb-20"
           >
             <span className="size-2 rounded-full bg-electric" />
-            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-black/50">
+            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-white/45">
               A runtime, not a conversation
             </p>
           </motion.div>
@@ -72,20 +72,20 @@ export function ValueProps() {
           whileInView="visible"
           viewport={{ once: true, amount: 0.2 }}
           transition={{ staggerChildren: 0.12 }}
-          className="mt-24 border-t border-black/20 lg:mt-36"
+          className="mt-24 border-t border-white/15 lg:mt-36"
         >
           {articles.map((article) => (
             <motion.article
               key={article.number}
               variants={reveal}
               transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-              className="grid gap-5 border-b border-black/20 py-8 sm:grid-cols-[8rem_1fr] sm:py-10 lg:grid-cols-[12rem_18rem_1fr] lg:items-baseline"
+              className="grid gap-5 border-b border-white/15 py-8 sm:grid-cols-[8rem_1fr] sm:py-10 lg:grid-cols-[12rem_18rem_1fr] lg:items-baseline"
             >
-              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-black/40">
+              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-white/40">
                 Article {article.number}
               </p>
               <h3 className="font-serif text-3xl tracking-[-0.04em] sm:text-4xl">{article.title}</h3>
-              <p className="max-w-2xl text-base leading-7 text-black/65 sm:text-lg sm:leading-8 lg:justify-self-end">
+              <p className="max-w-2xl text-base leading-7 text-white/60 sm:text-lg sm:leading-8 lg:justify-self-end">
                 {article.statement}
               </p>
             </motion.article>

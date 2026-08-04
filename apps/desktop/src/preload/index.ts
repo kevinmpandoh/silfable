@@ -121,6 +121,38 @@ import {
   WalletImportPrivateKeyRequestSchema,
   WalletImportResponseSchema,
   WalletListResponseSchema,
+  EvmWalletGetResponseSchema,
+  EvmWalletCreateRequestSchema,
+  EvmWalletCreateResponseSchema,
+  EvmWalletImportMnemonicRequestSchema,
+  EvmWalletImportPrivateKeyRequestSchema,
+  EvmWalletImportResponseSchema,
+  EvmWalletClearAllRequestSchema,
+  EvmWalletClearAllResponseSchema,
+  EvmSettingsResponseSchema,
+  EvmSaveRpcUrlRequestSchema,
+  EvmRpcMutationResponseSchema,
+  EvmTestRpcResponseSchema,
+  EvmPortfolioGetRequestSchema,
+  EvmPortfolioGetResponseSchema,
+  EvmPrepareKyberSwapRequestSchema,
+  EvmPrepareKyberSwapResponseSchema,
+  EvmExecuteKyberSwapRequestSchema,
+  EvmExecuteKyberSwapResponseSchema,
+  EvmReceiptsResponseSchema,
+  EvmReconcileReceiptsResponseSchema,
+  EvmBridgePrepareRequestSchema,
+  EvmBridgePrepareResponseSchema,
+  EvmBridgeExecuteRequestSchema,
+  EvmBridgeExecuteResponseSchema,
+  EvmBridgeReceiptsResponseSchema,
+  EvmBridgeReconcileRequestSchema,
+  EvmBridgeReconcileResponseSchema,
+  UniswapSettingsResponseSchema,
+  UniswapSaveKeyRequestSchema,
+  UniswapKeyMutationResponseSchema,
+  UniswapTestKeyRequestSchema,
+  UniswapTestKeyResponseSchema,
   type AiChatRequest,
   type AiPreviewOpenRouterModelsRequest,
   type AiSaveProviderRequest,
@@ -170,6 +202,19 @@ import {
   type WalletActivityGetRequest,
   type WalletImportMnemonicRequest,
   type WalletImportPrivateKeyRequest,
+  type EvmWalletCreateRequest,
+  type EvmWalletImportMnemonicRequest,
+  type EvmWalletImportPrivateKeyRequest,
+  type EvmWalletClearAllRequest,
+  type EvmSaveRpcUrlRequest,
+  type EvmPortfolioGetRequest,
+  type EvmPrepareKyberSwapRequest,
+  type EvmExecuteKyberSwapRequest,
+  type EvmBridgePrepareRequest,
+  type EvmBridgeExecuteRequest,
+  type EvmBridgeReconcileRequest,
+  type UniswapSaveKeyRequest,
+  type UniswapTestKeyRequest,
   type SecurityChangePasswordRequest,
   type SecurityConfigurePasswordRequest,
   type SecurityUnlockRequest,
@@ -180,6 +225,66 @@ import {
 const api = {
   async getRuntimeStatus() {
     return RuntimeStatusSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.runtimeStatus));
+  },
+  async getEvmWallets() {
+    return EvmWalletGetResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmWalletGet));
+  },
+  async clearEvmWallets(request: EvmWalletClearAllRequest) {
+    return EvmWalletClearAllResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmWalletClearAll, EvmWalletClearAllRequestSchema.parse(request)));
+  },
+  async createEvmWallet(request: EvmWalletCreateRequest) {
+    return EvmWalletCreateResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmWalletCreate, EvmWalletCreateRequestSchema.parse(request)));
+  },
+  async importEvmWalletMnemonic(request: EvmWalletImportMnemonicRequest) {
+    return EvmWalletImportResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmWalletImportMnemonic, EvmWalletImportMnemonicRequestSchema.parse(request)));
+  },
+  async importEvmWalletPrivateKey(request: EvmWalletImportPrivateKeyRequest) {
+    return EvmWalletImportResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmWalletImportPrivateKey, EvmWalletImportPrivateKeyRequestSchema.parse(request)));
+  },
+  async getEvmSettings() {
+    return EvmSettingsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmGetSettings));
+  },
+  async testEvmRpc(request: EvmSaveRpcUrlRequest) {
+    return EvmTestRpcResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmTestRpc, EvmSaveRpcUrlRequestSchema.parse(request)));
+  },
+  async saveEvmRpcUrl(request: EvmSaveRpcUrlRequest) {
+    return EvmRpcMutationResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmSaveRpcUrl, EvmSaveRpcUrlRequestSchema.parse(request)));
+  },
+  async getEvmPortfolio(request: EvmPortfolioGetRequest) {
+    return EvmPortfolioGetResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmPortfolioGet, EvmPortfolioGetRequestSchema.parse(request)));
+  },
+  async prepareEvmKyberSwap(request: EvmPrepareKyberSwapRequest) {
+    return EvmPrepareKyberSwapResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmPrepareKyberSwap, EvmPrepareKyberSwapRequestSchema.parse(request)));
+  },
+  async executeEvmKyberSwap(request: EvmExecuteKyberSwapRequest) {
+    return EvmExecuteKyberSwapResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmExecuteKyberSwap, EvmExecuteKyberSwapRequestSchema.parse(request)));
+  },
+  async listEvmReceipts() {
+    return EvmReceiptsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmListReceipts));
+  },
+  async reconcileEvmReceipts() {
+    return EvmReconcileReceiptsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmReconcileReceipts));
+  },
+  async prepareEvmBridge(request: EvmBridgePrepareRequest) {
+    return EvmBridgePrepareResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmBridgePrepare, EvmBridgePrepareRequestSchema.parse(request)));
+  },
+  async executeEvmBridge(request: EvmBridgeExecuteRequest) {
+    return EvmBridgeExecuteResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmBridgeExecute, EvmBridgeExecuteRequestSchema.parse(request)));
+  },
+  async listEvmBridgeReceipts() {
+    return EvmBridgeReceiptsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmBridgeListReceipts));
+  },
+  async reconcileEvmBridgeReceipts(request: EvmBridgeReconcileRequest) {
+    return EvmBridgeReconcileResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmBridgeReconcile, EvmBridgeReconcileRequestSchema.parse(request)));
+  },
+  async getUniswapSettings() {
+    return UniswapSettingsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.uniswapGetSettings));
+  },
+  async saveUniswapKey(request: UniswapSaveKeyRequest) {
+    return UniswapKeyMutationResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.uniswapSaveKey, UniswapSaveKeyRequestSchema.parse(request)));
+  },
+  async testUniswapKey(request: UniswapTestKeyRequest) {
+    return UniswapTestKeyResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.uniswapTestKey, UniswapTestKeyRequestSchema.parse(request)));
   },
   async getEmergencyStop() {
     return EmergencyStopGetResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.emergencyStopGet));
@@ -207,6 +312,9 @@ const api = {
   },
   async upsertSession(request: SessionUpsertRequest) {
     return SessionUpsertResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.sessionUpsert, SessionUpsertRequestSchema.parse(request)));
+  },
+  async deleteSession(id: string) {
+    return await ipcRenderer.invoke("session:delete", id);
   },
   async copyWalletAddress(request: ClipboardWriteWalletAddressRequest) {
     return ClipboardWriteWalletAddressResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.clipboardWriteWalletAddress, ClipboardWriteWalletAddressRequestSchema.parse(request)));

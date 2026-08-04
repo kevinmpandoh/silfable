@@ -64,7 +64,13 @@ export async function POST(request: NextRequest) {
     const consumed = await cloudDb.walletAuthChallenge.updateMany({
       where: {
         id: challenge.id,
-        usedAt: null,
+        // Older challenge documents may not contain `usedAt` at all. MongoDB
+        // does not treat a missing field as null, so accept both shapes while
+        // retaining the atomic one-time-consumption guard.
+        OR: [
+          { usedAt: null },
+          { usedAt: { isSet: false } },
+        ],
         expiresAt: { gt: new Date() },
       },
       data: { usedAt: new Date() },

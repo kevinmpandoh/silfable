@@ -4,28 +4,29 @@ import React, { useState } from "react";
 
 interface WebNewSessionModalProps {
   isOpen: boolean;
+  walletAddress: string;
   onClose: () => void;
+  onCancel: () => void;
   onCreateRestrictedSession: (session: {
     title: string;
-    workspace: "general" | "pump";
     mode: "agent" | "mission";
-  }) => void;
+  }) => Promise<void>;
 }
 
 export function WebNewSessionModal({
   isOpen,
+  walletAddress,
   onClose,
+  onCancel,
   onCreateRestrictedSession,
 }: WebNewSessionModalProps) {
-  const [workspace, setWorkspace] = useState<"general" | "pump">("general");
   const [title, setTitle] = useState("New Mainnet session");
   const [mode, setMode] = useState<"agent" | "mission">("agent");
   if (!isOpen) return null;
 
-  function handleSubmit() {
-    onCreateRestrictedSession({
+  async function handleSubmit() {
+    await onCreateRestrictedSession({
       title: title.trim() || "New Mainnet session",
-      workspace,
       mode,
     });
     onClose();
@@ -33,7 +34,7 @@ export function WebNewSessionModal({
 
   return (
     <div className="modalBackdrop" role="dialog" aria-modal="true" onClick={(e) => {
-      if (e.target === e.currentTarget) onClose();
+      if (e.target === e.currentTarget) onCancel();
     }}>
       <section className="sessionModal">
         <header className="sessionModalHeader">
@@ -42,52 +43,15 @@ export function WebNewSessionModal({
             <h2>Your goal. Your rules.</h2>
             <p>Define how the AI agent may reason, plan, and use your Mainnet context.</p>
           </div>
-          <button className="modalClose" aria-label="Close" onClick={onClose}>
+          <button className="modalClose" aria-label="Close" onClick={onCancel}>
             ×
           </button>
         </header>
 
         <div className="sessionModalBody">
-          {/* 01 WORKSPACE */}
           <section className="sessionConfigSection">
             <div className="sectionLegend">
               <span>01</span>
-              <strong>Workspace</strong>
-              <small>Choose the market context for this session.</small>
-            </div>
-            <div className="choiceGrid">
-              <button
-                type="button"
-                className={workspace === "general" ? "active" : ""}
-                onClick={() => {
-                  setWorkspace("general");
-                  setMode("agent");
-                }}
-              >
-                <span className="choiceNumber">01</span>
-                <strong>General agent</strong>
-                <small>Wallet analysis, research, and ordinary restricted Mainnet planning.</small>
-              </button>
-
-              <button
-                type="button"
-                className={workspace === "pump" ? "active pumpChoice" : "pumpChoice"}
-                onClick={() => {
-                  setWorkspace("pump");
-                  setMode("mission");
-                }}
-              >
-                <span className="choiceNumber">02</span>
-                <strong>Pump.fun agent</strong>
-                <small>Exact-mint monitoring and proposal-only Pump/PumpSwap analysis.</small>
-              </button>
-            </div>
-          </section>
-
-          {/* 02 SESSION NAME */}
-          <section className="sessionConfigSection">
-            <div className="sectionLegend">
-              <span>02</span>
               <strong>Session name</strong>
               <small>Used in your session history.</small>
             </div>
@@ -96,13 +60,32 @@ export function WebNewSessionModal({
                 type="text"
                 value={title}
                 maxLength={80}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(event) => setTitle(event.target.value)}
                 placeholder="Give this session a short name"
               />
               <div className="fieldMeta">
                 <span>You can start chatting after creation.</span>
                 <span>{title.length} / 80</span>
               </div>
+            </div>
+          </section>
+          <section className="sessionConfigSection">
+            <div className="sectionLegend">
+              <span>02</span>
+              <strong>Wallet network</strong>
+              <small>Web sessions use the browser wallet currently connected to Silfable.</small>
+            </div>
+            <div className="choiceGrid">
+              <button type="button" className="active">
+                <span className="choiceNumber">01</span>
+                <strong>Connected Solana wallet</strong>
+                <small>{shortAddress(walletAddress)} · signing stays inside your wallet extension.</small>
+              </button>
+              <button type="button" className="unavailableChoice" disabled>
+                <span className="choiceNumber">02 · DESKTOP</span>
+                <strong>Local EVM wallet</strong>
+                <small>EVM wallet generation and encrypted multi-wallet management are available in Desktop only.</small>
+              </button>
             </div>
           </section>
 
@@ -116,8 +99,7 @@ export function WebNewSessionModal({
             <div className="choiceGrid">
               <button
                 type="button"
-                className={workspace === "pump" ? "unavailableChoice" : mode === "agent" ? "active" : ""}
-                disabled={workspace === "pump"}
+                className={mode === "agent" ? "active" : ""}
                 onClick={() => setMode("agent")}
               >
                 <span className="choiceNumber">01</span>
@@ -160,8 +142,8 @@ export function WebNewSessionModal({
                 disabled
               >
                 <span className="choiceNumber">02 · LOCKED</span>
-                <strong>Cloud execution</strong>
-                <small>Monitoring and proposal workflows are being hardened. Cloud signing and broadcast are disabled.</small>
+                <strong>Full access</strong>
+                <small>Unavailable on web. Cloud signing, broadcast, and private-key storage are disabled.</small>
               </button>
             </div>
           </section>
@@ -170,7 +152,7 @@ export function WebNewSessionModal({
         <footer className="sessionModalFooter">
           <span>MAINNET — RESTRICTED</span>
           <div className="flex items-center gap-3">
-            <button type="button" className="cancelBtn" onClick={onClose}>
+            <button type="button" className="cancelBtn" onClick={onCancel}>
               Cancel
             </button>
             <button type="button" className="createBtn" onClick={handleSubmit}>
@@ -181,4 +163,8 @@ export function WebNewSessionModal({
       </section>
     </div>
   );
+}
+
+function shortAddress(address: string) {
+  return `${address.slice(0, 5)}...${address.slice(-5)}`;
 }

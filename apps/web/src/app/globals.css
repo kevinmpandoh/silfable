@@ -2,15 +2,15 @@
 @import "tailwindcss";
 
 :root {
-  --ink: #050505;
-  --paper: #fafafa;
-  --electric: #2563eb;
-  --bg: #070914;
-  --panel: #0b0e1c;
-  --panel-2: #101426;
-  --line: rgb(148 163 184 / 0.16);
-  --muted: #7f8aa7;
-  --blue: #3157ff;
+  --ink: #070914;
+  --paper: #eef2ff;
+  --electric: #4d6ef5;
+  --bg: #050713;
+  --panel: #0a0f20;
+  --panel-2: #101735;
+  --line: rgb(123 162 255 / 0.18);
+  --muted: #92a0bd;
+  --blue: #4d6ef5;
   --blue-2: #7ba2ff;
   --green: #20d880;
   --amber: #f7b733;
@@ -181,8 +181,8 @@ body:not(:has(.tradeDesktopShell)) {
 
 .modeButton.active {
   color: #ffffff;
-  background: rgb(49 87 255 / 0.3);
-  border: 1px solid rgb(49 87 255 / 0.5);
+  background: linear-gradient(110deg, rgb(83 102 233 / .36), rgb(22 183 214 / .24));
+  border: 1px solid rgb(53 190 226 / .48);
 }
 
 .headerActions {
@@ -215,9 +215,8 @@ body:not(:has(.tradeDesktopShell)) {
 .workspace {
   display: grid;
   grid-template-columns: clamp(220px, 16vw, 280px) minmax(0, 1fr) clamp(260px, 19vw, 320px);
-  flex: 1;
   width: 100vw;
-  height: calc(100dvh - 60px);
+  height: 100dvh;
   overflow: hidden;
   background: #080b18;
 }
@@ -307,7 +306,7 @@ body:not(:has(.tradeDesktopShell)) {
   border: 1px solid var(--blue);
   border-radius: 20px;
   color: white;
-  background: var(--blue);
+  background: linear-gradient(110deg, #5366e9, #16b7d6);
   font: 10px var(--mono);
   letter-spacing: 0.15em;
   text-transform: uppercase;
@@ -316,7 +315,7 @@ body:not(:has(.tradeDesktopShell)) {
 }
 
 .newSession:hover {
-  background: #4566ff;
+  background: linear-gradient(110deg, #6474f3, #22c4df);
 }
 
 .sessionFilters {
@@ -642,6 +641,42 @@ body:not(:has(.tradeDesktopShell)) {
   background: #080b18;
 }
 
+.webBridgePanel {
+  width: min(760px, 100%);
+  border: 1px solid rgb(123 162 255 / .2);
+  border-radius: 12px;
+  background: rgb(10 15 32 / .74);
+}
+
+.webBridgeToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 13px;
+  border: 0;
+  color: #b7c9f2;
+  background: transparent;
+  font: 9px var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.webBridgeToggle span { display: inline-flex; align-items: center; gap: 8px; }
+.webBridgeToggle:hover { color: #e7faff; background: linear-gradient(90deg, rgb(83 102 233 / .11), rgb(22 183 214 / .09)); }
+
+.webBridgeFields { display: grid; gap: 12px; padding: 0 13px 13px; }
+.webBridgeFields > p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.webBridgeFields label { display: grid; gap: 5px; color: #b7c9f2; font: 8px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.webBridgeFields input, .webBridgeFields select { width: 100%; min-height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; outline: 0; color: #eef2ff; background: #080c1b; font: 11px var(--mono); }
+.webBridgeFields input:focus, .webBridgeFields select:focus { border-color: #22b7d6; box-shadow: 0 0 0 2px rgb(22 183 214 / .1); }
+.webBridgeGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.webBridgeActions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.webBridgeActions small { color: var(--muted); font-size: 9px; }
+.webBridgeActions button { min-height: 34px; padding: 0 12px; border: 1px solid rgb(53 190 226 / .45); border-radius: 9px; color: white; background: linear-gradient(110deg, #5366e9, #16b7d6); font: 8px var(--mono); letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
+.webBridgeActions button:disabled { cursor: not-allowed; opacity: .48; }
+
 .homeState {
   min-height: 100%;
 }
@@ -771,13 +806,13 @@ body:not(:has(.tradeDesktopShell)) {
   border: 1px solid var(--line);
   border-radius: 50%;
   color: white;
-  background: rgb(49 87 255 / 0.2);
+  background: linear-gradient(135deg, rgb(83 102 233 / .86), rgb(22 183 214 / .88));
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .composer > button:hover:not(:disabled) {
-  background: var(--blue);
+  background: linear-gradient(135deg, #6474f3, #22c4df);
 }
 
 .sessionModalBackdrop {
@@ -1993,14 +2028,14 @@ body:not(:has(.tradeDesktopShell)) {
   border: 0;
   border-radius: 20px;
   color: white;
-  background: var(--blue);
+  background: linear-gradient(110deg, #5366e9, #16b7d6);
   font: 10px var(--mono);
   font-weight: 700;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-  box-shadow: 0 4px 20px rgba(49, 87, 255, 0.3);
+  box-shadow: 0 8px 24px rgb(25 164 218 / .24);
 }
 
 .sessionModalFooter button.createBtn:hover {
-  background: #4566ff;
+  background: linear-gradient(110deg, #6474f3, #22c4df);
 }

@@ -35,7 +35,7 @@ $manifest = [ordered]@{
   installerName = if ($null -eq $installer) { $null } else { $installer.Name }
   installerSha256 = if ($null -eq $installer) { $null } else { (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash }
   profileMode = "isolated"
-  checklist = "docs/desktop/P2_WINDOWS_ACCEPTANCE.md"
+  checklist = "docs/SILFABLE_PROJECT_REFERENCE.md"
 }
 $manifest | ConvertTo-Json -Depth 4 |
   Set-Content -LiteralPath (Join-Path $evidencePath "manifest.json") -Encoding utf8
@@ -78,7 +78,7 @@ Silfable Windows P2 QA
 Build SHA-256: $executableSha256
 Process ID (not part of submitted evidence): $($process.Id)
 
-Follow docs/desktop/P2_WINDOWS_ACCEPTANCE.md.
+Follow the Windows P2 acceptance checklist in docs/SILFABLE_PROJECT_REFERENCE.md.
 Never paste a seed phrase, private key, API key, or master password into this folder.
 The launcher does not execute or approve a transaction.
 Record each result in cases.json, then validate it with:
@@ -87,5 +87,5 @@ npm.cmd run qa:desktop:p2:validate -- <evidence-directory>
 
 Write-Host "Silfable P2 QA launched with an isolated profile."
 Write-Host "Evidence: $evidencePath"
-Write-Host "Checklist: docs/desktop/P2_WINDOWS_ACCEPTANCE.md"
+Write-Host "Checklist: docs/SILFABLE_PROJECT_REFERENCE.md"
 Write-Host "Authenticode: $($authenticode.Status)"

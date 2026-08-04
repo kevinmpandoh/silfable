@@ -1,4 +1,19 @@
-import { AiProviderSettingSchema, type AiProviderSetting, type EvmSwapProposal, type SessionIntent, type SessionWalletScope, type TransactionSettings } from "@silfable/contracts";
+import {
+  AiProviderSettingSchema,
+  BridgeContractSchema,
+  EvmBridgeContractSchema,
+  type AiProviderSetting,
+  type BridgeContract,
+  type BridgePreflightEvidence,
+  type BridgeProposal,
+  type EvmBridgeContract,
+  type EvmBridgePreflight,
+  type EvmBridgeQuote,
+  type EvmSwapProposal,
+  type SessionIntent,
+  type SessionWalletScope,
+  type TransactionSettings,
+} from "@silfable/contracts";
 
 import type { SecretName } from "../storage/keystore.js";
 import type { MainnetReadService } from "../integrations/read-only.js";
@@ -27,6 +42,14 @@ type EvmSwapQuoteService = {
   }): Promise<EvmSwapProposal>;
 };
 
+type BridgePreparationService = {
+  prepare(contract: BridgeContract): Promise<{ proposal: BridgeProposal; preflight: BridgePreflightEvidence }>;
+};
+
+type EvmBridgePreparationService = {
+  prepare(contract: EvmBridgeContract): Promise<{ quote: EvmBridgeQuote; preflight: EvmBridgePreflight }>;
+};
+
 const SETTING_KEY = "ai.provider.openrouter";
 
 export type PumpAiScope = {
@@ -41,13 +64,35 @@ export class AiService {
   readonly #readService: MainnetReadService | null;
   readonly #transactionSettings: Pick<TransactionSettingsService, "get">;
   readonly #evmSwapQuotes: EvmSwapQuoteService | null;
+  #bridgePreparation: BridgePreparationService | null;
+  #evmBridgePreparation: EvmBridgePreparationService | null;
 
-  constructor(input: { keystore: AiSecretStore; settings: AiSettingsStore; readService?: MainnetReadService; transactionSettings?: Pick<TransactionSettingsService, "get">; evmSwapQuotes?: EvmSwapQuoteService }) {
+  constructor(input: {
+    keystore: AiSecretStore;
+    settings: AiSettingsStore;
+    readService?: MainnetReadService;
+    transactionSettings?: Pick<TransactionSettingsService, "get">;
+    evmSwapQuotes?: EvmSwapQuoteService;
+    bridgePreparation?: BridgePreparationService;
+    evmBridgePreparation?: EvmBridgePreparationService;
+  }) {
     this.#keystore = input.keystore;
     this.#settings = input.settings;
     this.#readService = input.readService ?? null;
     this.#transactionSettings = input.transactionSettings ?? { get: () => ({ ...DEFAULT_TRANSACTION_SETTINGS }) };
     this.#evmSwapQuotes = input.evmSwapQuotes ?? null;
+    this.#bridgePreparation = input.bridgePreparation ?? null;
+    this.#evmBridgePreparation = input.evmBridgePreparation ?? null;
+  }
+
+  configureBridgePreparation(service: BridgePreparationService): void {
+    if (this.#bridgePreparation !== null) throw new Error("Bridge preparation is already configured");
+    this.#bridgePreparation = service;
+  }
+
+  configureEvmBridgePreparation(service: EvmBridgePreparationService): void {
+    if (this.#evmBridgePreparation !== null) throw new Error("EVM Bridge preparation is already configured");
+    this.#evmBridgePreparation = service;
   }
 
   async listSettings(): Promise<AiProviderSetting[]> {

@@ -24,13 +24,19 @@ export class SessionService {
   async list(): Promise<SessionRecord[]> {
     await this.#mutationTail;
     const key = await this.#getOrCreateKey();
-    return this.#database.listSessionRecords().map((record) => {
-      const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(record.nonce, "base64"));
-      decipher.setAAD(Buffer.from(`silfable-session-v1:${record.id}`, "utf8"));
-      decipher.setAuthTag(Buffer.from(record.tag, "base64"));
-      const plaintext = Buffer.concat([decipher.update(Buffer.from(record.ciphertext, "base64")), decipher.final()]).toString("utf8");
-      return SessionRecordSchema.parse(JSON.parse(plaintext) as unknown);
-    });
+    const sessions: SessionRecord[] = [];
+    for (const record of this.#database.listSessionRecords()) {
+      try {
+        const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(record.nonce, "base64"));
+        decipher.setAAD(Buffer.from(`silfable-session-v1:${record.id}`, "utf8"));
+        decipher.setAuthTag(Buffer.from(record.tag, "base64"));
+        const plaintext = Buffer.concat([decipher.update(Buffer.from(record.ciphertext, "base64")), decipher.final()]).toString("utf8");
+        sessions.push(SessionRecordSchema.parse(JSON.parse(plaintext) as unknown));
+      } catch {
+        // Skip undecipherable or invalid session records to prevent UI failure
+      }
+    }
+    return sessions;
   }
 
   async get(id: string): Promise<SessionRecord | null> {

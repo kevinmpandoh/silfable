@@ -16,6 +16,7 @@
     "packages/*"
   ],
   "scripts": {
+    "dev": "npm run dev:web",
     "dev:web": "npm run dev --workspace @silfable/web",
     "build:web": "npm run build --workspace @silfable/web",
     "lint:web": "npm run lint --workspace @silfable/web",

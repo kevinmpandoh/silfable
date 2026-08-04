@@ -24,6 +24,7 @@ import { LimitOrderPreviewCard } from "@/components/cards/LimitOrderPreviewCard"
 import { JupiterSwapPreviewCard } from "@/components/cards/JupiterSwapPreviewCard";
 import { WebSetupWizard } from "@/components/trade/WebSetupWizard";
 import { WebNewSessionModal } from "@/components/trade/WebNewSessionModal";
+import { SolanaBridgePanel, type SolanaBridgeRequest } from "@/components/trade/SolanaBridgePanel";
 
 function base64ToBytes(value: string): Uint8Array {
   const binary = window.atob(value);
@@ -72,40 +73,35 @@ function parseWebUsage(value: unknown, fallbackModel: string): WebUsage | undefi
 export interface WebSetupSettings {
   customRpcUrl: string;
   jupiterApiKey: string;
-  tavilyApiKey: string;
   openRouterApiKey: string;
   aiModel: string;
-  contextBudget: string;
   outputLimit: string;
   temperature: string;
-  maxNetworkFee: string;
   maxSlippageBps: string;
-  defaultDeadlineMinutes: string;
-  priority: "economy" | "standard" | "fast";
-  pumpMaxSpendLamports: string;
-  pumpTakeProfitBps: string;
-  pumpStopLossBps: string;
-  pumpMaxOpenPositions: string;
 }
 
 const DEFAULT_SETTINGS: WebSetupSettings = {
   customRpcUrl: "",
   jupiterApiKey: "",
-  tavilyApiKey: "",
   openRouterApiKey: "",
   aiModel: "openai/gpt-4o-mini",
-  contextBudget: "128000",
   outputLimit: "8192",
   temperature: "0.7",
-  maxNetworkFee: "5000000",
   maxSlippageBps: "100",
-  defaultDeadlineMinutes: "30",
-  priority: "standard",
-  pumpMaxSpendLamports: "1000000",
-  pumpTakeProfitBps: "1000",
-  pumpStopLossBps: "500",
-  pumpMaxOpenPositions: "3",
 };
+
+const WEB_MODEL_CONTEXT_LIMITS: Record<string, number> = {
+  "openai/gpt-4o-mini": 128_000,
+  "openai/gpt-4.1-mini": 1_000_000,
+  "anthropic/claude-3.5-sonnet": 200_000,
+  "google/gemini-2.0-flash-001": 1_000_000,
+};
+
+function formatTokenCount(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+  return String(value);
+}
 
 function setupStorageKey(walletAddress: string): string {
   return `silfable_web_setup_v1:${walletAddress}`;
@@ -142,12 +138,13 @@ export default function TradePage() {
   // IndexedDB Sessions & Messages State
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string>("");
-  const [sessionFilter, setSessionFilter] = useState<"all" | "agent" | "mission" | "pump">("all");
+  const [sessionFilter, setSessionFilter] = useState<"all" | "agent" | "mission">("all");
   const [showSessionModal, setShowSessionModal] = useState(false);
+  const [pendingSessionPrompt, setPendingSessionPrompt] = useState<string | null>(null);
   const [messages, setMessages] = useState<WebMessage[]>([]);
-  const [nav, setNav] = useState("sessions");
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [bridgeBusy, setBridgeBusy] = useState(false);
   const [txStatus, setTxStatus] = useState<string | null>(null);
 
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
@@ -191,6 +188,10 @@ export default function TradePage() {
     },
     { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, hasCost: false, model: settings.aiModel },
   );
+  const lastTurnUsage = [...messages].reverse().find((message) => message.usage)?.usage ?? null;
+  const providerContextLimit = WEB_MODEL_CONTEXT_LIMITS[runtimeUsage.model] ?? 128_000;
+  const lastTurnContextTokens = lastTurnUsage?.inputTokens ?? 0;
+  const contextUsagePercent = Math.min(100, Math.round((lastTurnContextTokens / providerContextLimit) * 100));
 
   // --------------------------------------------------------------------------
   // INITIALIZATION: Load Setup & Sessions
@@ -340,7 +341,6 @@ export default function TradePage() {
     setActiveSessionId("");
     setMessages([]);
     setInput("");
-    setNav("sessions");
   }
 
   // --------------------------------------------------------------------------
@@ -364,6 +364,12 @@ export default function TradePage() {
   function openSettings() {
     setSetupStep(4);
     setEditingSetup(true);
+  }
+
+  function openNewSession(prompt = "") {
+    setPendingSessionPrompt(prompt.trim() || null);
+    setInput("");
+    setShowSessionModal(true);
   }
 
   // --------------------------------------------------------------------------
@@ -513,6 +519,43 @@ export default function TradePage() {
     }
   }
 
+  useEffect(() => {
+    if (!pendingSessionPrompt || !activeSessionId || loading) return;
+    const prompt = pendingSessionPrompt;
+    setPendingSessionPrompt(null);
+    void handleSendMessage(prompt);
+  }, [activeSessionId, loading, pendingSessionPrompt]);
+
+  async function handlePrepareSolanaBridge(request: SolanaBridgeRequest) {
+    if (!connected || !publicKey || !walletAddress) {
+      setTxStatus("Connect a Solana wallet before preparing a bridge.");
+      return;
+    }
+    setBridgeBusy(true);
+    setTxStatus("Preparing a Relay bridge quote. No transaction is broadcast until wallet approval.");
+    try {
+      const response = await fetch("/api/bridge/solana-to-evm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress, ...request }),
+      });
+      const quote = await response.json() as { error?: string; transaction?: string; destination?: { label: string; symbol: string }; requestId?: string | null };
+      if (!response.ok || typeof quote.transaction !== "string") {
+        throw new Error(quote.error || "Bridge provider did not return an executable transaction.");
+      }
+      const transaction = VersionedTransaction.deserialize(base64ToBytes(quote.transaction));
+      const signature = await sendTransaction(transaction, connection);
+      setTxStatus(`Bridge to ${quote.destination?.label ?? request.destination} submitted. Source signature: ${signature.slice(0, 12)}…`);
+      await connection.confirmTransaction(signature, "confirmed");
+      await fetchWalletBalance();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Bridge was cancelled or failed safely.";
+      setTxStatus(`Bridge was not broadcast: ${message}`);
+    } finally {
+      setBridgeBusy(false);
+    }
+  }
+
   // Loading Gate while checking Wallet Connection
   if (!connected || !publicKey || authenticatedWallet !== walletAddress) {
     return (
@@ -548,14 +591,18 @@ export default function TradePage() {
     <div className="layout">
       <WebNewSessionModal
         isOpen={showSessionModal}
+        walletAddress={walletAddress ?? ""}
         onClose={() => setShowSessionModal(false)}
-        onCreateRestrictedSession={async ({ title, workspace, mode }) => {
+        onCancel={() => {
+          setPendingSessionPrompt(null);
+          setShowSessionModal(false);
+        }}
+        onCreateRestrictedSession={async ({ title, mode }) => {
           if (!walletAddress) return;
-          const filterType = workspace === "pump" ? "pump" : mode;
           const draftSession: SessionItem = {
             id: "",
             title,
-            filter: filterType,
+            filter: mode,
             createdAt: Date.now(),
             updatedAt: Date.now(),
           };
@@ -578,13 +625,13 @@ export default function TradePage() {
             <span className="railBrandTitle">SILFABLE</span>
           </Link>
 
-          <button onClick={() => setShowSessionModal(true)} className="newSession">
+          <button onClick={() => openNewSession()} className="newSession">
             + NEW SESSION
           </button>
 
           {/* Session Filters */}
           <div className="sessionFilters">
-            {(["all", "agent", "mission", "pump"] as const).map((filter) => (
+            {(["all", "agent", "mission"] as const).map((filter) => (
               <button
                 key={filter}
                 onClick={() => setSessionFilter(filter)}
@@ -610,7 +657,7 @@ export default function TradePage() {
               </button>
             </div>
             {sessions
-              .filter((s) => sessionFilter === "all" || s.filter === sessionFilter)
+              .filter((s) => sessionFilter === "all" || s.filter === sessionFilter || (sessionFilter === "mission" && s.filter === "pump"))
               .map((s) => (
                 <button
                   key={s.id}
@@ -634,15 +681,7 @@ export default function TradePage() {
           </div>
 
           <nav className="bottomNav">
-            <button className={nav === "memory" ? "active" : ""} onClick={() => setNav("memory")}>
-              Memory
-            </button>
-            <button className={nav === "missions" ? "active" : ""} onClick={() => setNav("missions")}>
-              Missions
-            </button>
-            <button onClick={openSettings}>
-              Settings
-            </button>
+            <button onClick={openSettings}>Settings</button>
           </nav>
 
           <div className="runtimeBadge">
@@ -652,76 +691,41 @@ export default function TradePage() {
 
         {/* CENTER STAGE: CONVERSATION CHAT FEED & COMPOSER */}
         <section className="centerStage">
-          {nav === "memory" ? (
-            <div className="workspacePanel">
-              <header>
-                <span className="modalKicker">Memory</span>
-                <h1>Durable lessons stay reviewable.</h1>
-                <p>Web memory is local-first. Future agent runs may reference approved lessons, but no secret or private key is stored here.</p>
-              </header>
-              <div className="panelGrid">
-                <article className="panelCard">
-                  <span>01</span>
-                  <strong>Approved lessons</strong>
-                  <p>No durable lessons saved yet. When the AI proposes a reusable rule, it will appear here for approval.</p>
-                </article>
-                <article className="panelCard">
-                  <span>02</span>
-                  <strong>Trading constraints</strong>
-                  <p>Restricted Mainnet, wallet approval required, max slippage {settings.maxSlippageBps} bps, max network fee {settings.maxNetworkFee} lamports.</p>
-                </article>
-                <article className="panelCard">
-                  <span>03</span>
-                  <strong>Research notes</strong>
-                  <p>Tavily-backed research is available only when the API key is configured in Settings.</p>
-                </article>
-              </div>
-            </div>
-          ) : nav === "missions" ? (
-            <div className="workspacePanel">
-              <header>
-                <span className="modalKicker">Missions</span>
-                <h1>Every mission has limits.</h1>
-                <p>Sessions created as Mission or Pump.fun are listed here with their current restricted posture.</p>
-              </header>
-              <div className="panelList">
-                {sessions.filter((session) => session.filter === "mission" || session.filter === "pump").length === 0 ? (
-                  <article className="panelCard">
-                    <span>EMPTY</span>
-                    <strong>No mission sessions yet</strong>
-                    <p>Create a new Mission or Pump.fun session to track goals, stop conditions, and future receipts.</p>
-                  </article>
-                ) : (
-                  sessions
-                    .filter((session) => session.filter === "mission" || session.filter === "pump")
-                    .map((session) => (
-                      <article key={session.id} className="panelCard">
-                        <span>{session.filter}</span>
-                        <strong>{session.title}</strong>
-                        <p>Restricted - wallet approval required - updated {new Date(session.updatedAt).toLocaleString()}</p>
-                        <button onClick={() => { setActiveSessionId(session.id); setNav("sessions"); }} className="railBtn">Open session</button>
-                      </article>
-                    ))
-                )}
-              </div>
-            </div>
-          ) : sessions.length === 0 ? (
+          {sessions.length === 0 ? (
             <div className="homeState flex h-full flex-col items-center justify-center px-6 text-center">
               <span className="brandMark large mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#3157ff]/50 bg-[rgba(49,87,255,0.1)]">
                 <Image src="/logo.png" alt="Silfable Logo" width={32} height={32} className="h-8 w-8 object-contain" />
               </span>
               <p className="mb-4 font-mono text-[9px] uppercase tracking-[0.22em] text-[#3157ff]">
-                Your workspace is empty
+                Understand. Constrain. Verify.
               </p>
               <h1 className="mb-5 font-serif text-4xl font-bold leading-tight tracking-tight text-white md:text-5xl">
-                Create a session to begin.
+                What should Silfable help you do?
               </h1>
               <p className="mb-8 max-w-lg text-sm leading-6 text-[#7f8aa7]">
-                Sessions keep each conversation, mission, and execution plan organized under this wallet.
+                Start with a prompt. Silfable will create a restricted session for this connected wallet.
               </p>
-              <button type="button" onClick={() => setShowSessionModal(true)} className="newSession max-w-64 px-8">
-                + NEW SESSION
-              </button>
+              <div className="composer mx-auto max-w-[680px] w-full mb-6 relative">
+                <textarea
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      openNewSession(input);
+                    }
+                  }}
+                  placeholder="Plan a Mainnet task or ask about your portfolio..."
+                  rows={1}
+                />
+                <span>NEW SESSION</span>
+                <button disabled={!input.trim()} onClick={() => openNewSession(input)}>↑</button>
+              </div>
+              <div className="suggestions flex flex-wrap justify-center gap-3">
+                <button onClick={() => openNewSession("Review my configured wallet balances and recent finalized activity.")}>WALLET ACTIVITY</button>
+                <button onClick={() => openNewSession("Plan a conservative Solana swap with explicit limits.")}>PLAN A SWAP</button>
+                <button onClick={() => openNewSession("Review this Pump.fun mint and prepare a restricted analysis preview.")}>PUMP.FUN ANALYSIS</button>
+              </div>
             </div>
           ) : messages.length === 0 ? (
             <div className="homeState flex flex-col justify-center items-center h-full px-6 text-center">
@@ -829,6 +833,7 @@ export default function TradePage() {
 
               {/* Quick Suggestions Chips & Composer */}
               <div className="conversationComposer">
+                <SolanaBridgePanel busy={bridgeBusy} onPrepare={handlePrepareSolanaBridge} />
                 <div className="suggestions">
                   <button
                     onClick={() =>
@@ -907,6 +912,16 @@ export default function TradePage() {
               {runtimeUsage.model}
             </div>
             
+            <div className="mb-4 border-b border-[rgb(148,163,184,0.16)] pb-4" title="Input tokens reported by the provider for the most recent AI request.">
+              <div className="mb-2 flex items-center justify-between gap-2 font-mono text-[8px] uppercase tracking-[0.14em] text-[#7f8aa7]">
+                <span>Context · last turn</span>
+                <span className="text-[#eef2ff]">{formatTokenCount(lastTurnContextTokens)} / {formatTokenCount(providerContextLimit)} · {contextUsagePercent}%</span>
+              </div>
+              <div className="h-1 overflow-hidden rounded-full bg-white/[0.12]">
+                <div className="h-full rounded-full bg-gradient-to-r from-[#5366e9] to-[#16b7d6] transition-[width] duration-200" style={{ width: `${contextUsagePercent}%` }} />
+              </div>
+              <p className="mt-2 font-mono text-[8px] text-[#7f8aa7]">Output cap: {formatTokenCount(Number(settings.outputLimit) || 0)} tokens</p>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <div className="text-[8px] tracking-[0.16em] uppercase text-[#7f8aa7] mb-1">INPUT</div>

@@ -13,7 +13,7 @@ const reveal = {
 
 export function Hero() {
   return (
-    <section id="top" className="relative flex min-h-screen overflow-hidden border-b border-white/15 bg-ink pt-20">
+    <section id="top" className="relative flex min-h-screen overflow-hidden border-b border-cyan-200/15 bg-[radial-gradient(circle_at_72%_28%,rgb(22_183_214_/_0.18),transparent_24%),radial-gradient(circle_at_24%_82%,rgb(83_102_233_/_0.16),transparent_30%),#070914] pt-20">
       <div className="pointer-events-none absolute inset-y-0 right-[24%] hidden w-px bg-white/10 xl:block" />
       <div className="section-shell flex min-h-[calc(100vh-5rem)] flex-col justify-between py-14 sm:py-18 lg:py-20">
         <motion.div

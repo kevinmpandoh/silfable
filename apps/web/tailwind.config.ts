@@ -10,9 +10,9 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#050505",
-        paper: "#FAFAFA",
-        electric: "#2563EB",
+        ink: "#070914",
+        paper: "#EEF2FF",
+        electric: "#4D6EF5",
       },
       fontFamily: {
         serif: ["var(--font-serif)", "Georgia", "serif"],

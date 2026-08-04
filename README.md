@@ -1,6 +1,6 @@
 # Silfable
 
-Silfable is a local-first desktop workspace for operating a restricted AI agent. Wallet material and API credentials stay encrypted locally. Its product architecture is organized into Token Launch (Pump.fun), Solana Swap (Jupiter), EVM Swap, and Bridge lanes. The guarded desktop Jupiter path and conservative Pump.fun Token Launch path have restricted manual execution implementations. A restricted Robinhood Chain/0x EVM pipeline is also wired through exact approval, local signing, and encrypted receipt recovery, but remains release-locked pending independent Mainnet acceptance and security evidence. Bridge remains quote-only.
+Silfable is a local-first desktop workspace for operating a restricted AI agent. Wallet material and API credentials stay encrypted locally. Its product architecture is organized into Token Launch (Pump.fun), Solana Swap (Jupiter), EVM Swap, and Bridge lanes. The guarded desktop Jupiter and Pump.fun Token Launch paths have restricted manual Mainnet execution implementations. EVM sessions use one chain-bound KyberSwap pipeline across Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, Avalanche, and Robinhood Chain. EVM signing, one-attempt broadcast, encrypted receipts, and reconciliation are implemented but remain release-gated pending controlled acceptance and security evidence. Bridge uses a release-controlled dynamic router: deBridge DLN is preferred and Relay is the availability fallback for Solana-USDC routes to six native-USDC destinations; Robinhood USDG is Relay-only. Every bridge route remains independently release-gated.
 
 ## Workspace
 
@@ -45,11 +45,7 @@ Settings reopens the review screen so each section can be edited and then return
 - Windows QA launches the packaged executable with an isolated profile and verifies that the React renderer and restricted preload bridge start successfully.
 - The signed-release workflow additionally requires a valid Authenticode result. Certificates and passwords are supplied through CI secrets and never committed.
 
-See [the Phase 0 baseline](docs/PHASE_0_BASELINE.md), [Phase 1 production hardening](docs/PHASE_1_PRODUCTION_HARDENING.md), [Phase 2 validation matrix](docs/PHASE_2_VALIDATION_MATRIX.md), [the venue product architecture](docs/VENUE_PRODUCT_ARCHITECTURE.md), and [the current desktop architecture](docs/desktop/MAINNET_DESKTOP_ARCHITECTURE.md) before adding privileged capabilities.
-
-Future work is tracked in the [prioritized Mainnet product roadmap](docs/desktop/MAINNET_PRODUCT_ROADMAP.md). It places fee and state correctness, security review, recovery, and signed-release gates ahead of scheduled or autonomous trading features.
-
-The legacy Pump/PumpSwap pilot is documented separately in [Pump.fun implementation status](docs/desktop/PUMPFUN_IMPLEMENTATION_STATUS.md). It is not the new Token Launch lane.
+Read the [Silfable Project Reference](docs/SILFABLE_PROJECT_REFERENCE.md) before adding privileged capabilities. It is the single source of truth for product scope, architecture, venue status, Mainnet acceptance, release gates, the VEX comparison, and the prioritized roadmap.
 
 ## Requirements
 

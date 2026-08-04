@@ -55,6 +55,9 @@ export async function POST(request: NextRequest) {
         nonceHash: sha256(nonce),
         message,
         expiresAt,
+        // MongoDB distinguishes a missing optional field from an explicit null.
+        // Persist null so the atomic consume filter can match new challenges.
+        usedAt: null,
       },
     });
 

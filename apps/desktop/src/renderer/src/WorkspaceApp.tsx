@@ -1,8 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Activity,
+  ArrowUp,
+  Brain,
+  CirclePlus,
+  Settings,
+  ShieldCheck,
+  Target,
+} from "lucide-react";
 import logoUrl from "../../assets/logo.png";
+import { Button, Modal } from "./components/ui";
 
 import type {
+  BridgePreflightEvidence,
+  BridgeProposal,
+  BridgeReceipt,
+  BridgeDestinationChain,
   EmergencyStopStatus,
+  EvmBridgeContract,
+  EvmBridgePreflight,
+  EvmBridgeQuote,
+  EvmBridgeReceipt,
+  EvmChainKey,
+  EvmPortfolioSnapshot,
   EvmSessionExecutionReceipt,
   EvmSwapPreflightEvidence,
   EvmSwapProposal,
@@ -10,6 +30,7 @@ import type {
   LimitOrderContractPreview,
   LimitOrderExecutionReceipt,
   LimitOrderSimulationPreview,
+  LegacyPumpLaunchMetadataPackage,
   MissionContractPreview,
   MissionExecutionReceipt,
   MissionSimulationPreview,
@@ -19,7 +40,7 @@ import type {
   PumpFinalRevalidation,
   PumpLaunchDraft,
   PumpLaunchDraftInput,
-  PumpLaunchMetadataPackage,
+  PumpLaunchMetadata,
   PumpLaunchPreflight,
   PumpLaunchFinalRevalidation,
   PumpLaunchExecutionRecord,
@@ -32,6 +53,86 @@ import type {
   TransactionSettings,
   WalletActivitySnapshot,
 } from "@silfable/contracts";
+import {
+  BRIDGE_ARBITRUM_CHAIN_ID,
+  BRIDGE_ARBITRUM_USDC_ADDRESS,
+  BRIDGE_AVALANCHE_CHAIN_ID,
+  BRIDGE_AVALANCHE_USDC_ADDRESS,
+  BRIDGE_BASE_CHAIN_ID,
+  BRIDGE_BASE_USDC_ADDRESS,
+  BRIDGE_ETHEREUM_CHAIN_ID,
+  BRIDGE_ETHEREUM_USDC_ADDRESS,
+  BRIDGE_OPTIMISM_CHAIN_ID,
+  BRIDGE_OPTIMISM_USDC_ADDRESS,
+  BRIDGE_POLYGON_CHAIN_ID,
+  BRIDGE_POLYGON_USDC_ADDRESS,
+  BRIDGE_ROBINHOOD_CHAIN_ID,
+  BRIDGE_ROBINHOOD_USDG_ADDRESS,
+  BRIDGE_SOLANA_CHAIN_ID,
+  BRIDGE_SOLANA_USDC_MINT,
+} from "@silfable/contracts";
+
+const BRIDGE_DESTINATIONS: Record<BridgeDestinationChain, {
+  label: string;
+  chainId: BridgeProposal["contract"]["destinationChainId"];
+  assetAddress: string;
+  symbol: "USDC" | "USDG";
+  confirmation: "BRIDGE USDC TO BASE" | "BRIDGE USDC TO ARBITRUM" | "BRIDGE USDC TO ETHEREUM" | "BRIDGE USDC TO OPTIMISM" | "BRIDGE USDC TO POLYGON" | "BRIDGE USDC TO AVALANCHE" | "BRIDGE USDC TO ROBINHOOD";
+}> = {
+  base: { label: "Base", chainId: BRIDGE_BASE_CHAIN_ID, assetAddress: BRIDGE_BASE_USDC_ADDRESS, symbol: "USDC", confirmation: "BRIDGE USDC TO BASE" },
+  arbitrum: { label: "Arbitrum", chainId: BRIDGE_ARBITRUM_CHAIN_ID, assetAddress: BRIDGE_ARBITRUM_USDC_ADDRESS, symbol: "USDC", confirmation: "BRIDGE USDC TO ARBITRUM" },
+  ethereum: { label: "Ethereum", chainId: BRIDGE_ETHEREUM_CHAIN_ID, assetAddress: BRIDGE_ETHEREUM_USDC_ADDRESS, symbol: "USDC", confirmation: "BRIDGE USDC TO ETHEREUM" },
+  optimism: { label: "Optimism", chainId: BRIDGE_OPTIMISM_CHAIN_ID, assetAddress: BRIDGE_OPTIMISM_USDC_ADDRESS, symbol: "USDC", confirmation: "BRIDGE USDC TO OPTIMISM" },
+  polygon: { label: "Polygon", chainId: BRIDGE_POLYGON_CHAIN_ID, assetAddress: BRIDGE_POLYGON_USDC_ADDRESS, symbol: "USDC", confirmation: "BRIDGE USDC TO POLYGON" },
+  avalanche: { label: "Avalanche", chainId: BRIDGE_AVALANCHE_CHAIN_ID, assetAddress: BRIDGE_AVALANCHE_USDC_ADDRESS, symbol: "USDC", confirmation: "BRIDGE USDC TO AVALANCHE" },
+  robinhood: { label: "Robinhood", chainId: BRIDGE_ROBINHOOD_CHAIN_ID, assetAddress: BRIDGE_ROBINHOOD_USDG_ADDRESS, symbol: "USDG", confirmation: "BRIDGE USDC TO ROBINHOOD" },
+};
+
+const CONTROLLED_BRIDGE_ACCEPTANCE_CONFIRMATION = "RUN CONTROLLED BRIDGE ACCEPTANCE" as const;
+
+function isControlledBridgeAcceptance(proposal: BridgeProposal): boolean {
+  return (proposal.quote.provider === "relay" || proposal.quote.provider === "debridge-dln")
+    && BigInt(proposal.contract.amountIn) <= 10_000_000n
+    && proposal.contract.maximumTotalFeeUsd <= 10.0
+    && proposal.quote.fee.totalFeeUsd <= 10.0
+    && BigInt(proposal.contract.minimumDestinationAmount) > 0n;
+}
+
+type EvmBridgeChainKey = Exclude<EvmChainKey, "bsc">;
+
+const EVM_BRIDGE_ASSETS: Record<EvmBridgeChainKey, {
+  label: string;
+  chainId: number;
+  address: `0x${string}`;
+  symbol: "USDC" | "USDG";
+}> = {
+  ethereum: { label: "Ethereum", chainId: BRIDGE_ETHEREUM_CHAIN_ID, address: BRIDGE_ETHEREUM_USDC_ADDRESS, symbol: "USDC" },
+  base: { label: "Base", chainId: BRIDGE_BASE_CHAIN_ID, address: BRIDGE_BASE_USDC_ADDRESS, symbol: "USDC" },
+  arbitrum: { label: "Arbitrum", chainId: BRIDGE_ARBITRUM_CHAIN_ID, address: BRIDGE_ARBITRUM_USDC_ADDRESS, symbol: "USDC" },
+  optimism: { label: "Optimism", chainId: BRIDGE_OPTIMISM_CHAIN_ID, address: BRIDGE_OPTIMISM_USDC_ADDRESS, symbol: "USDC" },
+  polygon: { label: "Polygon", chainId: BRIDGE_POLYGON_CHAIN_ID, address: BRIDGE_POLYGON_USDC_ADDRESS, symbol: "USDC" },
+  avalanche: { label: "Avalanche", chainId: BRIDGE_AVALANCHE_CHAIN_ID, address: BRIDGE_AVALANCHE_USDC_ADDRESS, symbol: "USDC" },
+  robinhood: { label: "Robinhood Chain", chainId: BRIDGE_ROBINHOOD_CHAIN_ID, address: BRIDGE_ROBINHOOD_USDG_ADDRESS, symbol: "USDG" },
+};
+
+const EVM_PORTFOLIO_CHAINS: ReadonlyArray<{
+  key: EvmChainKey;
+  label: string;
+  token?: { address: `0x${string}`; symbol: "USDC" | "USDG"; decimals: 6 };
+}> = [
+  { key: "robinhood", label: "Robinhood", token: { address: BRIDGE_ROBINHOOD_USDG_ADDRESS, symbol: "USDG", decimals: 6 } },
+  { key: "ethereum", label: "Ethereum", token: { address: BRIDGE_ETHEREUM_USDC_ADDRESS, symbol: "USDC", decimals: 6 } },
+  { key: "base", label: "Base", token: { address: BRIDGE_BASE_USDC_ADDRESS, symbol: "USDC", decimals: 6 } },
+  { key: "arbitrum", label: "Arbitrum", token: { address: BRIDGE_ARBITRUM_USDC_ADDRESS, symbol: "USDC", decimals: 6 } },
+  { key: "optimism", label: "Optimism", token: { address: BRIDGE_OPTIMISM_USDC_ADDRESS, symbol: "USDC", decimals: 6 } },
+  { key: "polygon", label: "Polygon", token: { address: BRIDGE_POLYGON_USDC_ADDRESS, symbol: "USDC", decimals: 6 } },
+  { key: "avalanche", label: "Avalanche", token: { address: BRIDGE_AVALANCHE_USDC_ADDRESS, symbol: "USDC", decimals: 6 } },
+  { key: "bsc", label: "BNB Chain" },
+];
+
+function bridgeDestination(chainId: BridgeProposal["contract"]["destinationChainId"]) {
+  return Object.values(BRIDGE_DESTINATIONS).find((candidate) => candidate.chainId === chainId) ?? BRIDGE_DESTINATIONS.base;
+}
 
 type SetupState = {
   step: number;
@@ -166,7 +267,7 @@ export function WorkspaceApp() {
       />
     );
   }
-  if (
+ if (
     runtime?.masterPassword === "configured" &&
     runtime.keystore === "locked"
   ) {
@@ -184,7 +285,7 @@ export function WorkspaceApp() {
       />
     );
   }
-  if (setup.complete && runtime?.masterPassword === "missing") {
+   if (setup.complete && runtime?.masterPassword === "missing") {
     return (
       <main className="setupPage">
         <Brand compact />
@@ -308,7 +409,7 @@ function BootstrapScreen({
             </div>
           ))}
         </div>
-        {error && (
+      {error && (
           <Notice tone="danger" title="Runtime check failed">
             {error}
           </Notice>
@@ -891,11 +992,12 @@ function WalletStep({
   const [evmWallets, setEvmWallets] = useState<Array<{ address: string; primary: boolean }>>([]);
   const [evmRecovery, setEvmRecovery] = useState<string | null>(null);
   const [evmMessage, setEvmMessage] = useState<string | null>(null);
+  const [evmMode, setEvmMode] = useState<"generate" | "mnemonic" | "private">("generate");
   const [walletTab, setWalletTab] = useState<"solana" | "evm">("solana");
   const configured = runtime?.wallet === "configured";
   useEffect(() => {
     if (!configured) return;
-    window.silfable
+      window.silfable
       .listWallets()
       .then((response) => setWallets(response.wallets))
       .catch(() =>
@@ -903,13 +1005,14 @@ function WalletStep({
       );
   }, [configured]);
   useEffect(() => {
-    window.silfable.getRobinhoodWallet().then((result) => {
+    window.silfable.getEvmWallets().then((result: any) => {
       setEvmAddress(result.address);
       setEvmWallets(result.wallets);
     }).catch(() => undefined);
   }, []);
   async function refreshEvmWallets(): Promise<void> {
-    const result = await window.silfable.getRobinhoodWallet();
+    const result = await window.silfable.getEvmWallets();
+
     setEvmAddress(result.address);
     setEvmWallets(result.wallets);
   }
@@ -945,7 +1048,7 @@ function WalletStep({
       setRuntime(await window.silfable.getRuntimeStatus());
       setWallets((await window.silfable.listWallets()).wallets);
     } catch (error) {
-      setSecret("");
+       setSecret("");
       setMessage(
         error instanceof Error
           ? error.message
@@ -966,18 +1069,43 @@ function WalletStep({
   async function importEvmWallet(): Promise<void> {
     setBusy(true); setEvmMessage(null); setEvmRecovery(null);
     try {
-      const result = await window.silfable.importRobinhoodWalletMnemonic({ schemaVersion: 1, requestId: crypto.randomUUID(), mnemonic: evmMnemonic, acknowledgedHotWalletRisk: true });
+      await window.silfable.importRobinhoodWalletMnemonic({ schemaVersion: 1, requestId: crypto.randomUUID(), mnemonic: evmMnemonic, acknowledgedHotWalletRisk: true });
       setEvmMnemonic(""); await refreshEvmWallets(); setEvmMessage("Robinhood Chain EVM wallet imported and encrypted locally.");
     } catch { setEvmMessage("EVM recovery phrase could not be imported."); }
     finally { setBusy(false); }
   }
-  async function importEvmPrivateKey(): Promise<void> {
+ async function importEvmPrivateKey(): Promise<void> {
     setBusy(true); setEvmMessage(null); setEvmRecovery(null);
     try {
       await window.silfable.importRobinhoodWalletPrivateKey({ schemaVersion: 1, requestId: crypto.randomUUID(), privateKey: evmPrivateKey, acknowledgedHotWalletRisk: true });
       setEvmPrivateKey(""); await refreshEvmWallets(); setEvmMessage("EVM private key imported and encrypted locally.");
     } catch { setEvmMessage("EVM private key could not be imported. Use a 32-byte hexadecimal key."); }
     finally { setBusy(false); }
+  }
+  async function clearAllWallets(family: "solana" | "evm"): Promise<void> {
+    const label = family === "solana" ? "Solana" : "EVM";
+    if (!window.confirm(`Remove every ${label} wallet from this encrypted vault? Sessions will remain, but they will no longer have a registered wallet.`)) return;
+    setBusy(true);
+    try {
+      if (family === "solana") {
+        const result = await window.silfable.clearWallets({ schemaVersion: 1, requestId: crypto.randomUUID(), confirmation: "CLEAR ALL SOLANA WALLETS" });
+        setWallets([]);
+        setRecovery(null);
+        setMessage(`${result.removed} Solana wallet(s) removed from this device.`);
+        setRuntime(await window.silfable.getRuntimeStatus());
+      } else {
+        const result = await window.silfable.clearEvmWallets({ schemaVersion: 1, requestId: crypto.randomUUID(), confirmation: "CLEAR ALL EVM WALLETS" });
+        setEvmAddress(null);
+        setEvmWallets([]);
+        setEvmRecovery(null);
+        setEvmMessage(`${result.removed} EVM wallet(s) removed from this device.`);
+      }
+    } catch {
+     const fallback = `${label} wallets could not be removed. Unlock the vault and try again.`;
+      family === "solana" ? setMessage(fallback) : setEvmMessage(fallback);
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <SetupCard
@@ -1008,8 +1136,9 @@ function WalletStep({
           </div>
         </div>
       )}
-      {wallets.length > 0 && (
-        <div className="walletList">
+     {wallets.length > 0 && (
+        <div>
+          <div className="walletList">
           {wallets.map((wallet, index) => (
               <div key={wallet.address}>
                 <span>0{index + 1}</span>
@@ -1022,6 +1151,8 @@ function WalletStep({
                 </button>
               </div>
           ))}
+          </div>
+          <button className="secondaryButton dangerButton" disabled={busy} onClick={() => void clearAllWallets("solana")}>Clear all Solana wallets</button>
         </div>
       )}
       <div className="segmented">
@@ -1061,7 +1192,7 @@ function WalletStep({
       )}
       <button
         className="secondaryButton"
-        disabled={busy || (mode !== "generate" && secret.trim().length < 8)}
+        disabled={busy || wallets.length >= 3 || (mode !== "generate" && secret.trim().length < 8)}
         onClick={() => void onboard()}
       >
         {busy
@@ -1080,10 +1211,21 @@ function WalletStep({
         </Notice>
       )}
       </>}
-      {walletTab === "evm" &&
+{walletTab === "evm" && <section className="advanced transactionGuardSettings">
+        <strong>Robinhood Chain EVM wallets</strong>
+        <small className="providerHint">Maximum 3 wallets. Creating or importing never authorizes a transaction.</small>
+        {evmWallets.length > 0 && <><div className="walletList">{evmWallets.map((wallet, index) => <div key={wallet.address}><span>0{index + 1}</span><strong>{shorten(wallet.address)}</strong>{wallet.primary && <StatusPill tone="success">Primary</StatusPill>}<button onClick={() => void copyWalletAddress(wallet.address)}>Copy</button></div>)}</div><button className="secondaryButton dangerButton" disabled={busy} onClick={() => void clearAllWallets("evm")}>Clear all EVM wallets</button></>}
+        <div className="segmented"><button className={evmMode === "generate" ? "active" : ""} onClick={() => setEvmMode("generate")}>Generate new</button><button className={evmMode === "mnemonic" ? "active" : ""} onClick={() => setEvmMode("mnemonic")}>Import phrase</button><button className={evmMode === "private" ? "active" : ""} onClick={() => setEvmMode("private")}>Import key</button></div>
+        {evmMode === "mnemonic" && <Field label="EVM recovery phrase"><textarea value={evmMnemonic} onChange={(event) => setEvmMnemonic(event.target.value)} rows={3} spellCheck={false} placeholder="12 or 24 recovery words" /></Field>}
+        {evmMode === "private" && <Field label="EVM private key"><textarea value={evmPrivateKey} onChange={(event) => setEvmPrivateKey(event.target.value)} rows={3} spellCheck={false} placeholder="0x followed by 64 hexadecimal characters" /></Field>}
+        <button className="secondaryButton" disabled={busy || evmWallets.length >= 3 || (evmMode === "mnemonic" && evmMnemonic.trim().length < 32) || (evmMode === "private" && evmPrivateKey.trim().length < 64)} onClick={() => void (evmMode === "generate" ? createEvmWallet() : evmMode === "mnemonic" ? importEvmWallet() : importEvmPrivateKey())}>{busy ? "Securing…" : evmMode === "generate" ? "Generate EVM wallet" : evmMode === "mnemonic" ? "Import EVM phrase" : "Import EVM private key"}</button>
+        {evmRecovery && <Notice tone="danger" title="Write down this EVM recovery phrase">{evmRecovery}</Notice>}
+        {evmMessage && <p className="inlineMessage">{evmMessage}</p>}
+      </section>}
+       {false && walletTab === "evm" &&
       <section className="advanced transactionGuardSettings">
         <strong>Robinhood Chain EVM wallet</strong>
-        <small className="providerHint">Separate from Solana. Creating or importing this wallet never enables a transaction.</small>
+        <small className="providerHint">Maximum 3 wallets. Separate from Solana; adding one never authorizes a transaction.</small>
         {evmWallets.length > 0 && <div className="walletList">{evmWallets.map((wallet, index) => <div key={wallet.address}><span>0{index + 1}</span><strong>{shorten(wallet.address)}</strong>{wallet.primary && <StatusPill tone="success">Primary</StatusPill>}<button onClick={() => void copyWalletAddress(wallet.address)}>Copy</button></div>)}</div>}
         {evmAddress ? (
           <div className="configuredReceipt"><span>âœ“</span><div><strong>EVM wallet configured</strong><small>{evmAddress}</small></div></div>
@@ -1099,7 +1241,7 @@ function WalletStep({
           <button className="secondaryButton" disabled={busy || evmMnemonic.trim().length < 32} onClick={() => void importEvmWallet()}>{busy ? "Importing…" : "Import another EVM wallet"}</button>
           <button className="secondaryButton" disabled={busy} onClick={() => void createEvmWallet()}>{busy ? "Creating…" : "Generate another EVM wallet"}</button>
         </>}
-        <Field label="Import EVM private key"><textarea value={evmPrivateKey} onChange={(event) => setEvmPrivateKey(event.target.value)} rows={3} spellCheck={false} placeholder="0x followed by 64 hexadecimal characters" /></Field>
+         <Field label="Import EVM private key"><textarea value={evmPrivateKey} onChange={(event) => setEvmPrivateKey(event.target.value)} rows={3} spellCheck={false} placeholder="0x followed by 64 hexadecimal characters" /></Field>
         <button className="secondaryButton" disabled={busy || evmPrivateKey.trim().length < 64} onClick={() => void importEvmPrivateKey()}>{busy ? "Importing…" : "Import EVM private key"}</button>
         {evmRecovery && <Notice tone="danger" title="Write down this EVM recovery phrase">{evmRecovery}</Notice>}
         {evmMessage && <p className="inlineMessage">{evmMessage}</p>}
@@ -1128,71 +1270,25 @@ function IntegrationStep({
   ) => void;
 }) {
   const [jupiterKey, setJupiterKey] = useState("");
-  const [r2AccountId, setR2AccountId] = useState("");
-  const [r2Bucket, setR2Bucket] = useState("");
-  const [r2PublicBaseUrl, setR2PublicBaseUrl] = useState("");
-  const [r2AccessKeyId, setR2AccessKeyId] = useState("");
-  const [r2SecretAccessKey, setR2SecretAccessKey] = useState("");
-  const [solanaRpcUrl, setSolanaRpcUrl] = useState("");
-  const [robinhoodRpcUrl, setRobinhoodRpcUrl] = useState("");
-  const [zeroExKey, setZeroExKey] = useState("");
-  const [robinhoodReceipts, setRobinhoodReceipts] = useState<Array<{ id: string; transactionHash: string; kind: "approval" | "swap"; status: "confirmed" | "reverted" | "unknown"; reconciledAt: string }>>([]);
   const [jupiterConfigured, setJupiterConfigured] = useState(
     setup.jupiterConfigured,
   );
-  const [rpcConfigured, setRpcConfigured] = useState(false);
-  const [r2Ready, setR2Ready] = useState(false);
-  const [robinhoodRpcConfigured, setRobinhoodRpcConfigured] = useState(false);
-  const [zeroExConfigured, setZeroExConfigured] = useState(false);
-  const [robinhoodExecutionEnabled, setRobinhoodExecutionEnabled] = useState(false);
-  const [robinhoodExecutionMissing, setRobinhoodExecutionMissing] = useState<string[]>([]);
+  const [uniswapKey, setUniswapKey] = useState("");
+  const [uniswapConfigured, setUniswapConfigured] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
-    Promise.all([
-      window.silfable.getJupiterSettings(),
-      window.silfable.getSolanaRpcSettings(),
-      window.silfable.getRobinhoodSettings(),
-      window.silfable.listRobinhoodReceipts(),
-      window.silfable.getR2Settings(),
-    ])
-      .then(([jupiter, rpc, robinhood, receipts, r2]) => {
+    window.silfable
+      .getJupiterSettings()
+      .then((jupiter) => {
         setJupiterConfigured(jupiter.configured);
-        if (rpc.rpcUrl) {
-          setSolanaRpcUrl(rpc.rpcUrl);
-          setRpcConfigured(true);
-        }
-        setRobinhoodRpcConfigured(robinhood.rpcConfigured);
-        setZeroExConfigured(robinhood.zeroExConfigured);
-        setRobinhoodExecutionEnabled(robinhood.executionEnabled);
-        setRobinhoodExecutionMissing(robinhood.executionMissing);
-        setRobinhoodReceipts(receipts.receipts);
-        setR2Ready(r2.ready);
-        if (r2.settings) {
-          setR2AccountId(r2.settings.accountId);
-          setR2Bucket(r2.settings.bucket);
-          setR2PublicBaseUrl(r2.settings.publicBaseUrl);
-        }
       })
       .catch(() => undefined);
+    window.silfable
+      .getUniswapSettings()
+      .then((uniswap) => setUniswapConfigured(uniswap.configured))
+      .catch(() => undefined);
   }, []);
-  async function saveRpc(): Promise<void> {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await window.silfable.saveSolanaRpcUrl({
-        schemaVersion: 1,
-        requestId: crypto.randomUUID(),
-        rpcUrl: solanaRpcUrl.trim() ? solanaRpcUrl.trim() : null,
-      });
-      setRpcConfigured(Boolean(solanaRpcUrl.trim()));
-      setMessage(solanaRpcUrl.trim() ? "Custom Solana RPC URL updated." : "Reset to default Solana public RPC.");
-    } catch {
-      setMessage("Solana RPC URL could not be saved. Ensure it starts with https://");
-    } finally {
-      setBusy(false);
-    }
-  }
   async function saveKey(): Promise<void> {
     setBusy(true);
     setMessage(null);
@@ -1212,93 +1308,25 @@ function IntegrationStep({
       setBusy(false);
     }
   }
-  async function saveR2Settings(testOnly = false): Promise<void> {
+  async function saveUniswapKey(): Promise<void> {
     setBusy(true);
     setMessage(null);
     try {
-      if (testOnly) {
-        const result = await window.silfable.testR2Settings({ schemaVersion: 1, requestId: crypto.randomUUID() });
-        setMessage(`Cloudflare R2 bucket ${result.bucket} is reachable.`);
-      } else {
-        await window.silfable.saveR2Settings({
-          schemaVersion: 1,
-          requestId: crypto.randomUUID(),
-          settings: { accountId: r2AccountId.trim(), bucket: r2Bucket.trim(), publicBaseUrl: r2PublicBaseUrl.trim() },
-          ...(r2AccessKeyId.trim() || r2SecretAccessKey.trim() ? { accessKeyId: r2AccessKeyId.trim(), secretAccessKey: r2SecretAccessKey.trim() } : {}),
-        });
-        setR2AccessKeyId("");
-        setR2SecretAccessKey("");
-        setR2Ready(true);
-        setMessage("Cloudflare R2 credentials were encrypted in the local vault. Metadata publishing remains a separate manual step.");
-      }
-    } catch {
-      setMessage(testOnly ? "Cloudflare R2 could not be reached. Check bucket permissions and the saved credentials." : "Cloudflare R2 settings could not be saved. Use your account ID, bucket, custom HTTPS domain, access key ID, and secret access key.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function saveRobinhoodRpc(testOnly = false): Promise<void> {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const request = { schemaVersion: 1 as const, requestId: crypto.randomUUID(), rpcUrl: robinhoodRpcUrl.trim() };
-      if (testOnly) {
-        const result = await window.silfable.testRobinhoodRpcUrl(request);
-        setMessage(`Robinhood RPC verified on chain ID ${result.chainId}.`);
-      } else {
-        await window.silfable.saveRobinhoodRpcUrl(request);
-        setRobinhoodRpcUrl("");
-        setRobinhoodRpcConfigured(true);
-        setMessage("Robinhood RPC encrypted in the local vault.");
-      }
-    } catch {
-      setMessage("Robinhood RPC could not be verified. Use an HTTPS endpoint serving chain ID 4663.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function saveZeroExKey(): Promise<void> {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await window.silfable.saveRobinhoodZeroXKey({
+      await window.silfable.saveUniswapKey({
         schemaVersion: 1,
         requestId: crypto.randomUUID(),
-        apiKey: zeroExKey,
+        apiKey: uniswapKey,
         acknowledgedExternalQuoteProvider: true,
       });
-      setZeroExKey("");
-      setZeroExConfigured(true);
-      setMessage("0x API key encrypted in the local vault. Robinhood execution remains disabled until its release gate is complete.");
-    } catch {
-      setMessage("0x API key could not be stored. Unlock the vault and try again.");
+      await window.silfable.testUniswapKey({ schemaVersion: 1, requestId: crypto.randomUUID() });
+      setUniswapKey("");
+      setUniswapConfigured(true);
+      setMessage("Uniswap API key verified and encrypted in the local vault.");
+    } catch (error) {
+      setMessage(error instanceof Error ? `Uniswap key could not be verified: ${error.message}` : "Uniswap key could not be verified. Unlock the vault and try again.");
     } finally {
       setBusy(false);
     }
-  }
-  async function testZeroExKey(): Promise<void> {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const result = await window.silfable.testRobinhoodZeroXKey({ schemaVersion: 1, requestId: crypto.randomUUID() });
-      setMessage(`0x Swap API verified for Robinhood Chain (${result.chainId}).`);
-    } catch {
-      setMessage("0x API could not be verified for Robinhood Chain. Check the saved API key and provider status.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function refreshRobinhoodReceipts(reconcile = false): Promise<void> {
-    setBusy(true); setMessage(null);
-    try {
-      if (reconcile) {
-        const result = await window.silfable.reconcileRobinhoodReceipts();
-        setMessage(result.reconciled.length === 0 ? "No pending Robinhood receipts required reconciliation." : `${result.reconciled.length} Robinhood receipt(s) reconciled without rebroadcast.`);
-      }
-      const result = await window.silfable.listRobinhoodReceipts();
-      setRobinhoodReceipts(result.receipts);
-    } catch { setMessage("Robinhood receipts could not be loaded or reconciled. Check the saved RPC URL."); }
-    finally { setBusy(false); }
   }
   return (
     <SetupCard
@@ -1306,31 +1334,6 @@ function IntegrationStep({
       title="Connect integrations"
       subtitle="Enable only the external services your sessions need."
     >
-      <ProviderCard
-        name="Solana RPC Node"
-        tag={rpcConfigured ? "Custom RPC" : "Default RPC"}
-        description="Custom HTTPS RPC URL for reliable, high-throughput Solana Mainnet reads."
-      >
-        <Field label="Custom RPC Endpoint URL (Helius, QuickNode, Triton, etc.)">
-          <div className="inputWithAction">
-            <input
-              type="url"
-              value={solanaRpcUrl}
-              onChange={(event) => setSolanaRpcUrl(event.target.value)}
-              placeholder="https://mainnet.helius-rpc.com/?api-key=..."
-            />
-            <button
-              disabled={busy}
-              onClick={() => void saveRpc()}
-            >
-              {busy ? "Saving" : "Save RPC"}
-            </button>
-          </div>
-        </Field>
-        <small className="providerHint">
-          Stored locally. Leave blank to use the default public RPC. A custom endpoint improves reliability but never changes transaction authority.
-        </small>
-      </ProviderCard>
       <ProviderCard
         name="Jupiter"
         tag={jupiterConfigured ? "Configured" : "Optional"}
@@ -1362,91 +1365,30 @@ function IntegrationStep({
         </small>
       </ProviderCard>
       <ProviderCard
-        name="Robinhood Chain"
-        tag={robinhoodExecutionEnabled ? "Restricted execution ready" : robinhoodRpcConfigured && zeroExConfigured ? "Configured · release locked" : "Optional"}
-        description="Configure the RPC and 0x quote provider here. EVM quote, review, approval, and swap actions now live only inside an EVM Mission session."
+        name="Uniswap · Robinhood Chain"
+        tag={uniswapConfigured ? "Configured" : "Required for Robinhood swaps"}
+        description="Official Uniswap Trading API with Classic routes only and the pinned Universal Router 2.1.1."
       >
-        <Field label="Robinhood Chain HTTPS RPC URL (Alchemy recommended)">
-          <div className="inputWithAction">
-            <input
-              type="url"
-              value={robinhoodRpcUrl}
-              onChange={(event) => setRobinhoodRpcUrl(event.target.value)}
-              placeholder={robinhoodRpcConfigured ? "Replace saved RPC URL" : "https://robinhood-mainnet.g.alchemy.com/v2/..."}
-              autoComplete="off"
-            />
-            <button disabled={busy || !robinhoodRpcUrl.trim()} onClick={() => void saveRobinhoodRpc(true)}>
-              {busy ? "Checking" : "Test RPC"}
-            </button>
-            <button disabled={busy || !robinhoodRpcUrl.trim()} onClick={() => void saveRobinhoodRpc()}>
-              Save RPC
-            </button>
-          </div>
-        </Field>
-        <Field label="0x API key">
+        <Field label="Uniswap API key">
           <div className="inputWithAction">
             <input
               type="password"
-              value={zeroExKey}
-              onChange={(event) => setZeroExKey(event.target.value)}
-              placeholder={zeroExConfigured ? "Replace saved key" : "Enter 0x API key"}
+              value={uniswapKey}
+              onChange={(event) => setUniswapKey(event.target.value)}
+              placeholder={uniswapConfigured ? "Replace saved key" : "Enter Uniswap API key"}
               autoComplete="new-password"
             />
-            <button disabled={busy || zeroExKey.trim().length < 8} onClick={() => void saveZeroExKey()}>
-              {busy ? "Saving" : "Save key"}
-            </button>
-            <button disabled={busy || !zeroExConfigured} onClick={() => void testZeroExKey()}>
-              {busy ? "Checking" : "Test 0x"}
+            <button
+              disabled={busy || uniswapKey.trim().length < 8}
+              onClick={() => void saveUniswapKey()}
+            >
+              {busy ? "Saving" : "Save & test"}
             </button>
           </div>
         </Field>
-        <Notice tone="info" title="Trading moved to chat">
-          Create a Mission session with an encrypted EVM wallet. Supply both exact
-          token contracts and the raw sell amount in chat. The session stores the
-          quote, fresh preflight, separate exact approval when required, swap
-          confirmation, and bounded receipt evidence.
-        </Notice>
         <small className="providerHint">
-          Credentials are encrypted locally and never shown again. Router and token policy remain release-controlled; no key grants signing or broadcast authority.
+          Required only for Robinhood Chain EVM swaps. It is encrypted locally and never sent to the AI model.
         </small>
-        <Field label="Robinhood execution receipts">
-          <button disabled={busy} onClick={() => void refreshRobinhoodReceipts()}>{busy ? "Loading" : "Refresh receipts"}</button>
-          <button disabled={busy || !robinhoodRpcConfigured} onClick={() => void refreshRobinhoodReceipts(true)}>{busy ? "Checking" : "Reconcile pending receipts"}</button>
-          {robinhoodReceipts.length === 0 ? <small className="providerHint">No Robinhood transaction receipts are stored on this device.</small> : (
-            <small className="providerHint">{robinhoodReceipts.slice(0, 5).map((receipt) => `${receipt.kind} ${receipt.status} · ${receipt.transactionHash.slice(0, 10)}… · ${new Date(receipt.reconciledAt).toLocaleString()}`).join(" | ")}</small>
-          )}
-        </Field>
-        {robinhoodExecutionMissing.length > 0 && (
-          <Notice tone="info" title="Restricted EVM execution is release-locked">
-            Remaining release evidence: {robinhoodExecutionMissing.join(", ")}.
-          </Notice>
-        )}
-      </ProviderCard>
-      <ProviderCard
-        name="Cloudflare R2 launch storage"
-        tag={r2Ready ? "Configured" : "Optional"}
-        description="Your own S3-compatible storage for immutable token-launch metadata. It never creates a coin or authorizes a transaction."
-      >
-        <Field label="Cloudflare account ID">
-          <input value={r2AccountId} onChange={(event) => setR2AccountId(event.target.value)} placeholder="32-character Cloudflare account ID" autoComplete="off" />
-        </Field>
-        <Field label="R2 bucket name">
-          <input value={r2Bucket} onChange={(event) => setR2Bucket(event.target.value)} placeholder="silfable-launches" autoComplete="off" />
-        </Field>
-        <Field label="Public custom HTTPS domain">
-          <input type="url" value={r2PublicBaseUrl} onChange={(event) => setR2PublicBaseUrl(event.target.value)} placeholder="https://assets.example.com" autoComplete="off" />
-        </Field>
-        <Field label="R2 S3 access key ID">
-          <input type="password" value={r2AccessKeyId} onChange={(event) => setR2AccessKeyId(event.target.value)} placeholder={r2Ready ? "Enter only to replace saved credentials" : "Enter R2 access key ID"} autoComplete="new-password" />
-        </Field>
-        <Field label="R2 S3 secret access key">
-          <div className="inputWithAction">
-            <input type="password" value={r2SecretAccessKey} onChange={(event) => setR2SecretAccessKey(event.target.value)} placeholder={r2Ready ? "Enter only to replace saved credentials" : "Enter R2 secret access key"} autoComplete="new-password" />
-            <button disabled={busy || !r2AccountId.trim() || !r2Bucket.trim() || !r2PublicBaseUrl.trim() || (!r2Ready && (!r2AccessKeyId.trim() || !r2SecretAccessKey.trim()))} onClick={() => void saveR2Settings()}>{busy ? "Saving" : "Save R2"}</button>
-            <button disabled={busy || !r2Ready} onClick={() => void saveR2Settings(true)}>{busy ? "Checking" : "Test R2"}</button>
-          </div>
-        </Field>
-        <small className="providerHint">Use a bucket-scoped Object Read &amp; Write API token and a custom public domain. `r2.dev` is not accepted for production. Keys are encrypted locally and never shown again.</small>
       </ProviderCard>
       {message && <p className="inlineMessage">{message}</p>}
       <SetupActions
@@ -1517,7 +1459,7 @@ function TuningStep({
   const [missionMaxSteps, setMissionMaxSteps] = useState(
     String(setup.missionMaxSteps),
   );
-  const [retryLimit, setRetryLimit] = useState(String(setup.retryLimit));
+   const [retryLimit, setRetryLimit] = useState(String(setup.retryLimit));
   const [maxNetworkFeeLamports, setMaxNetworkFeeLamports] = useState(String(setup.maxNetworkFeeLamports));
   const [maxNetworkFeeUnit, setMaxNetworkFeeUnit] = useState<"lamports" | "sol" | "usd">("lamports");
   const [solPriceUsd, setSolPriceUsd] = useState<number | null>(null);
@@ -1537,7 +1479,6 @@ function TuningStep({
     maxTransactionsPerHour: "10",
     minSolReserveLamports: "20000000",
   });
-  const [solanaRpcUrl, setSolanaRpcUrl] = useState("");
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   useEffect(() => {
     window.silfable.getTransactionSettings().then(({ settings }) => {
@@ -1550,9 +1491,6 @@ function TuningStep({
     }).catch(() => undefined);
     window.silfable.getPumpRiskSettings().then(({ settings }) => {
       setPumpRisk(Object.fromEntries(Object.entries(settings).map(([key, value]) => [key, String(value)])) as typeof pumpRisk);
-    }).catch(() => undefined);
-    window.silfable.getSolanaRpcSettings().then((res) => {
-      setSolanaRpcUrl(res.rpcUrl ?? "");
     }).catch(() => undefined);
     window.silfable.listWallets().then((res) => {
       const first = res.wallets[0];
@@ -1593,7 +1531,7 @@ function TuningStep({
     Number.isInteger(numeric.subagentContextLimit) &&
     numeric.subagentContextLimit >= 1_000 &&
     numeric.subagentContextLimit <= 2_000_000 &&
-    (!subagentOutputLimit ||
+      (!subagentOutputLimit ||
       (Number.isInteger(Number(subagentOutputLimit)) &&
         Number(subagentOutputLimit) >= 256 &&
         Number(subagentOutputLimit) <= numeric.subagentContextLimit)) &&
@@ -1624,7 +1562,7 @@ function TuningStep({
     maxSlippageBps: Number(pumpRisk.maxSlippageBps),
     maxSpendPerTradeLamports: pumpRisk.maxSpendPerTradeLamports,
     maxDailySpendLamports: pumpRisk.maxDailySpendLamports,
-    maxPerTokenExposureLamports: pumpRisk.maxPerTokenExposureLamports,
+     maxPerTokenExposureLamports: pumpRisk.maxPerTokenExposureLamports,
     maxTotalExposureLamports: pumpRisk.maxTotalExposureLamports,
     maxOpenPositions: Number(pumpRisk.maxOpenPositions),
     maxTransactionsPerHour: Number(pumpRisk.maxTransactionsPerHour),
@@ -1660,11 +1598,6 @@ function TuningStep({
         requestId: crypto.randomUUID(),
         settings: pumpSettings,
       });
-      await window.silfable.saveSolanaRpcUrl({
-        schemaVersion: 1,
-        requestId: crypto.randomUUID(),
-        rpcUrl: solanaRpcUrl.trim() ? solanaRpcUrl.trim() : null,
-      });
       onContinue({
         contextLimit: context, outputLimit: output, temperature,
         subagentMaxConcurrent: numeric.subagentMaxConcurrent, subagentContextLimit: numeric.subagentContextLimit,
@@ -1687,20 +1620,6 @@ function TuningStep({
         Tool calls, mission steps, and model spending remain bounded
         independently of model output.
       </Notice>
-      <div className="advanced transactionGuardSettings">
-        <strong>Solana Mainnet RPC Provider</strong>
-        <div className="advancedGrid">
-          <Field label="Custom RPC Endpoint URL (Helius, QuickNode, Triton, etc.)">
-            <input
-              type="url"
-              value={solanaRpcUrl}
-              onChange={(event) => setSolanaRpcUrl(event.target.value)}
-              placeholder="https://mainnet.helius-rpc.com/?api-key=..."
-            />
-            <small>Optional. Custom HTTPS RPC URL for fast, unthrottled Solana Mainnet & Pump.fun scanning.</small>
-          </Field>
-        </div>
-      </div>
       <Field label="Context budget">
         <input
           inputMode="numeric"
@@ -1719,7 +1638,7 @@ function TuningStep({
         />
         <small>Must not exceed the context budget.</small>
       </Field>
-      <Field label="Temperature">
+       <Field label="Temperature">
         <input
           inputMode="decimal"
           value={temperature}
@@ -2097,11 +2016,11 @@ function ReviewStep({
     {
       title: "Trading integrations",
       state: setup.jupiterConfigured ? "Configured" : "Optional missing",
-      detail: `Jupiter ${setup.jupiterConfigured ? "configured" : "not set"}. EVM RPC and 0x are optional advanced integrations.`,
+      detail: `Jupiter ${setup.jupiterConfigured ? "configured" : "not set"} · EVM routing uses chain defaults`,
       step: 3,
       ok: setup.jupiterConfigured,
     },
-    {
+   {
       title: "Agent core",
       state: "Saved",
       detail: `${setup.contextLimit.toLocaleString()} context · ${setup.outputLimit.toLocaleString()} output · ${setup.subagentMaxConcurrent} subagents`,
@@ -2141,14 +2060,25 @@ function ReviewStep({
           </div>
         ))}
       </div>
-      <Notice tone="warning" title="Mainnet safety status">
+       <Notice tone="warning" title="Mainnet safety status">
         Verified reads and restricted Jupiter swaps are available. Every swap
         requires a mission contract, passed simulation, master-password recheck,
         and explicit final confirmation. A restricted Robinhood Chain EVM
         execution path is available only after its independent release gate is
         satisfied. Autonomous execution and Full Access remain unavailable.
       </Notice>
-      {editing && <EmergencyStopPanel />}
+      {editing && (
+        <details className="advanced">
+          <summary>Advanced safety · Emergency stop</summary>
+          <p>
+            Use only when a prepared transaction or local strategy must be halted immediately.
+            Normal sessions do not require this control.
+          </p>
+          <div className="advancedSafetyPanel">
+            <EmergencyStopPanel />
+          </div>
+        </details>
+      )}
       {editing ? (
         <footer className="setupActions settingsActions">
           <span>Settings · Mainnet only</span>
@@ -2185,7 +2115,11 @@ function MainWorkspace({
   setRuntime: (runtime: RuntimeStatus) => void;
 }) {
   const [sessions, setSessions] = useState<SessionItem[]>([]);
+  const [sessionsState, setSessionsState] = useState<"loading" | "ready" | "error">("loading");
+  const [sessionToDelete, setSessionToDelete] = useState<SessionItem | null>(null);
+  const [deletingSession, setDeletingSession] = useState(false);
   const [wallets, setWallets] = useState<WalletSummary[]>([]);
+
   const [evmWallets, setEvmWallets] = useState<WalletSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [sessionFilter, setSessionFilter] = useState<SessionFilter>("all");
@@ -2194,9 +2128,7 @@ function MainWorkspace({
   const [draft, setDraft] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState("");
-  const [activePositions, setActivePositions] = useState<any[]>([]);
-  const [backgroundLoopEnabled, setBackgroundLoopEnabled] = useState(false);
-  const [nav, setNav] = useState<"sessions" | "memory" | "missions">(
+  const [nav, setNav] = useState<"sessions" | "missions">(
     "sessions",
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -2210,7 +2142,7 @@ function MainWorkspace({
   );
   const [simulatingPumpIds, setSimulatingPumpIds] = useState<string[]>([]);
   const [revalidatingPumpIds, setRevalidatingPumpIds] = useState<string[]>([]);
-  const [pumpExecutionApproval, setPumpExecutionApproval] = useState<{
+ const [pumpExecutionApproval, setPumpExecutionApproval] = useState<{
     sessionId: string;
     messageId: string;
     preview: PumpTradeContractPreview;
@@ -2273,6 +2205,13 @@ function MainWorkspace({
     } | null>(null);
   const [cancellingLimitIds, setCancellingLimitIds] = useState<string[]>([]);
   const [portfolioRefresh, setPortfolioRefresh] = useState(0);
+ const [preparingBridgeIds, setPreparingBridgeIds] = useState<string[]>([]);
+  const [reconcilingBridgeIds, setReconcilingBridgeIds] = useState<string[]>([]);
+  const [bridgeExecutionApproval, setBridgeExecutionApproval] = useState<{
+    sessionId: string;
+    proposal: BridgeProposal;
+    preflight: BridgePreflightEvidence;
+  } | null>(null);
   const [walletRefresh, setWalletRefresh] = useState(0);
   const active = sessions.find((session) => session.id === activeId) ?? null;
   const filteredSessions = sessions.filter((session) =>
@@ -2295,7 +2234,7 @@ function MainWorkspace({
         : [],
     ),
   );
-  useEffect(() => {
+   useEffect(() => {
     if (runtime?.keystore !== "unlocked") {
       return;
     }
@@ -2307,26 +2246,33 @@ function MainWorkspace({
       })
       .catch(() => undefined);
     window.silfable
-      .getRobinhoodWallet()
-      .then((response) => {
+      .getEvmWallets()
+      .then((response: any) => {
         if (activeRequest) setEvmWallets(response.wallets);
       })
       .catch(() => undefined);
     window.silfable
-      .getRobinhoodSettings()
-      .then((response) => {
+      .getEvmSettings()
+      .then((response: any) => {
         if (activeRequest) {
           setEvmExecutionEnabled(response.executionEnabled);
           setEvmExecutionMissing(response.executionMissing);
         }
       })
       .catch(() => undefined);
+
+
     window.silfable
       .listSessions()
       .then((response) => {
-        if (activeRequest) setSessions(response.sessions);
+        if (activeRequest) {
+          setSessions(response.sessions);
+          setSessionsState("ready");
+        }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (activeRequest) setSessionsState("error");
+      });
     return () => {
       activeRequest = false;
     };
@@ -2338,16 +2284,162 @@ function MainWorkspace({
       session,
     });
   }
+  async function refreshEncryptedSessions(preferredId?: string): Promise<void> {
+    setSessionsState("loading");
+    try {
+      const response = await window.silfable.listSessions();
+      setSessions(response.sessions);
+      setSessionsState("ready");
+      if (preferredId && response.sessions.some((session) => session.id === preferredId)) {
+        setActiveId(preferredId);
+      }
+    } catch (error) {
+      setSessionsState("error");
+      throw error;
+    }
+  }
+  async function prepareBridge(
+    target: SessionItem,
+    input: { destinationChain: BridgeDestinationChain; destinationRecipient: string; amountIn: string; minimumDestinationAmount: string; maximumTotalFeeUsd: number },
+  ): Promise<void> {
+    if (target.walletScope !== "solana" || target.walletAddress === null) {
+      throw new Error("A Solana wallet-scoped session is required.");
+    }
+    const contractId = crypto.randomUUID();
+    setPreparingBridgeIds((current) => [...current, contractId]);
+    try {
+      const createdAt = new Date();
+      const destination = BRIDGE_DESTINATIONS[input.destinationChain];
+      await window.silfable.prepareBridge({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        sessionId: target.id,
+        acknowledgedQuoteOnly: true,
+        contract: {
+          id: contractId,
+          provider: "auto",
+          sourceChainId: BRIDGE_SOLANA_CHAIN_ID,
+          destinationChainId: destination.chainId,
+          sourceAsset: { address: BRIDGE_SOLANA_USDC_MINT, symbol: "USDC", decimals: 6 },
+          destinationAsset: { address: destination.assetAddress, symbol: destination.symbol, decimals: 6 },
+          sourceWallet: target.walletAddress,
+          destinationRecipient: input.destinationRecipient,
+          amountIn: input.amountIn,
+          minimumDestinationAmount: input.minimumDestinationAmount,
+          maximumTotalFeeUsd: input.maximumTotalFeeUsd,
+          deadline: new Date(createdAt.getTime() + 30 * 60_000).toISOString(),
+          timeoutSeconds: 3_600,
+          refundPolicy: "provider-cancel-only",
+          createdAt: createdAt.toISOString(),
+        },
+      });
+      await refreshEncryptedSessions(target.id);
+    } finally {
+      setPreparingBridgeIds((current) => current.filter((id) => id !== contractId));
+    }
+  }
+   async function executeBridge(
+    input: NonNullable<typeof bridgeExecutionApproval>,
+    masterPassword: string,
+  ): Promise<void> {
+    await window.silfable.executeBridge({
+      schemaVersion: 1,
+      requestId: crypto.randomUUID(),
+      sessionId: input.sessionId,
+      contractId: input.proposal.contract.id,
+      preflightId: input.preflight.id,
+      masterPassword,
+      confirmation: isControlledBridgeAcceptance(input.proposal)
+        ? CONTROLLED_BRIDGE_ACCEPTANCE_CONFIRMATION
+        : bridgeDestination(input.proposal.contract.destinationChainId).confirmation,
+      acknowledgedOneAttemptBroadcast: true,
+    });
+    setBridgeExecutionApproval(null);
+    await refreshEncryptedSessions(input.sessionId);
+    setPortfolioRefresh((current) => current + 1);
+  }
+  async function reconcileBridge(target: SessionItem, receipt: BridgeReceipt): Promise<void> {
+    setReconcilingBridgeIds((current) => [...new Set([...current, receipt.id])]);
+    try {
+      await window.silfable.reconcileBridge({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        sessionId: target.id,
+        receiptId: receipt.id,
+      });
+      await refreshEncryptedSessions(target.id);
+      setPortfolioRefresh((current) => current + 1);
+    } finally {
+      setReconcilingBridgeIds((current) => current.filter((id) => id !== receipt.id));
+    }
+  }
+
+  const activeSessionRef = useRef(active);
+  useEffect(() => {
+    activeSessionRef.current = active;
+  }, [active]);
+  
+  const reconcileBridgeRef = useRef(reconcileBridge);
+  useEffect(() => {
+    reconcileBridgeRef.current = reconcileBridge;
+  }, [reconcileBridge]);
+
+  const reconcilingBridgeIdsRef = useRef(reconcilingBridgeIds);
+  useEffect(() => {
+    reconcilingBridgeIdsRef.current = reconcilingBridgeIds;
+  }, [reconcilingBridgeIds]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const currentActive = activeSessionRef.current;
+      if (!currentActive) return;
+
+      const pendingReceipts = currentActive.history
+        .map((item) => item.payload)
+        .filter((p): p is BridgeReceipt => p.type === "bridge-receipt")
+         .filter((receipt) =>
+          [
+            "source-submitted",
+            "broadcast-unknown",
+            "relay-pending",
+            "refund-pending",
+            "relay-fulfilled-unverified",
+          ].includes(receipt.state),
+        );
+
+      for (const receipt of pendingReceipts) {
+        if (!reconcilingBridgeIdsRef.current.includes(receipt.id)) {
+          void reconcileBridgeRef.current(currentActive, receipt);
+        }
+      }
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, []);
+   async function confirmDeleteSession(): Promise<void> {
+    if (!sessionToDelete) return;
+    setDeletingSession(true);
+    try {
+      await window.silfable.deleteSession(sessionToDelete.id);
+      setSessions((prev) => prev.filter((s) => s.id !== sessionToDelete.id));
+      if (activeId === sessionToDelete.id) {
+        setActiveId(null);
+      }
+      setSessionToDelete(null);
+    } catch (error) {
+      console.error("Failed to delete session:", error);
+    } finally {
+      setDeletingSession(false);
+    }
+  }
   function chooseFilter(filter: SessionFilter): void {
     setSessionFilter(filter);
     if (active && filter !== "all") {
-      const visible = filter === "pump"
-        ? active.workspace === "pump"
-        : active.mode === filter && active.workspace !== "pump";
+      const visible = active.mode === filter && active.workspace !== "pump";
       if (!visible) setActiveId(null);
     }
     setNav("sessions");
   }
+
   async function requestSession(prompt = ""): Promise<void> {
     setPendingPrompt(prompt);
     try {
@@ -2384,6 +2476,7 @@ function MainWorkspace({
       permission: input.permission,
       workspace: input.workspace,
       ...(input.walletScope ? { walletScope: input.walletScope } : {}),
+      ...(input.walletScope === "evm" ? { evmChainKey: "robinhood" as const } : {}),
       walletAddress: input.walletAddress,
       startedAt: now,
       usage: { input: 0, output: 0, total: 0, cost: null },
@@ -2452,6 +2545,12 @@ function MainWorkspace({
         ...(response.evmSwapProposal
           ? { evmSwapProposal: response.evmSwapProposal }
           : {}),
+        ...(response.bridgeProposal && response.bridgePreflight
+          ? {
+              bridgeProposal: response.bridgeProposal,
+              bridgePreflight: response.bridgePreflight,
+            }
+          : {}),
       };
       setAnimatedMessageIds((current) => [...current, assistant.id]);
       setSessions((current) =>
@@ -2498,23 +2597,25 @@ function MainWorkspace({
   }): Promise<void> {
     setPreparingEvmIds((current) => [...new Set([...current, input.proposal.id])]);
     try {
-      const result = await window.silfable.prepareRobinhoodTrade({
+      const chainKey = input.proposal.chainKey;
+      if (!chainKey) throw new Error("This EVM quote has no locked chain scope.");
+      const result = await window.silfable.prepareEvmKyberSwap({
         schemaVersion: 1,
         requestId: crypto.randomUUID(),
+        sessionId: input.sessionId,
+        chainKey,
+        quoteId: input.proposal.quoteId,
         walletAddress: input.proposal.walletAddress,
-        sellToken: input.proposal.quote.sellToken,
-        buyToken: input.proposal.quote.buyToken,
-        sellAmount: input.proposal.quote.sellAmount,
         slippageBps: input.proposal.slippageBps,
-        acknowledgedReadOnlyQuote: true,
+        acknowledgedSimulationOnly: true,
       });
       const preflight: EvmSwapPreflightEvidence = {
         ...result.preflight,
-        expectedBuyAmount: result.expectedBuyAmount,
-        minimumBuyAmount: result.minimumBuyAmount,
-        preparedAt: new Date().toISOString(),
+        maxGasCostWei: result.preflight.maximumNetworkFeeWei,
+        expectedBuyAmount: result.preflight.expectedAmountOut,
+        minimumBuyAmount: result.preflight.minimumAmountOut,
       };
-      setSessions((current) =>
+ setSessions((current) =>
         current.map((session) => {
           if (session.id !== input.sessionId) return session;
           const next = {
@@ -2529,20 +2630,21 @@ function MainWorkspace({
           return next;
         }),
       );
-    } catch {
+    } catch (cause) {
+      const errMsg = cause instanceof Error ? cause.message : "The EVM trade review could not be prepared safely. Verify the saved RPC, 0x key, official token contracts, liquidity, allowance, and gas policy.";
       setSessions((current) =>
         current.map((session) => {
           if (session.id !== input.sessionId) return session;
           const next = {
             ...session,
-            messages: session.messages.map((message) =>
-              message.id === input.messageId
-                ? {
-                    ...message,
-                    text: `${message.text.slice(0, 11_400)}\n\nThe EVM trade review could not be prepared safely. Verify the saved RPC, 0x key, official token contracts, liquidity, allowance, and gas policy.`.slice(0, 12_000),
-                  }
-                : message,
-            ),
+            messages: session.messages.map((message) => {
+              if (message.id !== input.messageId) return message;
+              if (message.text.includes(errMsg)) return message;
+              return {
+                ...message,
+                text: `${message.text.slice(0, 11_400)}\n\n${errMsg}`.slice(0, 12_000),
+              };
+            }),
           };
           void persistSession(next);
           return next;
@@ -2557,29 +2659,25 @@ function MainWorkspace({
     credentials: { masterPassword: string; confirmation: string },
   ): Promise<void> {
     const expectedConfirmation = approval.action === "approval"
-      ? "APPROVE ROBINHOOD MAINNET"
-      : "EXECUTE ROBINHOOD MAINNET SWAP";
-    if (credentials.confirmation !== expectedConfirmation) return;
+      ? "APPROVE EVM MAINNET"
+      : "EXECUTE EVM MAINNET SWAP";
+    if (credentials.confirmation.trim().toUpperCase() !== expectedConfirmation) return;
     setEvmExecutionApproval(null);
     setExecutingEvmIds((current) => [...new Set([...current, approval.proposal.id])]);
     try {
       const base = {
         schemaVersion: 1 as const,
         requestId: crypto.randomUUID(),
+        sessionId: approval.sessionId,
+        chainKey: approval.proposal.chainKey,
         walletAddress: approval.proposal.walletAddress,
         preflightId: approval.preflight.id,
+        action: approval.action,
         masterPassword: credentials.masterPassword,
+        confirmation: expectedConfirmation as "APPROVE EVM MAINNET" | "EXECUTE EVM MAINNET SWAP",
         acknowledgedIrreversible: true as const,
       };
-      const result = approval.action === "approval"
-        ? await window.silfable.executeRobinhoodApproval({
-            ...base,
-            confirmation: "APPROVE ROBINHOOD MAINNET",
-          })
-        : await window.silfable.executeRobinhoodSwap({
-            ...base,
-            confirmation: "EXECUTE ROBINHOOD MAINNET SWAP",
-          });
+      const result = await window.silfable.executeEvmKyberSwap(base);
       setSessions((current) =>
         current.map((session) => {
           if (session.id !== approval.sessionId) return session;
@@ -2621,7 +2719,7 @@ function MainWorkspace({
         }),
       );
     } finally {
-      setExecutingEvmIds((current) => current.filter((id) => id !== approval.proposal.id));
+    setExecutingEvmIds((current) => current.filter((id) => id !== approval.proposal.id));
     }
   }
   async function runSimulation(input: {
@@ -2629,8 +2727,8 @@ function MainWorkspace({
     messageId: string;
     preview: MissionContractPreview;
   }): Promise<void> {
-    setSimulationApproval(null);
-    setSimulatingMissionIds((current) => [
+    setSimulationApproval(null);   
+     setSimulatingMissionIds((current) => [
       ...new Set([...current, input.preview.id]),
     ]);
     try {
@@ -2751,24 +2849,6 @@ function MainWorkspace({
       sessionId: target.id,
       draftId: draft.id,
     });
-  }
-  async function publishPumpLaunchMetadata(target: SessionItem, launchDraft: PumpLaunchDraft): Promise<void> {
-    const response = await window.silfable.publishPumpLaunchMetadata({
-      schemaVersion: 1,
-      requestId: crypto.randomUUID(),
-      sessionId: target.id,
-      draftId: launchDraft.id,
-    });
-    const current = sessions.find((item) => item.id === target.id);
-    if (current === undefined) throw new Error("Session is unavailable");
-    const next = {
-      ...current,
-      messages: current.messages.map((message) => message.pumpLaunchDraft?.id === launchDraft.id
-        ? { ...message, pumpLaunchMetadataPackage: response.metadataPackage }
-        : message),
-    };
-    setSessions((items) => items.map((item) => item.id === next.id ? next : item));
-    await persistSession(next);
   }
   async function preflightPumpLaunch(target: SessionItem, launchDraft: PumpLaunchDraft): Promise<void> {
     const response = await window.silfable.preflightPumpLaunch({
@@ -3301,127 +3381,149 @@ function MainWorkspace({
       />
     );
   return (
-    <main className="workspace">
+   <main className="workspace">
       <aside className="leftRail">
-        <div className="railBrand">
+        <button
+          className="railBrand"
+          type="button"
+          aria-label="Return to Silfable home"
+          title="Return to home"
+          onClick={() => {
+            setActiveId(null);
+            setNav("sessions");
+          }}
+        >
           <BrandMark />
           <span>Silfable</span>
-        </div>
-        <button className="newSession" onClick={() => void requestSession()}>
-          ＋ New session
         </button>
+        <Button
+          className="newSession"
+          size="lg"
+          fullWidth
+          icon={<CirclePlus className="size-4" />}
+          onClick={() => void requestSession()}
+        >
+          New session
+        </Button>
         <div className="sessionFilters">
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             className={sessionFilter === "all" ? "active" : ""}
             onClick={() => chooseFilter("all")}
           >
             All
-          </button>
-          <button
+          </Button>
+           <Button
+            variant="ghost"
+            size="sm"
             className={sessionFilter === "agent" ? "active" : ""}
             onClick={() => chooseFilter("agent")}
           >
             Agent
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             className={sessionFilter === "mission" ? "active" : ""}
             onClick={() => chooseFilter("mission")}
           >
             Mission
-          </button>
-          <button
-            className={sessionFilter === "pump" ? "active" : ""}
-            onClick={() => chooseFilter("pump")}
-          >
-            Pump
-          </button>
+          </Button>
         </div>
         <div className="sessionList">
           <p>Sessions</p>
-          {filteredSessions.length === 0 ? (
+          {sessionsState === "error" ? (
+            <div className="emptySessions sessionLoadError" role="status">
+              <strong>Session history is unavailable</strong>
+              <span>Your encrypted records were not deleted.</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void refreshEncryptedSessions().catch(() => undefined)}
+              >
+                Retry
+              </Button>
+            </div>
+            ) : sessionsState === "loading" ? (
+            <div className="emptySessions">Loading encrypted sessions…</div>
+          ) : filteredSessions.length === 0 ? (
             <div className="emptySessions">
               No {sessionFilter === "all" ? "" : `${sessionFilter} `}sessions
               yet.
             </div>
           ) : (
             filteredSessions.map((session) => (
-              <button
-                className={session.id === activeId ? "active" : ""}
-                onClick={() => {
-                  setActiveId(session.id);
-                  setNav("sessions");
-                }}
+              <div
+                className="sessionItemWrapper"
                 key={session.id}
               >
-                <span>
-                  {session.workspace === "pump"
-                    ? "P"
-                    : session.mode === "mission"
-                      ? "◎"
-                      : "◌"}
-                </span>
-                <div>
-                  <strong>{session.title}</strong>
-                  <small>
-                    {sessionIntentLabel(session)} ·{" "}
-                    {session.permission}
-                  </small>
-                </div>
-              </button>
+                <button
+                  className={`sessionButton ${session.id === activeId ? "active" : ""}`}
+                  onClick={() => {
+                    setActiveId(session.id);
+                    setNav("sessions");
+                  }}
+                >
+                  <span>
+                    {session.workspace === "pump"
+                      ? "P"
+                      : session.mode === "mission"
+                        ? "◎"
+                        : "◌"}
+                  </span>
+                  <div>
+                    <strong>{session.title}</strong>
+                    <small>
+                      {sessionIntentLabel(session)} ·{" "}
+                      {session.permission}
+                    </small>
+                  </div>
+                </button>
+                <button
+                  className="deleteSessionButton"
+                  title="Delete session"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSessionToDelete(session);
+                  }}
+                >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                </button>
+              </div>
             ))
           )}
         </div>
+
         <nav className="bottomNav">
-          <button
-            className={nav === "memory" ? "active" : ""}
-            onClick={() => setNav("memory")}
-          >
-            ⌘ Memory
-          </button>
-          <button
+          <Button
+            variant="ghost"
+            icon={<Target className="size-4" />}
             className={nav === "missions" ? "active" : ""}
             onClick={() => setNav("missions")}
           >
-            ◎ Missions
-          </button>
-          <button
+            Missions
+          </Button>
+          <Button
+            variant="ghost"
+            icon={<Settings className="size-4" />}
             onClick={() => {
               saveSetup({ ...setup, step: 6 });
               setSettingsOpen(true);
             }}
           >
-            ⚙ Settings
-          </button>
-          <div style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            <label
-              title="Observes configured strategies and creates reviewable proposals only. It cannot sign or broadcast."
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
-            >
-              <input
-                type="checkbox"
-                checked={backgroundLoopEnabled}
-                onChange={(e) => {
-                  const enabled = e.target.checked;
-                  setBackgroundLoopEnabled(enabled);
-                  window.silfable.toggleBackgroundLoop(enabled);
-                }}
-              />
-              Monitor only
-            </label>
-          </div>
+            Settings
+          </Button>
         </nav>
         <div className="runtimeBadge">
           <span /> Mainnet guarded · {runtime ? "ready" : "checking"}
         </div>
       </aside>
-      <section className="centerStage">
-        {nav === "memory" ? (
-          <UtilityView
-            eyebrow="Memory"
-            title="Local memory is not indexed yet."
-            copy="Durable memory indexing is not enabled in this build."
-          />
-        ) : nav === "missions" ? (
+     <section className="centerStage">
+        {nav === "missions" ? (
           <MissionsView
             items={missionPreviews}
             onOpen={(sessionId) => {
@@ -3439,11 +3541,19 @@ function MainWorkspace({
             }
             onCreatePumpLaunchDraft={(input) => createPumpLaunchDraft(active, input)}
             onOpenPumpLaunchOfficialCreate={(launchDraft) => openPumpLaunchOfficialCreate(active, launchDraft)}
-            onPublishPumpLaunchMetadata={(launchDraft) => publishPumpLaunchMetadata(active, launchDraft)}
             onPreflightPumpLaunch={(launchDraft) => preflightPumpLaunch(active, launchDraft)}
             onFinalRevalidatePumpLaunch={(launchDraft, preflight) => finalRevalidatePumpLaunch(active, launchDraft, preflight)}
             onExecutePumpLaunch={(launchDraft, preflight, revalidation, credentials) => executePumpLaunch(active, launchDraft, preflight, revalidation, credentials)}
             onVerifyPumpLaunchExecution={(launchDraft, execution) => verifyPumpLaunchExecution(active, launchDraft, execution)}
+            onPrepareBridge={(input) => prepareBridge(active, input)}
+            preparingBridge={preparingBridgeIds.length > 0}
+            reconcilingBridgeIds={reconcilingBridgeIds}
+            onRequestBridgeExecution={(proposal, preflight) => setBridgeExecutionApproval({
+              sessionId: active.id,
+              proposal,
+              preflight,
+            })}
+            onReconcileBridge={(receipt) => void reconcileBridge(active, receipt)}
             thinking={thinkingIds.includes(active.id)}
             animatedMessageIds={animatedMessageIds}
             onAnimationComplete={(id) =>
@@ -3600,11 +3710,14 @@ function MainWorkspace({
           />
         )}
       </section>
-      <RightRail
+       <RightRail
         session={active}
         runtime={runtime}
         model={setup.providerModel}
+        contextLimit={setup.contextLimit}
+        outputLimit={setup.outputLimit}
         wallets={wallets}
+        evmWallets={evmWallets}
         refreshToken={portfolioRefresh}
         onAnalyzePump={active?.workspace === "pump"
           ? (mint) => {
@@ -3618,7 +3731,7 @@ function MainWorkspace({
           ? () => void sendMessage(active, `Scan up to 10 recent finalized transactions touching the official Pump program and return at most 5 independently verified candidates using a reference buy size of ${active.pumpConfig!.analysisBuyLamports ?? "1000000"} lamports. Do not rank candidates that fail deterministic research eligibility, and do not prepare or execute a transaction.`)
           : undefined}
       />
-      {modalOpen && (
+     {modalOpen && (
         <SessionModal
           prompt={pendingPrompt}
           wallets={wallets}
@@ -3627,6 +3740,43 @@ function MainWorkspace({
           onCreate={(value) => void createSession(value)}
         />
       )}
+       {sessionToDelete && (
+        <Modal
+          isOpen={true}
+          onClose={() => setSessionToDelete(null)}
+          title="Delete session"
+        >
+          <div className="deleteSessionModalContent">
+            <p>
+              Are you sure you want to delete <strong>"{sessionToDelete.title}"</strong>?
+            </p>
+            <p className="deleteSessionWarning">
+              All messages and history associated with this session will be permanently removed.
+            </p>
+            <div className="modalFooterActions">
+              <Button
+                variant="ghost"
+                onClick={() => setSessionToDelete(null)}
+                disabled={deletingSession}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                loading={deletingSession}
+                onClick={async (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  await confirmDeleteSession();
+                }}
+              >
+                Delete session
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {simulationApproval && (
         <SimulationApprovalModal
           preview={simulationApproval.preview}
@@ -3653,6 +3803,14 @@ function MainWorkspace({
           onConfirm={(credentials) =>
             executeEvmAction(evmExecutionApproval, credentials)
           }
+        />
+      )}
+       {bridgeExecutionApproval && (
+        <BridgeExecutionApprovalModal
+          proposal={bridgeExecutionApproval.proposal}
+          preflight={bridgeExecutionApproval.preflight}
+          onCancel={() => setBridgeExecutionApproval(null)}
+          onConfirm={(password) => executeBridge(bridgeExecutionApproval, password)}
         />
       )}
       {pumpExecutionApproval && (
@@ -3727,7 +3885,7 @@ function HomeComposer({
         placeholder="Plan a Mainnet task or ask about your portfolio…"
       />
       <div className="suggestions">
-        <button
+        <Button variant="outline" size="sm" icon={<Activity className="size-3.5" />}
           onClick={() =>
             setDraft(
               "Explain exactly what you can and cannot do in this desktop application.",
@@ -3735,8 +3893,8 @@ function HomeComposer({
           }
         >
           AI capabilities
-        </button>
-        <button
+        </Button>
+        <Button variant="outline" size="sm" icon={<Brain className="size-3.5" />}
           onClick={() =>
             setDraft(
               "Review my configured wallet balances and recent finalized activity.",
@@ -3744,8 +3902,8 @@ function HomeComposer({
           }
         >
           Wallet activity
-        </button>
-        <button
+        </Button>
+         <Button variant="outline" size="sm" icon={<Target className="size-3.5" />}
           onClick={() =>
             setDraft(
               "Draft a conservative SOL accumulation mission with explicit limits.",
@@ -3753,14 +3911,14 @@ function HomeComposer({
           }
         >
           Plan a mission
-        </button>
-        <button
+        </Button>
+        <Button variant="outline" size="sm" icon={<ShieldCheck className="size-3.5" />}
           onClick={() =>
             setDraft("Explain the current Mainnet execution restrictions.")
           }
         >
           Runtime safety
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -3773,11 +3931,15 @@ function Conversation({
   onSend,
   onCreatePumpLaunchDraft,
   onOpenPumpLaunchOfficialCreate,
-  onPublishPumpLaunchMetadata,
   onPreflightPumpLaunch,
   onFinalRevalidatePumpLaunch,
   onExecutePumpLaunch,
   onVerifyPumpLaunchExecution,
+  onPrepareBridge,
+  preparingBridge,
+  reconcilingBridgeIds,
+  onRequestBridgeExecution,
+  onReconcileBridge,
   thinking,
   animatedMessageIds,
   onAnimationComplete,
@@ -3819,7 +3981,6 @@ function Conversation({
   onSend: () => void;
   onCreatePumpLaunchDraft: (input: PumpLaunchDraftInput) => Promise<void>;
   onOpenPumpLaunchOfficialCreate: (draft: PumpLaunchDraft) => Promise<void>;
-  onPublishPumpLaunchMetadata: (draft: PumpLaunchDraft) => Promise<void>;
   onPreflightPumpLaunch: (draft: PumpLaunchDraft) => Promise<void>;
   onFinalRevalidatePumpLaunch: (draft: PumpLaunchDraft, preflight: PumpLaunchPreflight) => Promise<void>;
   onExecutePumpLaunch: (
@@ -3829,6 +3990,17 @@ function Conversation({
     credentials: { masterPassword: string },
   ) => Promise<void>;
   onVerifyPumpLaunchExecution: (draft: PumpLaunchDraft, execution: PumpLaunchExecutionRecord) => Promise<void>;
+  onPrepareBridge: (input: {
+    destinationChain: BridgeDestinationChain;
+    destinationRecipient: string;
+    amountIn: string;
+    minimumDestinationAmount: string;
+    maximumTotalFeeUsd: number;
+  }) => Promise<void>;
+  preparingBridge: boolean;
+  reconcilingBridgeIds: string[];
+  onRequestBridgeExecution: (proposal: BridgeProposal, preflight: BridgePreflightEvidence) => void;
+  onReconcileBridge: (receipt: BridgeReceipt) => void;
   thinking: boolean;
   animatedMessageIds: string[];
   onAnimationComplete: (id: string) => void;
@@ -3837,7 +4009,7 @@ function Conversation({
   revalidatingPumpIds: string[];
   executingPumpIds: string[];
   verifyingPumpExecutionIds: string[];
-  executingMissionIds: string[];
+   executingMissionIds: string[];
   verifyingReceiptIds: string[];
   simulatingLimitIds: string[];
   executingLimitIds: string[];
@@ -3903,7 +4075,7 @@ function Conversation({
     simulation: PumpSimulationArtifact,
     revalidation: PumpFinalRevalidation,
   ) => void;
-  onVerifyPumpExecution: (
+   onVerifyPumpExecution: (
     messageId: string,
     preview: PumpTradeContractPreview,
     execution: PumpExecutionRecord,
@@ -3920,7 +4092,7 @@ function Conversation({
   ) => void;
 }) {
   return (
-    <div className="conversation">
+     <div className={`conversation${session.walletScope === "solana" && session.walletAddress !== null ? " conversationWithLaunch" : ""}`}>
       <header>
         <div>
           <span className="liveDot" />{" "}
@@ -3948,6 +4120,14 @@ function Conversation({
         </div>
         <StatusPill tone="warning">Restricted</StatusPill>
       </header>
+        {session.walletScope === "solana" && session.walletAddress !== null && (
+        <div className="conversationLaunchBar">
+          <PumpLaunchDraftForm
+            creatorWallet={session.walletAddress}
+            onCreate={onCreatePumpLaunchDraft}
+          />
+        </div>
+      )}
       <div className="messages">
         {session.messages.map((message) => (
           <article className={message.role} key={message.id}>
@@ -3988,6 +4168,20 @@ function Conversation({
                       message.evmSwapPreflight!,
                     )
                   }
+                />
+              )}
+               {message.bridgeProposal && message.bridgePreflight && (
+                <BridgeProposalCard
+                  proposal={message.bridgeProposal}
+                  preflight={message.bridgePreflight}
+                  receipt={message.bridgeReceipt ?? null}
+                  reconciling={message.bridgeReceipt
+                    ? reconcilingBridgeIds.includes(message.bridgeReceipt.id)
+                    : false}
+                  onExecute={() => onRequestBridgeExecution(message.bridgeProposal!, message.bridgePreflight!)}
+                  {...(message.bridgeReceipt
+                    ? { onReconcile: () => onReconcileBridge(message.bridgeReceipt!) }
+                    : {})}
                 />
               )}
               {message.missionPreview && (
@@ -4036,7 +4230,7 @@ function Conversation({
                 />
               )}
               {message.pumpSimulation && (
-                <PumpSimulationCard
+                  <PumpSimulationCard
                   simulation={message.pumpSimulation}
                   execution={message.pumpExecution ?? null}
                   revalidating={message.pumpTradePreview ? revalidatingPumpIds.includes(message.pumpTradePreview.id) : false}
@@ -4058,9 +4252,9 @@ function Conversation({
                 draft={message.pumpLaunchDraft}
                 metadataPackage={message.pumpLaunchMetadataPackage}
                 preflight={message.pumpLaunchPreflight}
+
                 revalidation={message.pumpLaunchFinalRevalidation}
                 execution={message.pumpLaunchExecution}
-                onPublishMetadata={onPublishPumpLaunchMetadata}
                 onPreflight={onPreflightPumpLaunch}
                 onFinalRevalidate={onFinalRevalidatePumpLaunch}
                 onExecute={onExecutePumpLaunch}
@@ -4068,7 +4262,7 @@ function Conversation({
                 onOpenOfficialCreate={onOpenPumpLaunchOfficialCreate}
               />}
               {message.pumpTradePreview && message.pumpExecution && (
-                <PumpExecutionCard
+                                <PumpExecutionCard
                   execution={message.pumpExecution}
                   preview={message.pumpTradePreview}
                   simulation={message.pumpSimulation ?? null}
@@ -4100,7 +4294,7 @@ function Conversation({
                         )
                       : false
                   }
-                  verifyingExecution={
+                   verifyingExecution={
                     message.limitOrderExecution
                       ? verifyingLimitExecutionIds.includes(
                           message.limitOrderExecution.id,
@@ -4193,9 +4387,17 @@ function Conversation({
       </div>
       <div className="conversationComposer">
         {session.walletScope === "solana" && session.walletAddress !== null && (
-          <PumpLaunchDraftForm
-            creatorWallet={session.walletAddress}
-            onCreate={onCreatePumpLaunchDraft}
+          <>
+            {session.mode === "mission" && (
+              <BridgePreparationForm busy={preparingBridge} onPrepare={onPrepareBridge} />
+            )}
+          </>
+        )}
+        {session.walletScope === "evm" && session.walletAddress !== null && session.evmChainKey && session.evmChainKey !== "bsc" && (
+          <EvmBridgeWorkspace
+            sessionId={session.id}
+            sourceChainKey={session.evmChainKey}
+            sourceWallet={session.walletAddress}
           />
         )}
         <Notice tone="warning" title="Restricted Mainnet session">
@@ -4212,6 +4414,323 @@ function Conversation({
       </div>
     </div>
   );
+}
+
+type EvmBridgeDestinationSelection = "solana" | EvmBridgeChainKey;
+
+function EvmBridgeWorkspace({
+  sessionId,
+  sourceChainKey,
+  sourceWallet,
+}: {
+  sessionId: string;
+  sourceChainKey: EvmBridgeChainKey;
+  sourceWallet: string;
+}) {
+  const source = EVM_BRIDGE_ASSETS[sourceChainKey];
+  const [open, setOpen] = useState(false);
+  const [destination, setDestination] = useState<EvmBridgeDestinationSelection>("solana");
+  const [recipient, setRecipient] = useState("");
+  const [amount, setAmount] = useState("1.00");
+  const [minimum, setMinimum] = useState("0.90");
+  const [maximumTotalFeeUsd, setMaximumTotalFeeUsd] = useState("3.00");
+  const [maximumNetworkFeeWei, setMaximumNetworkFeeWei] = useState("10000000000000000");
+  const [prepared, setPrepared] = useState<{ quote: EvmBridgeQuote; preflight: EvmBridgePreflight } | null>(null);
+  const [receipt, setReceipt] = useState<EvmBridgeReceipt | null>(null);
+  const [approval, setApproval] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void window.silfable.listEvmBridgeReceipts().then((response) => {
+      if (!live) return;
+      const latest = response.receipts
+        .filter((item) => item.sourceWallet.toLowerCase() === sourceWallet.toLowerCase())
+        .sort((a, b) => Date.parse(b.reconciledAt) - Date.parse(a.reconciledAt))[0] ?? null;
+      setReceipt(latest);
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [sourceWallet]);
+
+ function toRaw(value: string): string | null {
+    if (!/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/u.test(value)) return null;
+    const [whole = "0", fraction = ""] = value.split(".");
+    const raw = BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, "0"));
+    return raw > 0n ? raw.toString() : null;
+  }
+
+  async function prepare(): Promise<void> {
+    const amountIn = toRaw(amount);
+    const minimumDestinationAmount = toRaw(minimum);
+    const maximumFee = Number(maximumTotalFeeUsd);
+    if (amountIn === null || minimumDestinationAmount === null || BigInt(minimumDestinationAmount) > BigInt(amountIn)) {
+      setError("Enter valid six-decimal stablecoin amounts; the minimum output cannot exceed the source amount.");
+      return;
+    }
+    if (!/^\d+$/u.test(maximumNetworkFeeWei) || BigInt(maximumNetworkFeeWei) === 0n) {
+      setError("Maximum source network fee must be a positive raw wei amount.");
+      return;
+    }
+    if (!Number.isFinite(maximumFee) || maximumFee <= 0 || maximumFee > 1_000) {
+      setError("Maximum provider fee must be between $0 and $1,000.");
+      return;
+    }
+    const recipientValid = destination === "solana"
+      ? SOLANA_ADDRESS_PATTERN.test(recipient)
+      : /^0x[a-fA-F0-9]{40}$/u.test(recipient);
+    if (!recipientValid) {
+      setError(destination === "solana" ? "Enter the exact destination Solana address." : "Enter the exact destination EVM address.");
+      return;
+    }
+    const now = new Date();
+    const destinationAsset = destination === "solana" ? null : EVM_BRIDGE_ASSETS[destination];
+    const contract: EvmBridgeContract = {
+      id: crypto.randomUUID(), provider: "relay",
+      sourceChainId: source.chainId as EvmBridgeContract["sourceChainId"],
+      sourceChainKey, sourceAssetAddress: source.address, sourceAssetSymbol: source.symbol,
+      sourceAssetDecimals: 6, sourceWallet,
+      destination: destination === "solana"
+       ? {
+            kind: "solana", chainId: BRIDGE_SOLANA_CHAIN_ID, chainKey: "solana",
+            assetAddress: BRIDGE_SOLANA_USDC_MINT, assetSymbol: "USDC", assetDecimals: 6,
+            recipient,
+          }
+        : {
+            kind: "evm", chainId: destinationAsset!.chainId as Extract<EvmBridgeContract["destination"], { kind: "evm" }>["chainId"],
+            chainKey: destination, assetAddress: destinationAsset!.address,
+            assetSymbol: destinationAsset!.symbol, assetDecimals: 6, recipient,
+          },
+      amountIn, minimumDestinationAmount, maximumNetworkFeeWei,
+      maximumTotalFeeUsd: maximumFee, slippageBps: 50,
+      deadline: new Date(now.getTime() + 20 * 60_000).toISOString(),
+      timeoutSeconds: 3_600, refundPolicy: "relay-origin-refund", createdAt: now.toISOString(),
+    };
+    setBusy(true);
+    setError(null);
+    setPrepared(null);
+    try {
+      const result = await window.silfable.prepareEvmBridge({
+        schemaVersion: 1, requestId: crypto.randomUUID(), sessionId, contract,
+        acknowledgedSimulationOnly: true,
+      });
+      setPrepared({ quote: result.quote, preflight: result.preflight });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The EVM bridge review was blocked safely.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+   async function execute(credentials: { masterPassword: string; confirmation: string }): Promise<void> {
+    if (prepared === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await window.silfable.executeEvmBridge({
+        schemaVersion: 1, requestId: crypto.randomUUID(), sessionId,
+        preflightId: prepared.preflight.id, action: prepared.preflight.action,
+        masterPassword: credentials.masterPassword,
+        confirmation: credentials.confirmation as "APPROVE BRIDGE TOKEN" | "EXECUTE EVM BRIDGE MAINNET",
+        acknowledgedIrreversible: true,
+      });
+      setReceipt(result.receipt);
+      setPrepared(null);
+      setApproval(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The EVM bridge source transaction was not submitted.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reconcile(): Promise<void> {
+    if (receipt === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await window.silfable.reconcileEvmBridge({
+        schemaVersion: 1, requestId: crypto.randomUUID(), receiptId: receipt.id,
+      });
+      setReceipt(result.receipt);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Cross-chain settlement could not be verified yet.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return null;
+}
+
+function BridgePreparationForm({
+  busy,
+  onPrepare,
+}: {
+  busy: boolean;
+  onPrepare: (input: {
+    destinationChain: BridgeDestinationChain;
+    destinationRecipient: string;
+    amountIn: string;
+    minimumDestinationAmount: string;
+    maximumTotalFeeUsd: number;
+  }) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [destinationChain, setDestinationChain] = useState<BridgeDestinationChain>("base");
+  const [recipient, setRecipient] = useState("");
+  const [amount, setAmount] = useState("1.00");
+  // Small cross-chain transfers can have a meaningful fixed relayer cost. This is
+  // deliberately a quote-discovery floor only; execution still needs its own review.
+  const [minimum, setMinimum] = useState("0.50");
+  const [maxFee, setMaxFee] = useState("0.25");
+  const [error, setError] = useState<string | null>(null);
+  function toRaw(value: string): string | null {
+    if (!/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/u.test(value)) return null;
+    const [whole, fraction = ""] = value.split(".");
+    const raw = BigInt(whole ?? "0") * 1_000_000n + BigInt(fraction.padEnd(6, "0"));
+    return raw > 0n ? raw.toString() : null;
+  }
+  async function submit(): Promise<void> {
+    const amountIn = toRaw(amount);
+    const minimumDestinationAmount = toRaw(minimum);
+    const maximumTotalFeeUsd = Number(maxFee);
+    if (!/^0x[a-fA-F0-9]{40}$/u.test(recipient)) {
+      setError(`Enter the exact ${BRIDGE_DESTINATIONS[destinationChain].label} recipient address (0x + 40 hexadecimal characters).`);
+      return;
+    }
+     if (amountIn === null || minimumDestinationAmount === null || BigInt(minimumDestinationAmount) > BigInt(amountIn)) {
+      setError("Enter valid USDC amounts; the minimum destination amount cannot exceed the source amount.");
+      return;
+    }
+    if (!Number.isFinite(maximumTotalFeeUsd) || maximumTotalFeeUsd <= 0 || maximumTotalFeeUsd > 1_000) {
+      setError("Enter a positive maximum total fee in USD.");
+      return;
+    }
+    setError(null);
+    try {
+      await onPrepare({ destinationChain, destinationRecipient: recipient, amountIn, minimumDestinationAmount, maximumTotalFeeUsd });
+      setOpen(false);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Bridge preflight failed safely.";
+      if (/route output is below the contract minimum|quote is below the minimum destination amount/iu.test(message)) {
+        const destinationSymbol = BRIDGE_DESTINATIONS[destinationChain].symbol;
+        const quote = /provider quote:\s*(\d+)\s*raw (?:USDC|USDG)/iu.exec(message)?.[1];
+        const floor = /requested minimum:\s*(\d+)\s*raw (?:USDC|USDG)/iu.exec(message)?.[1];
+        const quoteText = quote === undefined ? "" : ` Provider quote: ${(Number(quote) / 1_000_000).toFixed(6)} ${destinationSymbol}.`;
+        const floorText = floor === undefined ? "" : ` Your floor: ${(Number(floor) / 1_000_000).toFixed(6)} ${destinationSymbol}.`;
+        setError(
+          `The quoted route would deliver less than your Minimum on ${BRIDGE_DESTINATIONS[destinationChain].label} floor.${quoteText}${floorText} No transaction was created, signed, or broadcast. Lower the floor only if that quoted output is acceptable, or increase the source amount and request a fresh quote.`,
+        );
+      } else if (/total fee.*maximum|fee.*exceed/iu.test(message)) {
+        const estimated = /estimated total:\s*\$([\d.]+)/iu.exec(message)?.[1];
+        const maximum = /maximum:\s*\$([\d.]+)/iu.exec(message)?.[1];
+        const estimateText = estimated === undefined ? "" : ` Provider estimate: $${estimated}.`;
+        const maximumText = maximum === undefined ? "" : ` Your limit: $${maximum}.`;
+        setError(
+          `The quoted provider cost exceeds your Maximum total fee limit.${estimateText}${maximumText} No transaction was created, signed, or broadcast. Review the quoted cost before changing the limit.`,
+        );
+      } else if (/USDC balance does not cover the bridge amount/iu.test(message)) {
+        const available = /available:\s*(\d+)\s*raw USDC/iu.exec(message)?.[1];
+        const requested = /requested:\s*(\d+)\s*raw USDC/iu.exec(message)?.[1];
+        const availableText = available === undefined ? "" : ` Available: ${(Number(available) / 1_000_000).toFixed(6)} USDC.`;
+        const requestedText = requested === undefined ? "" : ` Requested: ${(Number(requested) / 1_000_000).toFixed(6)} USDC.`;
+        setError(
+          `The finalized source-wallet USDC balance is insufficient.${availableText}${requestedText} No quote, signature, or broadcast was attempted.`,
+        );
+      } else {
+        setError(message);
+      }
+    }
+  }
+  return null;
+}
+
+function BridgeProposalCard({
+  proposal,
+  preflight,
+  receipt,
+  reconciling,
+  onExecute,
+  onReconcile,
+}: {
+  proposal: BridgeProposal;
+  preflight: BridgePreflightEvidence;
+  receipt: BridgeReceipt | null;
+  reconciling: boolean;
+  onExecute: () => void;
+  onReconcile?: () => void;
+}) {
+  const formatAsset = (raw: string, symbol: "USDC" | "USDG") => `${(Number(raw) / 1_000_000).toFixed(6)} ${symbol}`;
+  const destination = bridgeDestination(proposal.contract.destinationChainId);
+  const providerLabel = proposal.quote.provider === "relay" ? "Relay" : "deBridge DLN";
+  const terminal = receipt?.state === "destination-confirmed" || receipt?.state === "refunded" || receipt?.state === "source-failed" || receipt?.state === "destination-failed";
+  return (
+    <section className="bridgeProposalCard">
+      <header><div><span className="kicker">Bridge contract · {providerLabel}</span><h3>Solana USDC → {destination.label} {destination.symbol}</h3></div><StatusPill tone={receipt?.state === "destination-confirmed" ? "success" : "warning"}>{receipt?.state ?? "simulated"}</StatusPill></header>
+      <dl className="bridgeEvidenceGrid">
+        <div><dt>Source wallet</dt><dd>{shorten(proposal.contract.sourceWallet)}</dd></div>
+        <div><dt>{destination.label} recipient</dt><dd>{shorten(proposal.contract.destinationRecipient)}</dd></div>
+        <div><dt>Source amount</dt><dd>{formatAsset(proposal.contract.amountIn, "USDC")}</dd></div>
+        <div><dt>Expected on {destination.label}</dt><dd>{formatAsset(proposal.quote.estimatedDestinationAmount, destination.symbol)}</dd></div>
+        <div><dt>Minimum on {destination.label}</dt><dd>{formatAsset(proposal.contract.minimumDestinationAmount, destination.symbol)}</dd></div>
+        <div><dt>Total provider fee</dt><dd>${proposal.quote.fee.totalFeeUsd.toFixed(4)}</dd></div>
+        <div><dt>Solana network fee</dt><dd>{preflight.sourceNetworkFeeLamports.toLocaleString()} lamports</dd></div>
+        <div><dt>Quote expiry</dt><dd>{new Date(preflight.expiresAt).toLocaleTimeString()}</dd></div>
+      </dl>
+      <p className="bridgeSafetyCopy">Order <code>{proposal.quote.orderId}</code> · {preflight.programIds.length} allowlisted Solana programs · unsigned simulation passed.</p>
+      {receipt && <div className="bridgeReceiptPanel">
+        <strong>Encrypted cross-chain receipt</strong>
+        <span>Source signature: {shorten(receipt.sourceSignature)}</span>
+        <span>Provider: {receipt.providerStatus ?? "pending"}</span>
+        <span>Destination tx: {receipt.destinationTransactionHash ? shorten(receipt.destinationTransactionHash) : receipt.state === "relay-fulfilled-unverified" ? "not supplied by provider" : "pending"}</span>
+        <span>Actual destination: {receipt.actualDestinationAmount === null ? "pending" : formatAsset(receipt.actualDestinationAmount, destination.symbol)}</span>
+        {receipt.lastError && <span className="executionError">{receipt.lastError}</span>}
+        <div className="receiptActions" style={{ marginTop: "8px" }}>
+          <button onClick={() => void window.silfable.copyTransactionSignature({
+            schemaVersion: 1,
+            requestId: crypto.randomUUID(),
+            signature: receipt.sourceSignature,
+          })}>Copy signature</button>
+          <button onClick={() => void window.silfable.openTransactionInExplorer({
+            schemaVersion: 1,
+            requestId: crypto.randomUUID(),
+            signature: receipt.sourceSignature,
+          })}>Open Solana Explorer</button>
+        </div>
+      </div>}
+      <footer>
+        {!receipt && <button className="dangerButton" onClick={onExecute}>Final Mainnet approval</button>}
+        {receipt && !terminal && onReconcile && <button disabled={reconciling} onClick={onReconcile}>{reconciling ? `Checking source, relay & ${destination.label}…` : "Reconcile cross-chain status"}</button>}
+      </footer>
+    </section>
+  );
+}
+
+function formatEvmTokenAmount(rawAmount: string | null | undefined, symbol: string): string {
+  if (!rawAmount || rawAmount === "Unavailable") return "Unavailable";
+  try {
+    const bi = BigInt(rawAmount);
+    const isEth = symbol === "ETH" || symbol === "WETH";
+    const decimals = isEth ? 18 : 6;
+    const val = Number(bi) / (10 ** decimals);
+    if (val === 0 && bi > 0n) return `${bi} wei`;
+    return `${val.toLocaleString("en-US", { maximumFractionDigits: isEth ? 8 : 4 })} ${symbol}`;
+  } catch {
+    return `${rawAmount} ${symbol}`;
+  }
+}
+
+function formatWeiToGweiOrEth(weiAmount: string | null | undefined): string {
+  if (!weiAmount) return "0 wei";
+  try {
+    const bi = BigInt(weiAmount);
+    const ethVal = Number(bi) / 1e18;
+    if (ethVal >= 0.0001) return `${ethVal.toFixed(6)} ETH`;
+    const gweiVal = Number(bi) / 1e9;
+    return `${gweiVal.toFixed(2)} Gwei (${weiAmount} wei)`;
+  } catch {
+    return `${weiAmount} wei`;
+  }
 }
 
 function EvmSwapProposalCard({
@@ -4246,7 +4765,7 @@ function EvmSwapProposalCard({
     <section className={`missionPreview ${proposal.quote.liquidityAvailable ? "ready" : "blocked"}`}>
       <header>
         <div>
-          <span>Robinhood Chain · quote only</span>
+          <span>{proposal.chainKey ?? "EVM"} · {proposal.quote.provider ?? "chain router"} · quote only</span>
           <strong>
             {proposal.quote.sellTokenSymbol} → {proposal.quote.buyTokenSymbol}
           </strong>
@@ -4255,42 +4774,82 @@ function EvmSwapProposalCard({
           {proposal.quote.liquidityAvailable ? "Liquidity found" : "Blocked"}
         </StatusPill>
       </header>
-      <div className="previewGrid">
-        <div><span>Raw input</span><strong>{proposal.quote.sellAmount}</strong></div>
-        <div><span>Expected output</span><strong>{proposal.quote.buyAmount}</strong></div>
-        <div><span>Minimum output</span><strong>{proposal.quote.minBuyAmount ?? "Unavailable"}</strong></div>
-        <div><span>Slippage limit</span><strong>{proposal.slippageBps} bps</strong></div>
-        <div><span>0x fee</span><strong>{proposal.quote.zeroExFeeAmount ?? "None reported"}</strong></div>
-        <div><span>Chain</span><strong>Robinhood · 4663</strong></div>
-      </div>
-      <div className="contractRows">
-        <div><span>Wallet</span><strong>{shorten(proposal.walletAddress)}</strong></div>
-        <div><span>Sell contract</span><strong>{shorten(proposal.quote.sellToken)}</strong></div>
-        <div><span>Buy contract</span><strong>{shorten(proposal.quote.buyToken)}</strong></div>
-      </div>
+      <dl>
+        <div><dt>Sell Amount</dt><dd>{formatEvmTokenAmount(proposal.quote.sellAmount, proposal.quote.sellTokenSymbol)}</dd></div>
+        <div><dt>Expected Buy</dt><dd>{formatEvmTokenAmount(proposal.quote.buyAmount, proposal.quote.buyTokenSymbol)}</dd></div>
+        <div><dt>Minimum Buy</dt><dd>{formatEvmTokenAmount(proposal.quote.minBuyAmount, proposal.quote.buyTokenSymbol)}</dd></div>
+        <div><dt>Slippage Limit</dt><dd>{proposal.slippageBps} bps</dd></div>
+        <div><dt>Provider / Chain</dt><dd>{proposal.quote.provider === "uniswap" ? "Uniswap Classic" : "KyberSwap"} · {proposal.chainKey ?? "EVM"}</dd></div>
+        <div><dt>Wallet</dt><dd>{shorten(proposal.walletAddress)}</dd></div>
+        <div><dt>Sell Contract</dt><dd>{shorten(proposal.quote.sellToken)}</dd></div>
+        <div><dt>Buy Contract</dt><dd>{shorten(proposal.quote.buyToken)}</dd></div>
+      </dl>
       {preflight && (
-        <div className="simulationSummary">
-          <div><span>Allowance</span><strong>{preflight.currentAllowance}</strong></div>
-          <div><span>Approval</span><strong>{preflight.allowanceRequired ? "Required" : "Not required"}</strong></div>
-          <div><span>Gas limit</span><strong>{preflight.gasLimit}</strong></div>
-          <div><span>Maximum gas</span><strong>{preflight.maxGasCostWei} wei</strong></div>
-          <div><span>Firm minimum</span><strong>{preflight.minimumBuyAmount}</strong></div>
-          <div><span>Expires</span><strong>{new Date(preflight.expiresAt).toLocaleTimeString()}</strong></div>
-        </div>
+        <dl>
+          <div><dt>Current Allowance</dt><dd>{formatEvmTokenAmount(preflight.currentAllowance, proposal.quote.sellTokenSymbol)}</dd></div>
+          <div><dt>Approval Status</dt><dd>{preflight.allowanceRequired ? "Required" : "Not required"}</dd></div>
+          <div><dt>Gas Limit</dt><dd>{Number(preflight.gasLimit).toLocaleString()} units</dd></div>
+          <div><dt>Maximum Gas Fee</dt><dd>{formatWeiToGweiOrEth(preflight.maxGasCostWei)}</dd></div>
+          <div><dt>Firm Minimum Buy</dt><dd>{formatEvmTokenAmount(preflight.minimumBuyAmount, proposal.quote.buyTokenSymbol)}</dd></div>
+          <div><dt>Quote Expiry</dt><dd>{new Date(preflight.expiresAt).toLocaleTimeString()}</dd></div>
+        </dl>
       )}
       {receipts.length > 0 && (
         <div className="activityList">
-          {receipts.map((receipt) => (
-            <div key={receipt.id}>
-              <span className={receipt.status === "confirmed" ? "success" : "failed"}>
-                {receipt.status}
-              </span>
-              <div>
-                <strong>{receipt.kind} · {shorten(receipt.transactionHash)}</strong>
-                <small>{new Date(receipt.reconciledAt).toLocaleString()}</small>
+          {receipts.map((receipt) => {
+            const chainKey = proposal.chainKey ?? "robinhood";
+            const baseUrl = chainKey === "base"
+              ? "https://basescan.org"
+              : chainKey === "ethereum"
+                ? "https://etherscan.io"
+                : chainKey === "arbitrum"
+                  ? "https://arbiscan.io"
+                  : chainKey === "optimism"
+                    ? "https://optimistic.etherscan.io"
+                    : chainKey === "polygon"
+                      ? "https://polygonscan.com"
+                      : chainKey === "bsc"
+                        ? "https://bscscan.com"
+                        : chainKey === "avalanche"
+                          ? "https://snowtrace.io"
+                          : "https://explorer.mainnet.chain.robinhood.com";
+            const explorerTxUrl = `${baseUrl}/tx/${receipt.transactionHash}`;
+            return (
+              <div key={receipt.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "8px 12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span className={receipt.status === "confirmed" ? "success" : "failed"}>
+                    {receipt.status}
+                  </span>
+                  <div>
+                    <strong>{receipt.kind} · {shorten(receipt.transactionHash)}</strong>
+                    <small>{new Date(receipt.reconciledAt).toLocaleString()}</small>
+                  </div>
+                </div>
+                <a
+                  href={explorerTxUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    padding: "5px 12px",
+                    background: "rgba(59, 130, 246, 0.15)",
+                    border: "1px solid rgba(59, 130, 246, 0.4)",
+                    borderRadius: "6px",
+                    color: "#60a5fa",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  <span>🔗</span> Open Explorer
+                </a>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       {!executionEnabled && (
@@ -4305,7 +4864,7 @@ function EvmSwapProposalCard({
           Reconcile this transaction from Settings before preparing another action.
         </Notice>
       )}
-      <footer>
+     <footer>
         <span>
           {swapConfirmed
             ? "Swap confirmed"
@@ -5344,7 +5903,6 @@ function PumpLaunchDraftCard({
   preflight,
   revalidation,
   execution,
-  onPublishMetadata,
   onPreflight,
   onFinalRevalidate,
   onExecute,
@@ -5352,11 +5910,10 @@ function PumpLaunchDraftCard({
   onOpenOfficialCreate,
 }: {
   draft: PumpLaunchDraft;
-  metadataPackage: PumpLaunchMetadataPackage | undefined;
+  metadataPackage: LegacyPumpLaunchMetadataPackage | PumpLaunchMetadata | undefined;
   preflight: PumpLaunchPreflight | undefined;
   revalidation: PumpLaunchFinalRevalidation | undefined;
   execution: PumpLaunchExecutionRecord | undefined;
-  onPublishMetadata: (draft: PumpLaunchDraft) => Promise<void>;
   onPreflight: (draft: PumpLaunchDraft) => Promise<void>;
   onFinalRevalidate: (draft: PumpLaunchDraft, preflight: PumpLaunchPreflight) => Promise<void>;
   onExecute: (
@@ -5369,7 +5926,6 @@ function PumpLaunchDraftCard({
   onOpenOfficialCreate: (draft: PumpLaunchDraft) => Promise<void>;
 }) {
   const [opening, setOpening] = useState(false);
-  const [publishing, setPublishing] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [revalidating, setRevalidating] = useState(false);
   const [executing, setExecuting] = useState(false);
@@ -5387,17 +5943,6 @@ function PumpLaunchDraftCard({
       setError(reason instanceof Error ? reason.message : "The official Pump.fun page could not be opened.");
     } finally {
       setOpening(false);
-    }
-  };
-  const publish = async (): Promise<void> => {
-    setPublishing(true);
-    setError(null);
-    try {
-      await onPublishMetadata(draft);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Metadata could not be published to Cloudflare R2.");
-    } finally {
-      setPublishing(false);
     }
   };
   const simulate = async (): Promise<void> => {
@@ -5438,7 +5983,7 @@ function PumpLaunchDraftCard({
       setExecuting(false);
     }
   };
-  const verify = async (): Promise<void> => {
+   const verify = async (): Promise<void> => {
     if (execution === undefined) return;
     setVerifying(true);
     setError(null);
@@ -5462,8 +6007,7 @@ function PumpLaunchDraftCard({
         <div><dt>Outflow cap</dt><dd>{draft.maxCreatorOutflowLamports} lamports</dd></div>
         <div><dt>Priority cap</dt><dd>{draft.maxPriorityFeeLamports} lamports</dd></div>
       </dl>
-      <p>{metadataPackage ? `Metadata URI: ${metadataPackage.uri}` : draft.metadata.metadataUri ? "Hosted metadata JSON is recorded for a future preflight." : "Publish the metadata JSON to your configured Cloudflare R2 bucket, or supply your own hosted metadata URL."} No transaction, signing, or broadcast occurred.</p>
-      {!metadataPackage && !draft.metadata.metadataUri && <button className="launchDraftHandoff" disabled={publishing} onClick={() => void publish()}>{publishing ? "Publishing..." : "Publish metadata JSON to Cloudflare R2"}</button>}
+      <p>{metadataPackage ? `Metadata URI: ${(metadataPackage as any).uri || (metadataPackage as any).metadataUri || draft.metadata.metadataUri}` : draft.metadata.metadataUri ? "Hosted metadata JSON is recorded for a future preflight." : "Supply your own hosted metadata URL before preparing the launch."} No transaction, signing, or broadcast occurred.</p>
       {metadataReady && (
         <button className="launchDraftHandoff" disabled={simulating} onClick={() => void simulate()}>
           {simulating ? "Simulating unsigned launch..." : preflight ? "Refresh unsigned Mainnet preflight" : "Run unsigned Mainnet preflight"}
@@ -5496,7 +6040,7 @@ function PumpLaunchDraftCard({
         </div>
       )}
       {revalidation?.status === "ready-for-password" && execution === undefined && (
-        <div className="launchPreflightReview">
+         <div className="launchPreflightReview">
           <strong>Irreversible Mainnet approval</strong>
           <p>{revalidation.checks.filter((check) => check.passed).length}/{revalidation.checks.length} final checks passed. This action creates a real token mint and cannot be undone.</p>
           <label>Master password<input type="password" autoComplete="current-password" value={masterPassword} onChange={(event) => setMasterPassword(event.target.value)} /></label>
@@ -5626,7 +6170,7 @@ function MissionPreviewCard({
               : "Simulation never authorizes a transaction by itself."}
           </small>
         </div>
-        {simulation?.status === "passed" && !execution ? (
+         {simulation?.status === "passed" && !execution ? (
           <button
             className="executeButton"
             disabled={executing}
@@ -5918,46 +6462,62 @@ function AnimatedMarkdownMessage({
   message: ChatMessage;
   onComplete: () => void;
 }) {
-  const [length, setLength] = useState(0);
-  const completedRef = useRef(false);
+  const hasProposal = Boolean(
+    message.missionPreview ||
+    message.evmSwapProposal ||
+    message.bridgeProposal ||
+    message.pumpTradePreview ||
+    message.limitOrderPreview
+  );
+
+  const [isFinished, setIsFinished] = useState(hasProposal);
+  const [length, setLength] = useState(hasProposal ? (message.text?.length ?? 0) : 0);
+  const completedRef = useRef(hasProposal);
 
   useEffect(() => {
-    if (completedRef.current) return;
+    if (hasProposal || completedRef.current) {
+      if (!completedRef.current) {
+        completedRef.current = true;
+        onComplete();
+      }
+      return;
+    }
 
     if (!message.text || message.text.length <= 10) {
+      setIsFinished(true);
       setLength(message.text?.length ?? 0);
       completedRef.current = true;
       onComplete();
       return;
     }
-
+    
     setLength(0);
     const textLen = message.text.length;
-    const increment = Math.max(4, Math.ceil(textLen / 60));
+    const increment = Math.max(10, Math.ceil(textLen / 20));
 
     const timer = window.setInterval(() => {
       setLength((current) => {
         const next = Math.min(textLen, current + increment);
         if (next >= textLen) {
           window.clearInterval(timer);
-          if (!completedRef.current) {
-            completedRef.current = true;
-            queueMicrotask(() => {
-              onComplete();
-            });
-          }
           return textLen;
         }
         return next;
       });
-    }, 16);
+    }, 40);
 
     return () => {
       window.clearInterval(timer);
     };
-  }, [message.id]);
+  }, [message.id, hasProposal]);
 
-  const isFinished = length >= message.text.length || completedRef.current;
+  useEffect(() => {
+    if (length >= (message.text?.length ?? 0) && !completedRef.current) {
+      completedRef.current = true;
+      setIsFinished(true);
+      onComplete();
+    }
+  }, [length, message.text, onComplete]);
 
   return (
     <MarkdownMessage
@@ -6362,6 +6922,61 @@ function LimitOrderFinalModal({
   );
 }
 
+function EvmBridgeExecutionApprovalModal({
+ preflight,
+  quote,
+  onCancel,
+  onConfirm,
+}: {
+  preflight: EvmBridgePreflight;
+  quote: EvmBridgeQuote;
+  onCancel: () => void;
+  onConfirm: (credentials: { masterPassword: string; confirmation: string }) => Promise<void>;
+}) {
+  const [masterPassword, setMasterPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const required = preflight.action === "approval" ? "APPROVE BRIDGE TOKEN" : "EXECUTE EVM BRIDGE MAINNET";
+  const ready = masterPassword.length >= 8 && confirmation === required && acknowledged;
+  async function submit(): Promise<void> {
+    if (!ready) return;
+    setBusy(true);
+    setError(null);
+    try { await onConfirm({ masterPassword, confirmation }); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "The EVM Bridge transaction was blocked."); }
+    finally { setBusy(false); }
+  }
+   return (
+    <div className="modalBackdrop" role="presentation">
+      <section className="simulationApproval executionApproval" role="dialog" aria-modal="true" aria-labelledby="evm-bridge-approval-title">
+        <p className="kicker">Final EVM Bridge Mainnet authorization</p>
+        <h2 id="evm-bridge-approval-title">{preflight.action === "approval" ? "Approve the exact bridge token scope?" : "Submit this exact cross-chain deposit?"}</h2>
+        <p>{preflight.action === "approval" ? "This approval is a separate EVM transaction and does not move funds across chains. After confirmation, request a fresh quote for the deposit." : "This signs and broadcasts one source-chain deposit. Destination settlement remains asynchronous and must be reconciled independently."}</p>
+        <dl>
+          <div><dt>Source wallet</dt><dd>{preflight.walletAddress}</dd></div>
+          <div><dt>Action</dt><dd>{preflight.action}</dd></div>
+          <div><dt>Raw input</dt><dd>{quote.amountIn}</dd></div>
+          <div><dt>Minimum destination</dt><dd>{quote.minimumDestinationAmount}</dd></div>
+          <div><dt>Provider fee</dt><dd>${quote.totalFeeUsd.toFixed(4)}</dd></div>
+          <div><dt>Maximum gas</dt><dd>{preflight.maximumNetworkFeeWei} wei</dd></div>
+          <div><dt>Digest</dt><dd>{preflight.transactionDigest.slice(0, 24)}…</dd></div>
+          <div><dt>Expires</dt><dd>{new Date(preflight.expiresAt).toLocaleString()}</dd></div>
+        </dl>
+        <Notice tone="danger" title={preflight.action === "approval" ? "Real token approval" : "Irreversible source broadcast"}>
+          Verify the source chain, wallet, recipient, amount, minimum output, and fee limits. Never retry an unknown broadcast without reconciling the stored hash.
+        </Notice>
+        <Field label="Master password"><input type="password" autoComplete="current-password" value={masterPassword} onChange={(event) => setMasterPassword(event.target.value)} /></Field>
+        <Field label={`Type "${required}"`}><input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></Field>
+        <label className="riskCheck"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /><span>I authorize this exact EVM Mainnet action and understand its cross-chain risks.</span></label>
+        {error && <p className="executionError">{error}</p>}
+        <footer><button disabled={busy} onClick={onCancel}>Cancel</button><button className="dangerButton" disabled={!ready || busy} onClick={() => void submit()}>{busy ? "Signing and submitting once…" : preflight.action === "approval" ? "Approve exact scope" : "Submit bridge deposit"}</button></footer>
+           </section>
+    </div>
+  );
+}
+
 function EvmExecutionApprovalModal({
   action,
   proposal,
@@ -6381,21 +6996,20 @@ function EvmExecutionApprovalModal({
   const [masterPassword, setMasterPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
-  const [busy, setBusy] = useState(false);
+ const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const expectedConfirmation = action === "approval"
-    ? "APPROVE ROBINHOOD MAINNET"
-    : "EXECUTE ROBINHOOD MAINNET SWAP";
-  const ready =
-    masterPassword.length >= 8 &&
-    confirmation === expectedConfirmation &&
-    acknowledged;
+    ? "APPROVE EVM MAINNET"
+    : "EXECUTE EVM MAINNET SWAP";
+  const isPasswordEntered = masterPassword.trim().length > 0;
+  const isConfirmationMatched = confirmation.trim().toUpperCase() === expectedConfirmation.toUpperCase();
+  const ready = isPasswordEntered && isConfirmationMatched && acknowledged;
   async function submit(): Promise<void> {
     if (!ready) return;
     setBusy(true);
     setError(null);
     try {
-      await onConfirm({ masterPassword, confirmation });
+      await onConfirm({ masterPassword, confirmation: expectedConfirmation });
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -6414,38 +7028,40 @@ function EvmExecutionApprovalModal({
         aria-modal="true"
         aria-labelledby="evm-execution-approval-title"
       >
-        <p className="kicker">Final Robinhood Mainnet authorization</p>
+        <p className="kicker">Final EVM Mainnet authorization</p>
         <h2 id="evm-execution-approval-title">
           {action === "approval" ? "Approve this exact token amount" : "Execute this exact EVM swap"}
         </h2>
         <p>
           {action === "approval"
             ? "This is a separate ERC-20 approval transaction. A confirmed approval does not execute the swap; a fresh trade review is required afterward."
-            : "The firm 0x transaction will be signed locally and submitted once. An unknown broadcast must be reconciled before any retry."}
+             : `The exact ${proposal.quote.provider === "uniswap" ? "Uniswap" : "KyberSwap"} transaction will be signed locally and submitted once. An unknown broadcast must be reconciled before any retry.`}
         </p>
         <dl>
-          <div><dt>Wallet</dt><dd>{proposal.walletAddress}</dd></div>
+          <div><dt>Wallet</dt><dd>{shorten(proposal.walletAddress)}</dd></div>
           <div><dt>Pair</dt><dd>{proposal.quote.sellTokenSymbol} → {proposal.quote.buyTokenSymbol}</dd></div>
-          <div><dt>Raw input</dt><dd>{proposal.quote.sellAmount}</dd></div>
-          <div><dt>Expected output</dt><dd>{preflight.expectedBuyAmount}</dd></div>
-          <div><dt>Minimum output</dt><dd>{preflight.minimumBuyAmount}</dd></div>
-          <div><dt>Maximum gas</dt><dd>{preflight.maxGasCostWei} wei</dd></div>
-          <div><dt>Preflight expiry</dt><dd>{new Date(preflight.expiresAt).toLocaleString()}</dd></div>
+          <div><dt>Sell amount</dt><dd>{formatEvmTokenAmount(proposal.quote.sellAmount, proposal.quote.sellTokenSymbol)}</dd></div>
+          <div><dt>Expected output</dt><dd>{formatEvmTokenAmount(preflight.expectedBuyAmount, proposal.quote.buyTokenSymbol)}</dd></div>
+          <div><dt>Minimum output</dt><dd>{formatEvmTokenAmount(preflight.minimumBuyAmount, proposal.quote.buyTokenSymbol)}</dd></div>
+          <div><dt>Maximum gas</dt><dd>{formatWeiToGweiOrEth(preflight.maxGasCostWei)}</dd></div>
+          <div><dt>Preflight expiry</dt><dd>{new Date(preflight.expiresAt).toLocaleTimeString()}</dd></div>
         </dl>
         <Notice tone="danger" title="Irreversible Mainnet transaction">
-          Verify the wallet, exact token contracts, raw amount, minimum output,
+          Verify the wallet, exact token contracts, amount, minimum output,
           and gas ceiling before continuing.
         </Notice>
         <Field label="Master password">
           <input
             type="password"
             autoComplete="current-password"
+            placeholder="Enter your master password"
             value={masterPassword}
             onChange={(event) => setMasterPassword(event.target.value)}
           />
         </Field>
         <Field label={`Type "${expectedConfirmation}"`}>
           <input
+            placeholder={`Type: ${expectedConfirmation}`}
             value={confirmation}
             onChange={(event) => setConfirmation(event.target.value)}
           />
@@ -6456,17 +7072,55 @@ function EvmExecutionApprovalModal({
             checked={acknowledged}
             onChange={(event) => setAcknowledged(event.target.checked)}
           />
-          <span>I authorize this exact EVM Mainnet {action} and understand it uses real funds.</span>
         </label>
+
         {error && <p className="executionError">{error}</p>}
-        <footer>
-          <button disabled={busy} onClick={onCancel}>Cancel</button>
+        <footer style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "12px", marginTop: "24px", paddingTop: "16px", borderTop: "1px solid rgba(255, 255, 255, 0.1)" }}>
           <button
-            className="dangerButton"
+            type="button"
+            disabled={busy}
+            onClick={onCancel}
+            style={{
+              padding: "10px 20px",
+              background: "rgba(255, 255, 255, 0.05)",
+              border: "1px solid rgba(255, 255, 255, 0.2)",
+              borderRadius: "8px",
+              color: "#cbd5e1",
+              fontSize: "13px",
+              fontWeight: 600,
+              cursor: busy ? "not-allowed" : "pointer",
+              transition: "all 0.2s ease",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
             disabled={!ready || busy}
             onClick={() => void submit()}
+            style={{
+              padding: "11px 24px",
+              background: ready && !busy
+                ? "linear-gradient(135deg, #2563eb, #1d4ed8)"
+                : "rgba(30, 41, 59, 0.7)",
+              border: ready && !busy
+                ? "1px solid #60a5fa"
+                : "1px solid rgba(255, 255, 255, 0.1)",
+              borderRadius: "8px",
+              color: ready && !busy ? "#ffffff" : "rgba(255, 255, 255, 0.35)",
+              fontSize: "13px",
+              fontWeight: 700,
+              letterSpacing: "0.03em",
+              cursor: ready && !busy ? "pointer" : "not-allowed",
+              boxShadow: ready && !busy ? "0 4px 14px rgba(37, 99, 235, 0.4)" : "none",
+              transition: "all 0.2s ease",
+            }}
           >
-            {busy ? "Signing and submitting…" : action === "approval" ? "Approve exact amount" : "Execute real swap"}
+            {busy
+              ? "Signing and submitting…"
+              : action === "approval"
+                ? "Approve Exact Amount"
+                : "Execute Real Swap"}
           </button>
         </footer>
       </section>
@@ -6474,6 +7128,66 @@ function EvmExecutionApprovalModal({
   );
 }
 
+function BridgeExecutionApprovalModal({
+  proposal,
+  preflight,
+  onCancel,
+  onConfirm,
+}: {
+  proposal: BridgeProposal;
+  preflight: BridgePreflightEvidence;
+  onCancel: () => void;
+  onConfirm: (password: string) => Promise<void>;
+}) {
+  const [masterPassword, setMasterPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const destination = bridgeDestination(proposal.contract.destinationChainId);
+  const controlledAcceptance = isControlledBridgeAcceptance(proposal);
+  const confirmationPhrase = controlledAcceptance
+    ? CONTROLLED_BRIDGE_ACCEPTANCE_CONFIRMATION
+    : destination.confirmation;
+  const ready = masterPassword.length > 0 && confirmation === confirmationPhrase && acknowledged;
+  async function submit(): Promise<void> {
+    if (!ready) return;
+    setBusy(true);
+    setError(null);
+    try { await onConfirm(masterPassword); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Bridge execution was not started."); }
+    finally { setBusy(false); }
+  }
+   return (
+    <div className="modalBackdrop" role="presentation">
+      <section className="simulationApproval executionApproval" role="dialog" aria-modal="true" aria-labelledby="bridge-approval-title">
+        <p className="kicker">{controlledAcceptance ? "Controlled Bridge Acceptance" : "Final cross-chain Mainnet authorization"}</p>
+        <h2 id="bridge-approval-title">{controlledAcceptance ? "Run the 1 USDC Robinhood acceptance test?" : `Bridge real USDC to ${destination.label}?`}</h2>
+          <p>The exact {proposal.quote.provider === "relay" ? "Relay" : "deBridge"} source transaction that passed simulation will be signed locally and submitted once. Settlement on {destination.label} is asynchronous.</p>
+        <dl>
+          <div><dt>Source</dt><dd>Solana USDC</dd></div>
+            <div><dt>Destination</dt><dd>{destination.label} {destination.symbol}</dd></div>
+          <div><dt>Source wallet</dt><dd>{proposal.contract.sourceWallet}</dd></div>
+          <div><dt>{destination.label} recipient</dt><dd>{proposal.contract.destinationRecipient}</dd></div>
+          <div><dt>Raw source amount</dt><dd>{proposal.contract.amountIn}</dd></div>
+          <div><dt>Minimum destination</dt><dd>{proposal.contract.minimumDestinationAmount}</dd></div>
+          <div><dt>Provider order</dt><dd>{shorten(proposal.quote.orderId)}</dd></div>
+          <div><dt>Solana network fee</dt><dd>{preflight.sourceNetworkFeeLamports} lamports</dd></div>
+          <div><dt>Approval expiry</dt><dd>{new Date(preflight.expiresAt).toLocaleString()}</dd></div>
+        </dl>
+        <Notice tone="danger" title={controlledAcceptance ? "Canary only: this does not unlock production bridge execution" : "One-attempt irreversible source broadcast"}>
+          A timeout or unknown response must be reconciled by the stored signature and provider order. Never submit this route again automatically.
+        </Notice>
+        <Field label="Master password"><input type="password" autoComplete="current-password" value={masterPassword} onChange={(event) => setMasterPassword(event.target.value)} /></Field>
+           <Field label={`Type "${confirmationPhrase}"`}><input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></Field>
+        <label className="riskCheck"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /><span>I authorize this exact source transaction and its cross-chain settlement risks.</span></label>
+        {error && <p className="executionError">{error}</p>}
+        <footer><button disabled={busy} onClick={onCancel}>Cancel</button><button className="dangerButton" disabled={!ready || busy} onClick={() => void submit()}>{busy ? "Signing and submitting once…" : controlledAcceptance ? "Broadcast controlled acceptance" : "Bridge real USDC"}</button></footer>
+      </section>
+    </div>
+  );
+}
+     
 function ExecutionApprovalModal({
   preview,
   simulation,
@@ -6818,7 +7532,7 @@ function SessionModal({
         "",
     );
   }
-  const pumpMintValid = SOLANA_ADDRESS_PATTERN.test(pumpMint.trim());
+   const pumpMintValid = SOLANA_ADDRESS_PATTERN.test(pumpMint.trim());
   const pumpWatchlistMints = [...new Set(pumpWatchlistText
     .split(/[\s,;]+/u)
     .map((mint) => mint.trim())
@@ -6864,42 +7578,6 @@ function SessionModal({
           <section className="sessionConfigSection">
             <div className="sectionLegend">
               <span>01</span>
-              <strong>Wallet network</strong>
-              <small>The selected wallet determines the actions available inside this session.</small>
-            </div>
-            <div className="choiceGrid">
-              <button
-                className={walletScope === "solana" ? "active" : ""}
-                onClick={() => selectWalletScope("solana")}
-              >
-                <span className="choiceNumber">01</span>
-                <strong>Solana Mainnet wallet</strong>
-                <small>Available inside the session: Jupiter swap, Pump.fun Token Launch planning, Solana-to-EVM bridge planning, and research.</small>
-              </button>
-              <button
-                className={
-                  evmWallets.length === 0
-                    ? "unavailableChoice"
-                    : walletScope === "evm"
-                      ? "active"
-                      : ""
-                }
-                disabled={evmWallets.length === 0}
-                onClick={() => selectWalletScope("evm")}
-              >
-                <span className="choiceNumber">02</span>
-                <strong>Robinhood Chain EVM wallet</strong>
-                <small>
-                  {evmWallets.length === 0
-                    ? "Configure an encrypted EVM wallet in Settings first."
-                    : "Restricted 0x-routed swap review. Execution remains locked until the EVM release gate passes."}
-                </small>
-              </button>
-            </div>
-          </section>
-          <section className="sessionConfigSection">
-            <div className="sectionLegend">
-              <span>02</span>
               <strong>Session name</strong>
               <small>Used in your session history.</small>
             </div>
@@ -6919,6 +7597,42 @@ function SessionModal({
                 </span>
                 <span>{title.length} / 80</span>
               </div>
+            </div>
+          </section>
+          <section className="sessionConfigSection">
+            <div className="sectionLegend">
+              <span>02</span>
+              <strong>Wallet network</strong>
+              <small>The selected wallet determines the actions available inside this session.</small>
+            </div>
+            <div className="choiceGrid">
+              <button
+                className={walletScope === "solana" ? "active" : ""}
+                onClick={() => selectWalletScope("solana")}
+              >
+                <span className="choiceNumber">01</span>
+                <strong>Solana Mainnet wallet</strong>
+                 <small>Available inside the session: Jupiter swap, Pump.fun Token Launch planning, Solana-to-EVM bridge planning, and research.</small>
+              </button>
+              <button
+                className={
+                  evmWallets.length === 0
+                    ? "unavailableChoice"
+                    : walletScope === "evm"
+                      ? "active"
+                      : ""
+                }
+                disabled={evmWallets.length === 0}
+                onClick={() => selectWalletScope("evm")}
+              >
+                <span className="choiceNumber">02</span>
+                <strong>Robinhood Chain EVM wallet</strong>
+                <small>
+                  {evmWallets.length === 0
+                    ? "Configure an encrypted EVM wallet in Settings first."
+                    : "Restricted Uniswap-routed swap review on Robinhood Chain. Every approval and execution remains behind deterministic checks and explicit final confirmation."}
+                </small>
+              </button>
             </div>
           </section>
           <section className="sessionConfigSection">
@@ -7105,7 +7819,7 @@ function SessionModal({
           </section>
         </div>
         <footer>
-          <div className="sessionLockNote">
+       <div className="sessionLockNote">
             <span>●</span>
             <div>
               <strong>Mainnet · Restricted</strong>
@@ -7146,7 +7860,10 @@ function RightRail({
   session,
   runtime,
   model,
+  contextLimit,
+  outputLimit,
   wallets,
+  evmWallets,
   refreshToken,
   onAnalyzePump,
   onScanPump,
@@ -7154,7 +7871,10 @@ function RightRail({
   session: SessionItem | null;
   runtime: RuntimeStatus | null;
   model: string;
+  contextLimit: number;
+  outputLimit: number;
   wallets: WalletSummary[];
+  evmWallets: WalletSummary[];
   refreshToken: number;
   onAnalyzePump?: ((mint: string) => void) | undefined;
   onScanPump?: (() => void) | undefined;
@@ -7165,24 +7885,24 @@ function RightRail({
     (session ? null : wallets.find((wallet) => wallet.primary)?.address) ??
     null;
   const [portfolio, setPortfolio] = useState<PortfolioSnapshot | null>(null);
-  const [portfolioState, setPortfolioState] = useState<
-    "idle" | "loading" | "ready" | "error"
-  >("idle");
   const [activity, setActivity] = useState<WalletActivitySnapshot | null>(null);
   const [activityState, setActivityState] = useState<
     "idle" | "loading" | "ready" | "error"
   >("idle");
   const [activePositions, setActivePositions] = useState<any[]>([]);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
-  const [portfolioRetry, setPortfolioRetry] = useState(0);
 
   const [tpPercent, setTpPercent] = useState("");
   const [slPercent, setSlPercent] = useState("");
   
   const pumpConfig = session?.workspace === "pump" ? session.pumpConfig : undefined;
   const activePosition = activePositions.find(p => p.mintAddress === pumpConfig?.tokenMint);
+  const lastTurnInputTokens = session?.usage.input ?? 0;
+  const safeContextLimit = Math.max(contextLimit, 1);
+  const contextPercent = Math.min(100, Math.round((lastTurnInputTokens / safeContextLimit) * 100));
 
   useEffect(() => {
+    if (runtime?.keystore !== "unlocked") return;
     let active = true;
     const fetchPositions = async () => {
       try {
@@ -7198,7 +7918,8 @@ function RightRail({
       active = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [runtime?.keystore]);
+
 
   const minimumPortfolioSlot = useMemo(() => session?.messages.reduce((highest, message) => {
     const receipt = message.missionExecution;
@@ -7208,15 +7929,13 @@ function RightRail({
   }, 0) ?? 0, [session]);
   useEffect(() => {
     let active = true;
-    if (!visibleWallet || isEvmSession) {
+    if (!visibleWallet || isEvmSession || !pumpConfig) {
       setPortfolio(null);
-      setPortfolioState("idle");
       return () => {
         active = false;
       };
     }
-    setPortfolioState("loading");
-    void (async () => {
+     void (async () => {
       try {
         for (let attempt = 0; attempt < 10; attempt += 1) {
           const response = await window.silfable.getPortfolio({
@@ -7227,18 +7946,16 @@ function RightRail({
           if (!active) return;
           if (response.snapshot.slot >= minimumPortfolioSlot) {
             setPortfolio((current) => current?.address === response.snapshot.address && current.slot > response.snapshot.slot ? current : response.snapshot);
-            setPortfolioState("ready");
             return;
           }
           await new Promise<void>((resolve) => window.setTimeout(resolve, 750));
         }
-        if (active) setPortfolioState("error");
-      } catch { if (active) setPortfolioState("error"); }
+      } catch { /* Pump position evidence remains unavailable until the next refresh. */ }
     })();
     return () => {
       active = false;
     };
-  }, [visibleWallet, isEvmSession, refreshToken, minimumPortfolioSlot, portfolioRetry]);
+  }, [visibleWallet, isEvmSession, pumpConfig, refreshToken, minimumPortfolioSlot]);
   useEffect(() => {
     let active = true;
     setActivity(null);
@@ -7269,26 +7986,6 @@ function RightRail({
       active = false;
     };
   }, [session?.id, visibleWallet, isEvmSession, refreshToken]);
-  const emptyVerifiedPortfolio =
-    portfolio !== null &&
-    Number(portfolio.solBalance) === 0 &&
-    portfolio.assets.length === 0;
-  const portfolioLabel =
-    portfolioState === "loading"
-      ? "Loading…"
-      : portfolioState === "error"
-        ? "Unavailable"
-        : emptyVerifiedPortfolio
-          ? "$0.00"
-          : portfolio?.totalUsd === null || portfolio?.totalUsd === undefined
-            ? visibleWallet
-              ? "Unpriced"
-              : "No wallet"
-            : portfolio.totalUsd.toLocaleString(undefined, {
-                style: "currency",
-                currency: "USD",
-                maximumFractionDigits: 2,
-              });
   function copyAddress(address: string): void {
     void copyWalletAddress(address).then(() => {
       setCopiedAddress(address);
@@ -7299,14 +7996,6 @@ function RightRail({
       );
     });
   }
-  const balanceSummary =
-    portfolioState === "loading"
-      ? "Reading finalized Mainnet balances…"
-      : portfolioState === "error"
-        ? "Mainnet RPC could not verify this wallet. Try again later."
-        : portfolio
-          ? `${portfolio.solBalance} SOL · slot ${portfolio.slot.toLocaleString()} · verified ${new Date(portfolio.verifiedAt).toLocaleTimeString()}`
-          : "Select or configure a wallet to load its on-chain balances.";
   const latestPumpPreview = session?.messages
     .slice()
     .reverse()
@@ -7320,7 +8009,7 @@ function RightRail({
     .reverse()
     .find((message) => message.pumpDiscoverySnapshot)?.pumpDiscoverySnapshot;
   const pumpWatchlistEvidence = new Map<string, PumpTokenIntelligence>();
-  for (const message of session?.messages.slice().reverse() ?? []) {
+ for (const message of session?.messages.slice().reverse() ?? []) {
     const evidence = message.pumpTokenIntelligence;
     if (evidence && pumpConfig?.watchlistMints?.includes(evidence.mint) && !pumpWatchlistEvidence.has(evidence.mint)) {
       pumpWatchlistEvidence.set(evidence.mint, evidence);
@@ -7361,7 +8050,7 @@ function RightRail({
                       <div>
                         <strong>{shorten(candidate.mint)}</strong>
                         <span className={eligibility?.rankingAllowed ? "safe" : "risk"}>{eligibility?.rankingAllowed ? "Ranking eligible" : "Blocked"}</span>
-                      </div>
+                          </div>
                       <small>{candidate.intelligence.venue} · slot {candidate.intelligence.slot.toLocaleString()}</small>
                       <small>{candidate.signals.map((signal) => signal.replaceAll("-", " ")).join(" · ")}</small>
                       {eligibility && (
@@ -7378,7 +8067,7 @@ function RightRail({
                 <p>{latestPumpDiscovery?.disclosure ?? "Manual scan only. No persistent monitoring, ranking, proposal, signature, or broadcast is started."}</p>
               </div>
             )}
-            {pumpConfig.scope === "watchlist" && (
+             {pumpConfig.scope === "watchlist" && (
               <div className="pumpWatchlistRail">
                 {pumpConfig.watchlistMints?.map((mint) => {
                   const evidence = pumpWatchlistEvidence.get(mint);
@@ -7415,7 +8104,7 @@ function RightRail({
                     </div>
                   );
                 })}
-                <p>Watchlist analysis is read-only. Research eligibility does not authorize a trade proposal, signature, or broadcast.</p>
+                  <p>Watchlist analysis is read-only. Research eligibility does not authorize a trade proposal, signature, or broadcast.</p>
               </div>
             )}
             <dl className="pumpFacts">
@@ -7469,7 +8158,7 @@ function RightRail({
                 <small className="pumpEvidenceTime">Finalized slot {latestPumpIntelligence.slot.toLocaleString()} · {new Date(latestPumpIntelligence.verifiedAt).toLocaleTimeString()}</small>
                 <p className="pumpEvidenceNote">{latestPumpIntelligence.metrics.priceImpactNote}</p>
                 <p className="pumpEvidenceNote">{latestPumpIntelligence.metrics.feeNote}</p>
-                {latestPumpIntelligence.warnings.length > 0 && (
+                  {latestPumpIntelligence.warnings.length > 0 && (
                   <details className="pumpWarnings">
                     <summary>{latestPumpIntelligence.warnings.length} evidence warnings</summary>
                     <ul>{latestPumpIntelligence.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
@@ -7502,7 +8191,7 @@ function RightRail({
               <strong className="portfolioTotal">{pumpAsset?.uiAmount ?? "0"}</strong>
               <small>{pumpAsset ? `Token units at finalized slot ${portfolio?.slot.toLocaleString()}` : "No finalized balance for this mint was found in the selected wallet."}</small>
               
-              <div className="pumpControlGrid" style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+               <div className="pumpControlGrid" style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <input 
                     type="number" 
@@ -7554,9 +8243,9 @@ function RightRail({
                 <div className="walletLine selected">
                   <span>SESSION WALLET</span>
                   <strong>{shorten(visibleWallet)}</strong>
-                  <button onClick={() => copyAddress(visibleWallet)}>
+                  <Button variant="ghost" size="sm" onClick={() => copyAddress(visibleWallet)}>
                     {copiedAddress === visibleWallet ? "Copied" : "Copy"}
-                  </button>
+                  </Button>
                 </div>
               )}
             </RailSection>
@@ -7584,92 +8273,16 @@ function RightRail({
           )}
         </>
       )}
-      {!pumpConfig && isEvmSession && (
-        <RailSection title="EVM position">
-          <span className="totalLabel">Robinhood Chain session wallet</span>
-          <strong className="portfolioTotal">Restricted</strong>
-          <small>
-            Native and ERC-20 portfolio reads are not yet exposed in this rail.
-            Use the verified quote and restricted execution review in Mission chat.
-          </small>
-          {visibleWallet ? (
-            <div className="portfolioWallets">
-              <div className="walletLine selected">
-                <span>◇ SESSION WALLET</span>
-                <strong>{shorten(visibleWallet)}</strong>
-                <button onClick={() => copyAddress(visibleWallet)}>
-                  {copiedAddress === visibleWallet ? "Copied" : "Copy"}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <p>No EVM wallet is bound to this session.</p>
-          )}
-          <p className="pumpUnavailable">
-            Creating a session never authorizes an approval, signature, or
-            broadcast.
-          </p>
-        </RailSection>
-      )}
-      {!pumpConfig && !isEvmSession && (
-      <RailSection title={session ? "Positions" : "Portfolio"}>
-        <span className="totalLabel">
-          {session ? "Session wallet value" : "Verified portfolio"}
-        </span>
-        <strong className="portfolioTotal">{portfolioLabel}</strong>
-        <small>{balanceSummary}</small>
-        {portfolioState === "error" && (
-          <button className="railRetry" onClick={() => setPortfolioRetry((value) => value + 1)}>
-            Retry portfolio refresh
-          </button>
-        )}
-        {portfolio && portfolio.assets.length > 0 && (
-          <div className="assetList">
-            {portfolio.assets.slice(0, 5).map((asset) => (
-              <div key={asset.mint}>
-                <span>{shorten(asset.mint)}</span>
-                <strong>{asset.uiAmount}</strong>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="portfolioWallets">
-          {session ? (
-            visibleWallet ? (
-              <div className="walletLine selected">
-                <span>◎ SESSION WALLET</span>
-                <strong>{shorten(visibleWallet)}</strong>
-                <button onClick={() => copyAddress(visibleWallet)}>
-                  {copiedAddress === visibleWallet ? "Copied" : "Copy"}
-                </button>
-              </div>
-            ) : (
-              <div className="walletLine">
-                <span>◎ SOL</span>
-                <strong>Chat only</strong>
-              </div>
-            )
-          ) : wallets.length === 0 ? (
-            <div className="walletLine">
-              <span>◎ SOL</span>
-              <strong>Not configured</strong>
-            </div>
-          ) : (
-            wallets.map((wallet) => (
-              <div
-                className={`walletLine ${wallet.address === visibleWallet ? "selected" : ""}`}
-                key={wallet.address}
-              >
-                <span>◎ {wallet.primary ? "PRIMARY" : "SOL"}</span>
-                <strong>{shorten(wallet.address)}</strong>
-                <button onClick={() => copyAddress(wallet.address)}>
-                  {copiedAddress === wallet.address ? "Copied" : "Copy"}
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      </RailSection>
+      {!pumpConfig && (
+        <UnifiedPortfolioRail
+          session={session}
+          runtime={runtime}
+          solanaWallets={wallets}
+          evmWallets={evmWallets}
+          refreshToken={refreshToken}
+          copiedAddress={copiedAddress}
+          onCopyAddress={copyAddress}
+        />
       )}
       {session && !isEvmSession && (
         <RailSection title="Recent activity">
@@ -7700,6 +8313,16 @@ function RightRail({
       )}
       <RailSection title="Runtime & cost">
         <div className="runtimeModel">
+          <div className="runtimeContext" title="Input tokens reported by the provider for the most recent AI request.">
+            <div>
+              <span>Context · last turn</span>
+              <strong>{formatRuntimeTokens(lastTurnInputTokens)} / {formatRuntimeTokens(safeContextLimit)} · {contextPercent}%</strong>
+            </div>
+            <div className="runtimeContextTrack" aria-label={`Last-turn context usage: ${contextPercent}%`}>
+              <span style={{ width: `${contextPercent}%` }} />
+            </div>
+            <small>Output cap: {formatRuntimeTokens(outputLimit)} tokens</small>
+          </div>
           ◈ {model || "OpenRouter not configured"}
         </div>
         <dl>
@@ -7717,7 +8340,7 @@ function RightRail({
           </div>
           <div>
             <dt>Cost</dt>
-            <dd>
+             <dd>
               {session?.usage.cost === null || session?.usage.cost === undefined
                 ? "—"
                 : `$${session.usage.cost.toFixed(6)}`}
@@ -7754,7 +8377,7 @@ function RightRail({
               </dd>
             </div>
             <div>
-              <dt>Execution</dt>
+               <dt>Execution</dt>
               <dd>Locked</dd>
             </div>
           </dl>
@@ -7762,6 +8385,299 @@ function RightRail({
       )}
     </aside>
   );
+}
+
+type SolanaPortfolioView = { wallet: WalletSummary; snapshot: PortfolioSnapshot };
+type EvmPortfolioView = { wallet: WalletSummary; snapshot: EvmPortfolioSnapshot };
+type PortfolioLoadState = "idle" | "loading" | "ready" | "partial" | "error";
+type PortfolioFamilyFilter = "all" | "solana" | "evm";
+
+async function settleTaskPool<T>(tasks: ReadonlyArray<() => Promise<T>>, concurrency: number): Promise<Array<PromiseSettledResult<T>>> {
+  const results = new Array<PromiseSettledResult<T>>(tasks.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(Math.max(1, concurrency), tasks.length) }, async () => {
+    while (cursor < tasks.length) {
+      const index = cursor;
+      cursor += 1;
+      const task = tasks[index];
+      if (!task) continue;
+      try {
+        results[index] = { status: "fulfilled", value: await task() };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+function formatRuntimeTokens(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+  return String(value);
+}
+
+function UnifiedPortfolioRail({
+  session,
+  runtime,
+  solanaWallets,
+  evmWallets,
+  refreshToken,
+  copiedAddress,
+  onCopyAddress,
+}: {
+  session: SessionItem | null;
+  runtime: RuntimeStatus | null;
+  solanaWallets: WalletSummary[];
+  evmWallets: WalletSummary[];
+  refreshToken: number;
+  copiedAddress: string | null;
+  onCopyAddress: (address: string) => void;
+}) {
+  const [solanaViews, setSolanaViews] = useState<SolanaPortfolioView[]>([]);
+  const [evmViews, setEvmViews] = useState<EvmPortfolioView[]>([]);
+  const [solanaState, setSolanaState] = useState<PortfolioLoadState>("idle");
+  const [evmState, setEvmState] = useState<PortfolioLoadState>("idle");
+  const [evmFailureChains, setEvmFailureChains] = useState<EvmChainKey[]>([]);
+  const [walletFilter, setWalletFilter] = useState<PortfolioFamilyFilter>("all");
+  const [chainFilter, setChainFilter] = useState<"all" | EvmChainKey>("all");
+  const [retry, setRetry] = useState(0);
+
+  const sessionScope = session?.walletScope;
+  const sessionWallet = session?.walletAddress ?? null;
+  const solanaTargets = useMemo<WalletSummary[]>(() => {
+    if (session) return sessionScope === "solana" && sessionWallet
+      ? [{ address: sessionWallet, primary: true }]
+      : [];
+    return solanaWallets;
+  }, [session?.id, sessionScope, sessionWallet, solanaWallets]);
+  const evmTargets = useMemo<WalletSummary[]>(() => {
+    if (session) return sessionScope === "evm" && sessionWallet
+      ? [{ address: sessionWallet, primary: true }]
+      : [];
+    return evmWallets;
+  }, [session?.id, sessionScope, sessionWallet, evmWallets]);
+
+   useEffect(() => {
+    setWalletFilter("all");
+    setChainFilter(session?.walletScope === "evm" && session.evmChainKey
+      ? session.evmChainKey
+      : "all");
+  }, [session?.id, session?.walletScope, session?.evmChainKey]);
+
+  useEffect(() => {
+    let active = true;
+    setSolanaViews([]);
+    if (runtime?.keystore !== "unlocked" || solanaTargets.length === 0) {
+      setSolanaState("idle");
+      return () => { active = false; };
+    }
+    setSolanaState("loading");
+    const tasks = solanaTargets.map((wallet) => async () => ({
+      wallet,
+      snapshot: (await window.silfable.getPortfolio({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        address: wallet.address,
+      })).snapshot,
+    }));
+    void settleTaskPool(tasks, 1).then((results) => {
+      if (!active) return;
+      const fulfilled = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+      setSolanaViews(fulfilled);
+      setSolanaState(fulfilled.length === 0 ? "error" : fulfilled.length === results.length ? "ready" : "partial");
+    });
+    return () => { active = false; };
+  }, [runtime?.keystore, solanaTargets, refreshToken, retry]);
+
+  useEffect(() => {
+    let active = true;
+    setEvmViews([]);
+    setEvmFailureChains([]);
+    if (runtime?.keystore !== "unlocked" || evmTargets.length === 0) {
+      setEvmState("idle");
+      return () => { active = false; };
+    }
+     setEvmState("loading");
+    const requests = evmTargets.flatMap((wallet) => EVM_PORTFOLIO_CHAINS.map((chain) => ({ wallet, chain })));
+    const tasks = requests.map(({ wallet, chain }) => async () => ({
+      wallet,
+      snapshot: (await window.silfable.getEvmPortfolio({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        chainKey: chain.key,
+        address: wallet.address,
+        tokens: chain.token ? [chain.token] : [],
+      })).snapshot,
+    }));
+    void settleTaskPool(tasks, 3).then((results) => {
+      if (!active) return;
+      const fulfilled = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+      const failedChains = results.flatMap((result, index) => result.status === "rejected" && requests[index]
+        ? [requests[index].chain.key]
+        : []);
+      setEvmViews(fulfilled);
+      setEvmFailureChains([...new Set(failedChains)]);
+      setEvmState(fulfilled.length === 0 ? "error" : fulfilled.length === results.length ? "ready" : "partial");
+    });
+    return () => { active = false; };
+  }, [runtime?.keystore, evmTargets, refreshToken, retry]);
+
+  const selectedSolana = solanaViews.filter(() => walletFilter === "all" || walletFilter === "solana");
+  const selectedEvm = evmViews.filter((entry) =>
+    (walletFilter === "all" || walletFilter === "evm")
+    && (chainFilter === "all" || entry.snapshot.chainKey === chainFilter));
+  const hasPositiveRawAmount = (amount: string): boolean => {
+    try {
+      return BigInt(amount) > 0n;
+    } catch {
+      return false;
+    }
+  };
+  const visibleSolana = selectedSolana.filter((entry) =>
+    Number(entry.snapshot.solBalance) > 0
+    || entry.snapshot.assets.some((asset) => Number(asset.uiAmount) > 0));
+  const visibleEvm = selectedEvm.filter((entry) =>
+    hasPositiveRawAmount(entry.snapshot.nativeRawAmount)
+    || entry.snapshot.assets.some((asset) => hasPositiveRawAmount(asset.rawAmount)));
+  const hasVisibleAssets = visibleSolana.length + visibleEvm.length > 0;
+  const knownTotals = [
+     ...selectedSolana.map((entry) => entry.snapshot.totalUsd),
+    ...selectedEvm.map((entry) => entry.snapshot.totalUsd ?? null),
+  ].filter((value): value is number => value !== null && value !== undefined && Number.isFinite(value));
+  const totalUsd = knownTotals.length > 0 ? knownTotals.reduce((sum, value) => sum + value, 0) : null;
+  const includesSolana = session ? sessionScope === "solana" : walletFilter !== "evm";
+  const includesEvm = session ? sessionScope === "evm" : walletFilter !== "solana";
+  const loading = (includesSolana && solanaState === "loading") || (includesEvm && evmState === "loading");
+  const failed = (includesSolana && (solanaState === "error" || solanaState === "partial"))
+    || (includesEvm && (evmState === "error" || evmState === "partial"))
+    || selectedEvm.some((entry) => entry.snapshot.valuationStatus === "partial");
+  const robinhoodRpcUnavailable = chainFilter === "robinhood" && evmFailureChains.includes("robinhood");
+  const configuredCount = session
+    ? (sessionWallet ? 1 : 0)
+    : (includesSolana ? solanaWallets.length : 0) + (includesEvm ? evmWallets.length : 0);
+  const hasEvmSelection = sessionScope === "evm" || walletFilter === "evm";
+  const totalLabel = !hasVisibleAssets
+    ? "$0.00"
+    : loading
+    ? "Loading…"
+    : totalUsd === null ? "Unpriced" : formatPortfolioUsd(totalUsd);
+
+  return (
+    <RailSection title={session ? "Position" : "Portfolio"}>
+      <div className="portfolioHeadingRow">
+        <span className="totalLabel">{session
+          ? "Session wallet assets"
+          : walletFilter === "solana" ? "Solana wallets" : walletFilter === "evm" ? "EVM wallets" : "All configured wallets"}</span>
+        <small>{configuredCount} {configuredCount === 1 ? "wallet" : "wallets"}</small>
+      </div>
+      <strong className="portfolioTotal">{configuredCount === 0 ? "$0.00" : totalLabel}</strong>
+      <small>
+        {session
+          ? "Read-only balances for the wallet bound to this session."
+          : "Combined verified balances across Solana and supported EVM chains."}
+      </small>
+      
+      {!session && configuredCount > 1 && (
+        <div className="portfolioScopeTabs" aria-label="Portfolio wallet scope">
+          <button className={walletFilter === "all" ? "active" : ""} onClick={() => { setWalletFilter("all"); setChainFilter("all"); }}>All</button>
+          <button className={walletFilter === "solana" ? "active" : ""} disabled={solanaWallets.length === 0} onClick={() => { setWalletFilter("solana"); setChainFilter("all"); }}>Solana</button>
+          <button className={walletFilter === "evm" ? "active" : ""} disabled={evmWallets.length === 0} onClick={() => { setWalletFilter("evm"); setChainFilter("all"); }}>EVM</button>
+        </div>
+      )}
+
+      {hasEvmSelection && (
+        <div className="portfolioChainTabs" aria-label="EVM chain scope">
+          <button className={chainFilter === "all" ? "active" : ""} onClick={() => setChainFilter("all")}>All</button>
+          {EVM_PORTFOLIO_CHAINS.map((chain) => (
+            <button key={chain.key} className={chainFilter === chain.key ? "active" : ""} onClick={() => setChainFilter(chain.key)}>{chain.label}</button>
+          ))}
+        </div>
+      )}
+
+      {(failed || (configuredCount > 0 && !loading && selectedSolana.length + selectedEvm.length === 0)) && (
+        <div className="portfolioReadWarning">
+          <span>{robinhoodRpcUnavailable
+            ? "Robinhood Chain RPC did not respond. Add a custom provider endpoint in Settings → Connect integrations."
+            : "Some network balances could not be verified."}</span>
+          <Button variant="outline" size="sm" onClick={() => setRetry((value) => value + 1)}>Retry</Button>
+        </div>
+      )}
+
+      <div className="portfolioAssetGroups">
+        {visibleSolana.map((entry) => (
+          <div className="portfolioAssetGroup" key={`solana:${entry.wallet.address}`}>
+            <div className="portfolioGroupTitle"><span>SOLANA</span><strong>{formatPortfolioUsd(entry.snapshot.totalUsd)}</strong></div>
+            <PortfolioAssetRow symbol="SOL" amount={entry.snapshot.solBalance} usdValue={portfolioAssetUsd(entry.snapshot.solBalance, entry.snapshot.solUsdPrice)} />
+            {entry.snapshot.assets.slice(0, 8).map((asset) => (
+              <PortfolioAssetRow key={asset.mint} symbol={shorten(asset.mint)} amount={asset.uiAmount} usdValue={asset.usdValue} />
+            ))}
+          </div>
+        ))}
+        {visibleEvm.map((entry) => (
+          <div className="portfolioAssetGroup" key={`${entry.wallet.address}:${entry.snapshot.chainKey}`}>
+            <div className="portfolioGroupTitle"><span>{entry.snapshot.chainName.toUpperCase()}</span><strong>{formatPortfolioUsd(entry.snapshot.totalUsd ?? null)}</strong></div>
+            <PortfolioAssetRow symbol={entry.snapshot.nativeSymbol} amount={entry.snapshot.nativeUiAmount} usdValue={entry.snapshot.nativeUsdValue ?? null} />
+            {entry.snapshot.assets.filter((asset) => BigInt(asset.rawAmount) > 0n).map((asset) => (
+              <PortfolioAssetRow key={asset.address} symbol={asset.symbol} amount={asset.uiAmount} usdValue={asset.usdValue ?? null} />
+            ))}
+          </div>
+        ))}
+        {!loading && !hasVisibleAssets && configuredCount > 0 && (
+          <p className="portfolioEmpty">No non-zero assets are available for this selection.</p>
+        )}
+      </div>
+
+      <div className="portfolioWallets">
+        {(session
+          ? [...solanaTargets.map((wallet) => ({ ...wallet, family: "SOL" })), ...evmTargets.map((wallet) => ({ ...wallet, family: "EVM" }))]
+          : [
+            ...(walletFilter !== "evm" ? solanaWallets.map((wallet) => ({ ...wallet, family: "SOL" })) : []),
+            ...(walletFilter !== "solana" ? evmWallets.map((wallet) => ({ ...wallet, family: "EVM" })) : []),
+          ]
+        ).map((wallet) => (
+          <div className="walletLine" key={`${wallet.family}:${wallet.address}`}>
+            <span>{wallet.family} {wallet.primary ? "PRIMARY" : "WALLET"}</span>
+            <strong>{shorten(wallet.address)}</strong>
+            <Button variant="ghost" size="sm" onClick={() => onCopyAddress(wallet.address)}>{copiedAddress === wallet.address ? "Copied" : "Copy"}</Button>
+          </div>
+        ))}
+      </div>
+       <p className="portfolioBoundary">Balances are read-only. EVM token discovery is limited to native assets and release-pinned USDC/USDG contracts.</p>
+    </RailSection>
+  );
+}
+
+function PortfolioAssetRow({ symbol, amount, usdValue }: { symbol: string; amount: string; usdValue: number | null }) {
+  return (
+    <div className="portfolioAssetRow">
+      <span>{symbol}</span>
+      <strong>{formatPortfolioAmount(amount)}</strong>
+      <em>{formatPortfolioUsd(usdValue)}</em>
+    </div>
+  );
+}
+
+function formatPortfolioUsd(value: number | null | undefined): string {
+  return value === null || value === undefined
+    ? "Unpriced"
+    : value.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+}
+
+function portfolioAssetUsd(amount: string, price: number | null): number | null {
+  const numericAmount = Number(amount);
+  if (numericAmount === 0) return 0;
+  if (!Number.isFinite(numericAmount) || price === null) return null;
+  const value = numericAmount * price;
+  return Number.isFinite(value) ? value : null;
+}
+
+function formatPortfolioAmount(value: string): string {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return value;
+  if (numeric > 0 && numeric < 0.000001) return numeric.toExponential(4);
+  return numeric.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
 function SetupCard({
@@ -7964,12 +8880,26 @@ function Composer({
   disabled?: boolean;
   placeholder: string;
 }) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const resizeComposer = (element: HTMLTextAreaElement): void => {
+    element.style.height = "auto";
+    element.style.height = `${Math.min(element.scrollHeight, 240)}px`;
+  };
+
+  useEffect(() => {
+    if (textareaRef.current) resizeComposer(textareaRef.current);
+  }, [value]);
+
   return (
-    <div className={`composer ${disabled ? "disabled" : ""}`}>
+  <div className={`composer ${disabled ? "disabled" : ""}`}>
       <textarea
+        ref={textareaRef}
         value={value}
         disabled={disabled}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => {
+          setValue(event.target.value);
+          resizeComposer(event.currentTarget);
+        }}
         onKeyDown={(event) => {
           if (!disabled && event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
@@ -7979,10 +8909,16 @@ function Composer({
         placeholder={placeholder}
         rows={1}
       />
-      <span>Mode / Chat</span>
-      <button disabled={disabled || !value.trim()} onClick={onSubmit}>
-        ↑
-      </button>
+      <Button
+        className="composerSubmit"
+        size="sm"
+        icon={<ArrowUp className="size-4" />}
+        disabled={disabled || !value.trim()}
+        aria-label="Send message"
+        onClick={onSubmit}
+      >
+        <span className="sr-only">Send</span>
+      </Button>
     </div>
   );
 }
@@ -8028,3 +8964,123 @@ function readSetup(): SetupState {
     return DEFAULT_SETUP;
   }
 }
+
+function AutomationSetupDcaCard({
+  setup,
+  onApprove,
+}: {
+  setup: import("@silfable/contracts").AutomationSetupDcaRequest;
+  onApprove: (payload: any) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [approved, setApproved] = useState(false);
+  const approve = async () => {
+    setBusy(true);
+    try {
+      await onApprove({ type: "DCA", payload: setup });
+      setApproved(true);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="tradePreviewCard">
+      <header className="previewHeader">
+        <span className="venueBadge">?? Automation</span>
+        <strong>DCA Strategy Setup</strong>
+      </header>
+      <div className="previewBody">
+        <div className="orderRow">
+          <span>Target Token</span>
+          <span className="font-mono">{setup.outputMint.slice(0,6)}...{setup.outputMint.slice(-4)}</span>
+        </div>
+        <div className="orderRow">
+          <span>Amount per Execution (USDC)</span>
+          <span>{Number(setup.orderAmountRaw) / 1000000}</span>
+        </div>
+        <div className="orderRow">
+          <span>Total Executions</span>
+          <span>{setup.maximumExecutions}</span>
+        </div>
+        <div className="orderRow">
+          <span>Interval</span>
+          <span>{setup.intervalSeconds / 60} Minutes</span>
+        </div>
+      </div>
+      <footer className="previewFooter">
+        {approved ? (
+          <span className="text-green-400 font-bold" style={{color:"#4ade80"}}>? Approved & Active</span>
+        ) : (
+          <button className="executeButton" disabled={busy} onClick={approve}>
+            {busy ? "Approving..." : "Confirm & Setup"}
+          </button>
+        )}
+      </footer>
+    </div>
+  );
+}
+
+function AutomationSetupExitCard({
+  setup,
+  onApprove,
+}: {
+  setup: import("@silfable/contracts").AutomationSetupExitRequest;
+  onApprove: (payload: any) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [approved, setApproved] = useState(false);
+  const approve = async () => {
+    setBusy(true);
+    try {
+      await onApprove({ type: "EXIT", payload: setup });
+      setApproved(true);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="tradePreviewCard">
+      <header className="previewHeader">
+        <span className="venueBadge">??? Automation</span>
+        <strong>Take Profit / Stop Loss Setup</strong>
+      </header>
+      <div className="previewBody">
+        <div className="orderRow">
+          <span>Asset</span>
+          <span className="font-mono">{setup.inputMint.slice(0,6)}...{setup.inputMint.slice(-4)}</span>
+        </div>
+        <div className="orderRow">
+          <span>Entry Price (USD)</span>
+          <span>${setup.entryPriceUsd}</span>
+        </div>
+        {setup.takeProfitPriceUsd && (
+          <div className="orderRow">
+            <span style={{color:"#4ade80"}}>Take Profit (USD)</span>
+            <span style={{color:"#4ade80", fontWeight: "bold"}}>${setup.takeProfitPriceUsd}</span>
+          </div>
+        )}
+        {setup.stopLossPriceUsd && (
+          <div className="orderRow">
+            <span style={{color:"#f87171"}}>Stop Loss (USD)</span>
+            <span style={{color:"#f87171", fontWeight: "bold"}}>${setup.stopLossPriceUsd}</span>
+          </div>
+        )}
+      </div>
+      <footer className="previewFooter">
+        {approved ? (
+          <span className="text-green-400 font-bold" style={{color:"#4ade80"}}>? Approved & Active</span>
+        ) : (
+          <button className="executeButton" disabled={busy} onClick={approve}>
+            {busy ? "Approving..." : "Confirm & Setup"}
+          </button>
+        )}
+      </footer>
+    </div>
+  );
+}
+
+

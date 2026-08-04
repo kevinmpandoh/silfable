@@ -42,6 +42,11 @@ export function createP2Cases(buildSha256) {
   };
 }
 
+export function parseP2EvidenceJson(value) {
+  assert.equal(typeof value, "string", "P2 evidence JSON must be text");
+  return JSON.parse(value.replace(/^\uFEFF/u, ""));
+}
+
 export function validateP2Evidence(manifest, cases, options = {}) {
   assert.equal(typeof manifest, "object", "P2 manifest is missing");
   assert.equal(manifest?.schemaVersion, 2, "P2 manifest schema is unsupported");
@@ -51,7 +56,7 @@ export function validateP2Evidence(manifest, cases, options = {}) {
   assert.match(manifest.executableSha256, SHA256, "Packaged executable digest is invalid");
   assert.equal(typeof manifest.authenticodeStatus, "string", "Authenticode status is missing");
   assert.equal(manifest.profileMode, "isolated", "P2 must use an isolated profile");
-  assert.equal(manifest.checklist, "docs/desktop/P2_WINDOWS_ACCEPTANCE.md", "P2 checklist binding is invalid");
+  assert.equal(manifest.checklist, "docs/SILFABLE_PROJECT_REFERENCE.md", "P2 checklist binding is invalid");
   assert.equal(typeof cases, "object", "P2 case evidence is missing");
   assert.equal(cases?.schemaVersion, 1, "P2 case schema is unsupported");
   assert.match(cases.buildSha256, SHA256, "P2 case build digest is invalid");

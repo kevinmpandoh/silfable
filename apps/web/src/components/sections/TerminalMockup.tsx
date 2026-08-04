@@ -22,7 +22,7 @@ const logLines = [
 
 export function TerminalMockup() {
   return (
-    <section className="overflow-hidden bg-paper text-ink">
+    <section className="overflow-hidden bg-[#070a16] text-[#eef2ff]">
       <div className="section-shell py-24 sm:py-32 lg:py-44">
         <motion.div
           initial={{ opacity: 0, y: 28 }}
@@ -39,7 +39,7 @@ export function TerminalMockup() {
               Rules the agent <em className="text-electric">cannot</em> negotiate.
             </h2>
           </div>
-          <p className="max-w-xl text-base leading-8 text-black/55 lg:justify-self-end">
+          <p className="max-w-xl text-base leading-8 text-white/55 lg:justify-self-end">
             Define the operating envelope once. Every proposed trade is checked locally before signing, with a readable receipt for every pass or rejection.
           </p>
         </motion.div>
@@ -49,7 +49,7 @@ export function TerminalMockup() {
           whileInView={{ opacity: 1, scale: 1, y: 0 }}
           viewport={{ once: true, amount: 0.15 }}
           transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
-          className="overflow-hidden rounded-[1.25rem] border border-blue-950/50 bg-[#07101f] text-slate-200 ring-1 ring-black/10 sm:rounded-[1.75rem]"
+          className="overflow-hidden rounded-[1.25rem] border border-cyan-300/20 bg-[#07101f] text-slate-200 shadow-[0_26px_90px_rgb(0_0_0_/_0.35)] sm:rounded-[1.75rem]"
         >
           <div className="flex h-14 items-center border-b border-white/10 bg-[#0a1425] px-4 sm:px-6">
             <div className="flex gap-2" aria-hidden="true">
