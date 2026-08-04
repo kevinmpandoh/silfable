@@ -10,15 +10,19 @@ export const metadata: Metadata = {
   description: "Download current Silfable desktop builds and review release notes, checksums, compatibility, and update channels.",
 };
 
+import { PageTransition } from "@/components/ui/PageTransition";
+
 export default function ReleasesPage() {
   return (
-    <main className="bg-paper text-ink">
-      <ReleaseHero />
-      <div className="section-shell">
-        <ReleaseDownloads />
-        <ReleaseHistory />
-        <UpdatePolicy />
-      </div>
-    </main>
+    <PageTransition>
+      <main className="bg-paper text-ink">
+        <ReleaseHero />
+        <div className="section-shell">
+          <ReleaseDownloads />
+          <ReleaseHistory />
+          <UpdatePolicy />
+        </div>
+      </main>
+    </PageTransition>
   );
 }

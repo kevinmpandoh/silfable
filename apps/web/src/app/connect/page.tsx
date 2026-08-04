@@ -168,16 +168,20 @@ function ConnectContent() {
   );
 }
 
+import { PageTransition } from "@/components/ui/PageTransition";
+
 export default function ConnectPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center bg-[#050505] text-zinc-500">
-          Loading workspace...
-        </div>
-      }
-    >
-      <ConnectContent />
-    </Suspense>
+    <PageTransition>
+      <Suspense
+        fallback={
+          <div className="flex min-h-screen items-center justify-center bg-[#050505] text-zinc-500">
+            Loading workspace...
+          </div>
+        }
+      >
+        <ConnectContent />
+      </Suspense>
+    </PageTransition>
   );
 }
