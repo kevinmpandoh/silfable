@@ -32,12 +32,7 @@ export async function POST(req: NextRequest) {
         userPublicKey,
         wrapAndUnwrapSol: true,
         dynamicComputeUnitLimit: true,
-        prioritizationFeeLamports: {
-          priorityLevelWithMaxLamports: {
-            priorityLevel: "normal",
-            maxLamports: 500_000,
-          },
-        },
+        prioritizationFeeLamports: "auto",
       }),
     });
 
