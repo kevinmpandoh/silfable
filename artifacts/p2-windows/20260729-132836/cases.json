@@ -1,0 +1,123 @@
+﻿{
+    "schemaVersion":  1,
+    "buildSha256":  "11ab1db396ed14013e9709655e2c643783856f4abf3565b2ffabfacf2f434862",
+    "cases":  [
+                  {
+                      "id":  "P2-01",
+                      "title":  "Packaged startup and vault recovery",
+                      "status":  "pass",
+                      "checkedAt":  "2026-07-29T06:28:30.4529073Z",
+                      "publicSignatures":  [
+
+                                           ],
+                      "artifacts":  [
+
+                                    ],
+                      "notes":  "Packaged ASAR reopened to System Check and vault unlock; complete setup and provider model restored from SQLite after browser Local Storage was removed. No locked-vault IPC error was observed."
+                  },
+                  {
+                      "id":  "P2-02",
+                      "title":  "USDC to SOL reverse swap",
+                      "status":  "pending",
+                      "checkedAt":  null,
+                      "publicSignatures":  [
+
+                                           ],
+                      "artifacts":  [
+
+                                    ],
+                      "notes":  null
+                  },
+                  {
+                      "id":  "P2-03",
+                      "title":  "Insufficient balance",
+                      "status":  "pending",
+                      "checkedAt":  null,
+                      "publicSignatures":  [
+
+                                           ],
+                      "artifacts":  [
+
+                                    ],
+                      "notes":  null
+                  },
+                  {
+                      "id":  "P2-04",
+                      "title":  "Changed quote or route",
+                      "status":  "pending",
+                      "checkedAt":  null,
+                      "publicSignatures":  [
+
+                                           ],
+                      "artifacts":  [
+
+                                    ],
+                      "notes":  null
+                  },
+                  {
+                      "id":  "P2-05",
+                      "title":  "RPC timeout before signing",
+                      "status":  "pending",
+                      "checkedAt":  null,
+                      "publicSignatures":  [
+
+                                           ],
+                      "artifacts":  [
+
+                                    ],
+                      "notes":  null
+                  },
+                  {
+                      "id":  "P2-06",
+                      "title":  "Broadcast result unknown",
+                      "status":  "pending",
+                      "checkedAt":  null,
+                      "publicSignatures":  [
+
+                                           ],
+                      "artifacts":  [
+
+                                    ],
+                      "notes":  null
+                  },
+                  {
+                      "id":  "P2-07",
+                      "title":  "Receipt restart recovery",
+                      "status":  "pending",
+                      "checkedAt":  null,
+                      "publicSignatures":  [
+
+                                           ],
+                      "artifacts":  [
+
+                                    ],
+                      "notes":  null
+                  },
+                  {
+                      "id":  "P2-08",
+                      "title":  "Portfolio reconciliation",
+                      "status":  "pending",
+                      "checkedAt":  null,
+                      "publicSignatures":  [
+
+                                           ],
+                      "artifacts":  [
+
+                                    ],
+                      "notes":  null
+                  },
+                  {
+                      "id":  "P2-09",
+                      "title":  "Fee and account-funding evidence",
+                      "status":  "pending",
+                      "checkedAt":  null,
+                      "publicSignatures":  [
+
+                                           ],
+                      "artifacts":  [
+
+                                    ],
+                      "notes":  null
+                  }
+              ]
+}

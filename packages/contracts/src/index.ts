@@ -2069,10 +2069,21 @@ export type EvmWalletImportResponse = z.infer<typeof EvmWalletImportResponseSche
 export type EvmWalletClearAllRequest = z.infer<typeof EvmWalletClearAllRequestSchema>;
 export type EvmWalletClearAllResponse = z.infer<typeof EvmWalletClearAllResponseSchema>;
 
+export const EvmChainSettingsSchema = z.object({
+  chainKey: EvmChainKeySchema,
+  chainId: z.number().int().positive(),
+  name: z.string(),
+  nativeSymbol: z.string(),
+  explorerUrl: z.string(),
+  provider: z.string(),
+  rpcConfigured: z.boolean(),
+}).strict();
+
 export const EvmSettingsResponseSchema = z.object({
   schemaVersion: z.literal(1),
-  rpcConfigured: z.boolean(),
+  chains: z.array(EvmChainSettingsSchema),
   executionEnabled: z.boolean(),
+  executionMissing: z.array(z.string()),
 }).strict();
 export const EvmSaveRpcUrlRequestSchema = RequestBaseSchema.extend({
   rpcUrl: z.string().trim().url().max(1_024).refine((value) => value.startsWith("https://"), "EVM RPC URL must use HTTPS"),

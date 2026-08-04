@@ -48,10 +48,11 @@ export function Hero() {
         >
           <div>
             <p className="max-w-md text-lg leading-relaxed text-white/65 sm:text-xl">
-              Mainnet actions stay gated.
+              Mainnet actions stay gated. Proven in production.
             </p>
             <p className="mt-2 max-w-lg text-sm leading-6 text-white/35">
               Give the agent a mission. Silfable checks policy, records evidence, and asks for approval before any supported transaction.
+              Backed by successful real-world testing as documented in our whitepaper.
             </p>
           </div>
 

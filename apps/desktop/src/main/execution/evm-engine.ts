@@ -33,6 +33,10 @@ export class EvmEngine {
     return this.#chainId;
   }
 
+  getVerifiedRpcUrl(): string {
+    return this.#rpcUrl;
+  }
+
   /**
    * Proves that the configured RPC is serving the expected chain.
    * Call this immediately before any estimate, signing preparation, or broadcast.
@@ -43,6 +47,11 @@ export class EvmEngine {
       throw new Error(`EVM RPC chain mismatch: expected ${this.#chainId}, received ${remoteChainId}`);
     }
     return remoteChainId;
+  }
+
+  async getBlockNumber(): Promise<bigint> {
+    await this.assertExpectedChain();
+    return await this.#publicClient.getBlockNumber();
   }
 
   /**
@@ -90,6 +99,32 @@ export class EvmEngine {
       functionName: "allowance",
       args: [owner, spender],
     });
+  }
+
+  async getErc20Balance(token: Address, owner: Address): Promise<bigint> {
+    await this.assertExpectedChain();
+    return await this.#publicClient.readContract({
+      address: token,
+      abi: parseAbi(["function balanceOf(address owner) view returns (uint256)"]),
+      functionName: "balanceOf",
+      args: [owner],
+    });
+  }
+
+  async getBytecode(address: Address): Promise<Hex | undefined> {
+    await this.assertExpectedChain();
+    return await this.#publicClient.getBytecode({ address });
+  }
+
+  async simulateTransaction(params: EvmExecutionParams & { from: Address }): Promise<{ gasLimit: bigint }> {
+    await this.assertExpectedChain();
+    const gasLimit = await this.#publicClient.estimateGas({
+      account: params.from,
+      to: params.to,
+      value: params.valueWei,
+      data: params.data,
+    });
+    return { gasLimit };
   }
 
   /** Returns the pending nonce used to create a one-time EIP-1559 transaction. */

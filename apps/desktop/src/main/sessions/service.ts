@@ -64,6 +64,14 @@ export class SessionService {
     return operation;
   }
 
+  delete(id: string): Promise<void> {
+    const operation = this.#mutationTail.then(async () => {
+      this.#database.deleteSessionRecord(id);
+    });
+    this.#mutationTail = operation.catch(() => undefined);
+    return operation;
+  }
+
   async #getOrCreateKey(): Promise<Buffer> {
     let result: Buffer | null = null;
     const operation = this.#keyTail.then(async () => {

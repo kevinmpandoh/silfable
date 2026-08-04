@@ -1,0 +1,12 @@
+﻿{
+    "schemaVersion":  2,
+    "startedAt":  "2026-07-29T05:28:38.5991569Z",
+    "executableName":  "silfable.exe",
+    "executableSha256":  "11AB1DB396ED14013E9709655E2C643783856F4ABF3565B2FFABFACF2F434862",
+    "authenticodeStatus":  "NotSigned",
+    "authenticodeSubject":  null,
+    "installerName":  null,
+    "installerSha256":  null,
+    "profileMode":  "isolated",
+    "checklist":  "docs/desktop/P2_WINDOWS_ACCEPTANCE.md"
+}
