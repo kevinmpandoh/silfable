@@ -9,7 +9,7 @@ import { WalletError } from "@solana/wallet-adapter-base";
 
 import "@solana/wallet-adapter-react-ui/styles.css";
 
-const DEFAULT_RPC = "https://rpc.ankr.com/solana";
+const DEFAULT_RPC = "https://api.mainnet-beta.solana.com";
 
 export function SolanaProvider({ children }: { children: React.ReactNode }) {
   const endpoint = useMemo(

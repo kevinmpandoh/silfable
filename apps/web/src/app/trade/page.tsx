@@ -499,11 +499,18 @@ export default function TradePage() {
       const transaction = VersionedTransaction.deserialize(base64ToBytes(swapData.swapTransaction));
       const signature = await sendTransaction(transaction, connection);
       
-      const latestBlockhash = await connection.getLatestBlockhash("confirmed");
+      let blockhash = transaction.message.recentBlockhash;
+      let lastValidBlockHeight = swapData.lastValidBlockHeight;
+      if (!blockhash || !lastValidBlockHeight) {
+        const latest = await connection.getLatestBlockhash("confirmed");
+        blockhash = latest.blockhash;
+        lastValidBlockHeight = latest.lastValidBlockHeight;
+      }
+      
       await connection.confirmTransaction({
         signature,
-        blockhash: latestBlockhash.blockhash,
-        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+        blockhash,
+        lastValidBlockHeight,
       }, "confirmed");
       await fetchWalletBalance();
 
@@ -588,11 +595,19 @@ export default function TradePage() {
       }
       const transaction = VersionedTransaction.deserialize(base64ToBytes(quote.transaction));
       const signature = await sendTransaction(transaction, connection);
-      const latestBlockhash = await connection.getLatestBlockhash("confirmed");
+      
+      let blockhash = transaction.message.recentBlockhash;
+      let lastValidBlockHeight = quote.lastValidBlockHeight;
+      if (!blockhash || !lastValidBlockHeight) {
+        const latest = await connection.getLatestBlockhash("confirmed");
+        blockhash = latest.blockhash;
+        lastValidBlockHeight = latest.lastValidBlockHeight;
+      }
+
       await connection.confirmTransaction({
         signature,
-        blockhash: latestBlockhash.blockhash,
-        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+        blockhash,
+        lastValidBlockHeight,
       }, "confirmed");
       await fetchWalletBalance();
 
