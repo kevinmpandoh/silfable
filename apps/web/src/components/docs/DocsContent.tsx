@@ -20,7 +20,7 @@ export function DocsContent() {
         </p>
         <div className="mt-10 grid border-t border-l border-black/15 sm:grid-cols-3">
           {["Mainnet only", "Policy enforced", "Receipt recorded"].map((item) => (
-            <div key={item} className="flex items-center gap-3 border-r border-b border-black/15 p-5 text-xs font-medium">
+            <div key={item} className="flex items-center gap-3 border-r border-b border-black/15 p-5 text-xs font-medium text-black">
               <Check className="size-4 text-electric" /> {item}
             </div>
           ))}
@@ -38,9 +38,9 @@ export function DocsContent() {
             ["Review", "Inspect exact assets, amount, route, simulation, fees, and freshness. Approve only a supported lane and verify its persisted receipt."],
           ].map(([title, text], index) => (
             <li key={title} className="grid gap-3 border-t border-black/10 pt-6 sm:grid-cols-[3rem_8rem_1fr]">
-              <span className="font-mono text-[9px] text-electric">{String(index + 1).padStart(2, "0")}</span>
+              <span className="font-mono text-sm text-electric">{String(index + 1).padStart(2, "0")}</span>
               <strong className="font-serif text-xl font-normal">{title}</strong>
-              <span className="text-sm leading-7 text-black/55">{text}</span>
+              <span className="text-sm leading-7 text-black/70">{text}</span>
             </li>
           ))}
         </ol>
@@ -86,9 +86,9 @@ export function DocsContent() {
             ["Reconciled", "Success, failure, or ambiguous broadcast state is independently verified and persisted."],
           ].map(([state, description], index) => (
             <div key={state} className="grid grid-cols-[2.5rem_7rem_1fr] gap-3 border-b border-black/15 py-5 sm:grid-cols-[4rem_10rem_1fr]">
-              <span className="font-mono text-[9px] text-black/25">0{index + 1}</span>
-              <strong className="text-sm font-medium">{state}</strong>
-              <span className="text-sm leading-6 text-black/50">{description}</span>
+              <span className="font-mono text-sm text-black/45">0{index + 1}</span>
+              <strong className="text-sm font-medium text-black">{state}</strong>
+              <span className="text-sm leading-6 text-black/70">{description}</span>
             </div>
           ))}
         </div>
@@ -176,7 +176,7 @@ export function DocsContent() {
 function DocHeading({ number, title }: { number: string; title: string }) {
   return (
     <div className="flex items-baseline gap-5">
-      <span className="font-mono text-[9px] tracking-[0.18em] text-electric">{number}</span>
+      <span className="font-mono text-sm tracking-[0.18em] text-electric">{number}</span>
       <h2 className="font-serif text-4xl tracking-[-0.045em] sm:text-5xl">{title}</h2>
     </div>
   );

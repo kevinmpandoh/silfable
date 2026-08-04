@@ -101,7 +101,7 @@ function ConnectContent() {
     {
       icon: ShieldCheck,
       title: "Policy checks before execution",
-      text: "Silfable prepares Solana trades within your configured limits and keeps final transaction approval in your hands.",
+      text: "Silfable prepares cross-chain trades and DCA plans within your configured limits, keeping final transaction approval in your hands.",
     },
   ];
 
@@ -109,22 +109,21 @@ function ConnectContent() {
     <main className="min-h-screen bg-[#050505] px-4 py-16 text-[#f4f4f5] sm:px-6">
       <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[0.95fr_1.05fr]">
         <div>
-          <p className="mb-4 font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-blue-400">
+          <p className="mb-4 font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-electric">
             Silfable Web Workspace
           </p>
           <h1 className="font-serif text-5xl font-normal leading-none text-white sm:text-7xl">
             Connect your wallet to begin.
           </h1>
           <p className="mt-6 max-w-xl font-sans text-sm leading-relaxed text-zinc-500">
-            Use a Solana wallet to open your private Silfable workspace. Silfable can prepare trades, but every
-            transaction still requires your approval in the wallet.
+            Use a Solana wallet to open your private Silfable workspace. Silfable can prepare multi-chain trades, bridge flows, and DCA plans, but every transaction still requires your explicit approval.
           </p>
 
           <button
             type="button"
             onClick={() => void authenticateWallet()}
             disabled={authState === "signing"}
-            className="mt-8 inline-flex min-w-56 items-center justify-center gap-3 bg-blue-600 px-8 py-4 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-white transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050505]"
+            className="mt-8 inline-flex min-w-56 items-center justify-center gap-3 bg-electric px-8 py-4 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-white transition-colors hover:bg-cyan-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050505]"
           >
             <Wallet className="h-4 w-4" />
             {!connected
@@ -148,14 +147,14 @@ function ConnectContent() {
             const Icon = item.icon;
             return (
               <div key={item.title} className="border-b border-[#1a1a24] p-6 last:border-b-0">
-                <Icon className="mb-5 h-6 w-6 text-blue-500" />
+                <Icon className="mb-5 h-6 w-6 text-electric" />
                 <h2 className="font-serif text-2xl text-white">{item.title}</h2>
                 <p className="mt-3 font-sans text-sm leading-relaxed text-zinc-500">{item.text}</p>
               </div>
             );
           })}
-          <div className="border-t border-[#1a1a24] bg-blue-600 p-6 text-white">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-blue-100">
+          <div className="border-t border-[#1a1a24] bg-electric p-6 text-white">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-100">
               After connecting
             </p>
             <p className="mt-3 font-serif text-2xl">
