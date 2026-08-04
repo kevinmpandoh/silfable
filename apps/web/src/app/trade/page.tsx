@@ -242,10 +242,8 @@ export default function TradePage() {
           setMessages([]);
         } else {
           setSessions(storedSessions);
+          setMessages([]);
           setActiveSessionId(storedSessions[0].id);
-          const initialMsgs = await getSessionMessages(walletAddress, storedSessions[0].id);
-          if (cancelled) return;
-          setMessages(initialMsgs);
         }
       } catch (err) {
         console.error("Workspace initialization error:", err);
@@ -264,11 +262,15 @@ export default function TradePage() {
   // Load Messages when Active Session changes
   useEffect(() => {
     let cancelled = false;
+    setMessages([]);
 
     async function loadActiveMessages() {
       if (!walletAddress || !activeSessionId) return;
-      const msgs = await getSessionMessages(walletAddress, activeSessionId);
-      if (!cancelled) setMessages(msgs);
+      const targetId = activeSessionId;
+      const msgs = await getSessionMessages(walletAddress, targetId);
+      if (!cancelled) {
+        setMessages(msgs.filter((m) => m.sessionId === targetId));
+      }
     }
     void loadActiveMessages();
 
@@ -328,9 +330,10 @@ export default function TradePage() {
     const updated = await getAllSessions(walletAddress);
     setSessions(updated);
     if (activeSessionId === id) {
-      const nextSession = updated[0];
+      const remaining = updated.filter((s) => s.id !== id);
+      const nextSession = remaining[0];
+      setMessages([]);
       setActiveSessionId(nextSession?.id ?? "");
-      setMessages(nextSession ? await getSessionMessages(walletAddress, nextSession.id) : []);
     }
   }
 
@@ -384,6 +387,7 @@ export default function TradePage() {
     if (!walletAddress || !activeSessionId || !text.trim() || loading) return;
     const requestWalletAddress = walletAddress;
 
+    const activeSessionMessages = messages.filter((m) => m.sessionId === activeSessionId);
     const userMsg: WebMessage = {
       id: `user_${Date.now()}`,
       sessionId: activeSessionId,
@@ -392,7 +396,7 @@ export default function TradePage() {
       createdAt: Date.now(),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [...prev.filter((m) => m.sessionId === activeSessionId), userMsg]);
     await saveMessage(walletAddress, userMsg);
     if (!promptText) setInput("");
     setLoading(true);
@@ -403,7 +407,7 @@ export default function TradePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [...messages, userMsg],
+          messages: [...activeSessionMessages, userMsg],
           mode,
           sessionMode: activeSession?.filter === "mission" || activeSession?.filter === "pump" ? "mission" : "agent",
           walletAddress: publicKey?.toBase58() ?? null,
@@ -425,7 +429,7 @@ export default function TradePage() {
         createdAt: Date.now(),
       };
 
-      setMessages((prev) => [...prev, assistantMsg]);
+      setMessages((prev) => [...prev.filter((m) => m.sessionId === activeSessionId), assistantMsg]);
       await saveMessage(walletAddress, assistantMsg);
 
       // Update session timestamp in IndexedDB
@@ -689,6 +693,7 @@ export default function TradePage() {
           const saved = await saveSession(walletAddress, draftSession);
           if (saved) {
             setSessions((prev) => [saved, ...prev.filter((s) => s.id !== saved.id)]);
+            setMessages([]);
             setActiveSessionId(saved.id);
           }
         }}
@@ -850,7 +855,9 @@ export default function TradePage() {
               {/* Messages Feed */}
               <div className="messages">
 
-                {messages.map((msg) => (
+                {messages
+                  .filter((msg) => msg.sessionId === activeSessionId)
+                  .map((msg) => (
                   <article key={msg.id} className={msg.role}>
                     {msg.role === "assistant" && <div className="avatar shrink-0">S</div>}
                     <div>
