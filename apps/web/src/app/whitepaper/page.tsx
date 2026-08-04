@@ -20,8 +20,8 @@ export const metadata: Metadata = {
 const statusRows = [
   ["Release-gated", "Jupiter Solana Swap", "Guarded desktop quote, policy, unsigned simulation, local approval, one-attempt broadcast, and receipt recovery are implemented. Final release acceptance remains."],
   ["Release-gated", "Pump.fun Token Launch", "Restricted SOL-paired, zero-initial-buy desktop create_v2 path is implemented. Controlled Mainnet acceptance and security review remain."],
-  ["Pilot", "Robinhood Chain EVM Swap", "Wallet-scoped Mission chat, 0x firm quote, exact allowance, preflight, local signing, and receipt recovery are implemented but production-locked."],
-  ["Implemented", "Bridge", "Cross-chain swaps and transfers (e.g., Solana to EVM) are implemented with complete transaction signing and local receipt tracking."],
+  ["Release-gated", "EVM Swap", "Wallet-scoped Mission chat, 0x firm quote, exact allowance, preflight, local signing, and receipt recovery are implemented across multiple supported EVM networks (e.g., Ethereum, Base, Avalanche)."],
+  ["Release-gated", "Bridge", "Cross-chain swaps and transfers (e.g., Solana to EVM) are implemented with complete transaction signing and local receipt tracking."],
   ["Implemented", "Auto DCA", "Dollar-Cost Averaging policies are supported with strict local limits and deterministic execution bounds."],
   ["Implemented", "PnL Tracking", "Real-time Profit and Loss calculations and historical performance tracking across portfolios and active positions."],
   ["Preview", "Cloud Monitor", "Background monitoring and proposal infrastructure without signing or Mainnet broadcast authority."],
@@ -232,7 +232,7 @@ export default function WhitepaperPage() {
           <SectionLabel number="07" title="Venue Model" />
           <div>
             <p className="max-w-3xl text-lg leading-8 text-black/60">
-              Pump.fun is the Token Launch lane, not a generic AI auto-trading venue. Existing assets swap through Jupiter on Solana; the restricted EVM pilot uses a pinned Robinhood Chain and 0x configuration; Bridge remains a separate quote-only lifecycle.
+              Pump.fun is the Token Launch lane, not a generic AI auto-trading venue. Existing assets swap through Jupiter on Solana; the EVM swap operates across multiple supported EVM networks via 0x configuration; Bridge is a fully integrated execution lifecycle.
             </p>
             <div className="mt-10 grid gap-4 md:grid-cols-3">
               {[
@@ -259,7 +259,7 @@ export default function WhitepaperPage() {
             <div className="border border-black/15 p-6 bg-white">
               <h2 className="font-serif text-3xl font-normal tracking-normal">Desktop</h2>
               <p className="mt-4 text-sm leading-7 text-black/55">
-                The reference surface for encrypted local-vault signing, guarded Jupiter Swap, Pump.fun Token Launch, and the release-locked Robinhood Chain/0x pilot.
+                The reference surface for encrypted local-vault signing, guarded Jupiter Swap, Pump.fun Token Launch, and the release-gated EVM/0x multi-chain support.
               </p>
             </div>
             <div className="border border-black/15 p-6 bg-white">
