@@ -21,7 +21,9 @@ const statusRows = [
   ["Release-gated", "Jupiter Solana Swap", "Guarded desktop quote, policy, unsigned simulation, local approval, one-attempt broadcast, and receipt recovery are implemented. Final release acceptance remains."],
   ["Release-gated", "Pump.fun Token Launch", "Restricted SOL-paired, zero-initial-buy desktop create_v2 path is implemented. Controlled Mainnet acceptance and security review remain."],
   ["Pilot", "Robinhood Chain EVM Swap", "Wallet-scoped Mission chat, 0x firm quote, exact allowance, preflight, local signing, and receipt recovery are implemented but production-locked."],
-  ["Quote only", "Bridge", "Route review may be prepared, but no bridge signer or broadcast path exists."],
+  ["Implemented", "Bridge", "Cross-chain swaps and transfers (e.g., Solana to EVM) are implemented with complete transaction signing and local receipt tracking."],
+  ["Implemented", "Auto DCA", "Dollar-Cost Averaging policies are supported with strict local limits and deterministic execution bounds."],
+  ["Implemented", "PnL Tracking", "Real-time Profit and Loss calculations and historical performance tracking across portfolios and active positions."],
   ["Preview", "Cloud Monitor", "Background monitoring and proposal infrastructure without signing or Mainnet broadcast authority."],
   ["Unavailable", "Autonomous and Full Access", "No cloud signer, approval bypass, unattended trading, or Hyperliquid execution is production-authorized."],
 ] as const;
@@ -236,7 +238,9 @@ export default function WhitepaperPage() {
               {[
                 ["Token Launch", "AI may help draft public metadata, but the user confirms exact immutable content, creator wallet, fee caps, and the final launch approval."],
                 ["Swap", "Solana and EVM swaps use separate typed contracts, provider evidence, policy, signer boundaries, and receipt recovery."],
-                ["Bridge", "Cross-chain review separates source and destination state. Signing and broadcast stay disabled until bridge-specific recovery is complete."],
+                ["Bridge", "Cross-chain transactions are fully supported with explicit pathing, signature verification, and synchronized state recovery."],
+                ["Auto DCA", "Automated Dollar-Cost Averaging flows are bound by tight daily limits, keeping periodic execution fully deterministic and safe."],
+                ["PnL Tracking", "Integrated Profit and Loss accounting provides verifiable insights into position changes without granting the AI trading authority."],
               ].map(([title, text]) => (
                 <div key={title} className="border-t border-black/20 pt-5">
                   <h3 className="font-serif text-2xl font-normal tracking-normal">{title}</h3>
