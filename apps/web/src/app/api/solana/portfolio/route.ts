@@ -119,13 +119,16 @@ export async function POST(request: NextRequest) {
     try {
       const ids = assets.map(a => a.mint).join(",");
       if (ids) {
-        const priceRes = await fetch(`https://api.jup.ag/price/v2?ids=${ids}`).then(r => r.json());
-        if (priceRes?.data) {
-          for (const asset of assets) {
-            const priceData = priceRes.data[asset.mint];
-            if (priceData?.price) {
-              asset.valueUsd = asset.amount * Number(priceData.price);
-              totalUsd += asset.valueUsd;
+        const priceResponse = await fetch(`https://api.jup.ag/price/v2?ids=${ids}`);
+        if (priceResponse.ok) {
+          const priceRes = await priceResponse.json();
+          if (priceRes?.data) {
+            for (const asset of assets) {
+              const priceData = priceRes.data[asset.mint];
+              if (priceData?.price) {
+                asset.valueUsd = asset.amount * Number(priceData.price);
+                totalUsd += asset.valueUsd;
+              }
             }
           }
         }

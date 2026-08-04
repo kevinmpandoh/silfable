@@ -499,19 +499,19 @@ export default function TradePage() {
       const transaction = VersionedTransaction.deserialize(base64ToBytes(swapData.swapTransaction));
       const signature = await sendTransaction(transaction, connection);
       
-      let blockhash = transaction.message.recentBlockhash;
-      let lastValidBlockHeight = swapData.lastValidBlockHeight;
-      if (!blockhash || !lastValidBlockHeight) {
-        const latest = await connection.getLatestBlockhash("confirmed");
-        blockhash = latest.blockhash;
-        lastValidBlockHeight = latest.lastValidBlockHeight;
+      let confirmed = false;
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const status = await connection.getSignatureStatus(signature);
+        if (status.value?.confirmationStatus === "confirmed" || status.value?.confirmationStatus === "finalized") {
+          if (status.value.err) throw new Error("Transaction failed on chain: " + JSON.stringify(status.value.err));
+          confirmed = true;
+          break;
+        }
       }
-      
-      await connection.confirmTransaction({
-        signature,
-        blockhash,
-        lastValidBlockHeight,
-      }, "confirmed");
+      if (!confirmed) {
+        throw new Error("Transaction confirmation timeout. It may have succeeded, please check the Explorer.");
+      }
       await fetchWalletBalance();
 
       const successMsg: WebMessage = {
@@ -596,19 +596,19 @@ export default function TradePage() {
       const transaction = VersionedTransaction.deserialize(base64ToBytes(quote.transaction));
       const signature = await sendTransaction(transaction, connection);
       
-      let blockhash = transaction.message.recentBlockhash;
-      let lastValidBlockHeight = quote.lastValidBlockHeight;
-      if (!blockhash || !lastValidBlockHeight) {
-        const latest = await connection.getLatestBlockhash("confirmed");
-        blockhash = latest.blockhash;
-        lastValidBlockHeight = latest.lastValidBlockHeight;
+      let confirmed = false;
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const status = await connection.getSignatureStatus(signature);
+        if (status.value?.confirmationStatus === "confirmed" || status.value?.confirmationStatus === "finalized") {
+          if (status.value.err) throw new Error("Transaction failed on chain: " + JSON.stringify(status.value.err));
+          confirmed = true;
+          break;
+        }
       }
-
-      await connection.confirmTransaction({
-        signature,
-        blockhash,
-        lastValidBlockHeight,
-      }, "confirmed");
+      if (!confirmed) {
+        throw new Error("Transaction confirmation timeout. It may have succeeded, please check the Explorer.");
+      }
       await fetchWalletBalance();
 
       const successMsg: WebMessage = {
