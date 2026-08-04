@@ -1,14 +1,5 @@
 import { AlertTriangle, ArrowRight, Check, KeyRound, Monitor, ShieldCheck, TerminalSquare } from "lucide-react";
-
-import { CodeBlock } from "@/components/docs/CodeBlock";
-
-const deskRuleExample = `network: mainnet
-permission: restricted
-max_slippage_bps: 50
-max_network_fee_lamports: 250000
-priority: economy
-deadline_minutes: 30
-on_unknown_state: BLOCK`;
+import Image from "next/image";
 
 const concepts = [
   { icon: TerminalSquare, title: "Agent", text: "Researches, explains, and drafts typed proposals without receiving signing authority." },
@@ -75,7 +66,9 @@ export function DocsContent() {
       <section id="desk-rule" className="scroll-mt-36 border-b border-black/15 py-16">
         <DocHeading number="03" title="Transaction settings" />
         <p className="doc-lead">Global limits are evaluated before signing. The AI and the session cannot silently raise these values or bypass a blocked venue.</p>
-        <CodeBlock label="illustrative settings" code={deskRuleExample} />
+        <div className="mt-8 mb-8 overflow-hidden rounded-xl border border-black/10 shadow-sm">
+          <Image src="/setting.app.png" alt="Transaction Settings UI" width={1200} height={800} className="w-full object-cover" />
+        </div>
         <div className="border-l-2 border-electric bg-blue-50 p-5 text-sm leading-7 text-blue-950">
           Rules use deny-by-default semantics. If a proposed action cannot be proven compliant, Silfable rejects it before signing.
         </div>
@@ -151,8 +144,10 @@ export function DocsContent() {
             <tbody className="divide-y divide-black/10 text-black/55">
               <tr><td className="py-5 text-ink">Solana Swap</td><td>Guarded desktop Jupiter path</td><td>Signed-build, recovery, and Mainnet acceptance gates remain</td></tr>
               <tr><td className="py-5 text-ink">Token Launch</td><td>Restricted Pump.fun desktop implementation</td><td>Controlled Mainnet acceptance and security review remain</td></tr>
-              <tr><td className="py-5 text-ink">EVM Swap</td><td>Release-locked Robinhood Chain/0x pilot</td><td>Not production-cleared</td></tr>
-              <tr><td className="py-5 text-ink">Bridge</td><td>Quote and review only</td><td>No signer or broadcast path</td></tr>
+              <tr><td className="py-5 text-ink">EVM Swap</td><td>Release-gated across supported EVM networks</td><td>Mainnet acceptance and recovery testing remain</td></tr>
+              <tr><td className="py-5 text-ink">Bridge</td><td>Implemented cross-chain execution</td><td>Release-gated validation remains</td></tr>
+              <tr><td className="py-5 text-ink">Auto DCA</td><td>Implemented deterministic recurring flows</td><td>Global limit verification remains</td></tr>
+              <tr><td className="py-5 text-ink">PnL Tracking</td><td>Implemented real-time accounting</td><td>Performance reconciliation review remains</td></tr>
             </tbody>
           </table>
         </div>
