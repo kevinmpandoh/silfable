@@ -145,7 +145,6 @@ export default function TradePage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [bridgeBusy, setBridgeBusy] = useState(false);
-  const [txStatus, setTxStatus] = useState<string | null>(null);
 
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [portfolioStatus, setPortfolioStatus] = useState("Refreshing Mainnet balance...");
@@ -210,7 +209,6 @@ export default function TradePage() {
         setMessages([]);
         setActiveSessionId("");
         setLoading(false);
-        setTxStatus(null);
 
         // Load Settings
         const savedSetup = localStorage.getItem(setupStorageKey(walletAddress));
@@ -458,11 +456,17 @@ export default function TradePage() {
     const activeWalletAddress = walletAddress;
 
     if (!proposal.quoteResponse) {
-      setTxStatus("Swap quote is missing. Ask the AI to refresh the proposal first.");
+      const errMsg: WebMessage = {
+        id: `sys_${Date.now()}`,
+        sessionId: activeSessionId,
+        role: "assistant",
+        content: "Swap quote is missing. Ask the AI to refresh the proposal first.",
+        createdAt: Date.now(),
+      };
+      setMessages((prev) => [...prev, errMsg]);
+      await saveMessage(activeWalletAddress, errMsg);
       return;
     }
-
-    setTxStatus("Preparing Jupiter swap transaction. No broadcast until wallet approval.");
 
     try {
       setMessages((prev) =>
@@ -488,7 +492,7 @@ export default function TradePage() {
       }
       const transaction = VersionedTransaction.deserialize(base64ToBytes(swapData.swapTransaction));
       const signature = await sendTransaction(transaction, connection);
-      setTxStatus(`Mainnet swap submitted. Signature: ${signature.slice(0, 12)}...`);
+      
       const latestBlockhash = await connection.getLatestBlockhash("confirmed");
       await connection.confirmTransaction({
         signature,
@@ -497,30 +501,51 @@ export default function TradePage() {
       }, "confirmed");
       await fetchWalletBalance();
 
-      setMessages((prev) =>
-        prev.map((m) => {
+      const successMsg: WebMessage = {
+        id: `sys_${Date.now()}`,
+        sessionId: activeSessionId,
+        role: "assistant",
+        content: `Mainnet swap confirmed successfully.\n\n[View on Solana Explorer](https://solscan.io/tx/${signature})`,
+        createdAt: Date.now(),
+      };
+      
+      setMessages((prev) => {
+        const updated = prev.map((m) => {
           if (m.id === msgId && m.proposal) {
-            const updated = { ...m, proposal: { ...m.proposal, status: "signed" as const } };
-            void saveMessage(activeWalletAddress, updated);
-            return updated;
+            const updatedM = { ...m, proposal: { ...m.proposal, status: "signed" as const } };
+            void saveMessage(activeWalletAddress, updatedM);
+            return updatedM;
           }
           return m;
-        })
-      );
+        });
+        return [...updated, successMsg];
+      });
+      await saveMessage(activeWalletAddress, successMsg);
+
     } catch (err: unknown) {
       console.error(err);
       const message = err instanceof Error ? err.message : String(err);
-      setTxStatus(`Swap cancelled or failed safely: ${message}`);
-      setMessages((prev) =>
-        prev.map((m) => {
+      
+      const errMsg: WebMessage = {
+        id: `sys_${Date.now()}`,
+        sessionId: activeSessionId,
+        role: "assistant",
+        content: `Swap cancelled or failed safely: ${message}`,
+        createdAt: Date.now(),
+      };
+
+      setMessages((prev) => {
+        const updated = prev.map((m) => {
           if (m.id === msgId && m.proposal) {
-            const updated = { ...m, proposal: { ...m.proposal, status: "failed" as const } };
-            void saveMessage(activeWalletAddress, updated);
-            return updated;
+            const updatedM = { ...m, proposal: { ...m.proposal, status: "failed" as const } };
+            void saveMessage(activeWalletAddress, updatedM);
+            return updatedM;
           }
           return m;
-        })
-      );
+        });
+        return [...updated, errMsg];
+      });
+      await saveMessage(activeWalletAddress, errMsg);
     }
   }
 
@@ -533,11 +558,18 @@ export default function TradePage() {
 
   async function handlePrepareSolanaBridge(request: SolanaBridgeRequest) {
     if (!connected || !publicKey || !walletAddress) {
-      setTxStatus("Connect a Solana wallet before preparing a bridge.");
+      const errMsg: WebMessage = {
+        id: `sys_${Date.now()}`,
+        sessionId: activeSessionId,
+        role: "assistant",
+        content: "Connect a Solana wallet before preparing a bridge.",
+        createdAt: Date.now(),
+      };
+      setMessages((prev) => [...prev, errMsg]);
+      await saveMessage(walletAddress, errMsg);
       return;
     }
     setBridgeBusy(true);
-    setTxStatus("Preparing a Relay bridge quote. No transaction is broadcast until wallet approval.");
     try {
       const response = await fetch("/api/bridge/solana-to-evm", {
         method: "POST",
@@ -550,7 +582,6 @@ export default function TradePage() {
       }
       const transaction = VersionedTransaction.deserialize(base64ToBytes(quote.transaction));
       const signature = await sendTransaction(transaction, connection);
-      setTxStatus(`Bridge to ${quote.destination?.label ?? request.destination} submitted. Source signature: ${signature.slice(0, 12)}…`);
       const latestBlockhash = await connection.getLatestBlockhash("confirmed");
       await connection.confirmTransaction({
         signature,
@@ -558,9 +589,27 @@ export default function TradePage() {
         lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
       }, "confirmed");
       await fetchWalletBalance();
+
+      const successMsg: WebMessage = {
+        id: `sys_${Date.now()}`,
+        sessionId: activeSessionId,
+        role: "assistant",
+        content: `Bridge to ${quote.destination?.label ?? request.destination} confirmed successfully.\n\n[View on Solana Explorer](https://solscan.io/tx/${signature})`,
+        createdAt: Date.now(),
+      };
+      setMessages((prev) => [...prev, successMsg]);
+      await saveMessage(walletAddress, successMsg);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Bridge was cancelled or failed safely.";
-      setTxStatus(`Bridge was not broadcast: ${message}`);
+      const errMsg: WebMessage = {
+        id: `sys_${Date.now()}`,
+        sessionId: activeSessionId,
+        role: "assistant",
+        content: `Bridge was not broadcast: ${message}`,
+        createdAt: Date.now(),
+      };
+      setMessages((prev) => [...prev, errMsg]);
+      await saveMessage(walletAddress, errMsg);
     } finally {
       setBridgeBusy(false);
     }
@@ -691,6 +740,7 @@ export default function TradePage() {
           </div>
 
           <nav className="bottomNav">
+            <button onClick={() => alert("Missions execution in the web version is coming soon!")}>Missions</button>
             <button onClick={openSettings}>Settings</button>
           </nav>
 
@@ -778,24 +828,6 @@ export default function TradePage() {
 
               {/* Messages Feed */}
               <div className="messages">
-                {/* Banner Status Notifications */}
-                <div className="notice info mb-4">
-                  <span>ⓘ</span>
-                  <div>
-                    <strong>Restricted Mainnet Active</strong>
-                    <p>AI can prepare quotes and unsigned transactions. Your connected wallet must approve every broadcast.</p>
-                  </div>
-                </div>
-
-                {txStatus && (
-                  <div className="notice success mb-4">
-                    <span>✓</span>
-                    <div>
-                      <strong>Status Update</strong>
-                      <p>{txStatus}</p>
-                    </div>
-                  </div>
-                )}
 
                 {messages.map((msg) => (
                   <article key={msg.id} className={msg.role}>
@@ -843,7 +875,6 @@ export default function TradePage() {
 
               {/* Quick Suggestions Chips & Composer */}
               <div className="conversationComposer">
-                <SolanaBridgePanel busy={bridgeBusy} onPrepare={handlePrepareSolanaBridge} />
                 <div className="suggestions">
                   <button
                     onClick={() =>
