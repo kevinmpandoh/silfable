@@ -73,12 +73,74 @@ export async function POST(request: NextRequest) {
     if (typeof body.address !== "string") throw new Error("Alamat wallet diperlukan.");
     const address = new PublicKey(body.address).toBase58();
     const customRpcUrl = validateCustomRpcUrl(body.customRpcUrl);
-    const result = await readBalance(customRpcUrl ?? DEFAULT_MAINNET_RPC, address);
+    const solResult = await readBalance(customRpcUrl ?? DEFAULT_MAINNET_RPC, address);
+    
+    // Fetch SPL Tokens
+    const tokensResponse = await fetch(customRpcUrl ?? DEFAULT_MAINNET_RPC, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "silfable-portfolio-spl",
+        method: "getTokenAccountsByOwner",
+        params: [
+          address,
+          { programId: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" },
+          { encoding: "jsonParsed", commitment: "confirmed" }
+        ]
+      }),
+      cache: "no-store",
+    }).catch(() => null);
+
+    const tokensBody = tokensResponse ? await tokensResponse.json().catch(() => null) : null;
+    
+    const assets = [];
+    assets.push({ mint: "SOL", symbol: "SOL", amount: solResult.lamports / 1e9, valueUsd: 0 });
+
+    if (tokensBody?.result?.value) {
+      for (const item of tokensBody.result.value) {
+        const info = item.account?.data?.parsed?.info;
+        if (!info) continue;
+        const amount = info.tokenAmount?.uiAmount;
+        if (amount > 0) {
+          // Identify USDC for better display
+          const isUsdc = info.mint === "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+          assets.push({
+            mint: info.mint,
+            symbol: isUsdc ? "USDC" : "SPL",
+            amount,
+            valueUsd: 0
+          });
+        }
+      }
+    }
+
+    let totalUsd = 0;
+    try {
+      const ids = assets.map(a => a.mint).join(",");
+      if (ids) {
+        const priceRes = await fetch(`https://api.jup.ag/price/v2?ids=${ids}`).then(r => r.json());
+        if (priceRes?.data) {
+          for (const asset of assets) {
+            const priceData = priceRes.data[asset.mint];
+            if (priceData?.price) {
+              asset.valueUsd = asset.amount * Number(priceData.price);
+              totalUsd += asset.valueUsd;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch Jupiter prices", e);
+    }
+
     return NextResponse.json({
       address,
-      lamports: result.lamports,
-      sol: result.lamports / 1_000_000_000,
-      slot: result.slot,
+      lamports: solResult.lamports,
+      sol: solResult.lamports / 1_000_000_000,
+      assets,
+      totalUsd,
+      slot: solResult.slot,
       source: customRpcUrl ? "custom" : "default",
     });
   } catch (error) {

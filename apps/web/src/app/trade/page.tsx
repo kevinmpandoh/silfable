@@ -147,6 +147,8 @@ export default function TradePage() {
   const [bridgeBusy, setBridgeBusy] = useState(false);
 
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [portfolioAssets, setPortfolioAssets] = useState<{ symbol: string; amount: number; valueUsd: number }[]>([]);
+  const [portfolioTotalUsd, setPortfolioTotalUsd] = useState<number | null>(null);
   const [portfolioStatus, setPortfolioStatus] = useState("Refreshing Mainnet balance...");
 
   useEffect(() => {
@@ -288,15 +290,19 @@ export default function TradePage() {
           customRpcUrl: settings.customRpcUrl.trim() || undefined,
         }),
       });
-      const result = await response.json() as { sol?: unknown; slot?: unknown; source?: unknown; error?: unknown };
+      const result = await response.json() as { sol?: number; assets?: any[]; totalUsd?: number; slot?: number; source?: string; error?: string };
       if (!response.ok || typeof result.sol !== "number") {
         throw new Error(typeof result.error === "string" ? result.error : "Saldo Mainnet tidak dapat dimuat.");
       }
       setWalletBalance(result.sol);
+      setPortfolioAssets(result.assets ?? []);
+      setPortfolioTotalUsd(typeof result.totalUsd === "number" ? result.totalUsd : null);
       const source = result.source === "custom" ? "Custom RPC" : "Default Mainnet RPC";
       setPortfolioStatus(`${source}${typeof result.slot === "number" ? ` - slot ${result.slot.toLocaleString()}` : ""}`);
     } catch (error) {
       setWalletBalance(null);
+      setPortfolioAssets([]);
+      setPortfolioTotalUsd(null);
       setPortfolioStatus(error instanceof Error ? error.message : "Saldo Mainnet tidak dapat dimuat.");
     }
   }, [publicKey, settings.customRpcUrl]);
@@ -927,9 +933,26 @@ export default function TradePage() {
             <div className="mb-4">
               <span className="text-[8px] tracking-[0.16em] uppercase text-[#7f8aa7]">VERIFIED PORTFOLIO</span>
               <div className="text-[28px] font-bold mt-1 text-white">
-                {walletBalance === null ? "—" : walletBalance.toFixed(6)} SOL
+                {portfolioTotalUsd !== null && portfolioTotalUsd > 0
+                  ? `$${portfolioTotalUsd.toFixed(2)}`
+                  : walletBalance === null
+                    ? "—"
+                    : `${walletBalance.toFixed(6)} SOL`}
               </div>
-              <div className="text-[8px] text-[#7f8aa7] mt-1">{portfolioStatus}</div>
+              <div className="text-[8px] text-[#7f8aa7] mt-1 mb-3">{portfolioStatus}</div>
+              {portfolioAssets.length > 0 && (
+                <div className="flex flex-col gap-1.5 mt-2">
+                  {portfolioAssets.slice(0, 5).map((asset, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-[10px] bg-white/5 px-2 py-1.5 rounded">
+                      <span className="text-[#eef2ff] font-medium">{asset.symbol}</span>
+                      <div className="text-right">
+                        <span className="text-white block">{asset.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
+                        {asset.valueUsd > 0 && <span className="text-[#7ba2ff] text-[8px]">${asset.valueUsd.toFixed(2)}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col gap-2">
