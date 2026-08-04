@@ -489,7 +489,12 @@ export default function TradePage() {
       const transaction = VersionedTransaction.deserialize(base64ToBytes(swapData.swapTransaction));
       const signature = await sendTransaction(transaction, connection);
       setTxStatus(`Mainnet swap submitted. Signature: ${signature.slice(0, 12)}...`);
-      await connection.confirmTransaction(signature, "confirmed");
+      const latestBlockhash = await connection.getLatestBlockhash("confirmed");
+      await connection.confirmTransaction({
+        signature,
+        blockhash: latestBlockhash.blockhash,
+        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+      }, "confirmed");
       await fetchWalletBalance();
 
       setMessages((prev) =>
@@ -546,7 +551,12 @@ export default function TradePage() {
       const transaction = VersionedTransaction.deserialize(base64ToBytes(quote.transaction));
       const signature = await sendTransaction(transaction, connection);
       setTxStatus(`Bridge to ${quote.destination?.label ?? request.destination} submitted. Source signature: ${signature.slice(0, 12)}…`);
-      await connection.confirmTransaction(signature, "confirmed");
+      const latestBlockhash = await connection.getLatestBlockhash("confirmed");
+      await connection.confirmTransaction({
+        signature,
+        blockhash: latestBlockhash.blockhash,
+        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+      }, "confirmed");
       await fetchWalletBalance();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Bridge was cancelled or failed safely.";
