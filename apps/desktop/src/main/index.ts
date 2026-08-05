@@ -118,6 +118,57 @@ import {
   SecurityResetVaultRequestSchema,
   SecurityResetVaultResponseSchema,
   SecurityUnlockRequestSchema,
+  LimitOrderExecuteRequestSchema,
+  LimitOrderExecuteResponseSchema,
+  LimitOrderCancelExecuteRequestSchema,
+  LimitOrderCancelExecuteResponseSchema,
+  LimitOrderCancelSimulateRequestSchema,
+  LimitOrderCancelSimulateResponseSchema,
+  LimitOrderVerifyExecutionRequestSchema,
+  LimitOrderVerifyExecutionResponseSchema,
+  LimitOrderVerifyCancelRequestSchema,
+  LimitOrderVerifyCancelResponseSchema,
+  LimitOrderListRequestSchema,
+  LimitOrderListResponseSchema,
+  LimitOrderSimulateRequestSchema,
+  LimitOrderSimulateResponseSchema,
+  MissionSimulateRequestSchema,
+  MissionSimulateResponseSchema,
+  MissionExecuteRequestSchema,
+  MissionExecuteResponseSchema,
+  MissionVerifyExecutionRequestSchema,
+  MissionVerifyExecutionResponseSchema,
+  PortfolioGetRequestSchema,
+  PortfolioGetResponseSchema,
+  PumpFinalRevalidateRequestSchema,
+  PumpFinalRevalidateResponseSchema,
+  PumpExecuteRequestSchema,
+  PumpExecuteResponseSchema,
+  PumpLaunchDraftRequestSchema,
+  PumpLaunchDraftResponseSchema,
+  PumpLaunchPreflightRequestSchema,
+  PumpLaunchPreflightResponseSchema,
+  PumpLaunchFinalRevalidateRequestSchema,
+  PumpLaunchFinalRevalidateResponseSchema,
+  PumpLaunchExecuteRequestSchema,
+  PumpLaunchExecuteResponseSchema,
+  PumpLaunchVerifyExecutionRequestSchema,
+  PumpLaunchVerifyExecutionResponseSchema,
+  PumpVerifyExecutionRequestSchema,
+  PumpVerifyExecutionResponseSchema,
+  PumpSimulateRequestSchema,
+  PumpSimulateResponseSchema,
+  PumpSimulationArtifactSchema,
+  PumpRiskSettingsMutationResponseSchema,
+  PumpRiskSettingsResponseSchema,
+  PumpRiskSettingsSaveRequestSchema,
+  RuntimeStatusSchema,
+  SecurityChangePasswordRequestSchema,
+  SecurityConfigurePasswordRequestSchema,
+  SecurityPasswordMutationResponseSchema,
+  SecurityResetVaultRequestSchema,
+  SecurityResetVaultResponseSchema,
+  SecurityUnlockRequestSchema,
   SessionListResponseSchema,
   SessionUpsertRequestSchema,
   SessionUpsertResponseSchema,
@@ -127,6 +178,12 @@ import {
   SolanaRpcMutationResponseSchema,
   SolanaRpcSaveUrlRequestSchema,
   SolanaRpcSettingsResponseSchema,
+  RobinhoodSettingsResponseSchema,
+  RobinhoodWalletCreateRequestSchema,
+  RobinhoodWalletCreateResponseSchema,
+  RobinhoodWalletGetResponseSchema,
+  RobinhoodWalletImportMnemonicRequestSchema,
+  RobinhoodWalletImportPrivateKeyRequestSchema,
   TransactionSettingsMutationResponseSchema,
   TransactionSettingsResponseSchema,
   TransactionSettingsSaveRequestSchema,
@@ -903,11 +960,85 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     });
   });
 
+  ipcMain.handle(IPC_CHANNELS.robinhoodGetSettings, async (event) => {
+    assertTrustedSender(event);
+    requireUnlocked();
+    const chain = getEvmChain("robinhood");
+    const configured = await secretStore.getSecret(chain.rpcSecretName);
+    const zeroXConfigured = await secretStore.getSecret("zeroex-api-key");
+    return RobinhoodSettingsResponseSchema.parse({
+      schemaVersion: 1,
+      rpcUrlConfigured: configured !== null,
+      zeroXApiKeyConfigured: zeroXConfigured !== null,
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.robinhoodWalletGet, async (event) => {
+    assertTrustedSender(event);
+    if (secretStore.isLocked()) {
+      return RobinhoodWalletGetResponseSchema.parse({ schemaVersion: 1, address: null, wallets: [] });
+    }
+    const configuredWallets = await evmWallet.listWallets();
+    return RobinhoodWalletGetResponseSchema.parse({
+      schemaVersion: 1,
+      address: configuredWallets[0]?.address ?? null,
+      wallets: configuredWallets,
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.robinhoodWalletCreate, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = RobinhoodWalletCreateRequestSchema.parse(raw);
+    requireUnlocked();
+    return RobinhoodWalletCreateResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      ...(await evmWallet.createWallet()),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.robinhoodWalletImportMnemonic, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = RobinhoodWalletImportMnemonicRequestSchema.parse(raw);
+    requireUnlocked();
+    return RobinhoodWalletImportResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      ...(await evmWallet.importMnemonic(request.mnemonic)),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.robinhoodWalletImportPrivateKey, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = RobinhoodWalletImportPrivateKeyRequestSchema.parse(raw);
+    requireUnlocked();
+    return RobinhoodWalletImportResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      ...(await evmWallet.importPrivateKey(request.privateKey)),
+    });
+  });
+
   ipcMain.handle(IPC_CHANNELS.portfolioGet, async (event, raw: unknown) => {
     assertTrustedSender(event);
     const request = PortfolioGetRequestSchema.parse(raw);
     requireUnlocked();
-    return PortfolioGetResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, snapshot: await reads.portfolio(request.address) });
+    try {
+      return PortfolioGetResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, snapshot: await reads.portfolio(request.address) });
+    } catch (err) {
+      console.warn("[Portfolio] Solana RPC read failed:", err);
+      return PortfolioGetResponseSchema.parse({
+        schemaVersion: 1,
+        requestId: request.requestId,
+        snapshot: {
+          address: request.address,
+          slot: 0,
+          solLamports: "0",
+          assets: [],
+          verifiedAt: new Date().toISOString(),
+        },
+      });
+    }
   });
 
   ipcMain.handle(IPC_CHANNELS.evmPortfolioGet, async (event, raw: unknown) => {

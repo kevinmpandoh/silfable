@@ -1325,7 +1325,7 @@ export const BRIDGE_AVALANCHE_USDC_ADDRESS = "0xB97EF9Ef8734C71904D8002F8b6Bc66D
 export const BRIDGE_ROBINHOOD_CHAIN_ID = 4663;
 export const BRIDGE_ROBINHOOD_USDG_ADDRESS = "0x5fc5360d0400a0fd4f2af552add042d716f1d168";
 
-export const BridgeDestinationChainSchema = z.enum(["base", "arbitrum", "ethereum", "optimism", "polygon", "avalanche", "robinhood"]);
+export const BridgeDestinationChainSchema = z.enum(["base", "arbitrum", "ethereum", "optimism", "polygon", "bsc", "avalanche", "robinhood"]);
 export type BridgeDestinationChain = z.infer<typeof BridgeDestinationChainSchema>;
 
 export const BridgeProviderIdSchema = z.enum(["auto", "debridge-dln", "relay"]);
@@ -1426,6 +1426,7 @@ export type BridgeReceipt = z.infer<typeof BridgeReceiptSchema>;
 export const EvmChainIdSchema = z.union([
   z.literal(1),
   z.literal(10),
+  z.literal(56),
   z.literal(137),
   z.literal(8453),
   z.literal(42161),
@@ -1434,7 +1435,7 @@ export const EvmChainIdSchema = z.union([
 ]);
 export type EvmChainId = z.infer<typeof EvmChainIdSchema>;
 
-export const EvmChainKeySchema = z.enum(["ethereum", "optimism", "polygon", "base", "arbitrum", "avalanche", "robinhood"]);
+export const EvmChainKeySchema = z.enum(["ethereum", "optimism", "polygon", "bsc", "base", "arbitrum", "avalanche", "robinhood"]);
 export type EvmChainKey = z.infer<typeof EvmChainKeySchema>;
 
 export const BridgeProviderStatusSchema = z.object({
