@@ -62,6 +62,8 @@ import type {
   MissionVerifyExecutionResponse,
   PortfolioGetRequest,
   PortfolioGetResponse,
+  PortfolioCostBasisGetRequest,
+  PortfolioCostBasisGetResponse,
   PumpFinalRevalidateRequest,
   PumpFinalRevalidateResponse,
   PumpExecuteRequest,
@@ -139,6 +141,7 @@ declare global {
       importWalletPrivateKey(request: WalletImportPrivateKeyRequest): Promise<WalletImportResponse>;
       listWallets(): Promise<WalletListResponse>;
       getPortfolio(request: PortfolioGetRequest): Promise<PortfolioGetResponse>;
+      getPortfolioCostBasis(request: PortfolioCostBasisGetRequest): Promise<PortfolioCostBasisGetResponse>;
       getWalletActivity(request: WalletActivityGetRequest): Promise<WalletActivityGetResponse>;
       getAiSettings(): Promise<AiSettingsResponse>;
       previewOpenRouterModels(request: AiPreviewOpenRouterModelsRequest): Promise<AiPreviewOpenRouterModelsResponse>;

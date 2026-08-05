@@ -92,6 +92,8 @@ import {
   MissionVerifyExecutionResponseSchema,
   PortfolioGetRequestSchema,
   PortfolioGetResponseSchema,
+  PortfolioCostBasisGetRequestSchema,
+  PortfolioCostBasisGetResponseSchema,
   PumpFinalRevalidateRequestSchema,
   PumpFinalRevalidateResponseSchema,
   PumpExecuteRequestSchema,
@@ -205,6 +207,8 @@ import { TOKEN_2022_PROGRAM_ID } from "./pump/launch-codec.js";
 import { MasterPasswordService } from "./security/master-password.js";
 import { EmergencyStopService } from "./security/emergency-stop.js";
 import { SessionService } from "./sessions/service.js";
+import { deriveVerifiedCostBasis } from "./portfolio/cost-basis.js";
+import { buildUnifiedPortfolio } from "./portfolio/unified-portfolio.js";
 import {
   assertTrustedIpcEvent,
   denyPermissionCheck,
@@ -954,6 +958,41 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
           solLamports: "0",
           assets: [],
           verifiedAt: new Date().toISOString(),
+        },
+      });
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.portfolioCostBasisGet, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = PortfolioCostBasisGetRequestSchema.parse(raw);
+    requireUnlocked();
+    try {
+      const solanaPortfolio = await reads.portfolio(request.address);
+      const snapshot = buildUnifiedPortfolio({
+        session: { id: "session-pnl", sessionId: "session-pnl", walletAddress: request.address, messages: [] } as any,
+        solanaPortfolio,
+      });
+      const summary = deriveVerifiedCostBasis(snapshot);
+      return PortfolioCostBasisGetResponseSchema.parse({
+        schemaVersion: 1,
+        requestId: request.requestId,
+        summary,
+      });
+    } catch (err) {
+      console.warn("[Portfolio] Cost basis calculation failed:", err);
+      return PortfolioCostBasisGetResponseSchema.parse({
+        schemaVersion: 1,
+        requestId: request.requestId,
+        summary: {
+          method: "fifo",
+          status: "unavailable",
+          realizedPnlUsd: null,
+          unrealizedPnlUsd: null,
+          lots: [],
+          assets: [],
+          excludedActivityCount: 0,
+          evaluatedAt: new Date().toISOString(),
         },
       });
     }

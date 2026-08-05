@@ -47,6 +47,8 @@ import {
   MissionVerifyExecutionResponseSchema,
   PortfolioGetRequestSchema,
   PortfolioGetResponseSchema,
+  PortfolioCostBasisGetRequestSchema,
+  PortfolioCostBasisGetResponseSchema,
   PumpFinalRevalidateRequestSchema,
   PumpFinalRevalidateResponseSchema,
   PumpExecuteRequestSchema,
@@ -177,6 +179,7 @@ import {
   type MissionExecuteRequest,
   type MissionVerifyExecutionRequest,
   type PortfolioGetRequest,
+  type PortfolioCostBasisGetRequest,
   type PumpFinalRevalidateRequest,
   type PumpExecuteRequest,
   type PumpLaunchDraftRequest,
@@ -343,6 +346,9 @@ const api = {
   },
   async getPortfolio(request: PortfolioGetRequest) {
     return PortfolioGetResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.portfolioGet, PortfolioGetRequestSchema.parse(request)));
+  },
+  async getPortfolioCostBasis(request: PortfolioCostBasisGetRequest) {
+    return PortfolioCostBasisGetResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.portfolioCostBasisGet, PortfolioCostBasisGetRequestSchema.parse(request)));
   },
   async getWalletActivity(request: WalletActivityGetRequest) {
     return WalletActivityGetResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.walletActivityGet, WalletActivityGetRequestSchema.parse(request)));

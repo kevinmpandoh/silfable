@@ -115,6 +115,7 @@ export const IPC_CHANNELS = {
   evmWalletImportMnemonic: "evm:import-wallet-mnemonic",
   evmWalletImportPrivateKey: "evm:import-wallet-private-key",
   portfolioGet: "portfolio:get",
+  portfolioCostBasisGet: "portfolio:get-cost-basis",
   evmPortfolioGet: "evm:get-portfolio",
   walletActivityGet: "wallet:get-activity",
   aiGetSettings: "ai:get-settings",
@@ -2365,6 +2366,15 @@ export const PortfolioCostBasisSummarySchema = z.object({
 export type PortfolioAcquisitionLot = z.infer<typeof PortfolioAcquisitionLotSchema>;
 export type PortfolioCostBasisAsset = z.infer<typeof PortfolioCostBasisAssetSchema>;
 export type PortfolioCostBasisSummary = z.infer<typeof PortfolioCostBasisSummarySchema>;
+
+export const PortfolioCostBasisGetRequestSchema = RequestBaseSchema.extend({
+  address: z.string().min(32).max(44),
+}).strict();
+export const PortfolioCostBasisGetResponseSchema = RequestBaseSchema.extend({
+  summary: PortfolioCostBasisSummarySchema,
+}).strict();
+export type PortfolioCostBasisGetRequest = z.infer<typeof PortfolioCostBasisGetRequestSchema>;
+export type PortfolioCostBasisGetResponse = z.infer<typeof PortfolioCostBasisGetResponseSchema>;
 
 export const GuardedCapabilitySchema = z.enum([
   "READ_PORTFOLIO",

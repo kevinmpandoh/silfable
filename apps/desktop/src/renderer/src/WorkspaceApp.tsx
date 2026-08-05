@@ -8570,6 +8570,7 @@ function UnifiedPortfolioRail({
   const [walletFilter, setWalletFilter] = useState<PortfolioFamilyFilter>("all");
   const [chainFilter, setChainFilter] = useState<"all" | EvmChainKey>("all");
   const [retry, setRetry] = useState(0);
+  const [costBasisSummary, setCostBasisSummary] = useState<any | null>(null);
 
   const sessionScope = session?.walletScope;
   const sessionWallet = session?.walletAddress ?? null;
@@ -8651,6 +8652,28 @@ function UnifiedPortfolioRail({
     return () => { active = false; };
   }, [runtime?.keystore, evmTargets, refreshToken, retry]);
 
+  useEffect(() => {
+    let active = true;
+    if (runtime?.keystore !== "unlocked" || solanaTargets.length === 0) {
+      setCostBasisSummary(null);
+      return;
+    }
+    if (typeof window.silfable.getPortfolioCostBasis !== "function") {
+      setCostBasisSummary(null);
+      return;
+    }
+    window.silfable.getPortfolioCostBasis({
+      schemaVersion: 1,
+      requestId: crypto.randomUUID(),
+      address: solanaTargets[0].address,
+    }).then((res) => {
+      if (active) setCostBasisSummary(res.summary);
+    }).catch((err) => {
+      console.warn("Failed to fetch cost basis summary", err);
+    });
+    return () => { active = false; };
+  }, [runtime?.keystore, solanaTargets, refreshToken, retry]);
+
   const selectedSolana = solanaViews.filter(() => walletFilter === "all" || walletFilter === "solana");
   const selectedEvm = evmViews.filter((entry) =>
     (walletFilter === "all" || walletFilter === "evm")
@@ -8705,6 +8728,27 @@ function UnifiedPortfolioRail({
           ? "Read-only balances for the wallet bound to this session."
           : "Combined verified balances across Solana and supported EVM chains."}
       </small>
+
+      {costBasisSummary && (
+        <div className="portfolioPnlSummary flex items-center justify-between text-xs mt-2.5 p-2 bg-slate-900/60 rounded border border-slate-800/80">
+          <div className="flex flex-col">
+            <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider">Unrealized PnL</span>
+            <span className={costBasisSummary.unrealizedPnlUsd !== null && costBasisSummary.unrealizedPnlUsd !== undefined && costBasisSummary.unrealizedPnlUsd >= 0 ? "text-emerald-400 font-semibold" : "text-rose-400 font-semibold"}>
+              {costBasisSummary.unrealizedPnlUsd !== null && costBasisSummary.unrealizedPnlUsd !== undefined
+                ? `${costBasisSummary.unrealizedPnlUsd >= 0 ? "+" : ""}$${costBasisSummary.unrealizedPnlUsd.toFixed(2)}`
+                : "—"}
+            </span>
+          </div>
+          <div className="flex flex-col text-right">
+            <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider">Realized PnL</span>
+            <span className={costBasisSummary.realizedPnlUsd !== null && costBasisSummary.realizedPnlUsd !== undefined && costBasisSummary.realizedPnlUsd >= 0 ? "text-emerald-400 font-semibold" : "text-rose-400 font-semibold"}>
+              {costBasisSummary.realizedPnlUsd !== null && costBasisSummary.realizedPnlUsd !== undefined
+                ? `${costBasisSummary.realizedPnlUsd >= 0 ? "+" : ""}$${costBasisSummary.realizedPnlUsd.toFixed(2)}`
+                : "$0.00"}
+            </span>
+          </div>
+        </div>
+      )}
       
       {!session && configuredCount > 1 && (
         <div className="portfolioScopeTabs" aria-label="Portfolio wallet scope">
@@ -8737,9 +8781,22 @@ function UnifiedPortfolioRail({
           <div className="portfolioAssetGroup" key={`solana:${entry.wallet.address}`}>
             <div className="portfolioGroupTitle"><span>SOLANA</span><strong>{formatPortfolioUsd(entry.snapshot.totalUsd)}</strong></div>
             <PortfolioAssetRow symbol="SOL" amount={entry.snapshot.solBalance} usdValue={portfolioAssetUsd(entry.snapshot.solBalance, entry.snapshot.solUsdPrice)} />
-            {entry.snapshot.assets.slice(0, 8).map((asset) => (
-              <PortfolioAssetRow key={asset.mint} symbol={shorten(asset.mint)} amount={asset.uiAmount} usdValue={asset.usdValue} />
-            ))}
+            {entry.snapshot.assets.slice(0, 8).map((asset) => {
+              const knownMints: Record<string, string> = {
+                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
+                "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN": "JUP",
+                "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": "BONK",
+                "So11111111111111111111111111111111111111112": "SOL",
+                "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": "USDT",
+              };
+              const resolvedSymbol = knownMints[asset.mint] || shorten(asset.mint);
+              const assetPnl = costBasisSummary?.assets?.find(
+                (a: any) => a.assetId?.toLowerCase() === asset.mint.toLowerCase()
+              )?.unrealizedPnlUsd;
+              return (
+                <PortfolioAssetRow key={asset.mint} symbol={resolvedSymbol} amount={asset.uiAmount} usdValue={asset.usdValue} pnl={assetPnl} />
+              );
+            })}
           </div>
         ))}
         {visibleEvm.map((entry) => (
@@ -8776,12 +8833,19 @@ function UnifiedPortfolioRail({
   );
 }
 
-function PortfolioAssetRow({ symbol, amount, usdValue }: { symbol: string; amount: string; usdValue: number | null }) {
+function PortfolioAssetRow({ symbol, amount, usdValue, pnl }: { symbol: string; amount: string; usdValue: number | null; pnl?: number | null }) {
   return (
     <div className="portfolioAssetRow">
       <span>{symbol}</span>
       <strong>{formatPortfolioAmount(amount)}</strong>
-      <em>{formatPortfolioUsd(usdValue)}</em>
+      <div>
+        <em>{formatPortfolioUsd(usdValue)}</em>
+        {pnl !== undefined && pnl !== null && (
+          <span className={`portfolioAssetPnl ${pnl >= 0 ? "positive" : "negative"}`}>
+            {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
