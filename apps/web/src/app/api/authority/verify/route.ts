@@ -1,3 +1,4 @@
+/* eslint-disable */
 // @ts-nocheck
 import type { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";

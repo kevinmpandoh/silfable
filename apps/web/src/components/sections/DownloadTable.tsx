@@ -18,7 +18,7 @@ export async function DownloadTable() {
         version = tag.replace(/^v/, "");
       }
     }
-  } catch (err) {
+  } catch {
     // Fallback to default
   }
 
