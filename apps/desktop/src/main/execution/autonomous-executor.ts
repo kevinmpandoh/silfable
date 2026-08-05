@@ -48,7 +48,7 @@ export class AutonomousExecutorService extends EventEmitter {
   async executeProposal(proposal: { id: string; strategyId: string; reason: string }): Promise<{ proposalId: string; status: string }> {
     if (this.#isVaultLocked()) {
       const error = new Error(
-        "Autonomous execution is disabled or vault is locked. A trigger may create a reviewable proposal only; it cannot close a position, sign, or broadcast.",
+        "Autonomous execution is disabled. A trigger may create a reviewable proposal only; it cannot close a position, sign, or broadcast.",
       );
       this.emit("execution_error", { proposalId: proposal.id, error: error.message });
       throw error;
@@ -68,7 +68,7 @@ export class AutonomousExecutorService extends EventEmitter {
   async executeTrigger(event: ExitTriggerEvent): Promise<{ positionId: string; status: string }> {
     if (this.#isVaultLocked()) {
       const error = new Error(
-        "Autonomous execution is disabled or vault is locked. A trigger may create a reviewable proposal only; it cannot close a position, sign, or broadcast.",
+        "Autonomous execution is disabled. A trigger may create a reviewable proposal only; it cannot close a position, sign, or broadcast.",
       );
       this.emit("execution_error", { positionId: event.positionId, error: error.message });
       throw error;
