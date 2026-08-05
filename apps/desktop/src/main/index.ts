@@ -958,7 +958,9 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
         snapshot: {
           address: request.address,
           slot: 0,
-          solLamports: "0",
+          solBalance: "0",
+          solUsdPrice: null,
+          totalUsd: null,
           assets: [],
           verifiedAt: new Date().toISOString(),
         },

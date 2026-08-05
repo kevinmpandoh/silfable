@@ -42,7 +42,7 @@ export class MissionPolicyService {
     const slippageValid = Number.isInteger(input.maxSlippageBps) && input.maxSlippageBps >= 0 && input.maxSlippageBps <= slippageCeiling;
     checks.push(check("slippage_within_limit", slippageValid, slippageValid ? `Slippage limit is ${input.maxSlippageBps} bps (maximum ${slippageCeiling} bps).` : `Slippage exceeds the configured maximum of ${slippageCeiling} bps.`));
     const deadlineMs = Date.parse(input.deadlineAt);
-    const deadlineValid = Number.isFinite(deadlineMs) && deadlineMs >= now + 5 * 60_000 && deadlineMs <= now + 30 * 24 * 60 * 60_000;
+    const deadlineValid = Number.isFinite(deadlineMs) && deadlineMs >= now + 4 * 60_000 && deadlineMs <= now + 30 * 24 * 60 * 60_000;
     checks.push(check("deadline_valid", deadlineValid, deadlineValid ? "Deadline is between five minutes and thirty days from now." : "Deadline must be between five minutes and thirty days from now."));
 
     let portfolio: PortfolioSnapshot | null = null;

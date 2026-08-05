@@ -6557,7 +6557,7 @@ function MarkdownMessage({
       index += 1;
       continue;
     }
-    const heading = /^(#{1,4})\s+(.+)$/u.exec(line);
+    const heading = /^(#{1,4})\s+(.*)$/u.exec(line);
     if (heading) {
       const content = renderInlineMarkdown(heading[2] ?? "");
       blocks.push(
@@ -6570,15 +6570,15 @@ function MarkdownMessage({
       index += 1;
       continue;
     }
-    const ordered = /^\d+\.\s+(.+)$/u.exec(line);
-    const unordered = /^[-*]\s+(.+)$/u.exec(line);
+    const ordered = /^\d+\.\s+(.*)$/u.exec(line);
+    const unordered = /^[-*]\s+(.*)$/u.exec(line);
     if (ordered || unordered) {
       const items: React.ReactNode[] = [];
       const orderedList = Boolean(ordered);
       while (index < lines.length) {
         const match = orderedList
-          ? /^\d+\.\s+(.+)$/u.exec(lines[index] ?? "")
-          : /^[-*]\s+(.+)$/u.exec(lines[index] ?? "");
+          ? /^\d+\.\s+(.*)$/u.exec(lines[index] ?? "")
+          : /^[-*]\s+(.*)$/u.exec(lines[index] ?? "");
         if (!match) break;
         items.push(<li key={index}>{renderInlineMarkdown(match[1] ?? "")}</li>);
         index += 1;
@@ -7786,15 +7786,13 @@ function SessionModal({
                 </small>
               </button>
               <button
-                className="unavailableChoice"
-                disabled
+                className={permission === "full" ? "active" : ""}
                 onClick={() => setPermission("full")}
               >
                 <span className="choiceNumber">02 · Guarded MVP</span>
                 <strong>Full access</strong>
                 <small>
-                  Not available for new sessions. Full Access never bypasses
-                  signing, policy checks, or final transaction approval.
+                  Autonomous execution enabled using active Session Grants with guarded policy limits.
                 </small>
               </button>
             </div>

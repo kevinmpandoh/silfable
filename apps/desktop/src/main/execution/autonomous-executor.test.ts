@@ -80,3 +80,52 @@ test("autonomous executor executes trigger and closes position when vault is unl
   });
 });
 
+test("end-to-end full access grant validation lifecycle in autonomous executor", async () => {
+  let activeGrantState = true;
+  const mockGrantService = {
+    activeForSession: async (sessionId: string) => {
+      if (sessionId === "active-session" && activeGrantState) {
+        return { status: "ACTIVE", sessionId } as any;
+      }
+      return null;
+    },
+  };
+
+  let closedPositionId = "";
+  const service = new AutonomousExecutorService({
+    keystore: { isLocked: () => false },
+    strategyManager: { closePosition: (id: string) => { closedPositionId = id; } },
+    fullAccessGrants: mockGrantService as any,
+  } as unknown as AutonomousExecutorDependencies);
+
+  // 1. Valid active session grant succeeds
+  const activeResult = await service.executeTrigger({
+    positionId: "pos-active",
+    mintAddress: "So11111111111111111111111111111111111111112",
+    reason: "STOP_LOSS",
+    triggerPrice: 100,
+    targetPrice: 90,
+    amount: "1000",
+    triggeredAt: new Date().toISOString(),
+    sessionId: "active-session",
+  });
+  assert.equal(activeResult.status, "EXECUTED");
+  assert.equal(closedPositionId, "pos-active");
+
+  // 2. Revoked/Inactive session grant fails closed
+  activeGrantState = false;
+  await assert.rejects(
+    () => service.executeTrigger({
+      positionId: "pos-inactive",
+      mintAddress: "So11111111111111111111111111111111111111112",
+      reason: "STOP_LOSS",
+      triggerPrice: 100,
+      targetPrice: 90,
+      amount: "1000",
+      triggeredAt: new Date().toISOString(),
+      sessionId: "active-session",
+    }),
+    /cannot close a position, sign, or broadcast/u,
+  );
+});
+
