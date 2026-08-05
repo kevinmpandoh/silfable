@@ -63,7 +63,7 @@ export function FaqSection() {
                       <span>{faq.question}</span>
                     </span>
                   </AccordionTrigger>
-                  <AccordionContent className="max-w-2xl pl-10 pr-8 text-base leading-8 sm:pl-16">
+                  <AccordionContent className="max-w-2xl pl-10 pr-8 text-base leading-8 text-white/60 sm:pl-16">
                     {faq.answer}
                   </AccordionContent>
                 </AccordionItem>
