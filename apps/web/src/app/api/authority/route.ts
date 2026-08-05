@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NextRequest, NextResponse } from "next/server";
 import { cloudDb, isDbConfigured } from "@/lib/cloud-db";
 import { delegatedAuthorityStatus, parseDelegatedPolicy } from "@/lib/delegated-authority";

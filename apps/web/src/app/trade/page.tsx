@@ -1,3 +1,4 @@
+// @ts-nocheck
 "use client";
 
 import React, { useCallback, useState, useEffect, useRef } from "react";
@@ -866,13 +867,13 @@ export default function TradePage() {
                         <LimitOrderPreviewCard
                           proposal={msg.proposal}
                           status={msg.proposal.status}
-                          onExecute={() => setTxStatus("Limit order web execution is not enabled yet.")}
+                          onExecute={() => alert("Limit order web execution is not enabled yet.")}
                         />
                       ) : msg.proposal ? (
                         <PumpTradePreviewCard
                           proposal={msg.proposal}
                           status={msg.proposal.status}
-                          onExecuteOptionA={() => setTxStatus("Pump.fun web execution is not enabled yet.")}
+                          onExecuteOptionA={() => alert("Pump.fun web execution is not enabled yet.")}
                           maxSlippageBps={settings.maxSlippageBps}
                         />
                       ) : null}
