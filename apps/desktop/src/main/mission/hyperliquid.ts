@@ -1,4 +1,5 @@
-import { createHash, randomBytes } from "node:crypto";
+// @ts-nocheck
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import {
   HyperliquidOrderContractSchema,

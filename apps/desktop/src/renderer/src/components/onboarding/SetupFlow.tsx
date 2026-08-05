@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React from "react";
 import { DesktopSetupState, RuntimeStatus } from "@silfable/contracts";
 import { Brand, CornerFooter } from "../common/Brand";

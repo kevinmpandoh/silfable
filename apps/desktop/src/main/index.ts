@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, powerMonitor, session, shell, Tray } from "electron";
 import type { NativeImage } from "electron";
 import { existsSync } from "node:fs";

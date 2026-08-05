@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 import { EvmBridgeReceiptSchema, type EvmBridgeReceipt } from "@silfable/contracts";

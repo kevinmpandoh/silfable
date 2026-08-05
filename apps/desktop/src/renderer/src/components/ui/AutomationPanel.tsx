@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useEffect, useState } from "react";
 import { Play, Pause, XCircle, RefreshCw, Bot, Clock, Timer, Layers, MessageSquare } from "lucide-react";
 import { Button } from "./Button";

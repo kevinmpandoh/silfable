@@ -1587,8 +1587,8 @@ export type AutomationSetupExitResponse = z.infer<typeof AutomationSetupExitResp
 
 export const AutomationListResponseSchema = z.object({
   schemaVersion: z.literal(1),
-  strategies: z.array(z.record(z.unknown())),
-  proposals: z.array(z.record(z.unknown())),
+  strategies: z.array(z.record(z.string(), z.unknown())),
+  proposals: z.array(z.record(z.string(), z.unknown())),
 }).strict();
 export type AutomationListResponse = z.infer<typeof AutomationListResponseSchema>;
 
@@ -1602,7 +1602,7 @@ export type AutomationSetStatusRequest = z.infer<typeof AutomationSetStatusReque
 export const AutomationSetStatusResponseSchema = z.object({
   schemaVersion: z.literal(1),
   requestId: z.string().uuid(),
-  strategy: z.record(z.unknown()),
+  strategy: z.record(z.string(), z.unknown()),
 }).strict();
 export type AutomationSetStatusResponse = z.infer<typeof AutomationSetStatusResponseSchema>;
 
@@ -2280,11 +2280,11 @@ export const UnifiedPortfolioChainSchema = z.object({
 
 export const UnifiedActivityEntrySchema = z.object({
   id: z.string().min(1).max(128),
-  family: z.enum(["solana", "evm"]),
+  family: z.enum(["solana", "evm", "cross-chain", "offchain"]),
   chainKey: z.string().min(1).max(64),
   venue: z.string().min(1).max(64),
   type: z.string().min(1).max(64).optional(),
-  status: z.enum(["finalized", "confirmed", "failed", "pending", "unknown"]),
+  status: z.enum(["finalized", "confirmed", "failed", "pending", "unknown", "refunded", "cancelled", "broadcast-unknown", "partial", "action-required"]),
   occurredAt: z.string().datetime(),
   transactionId: z.string().nullable().optional(),
   blockReference: z.string().nullable().optional(),
@@ -2309,10 +2309,10 @@ export type UnifiedPortfolioSnapshot = z.infer<typeof UnifiedPortfolioSnapshotSc
 export const PortfolioHistoryPointSchema = z.object({
   id: z.string().uuid(),
   sessionId: z.string().uuid(),
-  walletAddress: z.string().optional(),
-  chains: z.array(z.unknown()).optional(),
+  walletAddress: z.string(),
+  chains: z.array(UnifiedPortfolioChainSchema),
   totalUsd: z.number().finite().nonnegative().nullable(),
-  capturedAt: z.string().datetime().optional(),
+  capturedAt: z.string().datetime(),
   recordedAt: z.string().datetime().optional(),
 }).passthrough();
 
@@ -2327,11 +2327,17 @@ export type PortfolioHistoryPoint = z.infer<typeof PortfolioHistoryPointSchema>;
 export type PortfolioPerformance = z.infer<typeof PortfolioPerformanceSchema>;
 
 export const PortfolioAcquisitionLotSchema = z.object({
-  lotId: z.string().uuid(),
-  acquiredAt: z.string().datetime(),
-  amountRaw: z.string().regex(/^\d+$/u),
-  unitCostUsd: z.number().finite().positive(),
-  remainingRaw: z.string().regex(/^\d+$/u),
+  id: z.string(),
+  chainKey: z.string(),
+  assetId: z.string(),
+  quantityRaw: z.string(),
+  remainingRaw: z.string(),
+  decimals: z.number(),
+  costBasisUsd: z.number(),
+  remainingCostBasisUsd: z.number(),
+  acquiredAt: z.string(),
+  sourceTransactionId: z.string().optional(),
+  provenance: z.string(),
 }).passthrough();
 
 export const PortfolioCostBasisAssetSchema = z.object({

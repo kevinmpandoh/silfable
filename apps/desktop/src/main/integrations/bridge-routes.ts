@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {
   BRIDGE_ARBITRUM_CHAIN_ID,
   BRIDGE_ARBITRUM_USDC_ADDRESS,

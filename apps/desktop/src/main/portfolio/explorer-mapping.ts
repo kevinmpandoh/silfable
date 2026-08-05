@@ -15,7 +15,7 @@ export function activityExplorerUrl(input: Pick<
   UnifiedActivityEntry,
   "family" | "chainKey" | "transactionId" | "venue"
 >): string | null {
-  if (input.transactionId === null) return null;
+  if (!input.transactionId) return null;
   if (input.family === "solana" && SOLANA_SIGNATURE.test(input.transactionId)) {
     return `${SOLANA_EXPLORER}/tx/${input.transactionId}`;
   }

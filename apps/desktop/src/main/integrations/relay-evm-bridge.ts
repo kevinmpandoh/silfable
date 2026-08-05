@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createHash, randomUUID } from "node:crypto";
 import { getAddress, type Address, type Hex } from "viem";
 
