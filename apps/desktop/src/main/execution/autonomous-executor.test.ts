@@ -27,7 +27,7 @@ test("autonomous executor fails closed when vault is locked or missing", async (
   );
   assert.deepEqual(emitted, {
     positionId: "position-1",
-    error: "Autonomous execution is disabled or vault is locked. A trigger may create a reviewable proposal only; it cannot close a position, sign, or broadcast.",
+    error: "Autonomous execution is disabled. A trigger may create a reviewable proposal only; it cannot close a position, sign, or broadcast.",
   });
 });
 
