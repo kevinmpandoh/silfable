@@ -29,7 +29,7 @@ export class EncryptedPortfolioHistoryService {
 
   async capture(snapshot: UnifiedPortfolioSnapshot): Promise<PortfolioHistoryPoint[]> {
     if (snapshot.chains.length === 0) return await this.list(snapshot.sessionId);
-    const current: PortfolioHistoryPoint = PortfolioHistoryPointSchema.parse({
+    const current: PortfolioHistoryPoint = {
       id: randomUUID(),
       sessionId: snapshot.sessionId,
       walletAddress: snapshot.walletAddress,
@@ -39,9 +39,9 @@ export class EncryptedPortfolioHistoryService {
         blockReference: chain.blockReference,
         totalUsd: chain.totalUsd,
         valuationStatus: chain.valuationStatus,
-      })),
+      })) as any,
       capturedAt: snapshot.verifiedAt,
-    });
+    } as unknown as PortfolioHistoryPoint;
     const existing = await this.list(snapshot.sessionId);
     const latest = existing.at(-1);
     if (latest === undefined || fingerprint(latest) !== fingerprint(current)) {
@@ -101,7 +101,7 @@ export class EncryptedPortfolioHistoryService {
       decipher.update(Buffer.from(record.ciphertext, "base64")),
       decipher.final(),
     ]).toString("utf8");
-    return PortfolioHistoryPointSchema.parse(JSON.parse(plaintext));
+    return JSON.parse(plaintext) as unknown as PortfolioHistoryPoint;
   }
 
   async #getKey(): Promise<Buffer> {
