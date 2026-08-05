@@ -3,49 +3,67 @@ import { ArrowDownToLine, Clock3, Laptop, PackageOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-const releases = [
-  {
-    os: "Linux",
-    build: "Universal",
-    format: ".AppImage",
-    architecture: "x64",
-    href: "https://github.com/kevinmpandoh/silfable/releases/download/v0.1.0/Silfable-0.1.0-x86_64.AppImage",
-    available: true,
-  },
-  {
-    os: "Linux",
-    build: "Debian",
-    format: ".deb",
-    architecture: "x64",
-    href: "https://github.com/kevinmpandoh/silfable/releases/download/v0.1.0/Silfable-0.1.0-amd64.deb",
-    available: true,
-  },
-  {
-    os: "macOS",
-    build: "Apple Silicon & Intel",
-    format: ".dmg",
-    architecture: "Universal",
-    href: null,
-    available: false,
-  },
-  {
-    os: "Windows",
-    build: "Installer",
-    format: ".exe",
-    architecture: "x64",
-    href: null,
-    available: false,
-  },
-] as const;
+export async function DownloadTable() {
+  let version = "0.1.0";
+  let tag = "v0.1.0";
+  
+  try {
+    const res = await fetch("https://api.github.com/repos/kevinmpandoh/silfable/releases/latest", {
+      next: { revalidate: 3600 }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.tag_name) {
+        tag = data.tag_name;
+        version = tag.replace(/^v/, "");
+      }
+    }
+  } catch (err) {
+    // Fallback to default
+  }
 
-export function DownloadTable() {
+  const releases = [
+    {
+      os: "Linux",
+      build: "Universal",
+      format: ".AppImage",
+      architecture: "x64",
+      href: `https://github.com/kevinmpandoh/silfable/releases/download/${tag}/Silfable-${version}-x86_64.AppImage`,
+      available: true,
+    },
+    {
+      os: "Linux",
+      build: "Debian",
+      format: ".deb",
+      architecture: "x64",
+      href: `https://github.com/kevinmpandoh/silfable/releases/download/${tag}/Silfable-${version}-amd64.deb`,
+      available: true,
+    },
+    {
+      os: "macOS",
+      build: "Apple Silicon & Intel",
+      format: ".dmg",
+      architecture: "Universal",
+      href: null,
+      available: false,
+    },
+    {
+      os: "Windows",
+      build: "Installer",
+      format: ".exe",
+      architecture: "x64",
+      href: null,
+      available: false,
+    },
+  ] as const;
+
   return (
     <section id="download" className="border-t border-white/10 bg-[#080b18] text-[#eef2ff]">
       <div className="section-shell py-24 sm:py-32 lg:py-44">
         <div className="grid gap-10 border-b border-white/15 pb-14 lg:grid-cols-[1fr_0.75fr] lg:items-end lg:pb-20">
           <div>
             <p className="mb-5 font-mono text-[10px] uppercase tracking-[0.24em] text-electric">
-              Release 0.1.0 / Desktop
+              Release {version} / Desktop
             </p>
             <h2 className="font-serif text-[clamp(3.4rem,7vw,7.8rem)] leading-[0.85] tracking-[-0.06em]">
               Run it on <em className="text-electric">your</em> machine.
