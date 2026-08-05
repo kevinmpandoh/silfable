@@ -235,6 +235,8 @@ import { RelayEvmBridgeService } from "./integrations/relay-evm-bridge.js";
 import { EncryptedEvmBridgeReceiptService } from "./execution/evm-bridge-receipt-store.js";
 import { EvmBridgeExecutionService, EvmBridgeReconciliationService } from "./execution/evm-bridge-execution.js";
 import { VenueReadinessService } from "./security/venue-readiness.js";
+import { EncryptedFullAccessGrantService } from "./security/full-access-grants.js";
+import { AutonomousExecutorService } from "./execution/autonomous-executor.js";
 import { configureSafeAuditLog } from "./telemetry/safe-audit-log.js";
 
 
@@ -2553,6 +2555,26 @@ function resolveEvmTokenMetadata(address: string): { symbol: string; decimals: n
   
   const missionProposals = new MissionProposalService(reads, observationService);
   const tokenAllowlist = new TokenAllowlistService(runtimeDatabase, reads);
+  const fullAccessGrants = new EncryptedFullAccessGrantService(runtimeDatabase, keystore);
+  const autonomousExecutor = new AutonomousExecutorService({
+    strategyManager,
+    pumpRpc,
+    transactionSettings,
+    pumpRiskSettings,
+    pumpRiskLedger,
+    keystore,
+    receiptStore: pumpReceipts,
+    wallets,
+    fullAccessGrants,
+  });
+
+  observationService.on("auto_execution_triggered", (event) => {
+    if (!emergencyStop.get().engaged) {
+      autonomousExecutor.executeTrigger(event).catch((err) => {
+        console.warn("Autonomous trigger execution skipped/failed:", err.message);
+      });
+    }
+  });
 
   if (!emergencyStop.get().engaged) observationService.startObservationLoop(async (mints) => {
     const pricePoints = await reads.prices(mints);
