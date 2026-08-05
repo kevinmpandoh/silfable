@@ -1,8 +1,10 @@
 import { EventEmitter } from "node:events";
 import type { PositionStrategyManager, ExitTriggerEvent } from "./strategy-manager.js";
+import type { AutomationManager } from "./automation-manager.js";
 
 export class DurableBackgroundObservationService extends EventEmitter {
   readonly #strategyManager: PositionStrategyManager;
+  #automationManager: AutomationManager | null = null;
   #intervalTimer: NodeJS.Timeout | null = null;
   #active = false;
   #pollIntervalMs: number;
@@ -18,6 +20,10 @@ export class DurableBackgroundObservationService extends EventEmitter {
     });
   }
 
+  setAutomationManager(automationManager: AutomationManager): void {
+    this.#automationManager = automationManager;
+  }
+
   isRunning(): boolean {
     return this.#active;
   }
@@ -30,16 +36,33 @@ export class DurableBackgroundObservationService extends EventEmitter {
       if (!this.#active) return;
       try {
         const activePositions = this.#strategyManager.getActivePositions();
-        if (activePositions.length === 0) return;
+        const activeAutomation = this.#automationManager?.listStrategies().filter((s) => s.status === "ACTIVE") ?? [];
 
-        const uniqueMints = [...new Set(activePositions.map((p) => p.mintAddress))];
-        const prices = await fetchPricesCallback(uniqueMints);
+        if (activePositions.length === 0 && activeAutomation.length === 0) return;
+
+        const positionMints = activePositions.map((p) => p.mintAddress);
+        const automationMints = activeAutomation.flatMap((s) => [s.inputMint, s.outputMint]);
+        const uniqueMints = [...new Set([...positionMints, ...automationMints])];
+
+        const prices = uniqueMints.length > 0 ? await fetchPricesCallback(uniqueMints) : new Map<string, number>();
 
         for (const [mint, price] of prices.entries()) {
           this.#strategyManager.evaluatePriceTick(mint, price);
         }
-      } catch (err) {
-        this.emit("error", err);
+
+        if (this.#automationManager !== null) {
+          const proposals = this.#automationManager.evaluate(new Date(), prices);
+          for (const proposal of proposals) {
+            this.emit("automation_proposal_created", proposal);
+          }
+        }
+      } catch (err: any) {
+        if (err?.message?.includes("locked")) return;
+        if (this.listenerCount("error") > 0) {
+          this.emit("error", err);
+        } else {
+          console.warn("[BackgroundLoop] Observation tick skipped:", err?.message || err);
+        }
       }
     }, this.#pollIntervalMs);
 

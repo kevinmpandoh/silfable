@@ -26,7 +26,7 @@ export function DocsSidebar() {
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
 
-      <aside className="hidden lg:block">
+      <aside className="hidden lg:block h-full">
         <div className="sticky top-28">
           <p className="mb-6 font-mono text-[9px] uppercase tracking-[0.2em] text-black/35">Documentation</p>
           <ScrollArea className="h-[calc(100vh-15rem)]">

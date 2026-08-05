@@ -20,6 +20,7 @@ import type { MainnetReadService } from "../integrations/read-only.js";
 import { MissionPolicyService } from "../mission/policy.js";
 import { DEFAULT_TRANSACTION_SETTINGS, type TransactionSettingsService } from "../mission/transaction-settings.js";
 import { callOpenRouterChat, DEFAULT_OPENROUTER_MODEL, type ReadOnlyAiTool } from "./providers.js";
+import type { AutomationManager } from "../execution/automation-manager.js";
 
 type AiSecretStore = {
   getSecret(name: SecretName): Promise<string | null>;
@@ -66,6 +67,7 @@ export class AiService {
   readonly #evmSwapQuotes: EvmSwapQuoteService | null;
   #bridgePreparation: BridgePreparationService | null;
   #evmBridgePreparation: EvmBridgePreparationService | null;
+  #automationManager: AutomationManager | null;
 
   constructor(input: {
     keystore: AiSecretStore;
@@ -75,6 +77,7 @@ export class AiService {
     evmSwapQuotes?: EvmSwapQuoteService;
     bridgePreparation?: BridgePreparationService;
     evmBridgePreparation?: EvmBridgePreparationService;
+    automationManager?: AutomationManager;
   }) {
     this.#keystore = input.keystore;
     this.#settings = input.settings;
@@ -83,6 +86,12 @@ export class AiService {
     this.#evmSwapQuotes = input.evmSwapQuotes ?? null;
     this.#bridgePreparation = input.bridgePreparation ?? null;
     this.#evmBridgePreparation = input.evmBridgePreparation ?? null;
+    this.#automationManager = input.automationManager ?? null;
+  }
+
+  configureAutomationManager(service: AutomationManager): void {
+    if (this.#automationManager !== null) throw new Error("Automation manager is already configured");
+    this.#automationManager = service;
   }
 
   configureBridgePreparation(service: BridgePreparationService): void {
@@ -291,6 +300,77 @@ export class AiService {
       parameters: { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: 400 } }, required: ["query"], additionalProperties: false },
       execute: async (argumentsValue) => this.#readService!.search(toolQuery(argumentsValue)),
     });
+    if (this.#automationManager !== null) {
+      const activeWalletAddress = walletAddress || "primary-wallet";
+      tools.push({
+        name: "create_automation_strategy",
+        description: "Create an autonomous automation strategy such as DCA or Exit strategy (Take Profit / Stop Loss).",
+        parameters: {
+          type: "object",
+          properties: {
+            kind: { type: "string", enum: ["DCA", "EXIT"] },
+            outputMint: { type: "string" },
+            inputMint: { type: "string" },
+            orderAmountRaw: { type: "string" },
+            maximumTotalRaw: { type: "string" },
+            intervalSeconds: { type: "number" },
+            maximumExecutions: { type: "number" },
+            amountRaw: { type: "string" },
+            entryPriceUsd: { type: "number" },
+            takeProfitPriceUsd: { type: "number" },
+            stopLossPriceUsd: { type: "number" },
+            trailingStopPercent: { type: "number" },
+            expiresAt: { type: "string" },
+          },
+          required: ["kind"],
+        },
+        execute: async (args: any) => {
+          const sessionId = intent?.sessionId ?? "session-ai";
+          if (args.kind === "DCA") {
+            const inputMint = args.inputMint || "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+            const outputMint = args.outputMint || "So11111111111111111111111111111111111111112";
+            return this.#automationManager!.createDca({
+              sessionId,
+              walletAddress: activeWalletAddress,
+              inputMint,
+              outputMint,
+              orderAmountRaw: args.orderAmountRaw || "500000",
+              maximumTotalRaw: args.maximumTotalRaw || "1000000",
+              intervalSeconds: args.intervalSeconds || 600,
+              maximumExecutions: args.maximumExecutions || 2,
+              expiresAt: args.expiresAt || new Date(Date.now() + 30 * 86400 * 1000).toISOString(),
+            });
+          } else {
+            return this.#automationManager!.createExit({
+              sessionId,
+              walletAddress: activeWalletAddress,
+              inputMint: args.inputMint || "So11111111111111111111111111111111111111112",
+              outputMint: args.outputMint,
+              amountRaw: args.amountRaw || "1000000",
+              entryPriceUsd: args.entryPriceUsd || 100,
+              takeProfitPriceUsd: args.takeProfitPriceUsd || null,
+              stopLossPriceUsd: args.stopLossPriceUsd || null,
+              trailingStopPercent: args.trailingStopPercent || null,
+              expiresAt: args.expiresAt || new Date(Date.now() + 30 * 86400 * 1000).toISOString(),
+            });
+          }
+        },
+      });
+      tools.push({
+        name: "cancel_automation_strategy",
+        description: "Cancel an active automation strategy by strategy ID.",
+        parameters: {
+          type: "object",
+          properties: {
+            strategyId: { type: "string" },
+          },
+          required: ["strategyId"],
+        },
+        execute: async (args: any) => {
+          return this.#automationManager!.setStatus(args.strategyId, "CANCEL");
+        },
+      });
+    }
     return tools;
   }
 

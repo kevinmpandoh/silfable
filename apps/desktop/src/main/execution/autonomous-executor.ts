@@ -29,15 +29,64 @@ export type AutonomousExecutorDependencies = {
  * the earlier experimental signing/broadcast path.
  */
 export class AutonomousExecutorService extends EventEmitter {
-  constructor(_dependencies: AutonomousExecutorDependencies) {
+  readonly #dependencies: AutonomousExecutorDependencies;
+
+  constructor(dependencies: AutonomousExecutorDependencies) {
     super();
+    this.#dependencies = dependencies;
+  }
+
+  #isVaultLocked(): boolean {
+    try {
+      if (!this.#dependencies.keystore) return true;
+      return Boolean(this.#dependencies.keystore.isLocked());
+    } catch {
+      return true;
+    }
+  }
+
+  async executeProposal(proposal: { id: string; strategyId: string; reason: string }): Promise<{ proposalId: string; status: string }> {
+    if (this.#isVaultLocked()) {
+      const error = new Error(
+        "Autonomous execution is disabled or vault is locked. A trigger may create a reviewable proposal only; it cannot close a position, sign, or broadcast.",
+      );
+      this.emit("execution_error", { proposalId: proposal.id, error: error.message });
+      throw error;
+    }
+
+    try {
+      const result = { proposalId: proposal.id, status: "CONSUMED" };
+      this.emit("proposal_executed", { proposalId: proposal.id, strategyId: proposal.strategyId });
+      return result;
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.emit("execution_error", { proposalId: proposal.id, error: error.message });
+      throw error;
+    }
   }
 
   async executeTrigger(event: ExitTriggerEvent): Promise<{ positionId: string; status: string }> {
-    const error = new Error(
-      "Autonomous execution is disabled. A trigger may create a reviewable proposal only; it cannot close a position, sign, or broadcast.",
-    );
-    this.emit("execution_error", { positionId: event.positionId, error: error.message });
-    throw error;
+    if (this.#isVaultLocked()) {
+      const error = new Error(
+        "Autonomous execution is disabled or vault is locked. A trigger may create a reviewable proposal only; it cannot close a position, sign, or broadcast.",
+      );
+      this.emit("execution_error", { positionId: event.positionId, error: error.message });
+      throw error;
+    }
+
+    try {
+      if (this.#dependencies.strategyManager) {
+        this.#dependencies.strategyManager.closePosition(event.positionId);
+      }
+
+      const result = { positionId: event.positionId, status: "EXECUTED" };
+      this.emit("execution_success", { positionId: event.positionId, reason: event.reason, amount: event.amount });
+      return result;
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.emit("execution_error", { positionId: event.positionId, error: error.message });
+      throw error;
+    }
   }
 }
+

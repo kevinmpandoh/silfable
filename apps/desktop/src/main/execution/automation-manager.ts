@@ -70,6 +70,7 @@ export type CreateDcaAutomationInput = {
   id?: string;
   sessionId: string;
   walletAddress: string;
+  inputMint?: string;
   outputMint: string;
   orderAmountRaw: string;
   maximumTotalRaw: string;
@@ -168,7 +169,7 @@ export class AutomationManager {
       kind: "DCA",
       sessionId: requireIdentifier(input.sessionId, "Session"),
       walletFingerprint: walletFingerprint(requireAddress(input.walletAddress, "Wallet")),
-      inputMint: SOL_MINT,
+      inputMint: input.inputMint ? requireAddress(input.inputMint, "Input mint") : "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       outputMint: requireAddress(input.outputMint, "Output mint"),
       orderAmountRaw,
       maximumTotalRaw,
@@ -248,6 +249,34 @@ export class AutomationManager {
   emergencyStop(now = new Date()): void {
     for (const strategy of this.listStrategies().filter((item) => item.status === "ACTIVE" || item.status === "AWAITING_APPROVAL")) {
       this.#persist({ ...strategy, status: "EMERGENCY_STOPPED", updatedAt: now.toISOString() });
+    }
+  }
+
+  approveProposal(id: string, now = new Date()): void {
+    const proposal = this.listProposals().find((item) => item.id === id);
+    if (!proposal || proposal.status !== "AWAITING_APPROVAL") return;
+    this.#db.setAutomationProposalStatus(id, "CONSUMED");
+    const strategy = this.listStrategies().find((item) => item.id === proposal.strategyId);
+    if (!strategy) return;
+    if (strategy.kind === "DCA") {
+      const completed = strategy.completedExecutions + 1;
+      const isDone = completed >= strategy.maximumExecutions;
+      this.#persist({
+        ...strategy,
+        completedExecutions: completed,
+        status: isDone ? "EXPIRED" : "ACTIVE",
+        nextWakeAt: isDone ? null : new Date(now.getTime() + strategy.intervalSeconds * 1000).toISOString(),
+        lastEvaluatedAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      });
+    } else {
+      this.#persist({
+        ...strategy,
+        status: "EXPIRED",
+        nextWakeAt: null,
+        lastEvaluatedAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      });
     }
   }
 

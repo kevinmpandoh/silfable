@@ -169,10 +169,10 @@ export const IPC_CHANNELS = {
   evmExecuteKyberSwap: "evm:execute-kyberswap",
   evmListReceipts: "evm:list-receipts",
   evmReconcileReceipts: "evm:reconcile-receipts",
-  evmBridgePrepare: "evm-bridge:prepare",
-  evmBridgeExecute: "evm-bridge:execute",
-  evmBridgeListReceipts: "evm-bridge:list-receipts",
-  evmBridgeReconcile: "evm-bridge:reconcile",
+  evmBridgePrepare: "evmbridge:prepare",
+  evmBridgeExecute: "evmbridge:execute",
+  evmBridgeListReceipts: "evmbridge:list-receipts",
+  evmBridgeReconcile: "evmbridge:reconcile",
   robinhoodGetSettings: "robinhood:get-settings",
   robinhoodSaveZeroXKey: "robinhood:save-zeroex-key",
   robinhoodSaveRpcUrl: "robinhood:save-rpc-url",
@@ -188,6 +188,8 @@ export const IPC_CHANNELS = {
   robinhoodExecuteSwap: "robinhood:execute-swap",
   robinhoodListReceipts: "robinhood:list-receipts",
   robinhoodReconcileReceipts: "robinhood:reconcile-receipts",
+  automationList: "automation:list",
+  automationSetStatus: "automation:set-status",
 } as const;
 
 const RequestBaseSchema = z.object({
@@ -1308,7 +1310,7 @@ export type EvmSwapProposal = z.infer<typeof EvmSwapProposalSchema>;
 export type EvmSwapPreflightEvidence = z.infer<typeof EvmSwapPreflightEvidenceSchema>;
 export type EvmSessionExecutionReceipt = z.infer<typeof EvmSessionExecutionReceiptSchema>;
 
-export const BRIDGE_SOLANA_CHAIN_ID = 792_703_809;
+export const BRIDGE_SOLANA_CHAIN_ID = 7565164;
 export const BRIDGE_SOLANA_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 export const BRIDGE_BASE_CHAIN_ID = 8453;
 export const BRIDGE_BASE_USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
@@ -1502,7 +1504,7 @@ export const EvmBridgeContractSchema = z.object({
     assetSymbol: z.string().min(1).max(16),
     assetDecimals: z.number().int().min(0).max(18),
     recipient: z.string().min(1).max(128),
-  }).strict(),
+  }).passthrough(),
   amountIn: z.string().regex(/^[1-9]\d*$/u),
   minimumDestinationAmount: z.string().regex(/^[1-9]\d*$/u),
   maximumNetworkFeeWei: z.string().regex(/^\d+$/u),
@@ -1516,46 +1518,46 @@ export const EvmBridgeContractSchema = z.object({
 export type EvmBridgeContract = z.infer<typeof EvmBridgeContractSchema>;
 
 export const EvmBridgeQuoteSchema = z.object({
-  quoteId: z.string().uuid(),
-  provider: z.literal("relay"),
-  contractId: z.string().uuid(),
-  requestHash: z.string().regex(/^[a-f0-9]{64}$/u),
-  expectedDestinationAmount: z.string().regex(/^[1-9]\d*$/u),
-  minimumDestinationAmount: z.string().regex(/^[1-9]\d*$/u),
-  estimatedGasWei: z.string().regex(/^\d+$/u),
-  estimatedFeeUsd: z.number().finite().nonnegative(),
-  stepCount: z.number().int().positive(),
-  expiresAt: z.string().datetime(),
-}).strict();
+  quoteId: z.string().uuid().optional(),
+  provider: z.string().optional(),
+  contractId: z.string().uuid().optional(),
+  requestHash: z.string().optional(),
+  expectedDestinationAmount: z.string().optional(),
+  minimumDestinationAmount: z.string().optional(),
+  estimatedGasWei: z.string().optional(),
+  estimatedFeeUsd: z.number().finite().nonnegative().optional(),
+  stepCount: z.number().int().positive().optional(),
+  expiresAt: z.string().optional(),
+}).passthrough();
 export type EvmBridgeQuote = z.infer<typeof EvmBridgeQuoteSchema>;
 
 export const EvmBridgePreflightSchema = z.object({
-  id: z.string().uuid(),
-  quoteId: z.string().uuid(),
-  contractId: z.string().uuid(),
-  digest: z.string().regex(/^[a-f0-9]{64}$/u),
-  allowanceRequired: z.boolean(),
-  allowanceTarget: SessionEvmAddressSchema.nullable(),
+  id: z.string().uuid().optional(),
+  quoteId: z.string().uuid().optional(),
+  contractId: z.string().uuid().optional(),
+  digest: z.string().optional(),
+  allowanceRequired: z.boolean().optional(),
+  allowanceTarget: SessionEvmAddressSchema.nullable().optional(),
   sourceTransaction: z.object({
-    to: SessionEvmAddressSchema,
-    data: z.string().regex(/^0x[0-9a-fA-F]*$/u),
-    valueWei: z.string().regex(/^\d+$/u),
-    gasLimit: z.string().regex(/^[1-9]\d*$/u),
-    maxFeePerGas: z.string().regex(/^[1-9]\d*$/u),
-    maxPriorityFeePerGas: z.string().regex(/^[1-9]\d*$/u),
-  }).strict(),
-  preparedAt: z.string().datetime(),
-  expiresAt: z.string().datetime(),
-}).strict();
+    to: SessionEvmAddressSchema.optional(),
+    data: z.string().optional(),
+    valueWei: z.string().optional(),
+    gasLimit: z.string().optional(),
+    maxFeePerGas: z.string().optional(),
+    maxPriorityFeePerGas: z.string().optional(),
+  }).passthrough().optional(),
+  preparedAt: z.string().optional(),
+  expiresAt: z.string().optional(),
+}).passthrough();
 export type EvmBridgePreflight = z.infer<typeof EvmBridgePreflightSchema>;
 
 export const EvmBridgeReceiptSchema = z.object({
-  id: z.string().uuid(),
-  preflightId: z.string().uuid(),
-  transactionHash: z.string().regex(/^0x[0-9a-fA-F]+$/u),
-  status: z.enum(["confirmed", "reverted", "unknown"]),
-  reconciledAt: z.string().datetime(),
-}).strict();
+  id: z.string().uuid().optional(),
+  preflightId: z.string().uuid().optional(),
+  transactionHash: z.string().optional(),
+  status: z.string().optional(),
+  reconciledAt: z.string().optional(),
+}).passthrough();
 export const AutomationSetupDcaRequestSchema = z.object({
   id: z.string().uuid(),
   walletAddress: z.string().min(32).max(64),
@@ -1581,6 +1583,27 @@ export const AutomationSetupExitRequestSchema = z.object({
 export type AutomationSetupExitRequest = z.infer<typeof AutomationSetupExitRequestSchema>;
 export const AutomationSetupExitResponseSchema = RequestBaseSchema.extend({ setup: AutomationSetupExitRequestSchema }).strict();
 export type AutomationSetupExitResponse = z.infer<typeof AutomationSetupExitResponseSchema>;
+
+export const AutomationListResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  strategies: z.array(z.record(z.unknown())),
+  proposals: z.array(z.record(z.unknown())),
+}).strict();
+export type AutomationListResponse = z.infer<typeof AutomationListResponseSchema>;
+
+export const AutomationSetStatusRequestSchema = RequestBaseSchema.extend({
+  id: z.string().min(1),
+  sessionId: z.string().optional(),
+  action: z.enum(["PAUSE", "RESUME", "CANCEL", "APPROVE_PROPOSAL", "REJECT_PROPOSAL"]),
+}).strict();
+export type AutomationSetStatusRequest = z.infer<typeof AutomationSetStatusRequestSchema>;
+
+export const AutomationSetStatusResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId: z.string().uuid(),
+  strategy: z.record(z.unknown()),
+}).strict();
+export type AutomationSetStatusResponse = z.infer<typeof AutomationSetStatusResponseSchema>;
 
 const AiToolNameSchema = z.string().min(1).max(64);
 export const SessionMessageSchema = z.object({
@@ -1667,6 +1690,9 @@ export const SessionRecordSchema = z.object({
     cost: z.number().nullable().optional(),
   }).passthrough().optional(),
 }).passthrough().superRefine((session, context) => {
+  if ((session as Record<string, unknown>).executionEnabled !== undefined) {
+    context.addIssue({ code: "custom", path: ["executionEnabled"], message: "Unexpected execution authority" });
+  }
   if (session.workspace === "pump" && session.pumpConfig === undefined) {
     context.addIssue({ code: "custom", path: ["pumpConfig"], message: "Pump workspace configuration is required" });
   }
@@ -1885,9 +1911,10 @@ export const AiChatResponseSchema = RequestBaseSchema.extend({
   bridgeProposal: BridgeProposalSchema.nullable().optional(),
   bridgePreflight: BridgePreflightEvidenceSchema.nullable().optional(),
   bridgeReceipt: BridgeReceiptSchema.nullable().optional(),
+  evmBridgePreparation: z.unknown().nullable().optional(),
   dcaSetup: AutomationSetupDcaRequestSchema.nullable().optional(),
   exitSetup: AutomationSetupExitRequestSchema.nullable().optional(),
-}).strict();
+}).passthrough();
 export type AiChatRequest = z.infer<typeof AiChatRequestSchema>;
 export type AiChatResponse = z.infer<typeof AiChatResponseSchema>;
 
@@ -2213,35 +2240,280 @@ export type EvmPortfolioAsset = z.infer<typeof EvmPortfolioAssetSchema>;
 export type EvmPortfolioSnapshot = z.infer<typeof EvmPortfolioSnapshotSchema>;
 export type EvmPortfolioGetResponse = z.infer<typeof EvmPortfolioGetResponseSchema>;
 
+export const UnifiedPortfolioAssetSchema = z.object({
+  assetId: z.string().min(1).max(128),
+  symbol: z.string().min(1).max(32).nullable().optional(),
+  name: z.string().min(1).max(128).optional(),
+  amountRaw: z.string().regex(/^\d+$/u),
+  decimals: z.number().int().nonnegative(),
+  uiAmount: z.string().min(1).max(128),
+  usdPrice: z.number().finite().nonnegative().nullable().optional(),
+  usdValue: z.number().finite().nonnegative().nullable().optional(),
+  tokenProgram: z.string().optional(),
+  isNative: z.boolean().optional(),
+  isCustomToken: z.boolean().optional(),
+  valuationSource: z.string().nullable().optional(),
+  priceVerifiedAt: z.string().datetime().nullable().optional(),
+}).strict();
+
+export const UnifiedPortfolioChainSchema = z.object({
+  family: z.enum(["solana", "evm"]),
+  chainKey: z.string().min(1).max(64),
+  chainId: z.string().min(1).max(64),
+  chainName: z.string().min(1).max(80),
+  walletAddress: z.string().min(1).max(128),
+  blockReference: z.string().nullable().optional(),
+  nativeSymbol: z.string().min(1).max(16),
+  nativeAmountRaw: z.string().regex(/^\d+$/u),
+  nativeUiAmount: z.string().min(1).max(128),
+  nativeUsdPrice: z.number().finite().nonnegative().nullable().optional(),
+  nativeUsdValue: z.number().finite().nonnegative().nullable().optional(),
+  totalUsd: z.number().finite().nonnegative().nullable().optional(),
+  valuationStatus: z.enum(["complete", "partial", "unavailable"]),
+  valuationSource: z.string().nullable().optional(),
+  priceVerifiedAt: z.string().datetime().nullable().optional(),
+  verifiedAt: z.string().datetime().nullable().optional(),
+  explorerBaseUrl: z.string().url().optional(),
+  assets: z.array(UnifiedPortfolioAssetSchema),
+}).strict();
+
+export const UnifiedActivityEntrySchema = z.object({
+  id: z.string().min(1).max(128),
+  family: z.enum(["solana", "evm"]),
+  chainKey: z.string().min(1).max(64),
+  venue: z.string().min(1).max(64),
+  type: z.string().min(1).max(64).optional(),
+  status: z.enum(["finalized", "confirmed", "failed", "pending", "unknown"]),
+  occurredAt: z.string().datetime(),
+  transactionId: z.string().nullable().optional(),
+  blockReference: z.string().nullable().optional(),
+  details: z.unknown().optional(),
+  explorerUrl: z.string().url().nullable().optional(),
+}).passthrough();
+
+export const UnifiedPortfolioSnapshotSchema = z.object({
+  sessionId: z.string().uuid(),
+  walletScope: z.enum(["solana", "evm"]),
+  walletAddress: z.string().min(1).max(128),
+  chains: z.array(UnifiedPortfolioChainSchema),
+  totalUsd: z.number().finite().nonnegative().nullable().optional(),
+  activity: z.array(UnifiedActivityEntrySchema),
+  verifiedAt: z.string().datetime(),
+}).strict();
+export type UnifiedPortfolioAsset = z.infer<typeof UnifiedPortfolioAssetSchema>;
+export type UnifiedPortfolioChain = z.infer<typeof UnifiedPortfolioChainSchema>;
+export type UnifiedActivityEntry = z.infer<typeof UnifiedActivityEntrySchema>;
+export type UnifiedPortfolioSnapshot = z.infer<typeof UnifiedPortfolioSnapshotSchema>;
+
+export const PortfolioHistoryPointSchema = z.object({
+  id: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  walletAddress: z.string().optional(),
+  chains: z.array(z.unknown()).optional(),
+  totalUsd: z.number().finite().nonnegative().nullable(),
+  capturedAt: z.string().datetime().optional(),
+  recordedAt: z.string().datetime().optional(),
+}).passthrough();
+
+export const PortfolioPerformanceSchema = z.object({
+  currentUsd: z.number().finite().nonnegative().nullable().optional(),
+  change24hUsd: z.number().finite().nullable().optional(),
+  change24hPercent: z.number().finite().nullable().optional(),
+  history: z.array(PortfolioHistoryPointSchema).optional(),
+}).passthrough();
+
+export type PortfolioHistoryPoint = z.infer<typeof PortfolioHistoryPointSchema>;
+export type PortfolioPerformance = z.infer<typeof PortfolioPerformanceSchema>;
+
+export const PortfolioAcquisitionLotSchema = z.object({
+  lotId: z.string().uuid(),
+  acquiredAt: z.string().datetime(),
+  amountRaw: z.string().regex(/^\d+$/u),
+  unitCostUsd: z.number().finite().positive(),
+  remainingRaw: z.string().regex(/^\d+$/u),
+}).passthrough();
+
+export const PortfolioCostBasisAssetSchema = z.object({
+  assetId: z.string().min(1).max(128),
+  symbol: z.string().min(1).max(32).nullable().optional(),
+  amountRaw: z.string().regex(/^\d+$/u).optional(),
+  uiAmount: z.string().min(1).max(128).optional(),
+  currentPriceUsd: z.number().finite().nonnegative().nullable().optional(),
+  currentValueUsd: z.number().finite().nonnegative().nullable().optional(),
+  totalCostUsd: z.number().finite().nonnegative().optional(),
+  unrealizedPnLUsd: z.number().finite().nullable().optional(),
+  unrealizedPnLPercent: z.number().finite().nullable().optional(),
+  realizedPnLUsd: z.number().finite().optional(),
+  lots: z.array(PortfolioAcquisitionLotSchema).optional(),
+}).passthrough();
+
+export const PortfolioCostBasisSummarySchema = z.object({
+  totalValueUsd: z.number().finite().nonnegative().nullable().optional(),
+  totalCostUsd: z.number().finite().nonnegative().optional(),
+  totalUnrealizedPnLUsd: z.number().finite().nullable().optional(),
+  totalRealizedPnLUsd: z.number().finite().optional(),
+  realizedPnlUsd: z.number().finite().nullable().optional(),
+  unrealizedPnlUsd: z.number().finite().nullable().optional(),
+  method: z.string().optional(),
+  status: z.string().optional(),
+  lots: z.array(z.unknown()).optional(),
+  excludedActivityCount: z.number().optional(),
+  evaluatedAt: z.string().datetime().optional(),
+  assets: z.array(PortfolioCostBasisAssetSchema).optional(),
+}).passthrough();
+
+export type PortfolioAcquisitionLot = z.infer<typeof PortfolioAcquisitionLotSchema>;
+export type PortfolioCostBasisAsset = z.infer<typeof PortfolioCostBasisAssetSchema>;
+export type PortfolioCostBasisSummary = z.infer<typeof PortfolioCostBasisSummarySchema>;
+
 export const GuardedCapabilitySchema = z.enum([
-  "solana-swap",
-  "evm-swap",
-  "bridge",
-  "token-launch",
+  "READ_PORTFOLIO",
+  "RESEARCH_MARKET",
+  "PREPARE_SOLANA_SWAP",
+  "PREPARE_EVM_SWAP",
+  "PREPARE_BRIDGE",
+  "PREPARE_TOKEN_LAUNCH",
+  "PREPARE_HYPERLIQUID_ORDER",
 ]);
 export type GuardedCapability = z.infer<typeof GuardedCapabilitySchema>;
 
+export const FullAccessGrantLimitsSchema = z.object({
+  maxActionsPerWake: z.number().int().positive(),
+  maxActionsTotal: z.number().int().positive(),
+  maxSingleActionUsd: z.number().finite().positive(),
+  maxTotalAllocationUsd: z.number().finite().positive(),
+  maxNetworkFeeUsd: z.number().finite().positive(),
+  maxFeePercentage: z.number().finite().positive(),
+  maxSlippageBps: z.number().int().nonnegative(),
+}).strict();
+export type FullAccessGrantLimits = z.infer<typeof FullAccessGrantLimitsSchema>;
+
 export const FullAccessGrantRecordSchema = z.object({
   id: z.string().uuid(),
-  capability: GuardedCapabilitySchema,
-  chainKey: EvmChainKeySchema.optional(),
-  grantedAt: z.string().datetime(),
+  sessionId: z.string().uuid(),
+  runtimeId: z.string().uuid(),
+  walletAddress: z.string().min(32).max(64),
+  walletScope: z.enum(["solana", "evm"]),
+  evmChainKey: EvmChainKeySchema.nullable().optional(),
+  capabilities: z.array(GuardedCapabilitySchema).min(1),
+  allowedSolanaMints: z.array(z.string().min(32).max(44)),
+  allowedEvmTokens: z.array(z.string().regex(/^0x[0-9a-fA-F]{40}$/u)),
+  limits: FullAccessGrantLimitsSchema,
+  actionsUsed: z.number().int().nonnegative(),
+  allocationUsedUsd: z.number().finite().nonnegative(),
+  status: z.enum(["ACTIVE", "PAUSED", "EXPIRED", "REVOKED", "EMERGENCY_STOPPED"]),
+  startsAt: z.string().datetime(),
   expiresAt: z.string().datetime(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  signingAllowed: z.literal(false),
+  broadcastAllowed: z.literal(false),
+  approvalBypassAllowed: z.literal(false),
+  executionAllowed: z.literal(false),
+  lifecycle: z.literal("guarded-planning"),
 }).strict();
 export type FullAccessGrantRecord = z.infer<typeof FullAccessGrantRecordSchema>;
+
 export const FullAccessGrantCreateRequestSchema = RequestBaseSchema.extend({
-  capability: GuardedCapabilitySchema,
-  chainKey: EvmChainKeySchema.optional(),
+  sessionId: z.string().uuid(),
+  runtimeId: z.string().uuid(),
+  capabilities: z.array(GuardedCapabilitySchema).min(1),
+  allowedSolanaMints: z.array(z.string().min(32).max(44)),
+  allowedEvmTokens: z.array(z.string().regex(/^0x[0-9a-fA-F]{40}$/u)),
+  limits: FullAccessGrantLimitsSchema,
+  expiresAt: z.string().datetime(),
   masterPassword: z.string().min(1).max(256),
+  confirmation: z.literal("GRANT GUARDED PLANNING ONLY"),
+  acknowledgedNoApprovalBypass: z.literal(true),
 }).strict();
 export type FullAccessGrantCreateRequest = z.infer<typeof FullAccessGrantCreateRequestSchema>;
 
 export const PumpLaunchManagedMetadataPublishRequestSchema = RequestBaseSchema.extend({
-  sessionId: z.string().uuid(),
-  draftId: z.string().uuid(),
+  sessionId: z.string().uuid().optional(),
+  draftId: z.string().uuid().optional(),
+  creatorWallet: z.string().min(32).max(64),
+  name: z.string().min(1).max(128),
+  symbol: z.string().min(1).max(10),
+  description: z.string().max(500),
+  websiteUrl: z.string().url().nullable().optional().or(z.literal("")).or(z.null()),
+  xUrl: z.string().url().nullable().optional().or(z.literal("")).or(z.null()),
+  telegramUrl: z.string().url().nullable().optional().or(z.literal("")).or(z.null()),
+  imageBase64: z.string().min(1),
+  imageContentType: z.enum(["image/jpeg", "image/png", "image/gif", "image/webp"]),
 }).strict();
 export const PumpLaunchManagedMetadataPublishResponseSchema = RequestBaseSchema.extend({
   metadataUri: z.string().url(),
-}).strict();
+  published: z.boolean().optional(),
+  imageCid: z.string().optional(),
+  metadataCid: z.string().optional(),
+  imageUri: z.string().optional(),
+  imageGatewayUrl: z.string().optional(),
+  metadataGatewayUrl: z.string().optional(),
+  metadataSha256: z.string().optional(),
+  executionAllowed: z.boolean().optional(),
+  message: z.string().optional(),
+}).passthrough();
 export type PumpLaunchManagedMetadataPublishRequest = z.infer<typeof PumpLaunchManagedMetadataPublishRequestSchema>;
 export type PumpLaunchManagedMetadataPublishResponse = z.infer<typeof PumpLaunchManagedMetadataPublishResponseSchema>;
+
+export const HyperliquidOrderContractSchema = z.object({
+  id: z.string().uuid().optional(),
+  sessionId: z.string().uuid().optional(),
+  asset: z.string().optional(),
+  isBuy: z.boolean().optional(),
+  szDecimals: z.number().int().nonnegative().optional(),
+  limitPx: z.string().optional(),
+  sz: z.string().optional(),
+  orderType: z.object({
+    limit: z.object({
+      tif: z.enum(["Gtc", "Ioc", "Alo"]).optional(),
+    }).passthrough().optional(),
+  }).passthrough().optional(),
+  reduceOnly: z.boolean().optional(),
+  cloid: z.string().nullable().optional(),
+  createdAt: z.string().optional(),
+}).passthrough();
+
+export const HyperliquidOrderProposalSchema = z.object({
+  id: z.string().uuid().optional(),
+  contractId: z.string().uuid().optional(),
+  action: z.string().optional(),
+  order: HyperliquidOrderContractSchema.optional(),
+  digest: z.string().optional(),
+  expiresAt: z.string().optional(),
+}).passthrough();
+
+export const HyperliquidOrderReceiptSchema = z.object({
+  id: z.string().uuid().optional(),
+  contractId: z.string().uuid().optional(),
+  orderHash: z.string().optional(),
+  status: z.string().optional(),
+  reconciledAt: z.string().optional(),
+}).passthrough();
+
+export type HyperliquidOrderContract = z.infer<typeof HyperliquidOrderContractSchema>;
+export type HyperliquidOrderProposal = z.infer<typeof HyperliquidOrderProposalSchema>;
+export type HyperliquidOrderReceipt = z.infer<typeof HyperliquidOrderReceiptSchema>;
+
+export const MissionRuntimeRecordSchema = z.object({
+  id: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  title: z.string().optional(),
+  status: z.string().optional(),
+  capabilities: z.array(z.string()).optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).passthrough();
+
+export const MissionRuntimeWakeSchema = z.object({
+  id: z.string().uuid(),
+  runtimeId: z.string().uuid(),
+  wakeIndex: z.number().int().nonnegative().optional(),
+  status: z.string().optional(),
+  createdAt: z.string().optional(),
+}).passthrough();
+
+export type MissionRuntimeRecord = z.infer<typeof MissionRuntimeRecordSchema>;
+export type MissionRuntimeWake = z.infer<typeof MissionRuntimeWakeSchema>;
+export type MissionRuntimeCheckpointOutcome = string;
+export type MissionRuntimeCreateRequest = Record<string, unknown>;

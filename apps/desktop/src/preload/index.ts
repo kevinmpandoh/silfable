@@ -7,6 +7,10 @@ import {
   AiProviderMutationResponseSchema,
   AiSaveProviderRequestSchema,
   AiSettingsResponseSchema,
+  AutomationListResponseSchema,
+  AutomationSetStatusRequestSchema,
+  AutomationSetStatusResponseSchema,
+  type AutomationSetStatusRequest,
   ClipboardWriteWalletAddressRequestSchema,
   ClipboardWriteWalletAddressResponseSchema,
   ClipboardWriteTransactionSignatureRequestSchema,
@@ -513,6 +517,12 @@ const api = {
   },
   async toggleBackgroundLoop(enabled: boolean) {
     return await ipcRenderer.invoke("runtime:toggleBackgroundLoop", enabled);
+  },
+  async listAutomationStrategies() {
+    return AutomationListResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.automationList));
+  },
+  async setAutomationStatus(request: AutomationSetStatusRequest) {
+    return AutomationSetStatusResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.automationSetStatus, AutomationSetStatusRequestSchema.parse(request)));
   }
 };
 

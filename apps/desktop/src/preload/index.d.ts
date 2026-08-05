@@ -197,6 +197,8 @@ declare global {
       upsertPosition(config: any): Promise<{ success: boolean }>;
       closePosition(id: string): Promise<{ success: boolean }>;
       toggleBackgroundLoop(enabled: boolean): Promise<{ success: boolean }>;
+      listAutomationStrategies(): Promise<{ schemaVersion: 1; strategies: any[]; proposals: any[] }>;
+      setAutomationStatus(request: { schemaVersion: 1; requestId: string; id: string; action: "PAUSE" | "RESUME" | "CANCEL" }): Promise<{ schemaVersion: 1; requestId: string; strategy: any }>;
     };
   }
 }

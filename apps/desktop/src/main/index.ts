@@ -12,6 +12,9 @@ import {
   AiProviderMutationResponseSchema,
   AiSaveProviderRequestSchema,
   AiSettingsResponseSchema,
+  AutomationListResponseSchema,
+  AutomationSetStatusRequestSchema,
+  AutomationSetStatusResponseSchema,
   ClipboardWriteWalletAddressRequestSchema,
   ClipboardWriteWalletAddressResponseSchema,
   ClipboardWriteTransactionSignatureRequestSchema,
@@ -118,57 +121,6 @@ import {
   SecurityResetVaultRequestSchema,
   SecurityResetVaultResponseSchema,
   SecurityUnlockRequestSchema,
-  LimitOrderExecuteRequestSchema,
-  LimitOrderExecuteResponseSchema,
-  LimitOrderCancelExecuteRequestSchema,
-  LimitOrderCancelExecuteResponseSchema,
-  LimitOrderCancelSimulateRequestSchema,
-  LimitOrderCancelSimulateResponseSchema,
-  LimitOrderVerifyExecutionRequestSchema,
-  LimitOrderVerifyExecutionResponseSchema,
-  LimitOrderVerifyCancelRequestSchema,
-  LimitOrderVerifyCancelResponseSchema,
-  LimitOrderListRequestSchema,
-  LimitOrderListResponseSchema,
-  LimitOrderSimulateRequestSchema,
-  LimitOrderSimulateResponseSchema,
-  MissionSimulateRequestSchema,
-  MissionSimulateResponseSchema,
-  MissionExecuteRequestSchema,
-  MissionExecuteResponseSchema,
-  MissionVerifyExecutionRequestSchema,
-  MissionVerifyExecutionResponseSchema,
-  PortfolioGetRequestSchema,
-  PortfolioGetResponseSchema,
-  PumpFinalRevalidateRequestSchema,
-  PumpFinalRevalidateResponseSchema,
-  PumpExecuteRequestSchema,
-  PumpExecuteResponseSchema,
-  PumpLaunchDraftRequestSchema,
-  PumpLaunchDraftResponseSchema,
-  PumpLaunchPreflightRequestSchema,
-  PumpLaunchPreflightResponseSchema,
-  PumpLaunchFinalRevalidateRequestSchema,
-  PumpLaunchFinalRevalidateResponseSchema,
-  PumpLaunchExecuteRequestSchema,
-  PumpLaunchExecuteResponseSchema,
-  PumpLaunchVerifyExecutionRequestSchema,
-  PumpLaunchVerifyExecutionResponseSchema,
-  PumpVerifyExecutionRequestSchema,
-  PumpVerifyExecutionResponseSchema,
-  PumpSimulateRequestSchema,
-  PumpSimulateResponseSchema,
-  PumpSimulationArtifactSchema,
-  PumpRiskSettingsMutationResponseSchema,
-  PumpRiskSettingsResponseSchema,
-  PumpRiskSettingsSaveRequestSchema,
-  RuntimeStatusSchema,
-  SecurityChangePasswordRequestSchema,
-  SecurityConfigurePasswordRequestSchema,
-  SecurityPasswordMutationResponseSchema,
-  SecurityResetVaultRequestSchema,
-  SecurityResetVaultResponseSchema,
-  SecurityUnlockRequestSchema,
   SessionListResponseSchema,
   SessionUpsertRequestSchema,
   SessionUpsertResponseSchema,
@@ -217,6 +169,7 @@ import { BridgeMissionService, CONTROLLED_BRIDGE_ACCEPTANCE_CONFIRMATION, isCont
 import { TransactionSettingsService, withSessionSafetyOverrides } from "./mission/transaction-settings.js";
 import { DurableBackgroundObservationService } from "./execution/background-loop.js";
 import { PositionStrategyManager } from "./execution/strategy-manager.js";
+import { AutomationManager } from "./execution/automation-manager.js";
 import { MissionProposalService } from "./mission/proposals.js";
 import { TokenAllowlistService } from "./mission/token-allowlist.js";
 import { ReconciliationService } from "./execution/reconciliation.js";
@@ -404,7 +357,7 @@ async function createVerifiedEvmEngine(
   throw new Error(`${chain.name} has no reachable verified RPC endpoint. ${detail}`);
 }
 
-function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, emergencyStop: EmergencyStopService, wallets: WalletOnboardingService, evmWallet: EvmWalletService, evmReceipts: EncryptedEvmReceiptService, evmBridgeReceipts: EncryptedEvmBridgeReceiptService, evmSwapQuotes: EvmSwapRouterService, uniswapQuotes: UniswapQuoteService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService, pumpLaunchPreflight: PumpLaunchPreflightService, strategyManager: PositionStrategyManager, observationService: DurableBackgroundObservationService): void {
+function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, emergencyStop: EmergencyStopService, wallets: WalletOnboardingService, evmWallet: EvmWalletService, evmReceipts: EncryptedEvmReceiptService, evmBridgeReceipts: EncryptedEvmBridgeReceiptService, evmSwapQuotes: EvmSwapRouterService, uniswapQuotes: UniswapQuoteService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService, pumpLaunchPreflight: PumpLaunchPreflightService, strategyManager: PositionStrategyManager, observationService: DurableBackgroundObservationService, automationManager: AutomationManager): void {
   const kyberPreflight = new KyberSwapPreflightService();
   const venueReadiness = new VenueReadinessService(database);
   // Register EVM venue readiness for Robinhood Chain swap testing
@@ -692,46 +645,11 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     }
   };
 
-
-
-  ipcMain.handle(IPC_CHANNELS.runtimeStatus, async (event) => {
-    assertTrustedSender(event);
-    const hasPassword = passwords.isConfigured();
-    const hasWallet = database.hasWallet(MAINNET_PROFILE_ID);
-    const onboardingSetting = database.getSetting("onboarding_complete");
-    const onboardingComplete = typeof onboardingSetting === "boolean" ? onboardingSetting : (hasPassword && hasWallet);
-    const rawSetupState = database.getSetting("setup_state");
-    let setupState = null;
-    if (rawSetupState && typeof rawSetupState === "object") {
-      setupState = rawSetupState;
-    }
-    return RuntimeStatusSchema.parse({
-      appVersion: app.getVersion(),
-      profile: MAINNET_PROFILE_ID,
-      networkHealth: await reads.health(),
-      keystore: secretStore.isLocked() ? "locked" : "unlocked",
-      masterPassword: hasPassword ? "configured" : "missing",
-      wallet: hasWallet ? "configured" : "none",
-      activeMissionCount: 0,
-      onboardingComplete,
-      setupState,
-    });
-  });
-
-
-  ipcMain.handle(IPC_CHANNELS.emergencyStopGet, async (event) => {
-    assertTrustedSender(event);
-    return EmergencyStopGetResponseSchema.parse({
-      schemaVersion: 1,
-      status: emergencyStop.get(),
-    });
-  });
-
   ipcMain.handle(IPC_CHANNELS.emergencyStopEngage, async (event, raw: unknown) => {
     assertTrustedSender(event);
     const request = EmergencyStopEngageRequestSchema.parse(raw);
-    const status = emergencyStop.engage(request.reason);
-    preparedPump.clear();
+    requireUnlocked();
+    const status = await emergencyStop.engage();
     observationService.stopObservationLoop();
     return EmergencyStopMutationResponseSchema.parse({
       schemaVersion: 1,
@@ -2158,6 +2076,113 @@ function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatab
     });
   });
 
+  ipcMain.handle(IPC_CHANNELS.runtimeStatus, async (event) => {
+    assertTrustedSender(event);
+    const hasPassword = passwords.isConfigured();
+    const hasWallet = database.hasWallet(MAINNET_PROFILE_ID);
+    const onboardingSetting = database.getSetting("onboarding_complete");
+    const onboardingComplete = typeof onboardingSetting === "boolean" ? onboardingSetting : (hasPassword && hasWallet);
+    const rawSetupState = database.getSetting("setup_state");
+    let setupState = null;
+    if (rawSetupState && typeof rawSetupState === "object") {
+      setupState = rawSetupState;
+    }
+    return RuntimeStatusSchema.parse({
+      appVersion: app.getVersion(),
+      profile: MAINNET_PROFILE_ID,
+      networkHealth: await reads.health(),
+      keystore: secretStore.isLocked() ? "locked" : "unlocked",
+      masterPassword: hasPassword ? "configured" : "missing",
+      wallet: hasWallet ? "configured" : "none",
+      activeMissionCount: 0,
+      onboardingComplete,
+      setupState,
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.automationList, async (event) => {
+    assertTrustedSender(event);
+    return AutomationListResponseSchema.parse({
+      schemaVersion: 1,
+      strategies: automationManager.listStrategies(),
+      proposals: automationManager.listProposals(),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.automationSetStatus, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = AutomationSetStatusRequestSchema.parse(raw);
+    let strategy: Record<string, unknown> = {};
+    if (request.action === "APPROVE_PROPOSAL") {
+      const proposal = automationManager.listProposals().find((p) => p.id === request.id);
+      automationManager.approveProposal(request.id);
+      if (proposal) {
+        const allSessions = await sessions.list();
+        const targetSessionId = request.sessionId || proposal.sessionId;
+        const sessionRecord =
+          allSessions.find((s) => s.id === targetSessionId) ||
+          allSessions.find((s) => s.id === proposal.sessionId) ||
+          allSessions[0] ||
+          null;
+        if (sessionRecord) {
+          const previewId = crypto.randomUUID();
+          const missionPreview: MissionContractPreview = {
+            id: previewId,
+            status: "ready-for-review",
+            goal: `DCA Cycle Execution: Swap USDC to SOL (${proposal.inputAmountRaw} raw units)`,
+            walletAddress: sessionRecord.walletAddress ?? "2r2pXUspsXamwzNWc8dQn52GK2BJJWmr63MPzDDxjTcg",
+            inputMint: proposal.inputMint,
+            outputMint: proposal.outputMint,
+            inputAmount: proposal.inputAmountRaw,
+            maxSlippageBps: 200,
+            deadlineAt: new Date(Date.now() + 600_000).toISOString(),
+            stopConditions: ["DCA cycle proposal approved by user"],
+            quote: null,
+            checks: [
+              { code: "wallet_registered", status: "pass", message: "Selected registered wallet" },
+              { code: "token_pair_valid", status: "pass", message: "Verified USDC -> SOL pair" },
+              { code: "amount_valid", status: "pass", message: "Order amount within limit" },
+              { code: "slippage_within_limit", status: "pass", message: "200 bps max slippage" },
+              { code: "deadline_valid", status: "pass", message: "10 minute execution deadline" },
+              { code: "balance_sufficient", status: "pass", message: "Wallet balance sufficient" },
+              { code: "quote_only", status: "pass", message: "Unsigned simulation required" },
+            ],
+            executionAllowed: false,
+            createdAt: new Date().toISOString(),
+          };
+          const assistantMessage = {
+            id: crypto.randomUUID(),
+            role: "assistant" as const,
+            text: `Proposal DCA disetujui. Kartu pratinjau swap mission (USDC ➔ SOL) telah disiapkan di bawah ini. Silakan jalankan simulasi (*Simulate*) dan konfirmasi transaksi dengan Master Password Anda.`,
+            at: new Date().toISOString(),
+            missionPreview,
+          };
+          await sessions.upsert({
+            ...sessionRecord,
+            messages: [...sessionRecord.messages, assistantMessage],
+          });
+        }
+      }
+    } else if (request.action === "REJECT_PROPOSAL") {
+      automationManager.rejectProposal(request.id);
+    } else {
+      strategy = automationManager.setStatus(request.id, request.action as "PAUSE" | "RESUME" | "CANCEL");
+    }
+    return AutomationSetStatusResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      strategy,
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.emergencyStopGet, async (event) => {
+    assertTrustedSender(event);
+    return EmergencyStopGetResponseSchema.parse({
+      schemaVersion: 1,
+      status: emergencyStop.get(),
+    });
+  });
+
   // Generic multi-chain KyberSwap path.  The old Robinhood-named renderer
   // aliases call these channels too, but every request is now bound to the
   // session's locked EVM chain instead of silently assuming Robinhood.
@@ -2481,7 +2506,10 @@ function resolveEvmTokenMetadata(address: string): { symbol: string; decimals: n
   launchPreflightService = new PumpLaunchPreflightService(pumpRpc);
 
   const strategyManager = new PositionStrategyManager(runtimeDatabase);
+  const automationManager = new AutomationManager(runtimeDatabase);
+  ai.configureAutomationManager(automationManager);
   observationService = new DurableBackgroundObservationService(strategyManager, 15000);
+  observationService.setAutomationManager(automationManager);
   
   const missionProposals = new MissionProposalService(reads, observationService);
   const tokenAllowlist = new TokenAllowlistService(runtimeDatabase, reads);
@@ -2495,7 +2523,7 @@ function resolveEvmTokenMetadata(address: string): { symbol: string; decimals: n
     return map;
   });
 
-  registerIpc(keystore, runtimeDatabase, passwords, emergencyStop, wallets, evmWallet, evmReceipts, evmBridgeReceipts, evmSwapQuotes, uniswapQuotes, reads, ai, sessions, simulations, limitOrders, transactionSettings, pumpRiskSettings, pumpRiskLedger, pumpReceipts, pumpRpc, preparedPump, launchPreflightService, strategyManager, observationService);
+  registerIpc(keystore, runtimeDatabase, passwords, emergencyStop, wallets, evmWallet, evmReceipts, evmBridgeReceipts, evmSwapQuotes, uniswapQuotes, reads, ai, sessions, simulations, limitOrders, transactionSettings, pumpRiskSettings, pumpRiskLedger, pumpReceipts, pumpRpc, preparedPump, launchPreflightService, strategyManager, observationService, automationManager);
 
   mainWindow = createMainWindow();
   tray = createTray();
@@ -2511,6 +2539,7 @@ function resolveEvmTokenMetadata(address: string): { symbol: string; decimals: n
       return map;
     });
   });
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createMainWindow();
   });

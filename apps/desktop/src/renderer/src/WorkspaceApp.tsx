@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowUp,
+  Bot,
   Brain,
   CirclePlus,
   Settings,
@@ -10,6 +11,7 @@ import {
 } from "lucide-react";
 import logoUrl from "../../assets/logo.png";
 import { Button, Modal } from "./components/ui";
+import { AutomationPanel } from "./components/ui/AutomationPanel";
 
 import type {
   BridgePreflightEvidence,
@@ -2128,7 +2130,7 @@ function MainWorkspace({
   const [draft, setDraft] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState("");
-  const [nav, setNav] = useState<"sessions" | "missions">(
+  const [nav, setNav] = useState<"sessions" | "missions" | "automation">(
     "sessions",
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -3509,6 +3511,14 @@ function MainWorkspace({
           </Button>
           <Button
             variant="ghost"
+            icon={<Bot className="size-4" />}
+            className={nav === "automation" ? "active" : ""}
+            onClick={() => setNav("automation")}
+          >
+            Automation
+          </Button>
+          <Button
+            variant="ghost"
             icon={<Settings className="size-4" />}
             onClick={() => {
               saveSetup({ ...setup, step: 6 });
@@ -3523,7 +3533,9 @@ function MainWorkspace({
         </div>
       </aside>
      <section className="centerStage">
-        {nav === "missions" ? (
+        {nav === "automation" ? (
+          <AutomationPanel sessionId={active?.id} onReloadSessions={() => refreshEncryptedSessions(active?.id)} />
+        ) : nav === "missions" ? (
           <MissionsView
             items={missionPreviews}
             onOpen={(sessionId) => {
@@ -3730,6 +3742,7 @@ function MainWorkspace({
         onScanPump={active?.workspace === "pump" && active.pumpConfig?.scope === "discovery"
           ? () => void sendMessage(active, `Scan up to 10 recent finalized transactions touching the official Pump program and return at most 5 independently verified candidates using a reference buy size of ${active.pumpConfig!.analysisBuyLamports ?? "1000000"} lamports. Do not rank candidates that fail deterministic research eligibility, and do not prepare or execute a transaction.`)
           : undefined}
+        onReloadSessions={() => refreshEncryptedSessions(active?.id)}
       />
      {modalOpen && (
         <SessionModal
@@ -7867,6 +7880,7 @@ function RightRail({
   refreshToken,
   onAnalyzePump,
   onScanPump,
+  onReloadSessions,
 }: {
   session: SessionItem | null;
   runtime: RuntimeStatus | null;
@@ -7878,6 +7892,7 @@ function RightRail({
   refreshToken: number;
   onAnalyzePump?: ((mint: string) => void) | undefined;
   onScanPump?: (() => void) | undefined;
+  onReloadSessions?: (() => Promise<void>) | undefined;
 }) {
   const isEvmSession = session?.walletScope === "evm";
   const visibleWallet =
@@ -7891,9 +7906,53 @@ function RightRail({
   >("idle");
   const [activePositions, setActivePositions] = useState<any[]>([]);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
-
   const [tpPercent, setTpPercent] = useState("");
   const [slPercent, setSlPercent] = useState("");
+
+  const [automationStrategies, setAutomationStrategies] = useState<any[]>([]);
+  const [automationProposals, setAutomationProposals] = useState<any[]>([]);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  const fetchAutomation = useCallback(async () => {
+    try {
+      if ((window as any).silfable?.listAutomationStrategies) {
+        const res = await (window as any).silfable.listAutomationStrategies();
+        setAutomationStrategies(res.strategies || []);
+        setAutomationProposals(res.proposals || []);
+      }
+    } catch (err) {
+      console.error("Failed to load automation in RightRail:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAutomation();
+    const interval = setInterval(fetchAutomation, 4000);
+    return () => clearInterval(interval);
+  }, [fetchAutomation]);
+
+  const handleApproveProposal = async (proposalId: string) => {
+    try {
+      setActionLoadingId(proposalId);
+      if ((window as any).silfable?.setAutomationStatus) {
+        await (window as any).silfable.setAutomationStatus({
+          schemaVersion: 1,
+          requestId: crypto.randomUUID(),
+          id: proposalId,
+          sessionId: session?.id,
+          action: "APPROVE_PROPOSAL",
+        });
+        await fetchAutomation();
+        if (onReloadSessions) {
+          await onReloadSessions();
+        }
+      }
+    } catch (err) {
+      console.error("Failed to approve proposal:", err);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
   
   const pumpConfig = session?.workspace === "pump" ? session.pumpConfig : undefined;
   const activePosition = activePositions.find(p => p.mintAddress === pumpConfig?.tokenMint);
@@ -8348,6 +8407,74 @@ function RightRail({
           </div>
         </dl>
       </RailSection>
+      {automationStrategies.filter((s) => s.status !== "CANCELLED" && s.status !== "EXPIRED").length > 0 && (
+        <RailSection title="Active Automation">
+          <div className="activeAutomationsRail space-y-2 text-xs">
+            {automationStrategies
+              .filter((s) => s.status !== "CANCELLED" && s.status !== "EXPIRED")
+              .map((strat) => {
+                const matchingProp = automationProposals.find(
+                  (p) => p.strategyId === strat.id && p.status === "AWAITING_APPROVAL",
+                );
+                const nextWake = strat.nextWakeAt ? Date.parse(strat.nextWakeAt) - Date.now() : null;
+                const countdown =
+                  nextWake && nextWake > 0
+                    ? `${Math.floor(nextWake / 60000)}m ${Math.floor((nextWake % 60000) / 1000)}s`
+                    : "Evaluating now...";
+
+                const formatOrderAmount = (rawAmount?: string, inputMint?: string) => {
+                  if (!rawAmount) return "-";
+                  const num = Number(rawAmount);
+                  if (isNaN(num)) return rawAmount;
+                  if (inputMint === "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" || (!inputMint && num >= 1000)) {
+                    const formatted = (num / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+                    return `${formatted} USDC`;
+                  }
+                  return `${num.toLocaleString()} raw units`;
+                };
+
+                const KNOWN: Record<string, string> = {
+                  "So11111111111111111111111111111111111111112": "SOL",
+                  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
+                  "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN": "JUP",
+                };
+
+                const inSym = KNOWN[strat.inputMint] || shorten(strat.inputMint);
+                const outSym = KNOWN[strat.outputMint] || shorten(strat.outputMint);
+
+                return (
+                  <div key={strat.id} className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1.5">
+                    <div className="flex items-center justify-between font-bold text-cyan-300">
+                      <span>{strat.kind} · {inSym} ➔ {outSym}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${strat.status === "ACTIVE" ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>
+                        {strat.status}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[11px] text-slate-400">
+                      <span>Progress: {strat.completedExecutions ?? 0}/{strat.maximumExecutions ?? "-"}</span>
+                      <span className="font-mono text-cyan-300 font-medium">{formatOrderAmount(strat.orderAmountRaw, strat.inputMint)}</span>
+                    </div>
+                    {strat.status === "ACTIVE" && strat.nextWakeAt && (
+                      <div className="flex justify-between text-[11px] text-cyan-400 font-mono">
+                        <span>⏱ Next run:</span>
+                        <span>{countdown}</span>
+                      </div>
+                    )}
+                    {matchingProp && (
+                      <button
+                        className="w-full mt-2 py-1.5 px-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors shadow-sm"
+                        disabled={actionLoadingId === matchingProp.id}
+                        onClick={() => handleApproveProposal(matchingProp.id)}
+                      >
+                        Approve Swap ({formatOrderAmount(matchingProp.inputAmountRaw, matchingProp.inputMint)})
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        </RailSection>
+      )}
       {session && (
         <RailSection title="Session">
           <dl className="sessionFacts">

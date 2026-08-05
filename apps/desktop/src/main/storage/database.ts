@@ -115,6 +115,23 @@ export class RuntimeDatabase {
         updated_at TEXT NOT NULL
       ) STRICT;
 
+      CREATE TABLE IF NOT EXISTS portfolio_history_records (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        ciphertext TEXT NOT NULL,
+        nonce TEXT NOT NULL,
+        auth_tag TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE IF NOT EXISTS mission_runtime_records (
+        id TEXT PRIMARY KEY,
+        ciphertext TEXT NOT NULL,
+        nonce TEXT NOT NULL,
+        auth_tag TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
       CREATE TABLE IF NOT EXISTS pump_blocked_creators (
         creator_address TEXT PRIMARY KEY,
         blocked_at TEXT NOT NULL
@@ -157,6 +174,28 @@ export class RuntimeDatabase {
         status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'COMPLETED', 'CANCELLED')),
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE IF NOT EXISTS automation_strategies (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('DCA', 'EXIT')),
+        status TEXT NOT NULL,
+        config_json TEXT NOT NULL,
+        next_wake_at TEXT,
+        last_evaluated_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE IF NOT EXISTS automation_proposals (
+        id TEXT PRIMARY KEY,
+        strategy_id TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        proposal_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (strategy_id) REFERENCES automation_strategies(id) ON DELETE CASCADE
       ) STRICT;
     `);
     database.enableDefensive(true);
@@ -568,4 +607,186 @@ export class RuntimeDatabase {
       updatedAt: r.updated_at,
     }));
   }
+
+  // Automation Strategies & Proposals
+  upsertAutomationStrategy(strategy: {
+    id: string;
+    kind: "DCA" | "EXIT";
+    status: string;
+    config: unknown;
+    nextWakeAt: string | null;
+    lastEvaluatedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }): void {
+    this.#database.prepare(`
+      INSERT INTO automation_strategies (
+        id, kind, status, config_json, next_wake_at, last_evaluated_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        status = excluded.status,
+        config_json = excluded.config_json,
+        next_wake_at = excluded.next_wake_at,
+        last_evaluated_at = excluded.last_evaluated_at,
+        updated_at = excluded.updated_at
+    `).run(
+      strategy.id,
+      strategy.kind,
+      strategy.status,
+      JSON.stringify(strategy.config),
+      strategy.nextWakeAt,
+      strategy.lastEvaluatedAt,
+      strategy.createdAt,
+      strategy.updatedAt,
+    );
+  }
+
+  listAutomationStrategies(): Array<{
+    id: string;
+    kind: "DCA" | "EXIT";
+    status: string;
+    config: unknown;
+    nextWakeAt: string | null;
+    lastEvaluatedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    const rows = this.#database.prepare("SELECT * FROM automation_strategies ORDER BY created_at DESC").all() as Array<{
+      id: string;
+      kind: "DCA" | "EXIT";
+      status: string;
+      config_json: string;
+      next_wake_at: string | null;
+      last_evaluated_at: string | null;
+      created_at: string;
+      updated_at: string;
+    }>;
+    return rows.map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      status: r.status,
+      config: JSON.parse(r.config_json),
+      nextWakeAt: r.next_wake_at,
+      lastEvaluatedAt: r.last_evaluated_at,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }));
+  }
+
+  upsertAutomationProposal(item: {
+    id: string;
+    strategyId: string;
+    idempotencyKey: string;
+    proposal: unknown;
+    status: string;
+    createdAt: string;
+    updatedAt: string;
+  }): boolean {
+    const result = this.#database.prepare(`
+      INSERT INTO automation_proposals (
+        id, strategy_id, idempotency_key, proposal_json, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(idempotency_key) DO NOTHING
+    `).run(
+      item.id,
+      item.strategyId,
+      item.idempotencyKey,
+      JSON.stringify(item.proposal),
+      item.status,
+      item.createdAt,
+      item.updatedAt,
+    );
+    return result.changes > 0;
+  }
+
+  listAutomationProposals(): Array<{
+    id: string;
+    strategyId: string;
+    idempotencyKey: string;
+    proposal: unknown;
+    status: string;
+    createdAt: string;
+    updatedAt: string;
+  }> {
+    const rows = this.#database.prepare("SELECT * FROM automation_proposals ORDER BY created_at DESC").all() as Array<{
+      id: string;
+      strategy_id: string;
+      idempotency_key: string;
+      proposal_json: string;
+      status: string;
+      created_at: string;
+      updated_at: string;
+    }>;
+    return rows.map((r) => ({
+      id: r.id,
+      strategyId: r.strategy_id,
+      idempotencyKey: r.idempotency_key,
+      proposal: JSON.parse(r.proposal_json),
+      status: r.status,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }));
+  }
+
+  setAutomationProposalStatus(id: string, status: string): void {
+    this.#database.prepare("UPDATE automation_proposals SET status = ?, updated_at = ? WHERE id = ?").run(
+      status,
+      new Date().toISOString(),
+      id,
+    );
+  }
+
+  insertPortfolioHistoryRecord(
+    sessionId: string,
+    record: { id: string; ciphertext: string; nonce: string; tag: string; updatedAt: string }
+  ): void {
+    const statement = this.#database.prepare(`
+      INSERT INTO portfolio_history_records (id, session_id, ciphertext, nonce, auth_tag, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        session_id = excluded.session_id,
+        ciphertext = excluded.ciphertext,
+        nonce = excluded.nonce,
+        auth_tag = excluded.auth_tag,
+        updated_at = excluded.updated_at
+    `);
+    statement.run(record.id, sessionId, record.ciphertext, record.nonce, record.tag, record.updatedAt);
+  }
+
+  listPortfolioHistoryRecords(
+    sessionId: string,
+    limit: number = 96
+  ): Array<{ id: string; ciphertext: string; nonce: string; tag: string; updatedAt: string }> {
+    const statement = this.#database.prepare(`
+      SELECT id, ciphertext, nonce, auth_tag as tag, updated_at as updatedAt
+      FROM portfolio_history_records
+      WHERE session_id = ?
+      ORDER BY updated_at ASC
+      LIMIT ?
+    `);
+    return statement.all(sessionId, limit) as Array<{ id: string; ciphertext: string; nonce: string; tag: string; updatedAt: string }>;
+  }
+
+  upsertMissionRuntimeRecord(record: { id: string; ciphertext: string; nonce: string; tag: string; updatedAt: string }): void {
+    const statement = this.#database.prepare(`
+      INSERT INTO mission_runtime_records (id, ciphertext, nonce, auth_tag, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        ciphertext = excluded.ciphertext,
+        nonce = excluded.nonce,
+        auth_tag = excluded.auth_tag,
+        updated_at = excluded.updated_at
+    `);
+    statement.run(record.id, record.ciphertext, record.nonce, record.tag, record.updatedAt);
+  }
+
+  listMissionRuntimeRecords(): Array<{ id: string; ciphertext: string; nonce: string; tag: string; updatedAt: string }> {
+    const statement = this.#database.prepare(`
+      SELECT id, ciphertext, nonce, auth_tag as tag, updated_at as updatedAt
+      FROM mission_runtime_records
+      ORDER BY updated_at ASC
+    `);
+    return statement.all() as Array<{ id: string; ciphertext: string; nonce: string; tag: string; updatedAt: string }>;
+  }
 }
+
