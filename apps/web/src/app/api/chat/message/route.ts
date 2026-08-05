@@ -67,15 +67,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Session not found." }, { status: 404 });
     }
 
-    const created = await cloudDb.chatMessage.create({
-      data: {
-        sessionId: message.sessionId,
-        role: message.role,
-        content: message.content,
-        proposalJson: message.proposal ? JSON.stringify(message.proposal) : null,
-        usageJson: message.usage ? JSON.stringify(message.usage) : null,
-      },
-    });
+    let saved;
+    if (isValidObjectId(message.id)) {
+      const existing = await cloudDb.chatMessage.findFirst({
+        where: { id: message.id, sessionId: message.sessionId },
+      });
+      if (existing) {
+        saved = await cloudDb.chatMessage.update({
+          where: { id: existing.id },
+          data: {
+            content: message.content,
+            proposalJson: message.proposal ? JSON.stringify(message.proposal) : null,
+            usageJson: message.usage ? JSON.stringify(message.usage) : null,
+          },
+        });
+      }
+    }
+
+    if (!saved) {
+      saved = await cloudDb.chatMessage.create({
+        data: {
+          sessionId: message.sessionId,
+          role: message.role,
+          content: message.content,
+          proposalJson: message.proposal ? JSON.stringify(message.proposal) : null,
+          usageJson: message.usage ? JSON.stringify(message.usage) : null,
+        },
+      });
+    }
 
     // Touch parent session's updatedAt timestamp
     await cloudDb.chatSession.update({
@@ -86,13 +105,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       message: {
-        id: created.id,
-        sessionId: created.sessionId,
-        role: created.role,
-        content: created.content,
-        proposal: created.proposalJson ? JSON.parse(created.proposalJson) : undefined,
-        usage: created.usageJson ? JSON.parse(created.usageJson) : undefined,
-        createdAt: created.createdAt.getTime(),
+        id: saved.id,
+        sessionId: saved.sessionId,
+        role: saved.role,
+        content: saved.content,
+        proposal: saved.proposalJson ? JSON.parse(saved.proposalJson) : undefined,
+        usage: saved.usageJson ? JSON.parse(saved.usageJson) : undefined,
+        createdAt: saved.createdAt.getTime(),
       },
     });
   } catch (error) {

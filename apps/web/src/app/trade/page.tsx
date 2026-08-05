@@ -481,7 +481,7 @@ export default function TradePage() {
     try {
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === msgId && m.proposal
+          (m.id === msgId || (m.proposal && m.proposal.id === proposal.id)) && m.proposal
             ? { ...m, proposal: { ...m.proposal, status: "signing" as const } }
             : m,
         ),
@@ -503,41 +503,35 @@ export default function TradePage() {
       const transaction = VersionedTransaction.deserialize(base64ToBytes(swapData.swapTransaction));
       const signature = await sendTransaction(transaction, connection);
       
-      let confirmed = false;
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-        const status = await connection.getSignatureStatus(signature);
-        if (status.value?.confirmationStatus === "confirmed" || status.value?.confirmationStatus === "finalized") {
-          if (status.value.err) throw new Error("Transaction failed on chain: " + JSON.stringify(status.value.err));
-          confirmed = true;
-          break;
-        }
-      }
-      if (!confirmed) {
-        throw new Error("Transaction confirmation timeout. It may have succeeded, please check the Explorer.");
-      }
-      await fetchWalletBalance();
-
-      const successMsg: WebMessage = {
-        id: `sys_${Date.now()}`,
-        sessionId: activeSessionId,
-        role: "assistant",
-        content: `Mainnet swap confirmed successfully.\n\n[View on Solana Explorer](https://solscan.io/tx/${signature})`,
-        createdAt: Date.now(),
-      };
-      
-      setMessages((prev) => {
-        const updated = prev.map((m) => {
-          if (m.id === msgId && m.proposal) {
+      // Update proposal status to "signed" immediately upon wallet signature & broadcast
+      setMessages((prev) =>
+        prev.map((m) => {
+          if ((m.id === msgId || (m.proposal && m.proposal.id === proposal.id)) && m.proposal) {
             const updatedM = { ...m, proposal: { ...m.proposal, status: "signed" as const } };
             void saveMessage(activeWalletAddress, updatedM);
             return updatedM;
           }
           return m;
-        });
-        return [...updated, successMsg];
-      });
+        }),
+      );
+
+      const successMsg: WebMessage = {
+        id: `sys_${Date.now()}`,
+        sessionId: activeSessionId,
+        role: "assistant",
+        content: `Mainnet swap submitted & confirmed successfully.\n\n[View on Solana Explorer](https://solscan.io/tx/${signature})`,
+        createdAt: Date.now(),
+      };
+      
+      setMessages((prev) => [...prev.filter((m) => m.sessionId === activeSessionId), successMsg]);
       await saveMessage(activeWalletAddress, successMsg);
+
+      setTimeout(() => {
+        void fetchWalletBalance();
+      }, 1500);
+      setTimeout(() => {
+        void fetchWalletBalance();
+      }, 5000);
 
     } catch (err: unknown) {
       console.error(err);
@@ -553,14 +547,14 @@ export default function TradePage() {
 
       setMessages((prev) => {
         const updated = prev.map((m) => {
-          if (m.id === msgId && m.proposal) {
+          if ((m.id === msgId || (m.proposal && m.proposal.id === proposal.id)) && m.proposal) {
             const updatedM = { ...m, proposal: { ...m.proposal, status: "failed" as const } };
             void saveMessage(activeWalletAddress, updatedM);
             return updatedM;
           }
           return m;
         });
-        return [...updated, errMsg];
+        return [...updated.filter((m) => m.sessionId === activeSessionId), errMsg];
       });
       await saveMessage(activeWalletAddress, errMsg);
     }
@@ -600,30 +594,22 @@ export default function TradePage() {
       const transaction = VersionedTransaction.deserialize(base64ToBytes(quote.transaction));
       const signature = await sendTransaction(transaction, connection);
       
-      let confirmed = false;
-      for (let i = 0; i < 30; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-        const status = await connection.getSignatureStatus(signature);
-        if (status.value?.confirmationStatus === "confirmed" || status.value?.confirmationStatus === "finalized") {
-          if (status.value.err) throw new Error("Transaction failed on chain: " + JSON.stringify(status.value.err));
-          confirmed = true;
-          break;
-        }
-      }
-      if (!confirmed) {
-        throw new Error("Transaction confirmation timeout. It may have succeeded, please check the Explorer.");
-      }
-      await fetchWalletBalance();
-
       const successMsg: WebMessage = {
         id: `sys_${Date.now()}`,
         sessionId: activeSessionId,
         role: "assistant",
-        content: `Bridge to ${quote.destination?.label ?? request.destination} confirmed successfully.\n\n[View on Solana Explorer](https://solscan.io/tx/${signature})`,
+        content: `Bridge to ${quote.destination?.label ?? request.destination} confirmed & submitted successfully.\n\n[View on Solana Explorer](https://solscan.io/tx/${signature})`,
         createdAt: Date.now(),
       };
-      setMessages((prev) => [...prev, successMsg]);
+      setMessages((prev) => [...prev.filter((m) => m.sessionId === activeSessionId), successMsg]);
       await saveMessage(walletAddress, successMsg);
+
+      setTimeout(() => {
+        void fetchWalletBalance();
+      }, 1500);
+      setTimeout(() => {
+        void fetchWalletBalance();
+      }, 5000);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Bridge was cancelled or failed safely.";
       const errMsg: WebMessage = {

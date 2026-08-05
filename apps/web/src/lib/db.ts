@@ -115,15 +115,19 @@ export async function getSessionMessages(walletAddress: string, sessionId: strin
   }
 }
 
-export async function saveMessage(walletAddress: string, msg: WebMessage): Promise<void> {
+export async function saveMessage(walletAddress: string, msg: WebMessage): Promise<WebMessage | null> {
   try {
-    if (!msg || !msg.sessionId) return;
-    await fetch("/api/chat/message", {
+    if (!msg || !msg.sessionId) return null;
+    const res = await fetch("/api/chat/message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: msg }),
     });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.message || null;
   } catch (err) {
     console.error("Backend saveMessage error:", err);
+    return null;
   }
 }
