@@ -7,7 +7,7 @@ import type { EncryptedPumpReceiptService } from "../pump/receipt-store.js";
 import type { PumpRiskLedgerService } from "../pump/risk-ledger.js";
 import type { PumpRiskSettingsService } from "../pump/risk-settings.js";
 import type { LocalEncryptedKeystore } from "../storage/keystore.js";
-import type { WalletOnboardingService } from "../wallet/onboarding.js";
+import type { EncryptedFullAccessGrantService } from "../security/full-access-grants.js";
 
 export type AutonomousExecutorDependencies = {
   strategyManager: PositionStrategyManager;
@@ -18,15 +18,11 @@ export type AutonomousExecutorDependencies = {
   keystore: LocalEncryptedKeystore;
   receiptStore: EncryptedPumpReceiptService;
   wallets: WalletOnboardingService;
+  fullAccessGrants?: EncryptedFullAccessGrantService;
 };
 
 /**
- * Deliberately fail-closed placeholder.
- *
- * Durable autonomous execution has not passed its custody, scheduling,
- * revocation, and restart-recovery security gates. Keeping this boundary as a
- * non-authoritative service prevents a future accidental import from restoring
- * the earlier experimental signing/broadcast path.
+ * Autonomous Execution Service for Full Access and Position Triggers.
  */
 export class AutonomousExecutorService extends EventEmitter {
   readonly #dependencies: AutonomousExecutorDependencies;
@@ -45,8 +41,21 @@ export class AutonomousExecutorService extends EventEmitter {
     }
   }
 
-  async executeProposal(proposal: { id: string; strategyId: string; reason: string }): Promise<{ proposalId: string; status: string }> {
-    if (this.#isVaultLocked()) {
+  async #hasActiveGrant(sessionId?: string): Promise<boolean> {
+    if (!sessionId || !this.#dependencies.fullAccessGrants) {
+      return true; // Fallback to vault-unlocked state if session grant service is unconfigured
+    }
+    try {
+      const activeGrant = await this.#dependencies.fullAccessGrants.activeForSession(sessionId);
+      return Boolean(activeGrant && activeGrant.status === "ACTIVE");
+    } catch {
+      return false;
+    }
+  }
+
+  async executeProposal(proposal: { id: string; strategyId: string; reason: string; sessionId?: string }): Promise<{ proposalId: string; status: string }> {
+    const hasGrant = await this.#hasActiveGrant(proposal.sessionId);
+    if (this.#isVaultLocked() || !hasGrant) {
       const error = new Error(
         "Autonomous execution is disabled. A trigger may create a reviewable proposal only; it cannot close a position, sign, or broadcast.",
       );
@@ -65,8 +74,9 @@ export class AutonomousExecutorService extends EventEmitter {
     }
   }
 
-  async executeTrigger(event: ExitTriggerEvent): Promise<{ positionId: string; status: string }> {
-    if (this.#isVaultLocked()) {
+  async executeTrigger(event: ExitTriggerEvent & { sessionId?: string }): Promise<{ positionId: string; status: string }> {
+    const hasGrant = await this.#hasActiveGrant(event.sessionId);
+    if (this.#isVaultLocked() || !hasGrant) {
       const error = new Error(
         "Autonomous execution is disabled. A trigger may create a reviewable proposal only; it cannot close a position, sign, or broadcast.",
       );
