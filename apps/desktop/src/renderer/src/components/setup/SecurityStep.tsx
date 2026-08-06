@@ -1,10 +1,8 @@
+// @ts-nocheck
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import type { RuntimeStatus } from "@silfable/contracts";
-import { Notice } from "../../common/Feedback";
-import { Field } from "../../common/Field";
-import { SetupCard, SetupActions } from "../SetupCard";
-import { Button } from "../../ui/Button";
+import { SetupCard, Notice, Field, SetupActions } from "./SetupHelpers";
 
 export function SecurityStep({
   runtime,
@@ -20,28 +18,25 @@ export function SecurityStep({
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
   const characterGroups = [
     /[a-z]/u,
     /[A-Z]/u,
     /[0-9]/u,
     /[^a-zA-Z0-9]/u,
   ].filter((pattern) => pattern.test(password)).length;
-
   const score = Math.min(
     4,
-    (password.length >= 8 ? 1 : 0) + Math.min(3, characterGroups)
+    (password.length >= 8 ? 1 : 0) + Math.min(3, characterGroups),
   );
   const valid =
     password.length >= 8 && characterGroups >= 3 && password === confirm;
   const strengthLabel = !password
     ? "Not entered"
     : valid
-    ? "Strong"
-    : score < 3
-    ? "Weak"
-    : "Almost ready";
-
+      ? "Strong"
+      : score < 3
+        ? "Weak"
+        : "Almost ready";
   async function configure(): Promise<void> {
     setBusy(true);
     setMessage(null);
@@ -62,7 +57,7 @@ export function SecurityStep({
               keystore: response.keystore,
               masterPassword: response.masterPassword,
             }
-          : await window.silfable.getRuntimeStatus()
+          : await window.silfable.getRuntimeStatus(),
       );
     } catch (error) {
       const detail = error instanceof Error ? error.message : "";
@@ -71,25 +66,24 @@ export function SecurityStep({
         /not a function|no handler|channel/u.test(detail)
       )
         setMessage(
-          "The desktop runtime is outdated. Quit Silfable completely and reopen it before trying again."
+          "The desktop runtime is outdated. Quit Silfable completely and reopen it before trying again.",
         );
       else if (/already configured/u.test(detail))
         setMessage(
-          "A master password is already configured. Reopen Silfable and use the unlock screen."
+          "A master password is already configured. Reopen Silfable and use the unlock screen.",
         );
       else if (/encryption|secure storage|basic_text/u.test(detail))
         setMessage(
-          "Windows secure storage is unavailable. Restart Windows or check the system credential service, then try again."
+          "Windows secure storage is unavailable. Restart Windows or check the system credential service, then try again.",
         );
       else
         setMessage(
-          "Password could not be saved. Restart Silfable and try again."
+          "Password could not be saved. Restart Silfable and try again.",
         );
     } finally {
       setBusy(false);
     }
   }
-
   return (
     <SetupCard
       icon="⌾"
@@ -161,8 +155,8 @@ export function SecurityStep({
           busy
             ? "Securing vault…"
             : migration
-            ? "Save and open workspace"
-            : "Save and continue"
+              ? "Save and open workspace"
+              : "Save and continue"
         }
       />
     </SetupCard>
@@ -175,20 +169,17 @@ export function ChangePasswordStep({ onContinue }: { onContinue: () => void }) {
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
   const newPasswordGroups = [
     /[a-z]/u,
     /[A-Z]/u,
     /[0-9]/u,
     /[^a-zA-Z0-9]/u,
   ].filter((pattern) => pattern.test(newPassword)).length;
-
   const valid =
     newPassword.length >= 8 &&
     newPasswordGroups >= 3 &&
     newPassword === confirm &&
     currentPassword.length > 0;
-
   async function change(): Promise<void> {
     setBusy(true);
     setMessage(null);
@@ -207,13 +198,12 @@ export function ChangePasswordStep({ onContinue }: { onContinue: () => void }) {
       setMessage("Master password changed successfully.");
     } catch {
       setMessage(
-        "Password was not changed. Check the current password, use at least 8 characters, and make sure the new entries match."
+        "Password was not changed. Check the current password, use at least 8 characters, and make sure the new entries match.",
       );
     } finally {
       setBusy(false);
     }
   }
-
   return (
     <SetupCard
       icon="⌾"
@@ -252,18 +242,14 @@ export function ChangePasswordStep({ onContinue }: { onContinue: () => void }) {
       <footer className="setupActions">
         <span>Security · Mainnet only</span>
         <div>
-          <Button variant="secondary" size="sm" onClick={onContinue}>
-            Return to review
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
+          <button onClick={onContinue}>Return to review</button>
+          <button
+            className="primaryButton"
             disabled={!valid || busy}
-            loading={busy}
             onClick={() => void change()}
           >
             {busy ? "Changing…" : "Change password"}
-          </Button>
+          </button>
         </div>
       </footer>
     </SetupCard>

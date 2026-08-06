@@ -45,13 +45,21 @@ export class MissionPolicyService {
     const deadlineValid = Number.isFinite(deadlineMs) && deadlineMs >= now + 4 * 60_000 && deadlineMs <= now + 30 * 24 * 60 * 60_000;
     checks.push(check("deadline_valid", deadlineValid, deadlineValid ? "Deadline is between five minutes and thirty days from now." : "Deadline must be between five minutes and thirty days from now."));
 
+    let registered = false;
     let portfolio: PortfolioSnapshot | null = null;
     try {
       portfolio = await this.#reads.portfolio(input.walletAddress);
-      checks.push(check("wallet_registered", true, "Wallet is registered in the encrypted local vault."));
-    } catch {
-      checks.push(check("wallet_registered", false, "Wallet is not available in the encrypted local vault."));
+      registered = true;
+    } catch (err: any) {
+      const msg = String(err?.message ?? err);
+      if (msg.includes("not registered")) {
+        registered = false;
+      } else {
+        // Wallet is registered, but RPC read failed (e.g. 429 rate limit)
+        registered = true;
+      }
     }
+    checks.push(check("wallet_registered", registered, registered ? "Wallet is registered in the encrypted local vault." : "Wallet is not available in the encrypted local vault."));
 
     if (portfolio !== null && tokenPairValid && amountValid) {
       const available = rawBalance(portfolio, input.inputMint);

@@ -162,12 +162,13 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .field > span, .choiceSection > span, .walletBinding > span { color: #b4bdd3; font: 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 .field input, .field textarea, .field select { width: 100%; min-height: 42px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 9px; outline: 0; color: #eef2ff; background: #090c19; font: 12px var(--mono); }
 .field textarea { resize: vertical; }
-.field input:focus, .field textarea:focus, .field select:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgb(49 87 255 / .1); }
+.field input:focus, .field textarea:focus, .field select:focus { border-color: rgb(58 190 226 / .7); box-shadow: 0 0 0 3px rgb(20 184 212 / .15); }
 .field small { color: var(--muted); font-size: 10px; }
-.inputWithAction { display: flex; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: #090c19; }
-.inputWithAction:focus-within { border-color: var(--blue); }
-.inputWithAction input { border: 0; border-radius: 0; box-shadow: none !important; }
-.inputWithAction button { padding: 0 14px; border: 0; color: var(--blue-2); background: transparent; font: 9px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.inputWithAction { display: flex; align-items: center; gap: 8px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: #090c19; }
+.inputWithAction:focus-within { border-color: rgb(58 190 226 / .7); box-shadow: 0 0 0 3px rgb(20 184 212 / .15); }
+.inputWithAction input { flex: 1; border: 0; border-radius: 0; background: transparent; box-shadow: none !important; }
+.inputWithAction input:focus { border-color: transparent !important; box-shadow: none !important; }
+.tuningSectionHeader { margin-top: 20px; margin-bottom: 10px; font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #7dd3fc; border-bottom: 1px solid rgb(255 255 255 / .08); padding-bottom: 6px; }
 .strength { display: flex; flex-direction: column; gap: 7px; margin-top: -4px; }
 .strengthHeader { display: flex; align-items: center; justify-content: space-between; }
 .strengthHeader small, .strengthHeader strong { font: 8px var(--mono); letter-spacing: .1em; text-transform: uppercase; }

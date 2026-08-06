@@ -1,10 +1,7 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { Brand, CornerFooter } from "../common/Brand";
-import { Field } from "../common/Field";
-import { Button } from "../ui/Button";
-
-const STORAGE_KEY = "silfable.mainnet-setup.v2";
+import { Brand, Field, CornerFooter } from "./SetupHelpers";
+import { STORAGE_KEY } from "../types";
 
 export function UnlockScreen({ onUnlocked }: { onUnlocked: () => Promise<void> }) {
   const [password, setPassword] = useState("");
@@ -14,7 +11,6 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => Promise<void> }
   const [resetOpen, setResetOpen] = useState(false);
   const [resetAcknowledged, setResetAcknowledged] = useState(false);
   const [resetBusy, setResetBusy] = useState(false);
-
   async function unlock(): Promise<void> {
     setBusy(true);
     setMessage(null);
@@ -29,13 +25,12 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => Promise<void> }
     } catch {
       setPassword("");
       setMessage(
-        "Master password is incorrect or the secure vault is unavailable."
+        "Master password is incorrect or the secure vault is unavailable.",
       );
     } finally {
       setBusy(false);
     }
   }
-
   async function resetVault(): Promise<void> {
     setResetBusy(true);
     setMessage(null);
@@ -51,7 +46,7 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => Promise<void> }
     } catch (error) {
       if (!(error instanceof Error) || !/cancelled/u.test(error.message))
         setMessage(
-          "The new vault was not created. Your current encrypted vault remains unchanged."
+          "The new vault was not created. Your current encrypted vault remains unchanged.",
         );
       setResetOpen(false);
       setResetAcknowledged(false);
@@ -59,7 +54,6 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => Promise<void> }
       setResetBusy(false);
     }
   }
-
   return (
     <main className="onboardingPage">
       <Brand compact={false} />
@@ -94,17 +88,15 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => Promise<void> }
         </Field>
         {message && <p className="fieldError">{message}</p>}
         <div className="bootActions">
-          <Button
-            variant="primary"
+          <button
+            className="primaryButton"
             disabled={!password || busy}
-            loading={busy}
             onClick={() => void unlock()}
           >
             {busy ? "Unlocking…" : "Unlock workspace"} <span>→</span>
-          </Button>
+          </button>
         </div>
         <button
-          type="button"
           className="forgotVaultButton"
           onClick={() => setResetOpen(true)}
         >
@@ -145,8 +137,7 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => Promise<void> }
               </span>
             </label>
             <div className="modalActions">
-              <Button
-                variant="secondary"
+              <button
                 disabled={resetBusy}
                 onClick={() => {
                   setResetOpen(false);
@@ -154,15 +145,14 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => Promise<void> }
                 }}
               >
                 Cancel
-              </Button>
-              <Button
-                variant="danger"
+              </button>
+              <button
+                className="dangerButton"
                 disabled={!resetAcknowledged || resetBusy}
-                loading={resetBusy}
                 onClick={() => void resetVault()}
               >
                 {resetBusy ? "Preparing backup…" : "Set up new vault"}
-              </Button>
+              </button>
             </div>
           </section>
         </div>

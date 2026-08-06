@@ -45,7 +45,15 @@ const KNOWN_TOKENS: Record<string, string> = {
   "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": "BONK",
 };
 
-export function AutomationPanel({ sessionId, onReloadSessions }: { sessionId?: string; onReloadSessions?: () => Promise<void> }) {
+export function AutomationPanel({
+  sessionId,
+  onReloadSessions,
+  onSelectSession,
+}: {
+  sessionId?: string;
+  onReloadSessions?: () => Promise<void>;
+  onSelectSession?: (sessionId: string) => void;
+}) {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -165,13 +173,8 @@ export function AutomationPanel({ sessionId, onReloadSessions }: { sessionId?: s
     ? currentSessionStrategies
     : strategies;
 
-  const displayProposals = filterMode === "SESSION" && sessionId
-    ? proposals.filter(p => currentSessionStrategies.some(s => s.id === p.strategyId) || p.sessionId === sessionId)
-    : proposals;
-
   return (
     <div className="space-y-6 p-6">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
@@ -184,7 +187,6 @@ export function AutomationPanel({ sessionId, onReloadSessions }: { sessionId?: s
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Segmented Filter Control */}
           <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 text-xs">
             <button
               onClick={() => setFilterMode("ALL")}
@@ -219,51 +221,43 @@ export function AutomationPanel({ sessionId, onReloadSessions }: { sessionId?: s
         </div>
       </div>
 
-      {/* Info Banner */}
       <div className="rounded-xl border border-cyan-500/20 bg-cyan-950/20 p-4 text-xs text-cyan-200/90 flex items-start gap-3">
         <Bot className="h-5 w-5 text-cyan-400 shrink-0 mt-0.5" />
         <div>
-          <span className="font-semibold text-cyan-300">How to Create Strategies:</span> Ask the AI Assistant in chat (e.g. <em>"Setup DCA to buy Solana 10 USDC every day"</em> or <em>"Set Take Profit at $200 for SOL"</em>). New strategies will automatically register and appear below for monitoring and pause/cancel management.
+          <span className="font-semibold text-cyan-300">How to Create Strategies:</span> Ask the AI Assistant in chat.
         </div>
       </div>
 
-      {/* Active Strategies Section */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
             Active Strategies ({displayStrategies.filter(s => s.status !== "CANCELLED").length})
           </h3>
-          {filterMode === "SESSION" && (
-            <span className="text-xs text-slate-400 font-medium">
-              Showing strategies created in this session
-            </span>
-          )}
         </div>
 
         {displayStrategies.filter(s => s.status !== "CANCELLED").length === 0 ? (
           <Card className="p-8 text-center border-dashed border-slate-800 bg-slate-900/30">
             <Clock className="h-8 w-8 text-slate-600 mx-auto mb-2" />
-            <p className="text-sm text-slate-400 font-medium">
-              {filterMode === "SESSION" ? "No Active Automation Strategies for This Session" : "No Active Automation Strategies"}
-            </p>
-            <p className="text-xs text-slate-500 mt-1">
-              {filterMode === "SESSION" ? (
-                <>
-                  Click <button onClick={() => setFilterMode("ALL")} className="text-cyan-400 underline font-semibold">All Sessions</button> to view strategies created in other chat sessions.
-                </>
-              ) : (
-                "Start by chatting with the AI Assistant to configure your first DCA or TP/SL trigger."
-              )}
-            </p>
+            <p className="text-sm text-slate-400 font-medium">No Active Strategies</p>
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {displayStrategies.filter(s => s.status !== "CANCELLED").map((strategy) => {
-              const matchingProposal = displayProposals.find(p => p.strategyId === strategy.id && p.status === "AWAITING_APPROVAL");
+              const matchingProposal = proposals.find(p => p.strategyId === strategy.id && p.status === "AWAITING_APPROVAL");
               const countdown = formatCountdown(strategy.nextWakeAt, strategy.status);
               return (
-                <Card key={strategy.id} variant="elevated" className="relative border-slate-800/80 bg-slate-900/60">
-                  <CardHeader>
+                <Card 
+                  key={strategy.id} 
+                  variant="elevated" 
+                  className={`relative border-slate-800/80 bg-slate-900/60 transition-all ${strategy.sessionId && onSelectSession ? "cursor-pointer hover:border-cyan-500/50" : ""}`}
+                  onClick={(e) => {
+                    if ((e.target as HTMLElement).closest("button")) return;
+                    if (strategy.sessionId && onSelectSession) {
+                      onSelectSession(strategy.sessionId);
+                    }
+                  }}
+                >
+                  <CardHeader className="flex flex-row items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wide uppercase bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
                         {strategy.kind}
@@ -272,113 +266,73 @@ export function AutomationPanel({ sessionId, onReloadSessions }: { sessionId?: s
                         {formatPair(strategy.inputMint, strategy.outputMint)}
                       </CardTitle>
                     </div>
-                    {getStatusBadge(strategy.status)}
+                    <div className="flex items-center gap-2">
+                      {getStatusBadge(strategy.status)}
+                      {strategy.sessionId && onSelectSession && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-[11px] text-cyan-400 hover:text-cyan-300"
+                          onClick={() => onSelectSession(strategy.sessionId!)}
+                        >
+                          Session →
+                        </Button>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-2 text-xs text-slate-300">
                     {strategy.kind === "DCA" && (
                       <>
                         <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
-                          <span className="text-slate-400">Execution Progress:</span>
-                          <span className="font-semibold text-slate-200">
-                            {strategy.completedExecutions ?? 0} / {strategy.maximumExecutions ?? "-"} cycles
-                          </span>
+                          <span className="text-slate-400">Progress:</span>
+                          <span className="font-semibold text-slate-200">{strategy.completedExecutions ?? 0} / {strategy.maximumExecutions ?? "-"}</span>
                         </div>
                         <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
-                          <span className="text-slate-400">Order Amount:</span>
-                          <span className="font-mono text-cyan-300 font-semibold">
-                            {formatOrderAmount(strategy.orderAmountRaw, strategy.inputMint)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
-                          <span className="text-slate-400">Interval:</span>
-                          <span className="text-slate-200">Every {Math.round((strategy.intervalSeconds ?? 0) / 60)} mins</span>
+                          <span className="text-slate-400">Amount:</span>
+                          <span className="font-mono text-cyan-300 font-semibold">{formatOrderAmount(strategy.orderAmountRaw, strategy.inputMint)}</span>
                         </div>
                         {countdown && (
                           <div className="flex justify-between pb-1.5 items-center">
                             <span className="text-slate-400 flex items-center gap-1">
-                              <Timer className="h-3.5 w-3.5 text-cyan-400" /> Next Run in:
+                              <Timer className="h-3.5 w-3.5 text-cyan-400" /> Next:
                             </span>
-                            <span className="font-mono text-cyan-300 font-bold bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-500/30">
-                              {countdown}
-                            </span>
+                            <span className="font-mono text-cyan-300 font-bold bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-500/30">{countdown}</span>
                           </div>
                         )}
                       </>
                     )}
-
                     {strategy.kind === "EXIT" && (
                       <>
                         <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
                           <span className="text-slate-400">Entry Price:</span>
                           <span className="font-mono text-slate-200">${strategy.entryPriceUsd}</span>
                         </div>
-                        {strategy.takeProfitPriceUsd && (
-                          <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
-                            <span className="text-slate-400">Take Profit:</span>
-                            <span className="font-mono text-emerald-400">${strategy.takeProfitPriceUsd}</span>
-                          </div>
-                        )}
-                        {strategy.stopLossPriceUsd && (
-                          <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
-                            <span className="text-slate-400">Stop Loss:</span>
-                            <span className="font-mono text-red-400">${strategy.stopLossPriceUsd}</span>
-                          </div>
-                        )}
                         {countdown && (
                           <div className="flex justify-between pb-1.5 items-center">
                             <span className="text-slate-400 flex items-center gap-1">
-                              <Timer className="h-3.5 w-3.5 text-cyan-400" /> Next Check in:
+                              <Timer className="h-3.5 w-3.5 text-cyan-400" /> Next:
                             </span>
-                            <span className="font-mono text-cyan-300 font-bold bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-500/30">
-                              {countdown}
-                            </span>
+                            <span className="font-mono text-cyan-300 font-bold bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-500/30">{countdown}</span>
                           </div>
                         )}
                       </>
                     )}
-
-                    {/* Actions */}
                     <div className="pt-3 flex gap-2 justify-end items-center flex-wrap">
                       {matchingProposal ? (
-                        <Button
-                          size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium shadow-sm"
-                          disabled={actionLoading === matchingProposal.id}
-                          onClick={() => handleStatusChange(matchingProposal.id, "APPROVE_PROPOSAL")}
-                        >
-                          <Play className="h-3.5 w-3.5 mr-1" />
-                          Approve Execution
+                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium" disabled={actionLoading === matchingProposal.id} onClick={() => handleStatusChange(matchingProposal.id, "APPROVE_PROPOSAL")}>
+                          <Play className="h-3.5 w-3.5 mr-1" /> Approve
                         </Button>
                       ) : strategy.status === "ACTIVE" ? (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={actionLoading === strategy.id}
-                          onClick={() => handleStatusChange(strategy.id, "PAUSE")}
-                        >
-                          <Pause className="h-3.5 w-3.5 mr-1 text-amber-400" />
-                          Pause
+                        <Button size="sm" variant="secondary" disabled={actionLoading === strategy.id} onClick={() => handleStatusChange(strategy.id, "PAUSE")}>
+                          <Pause className="h-3.5 w-3.5 mr-1 text-amber-400" /> Pause
                         </Button>
                       ) : strategy.status === "PAUSED" ? (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={actionLoading === strategy.id}
-                          onClick={() => handleStatusChange(strategy.id, "RESUME")}
-                        >
-                          <Play className="h-3.5 w-3.5 mr-1 text-emerald-400" />
-                          Resume
+                        <Button size="sm" variant="secondary" disabled={actionLoading === strategy.id} onClick={() => handleStatusChange(strategy.id, "RESUME")}>
+                          <Play className="h-3.5 w-3.5 mr-1 text-emerald-400" /> Resume
                         </Button>
                       ) : null}
-
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        disabled={actionLoading === strategy.id}
-                        onClick={() => handleStatusChange(strategy.id, "CANCEL")}
-                      >
-                        <XCircle className="h-3.5 w-3.5 mr-1" />
-                        Cancel
+                      <Button size="sm" variant="destructive" disabled={actionLoading === strategy.id} onClick={() => handleStatusChange(strategy.id, "CANCEL")}>
+                        <XCircle className="h-3.5 w-3.5 mr-1" /> Cancel
                       </Button>
                     </div>
                   </CardContent>
@@ -388,67 +342,6 @@ export function AutomationPanel({ sessionId, onReloadSessions }: { sessionId?: s
           </div>
         )}
       </div>
-
-      {/* Execution Proposals Log Section */}
-      {displayProposals.length > 0 && (
-        <div className="space-y-3 pt-4">
-          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
-            Execution Proposals & History ({displayProposals.length})
-          </h3>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-800/50 text-slate-400 font-semibold uppercase text-[10px] border-b border-slate-800">
-                <tr>
-                  <th className="p-3">Trigger Reason</th>
-                  <th className="p-3">Observed Price</th>
-                  <th className="p-3">Proposal Status</th>
-                  <th className="p-3">Action</th>
-                  <th className="p-3">Time</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/40">
-                {displayProposals.map((prop) => (
-                  <tr key={prop.id} className="hover:bg-slate-800/30">
-                    <td className="p-3 font-semibold text-slate-200">{prop.reason}</td>
-                    <td className="p-3 font-mono">{prop.observedPriceUsd ? `$${prop.observedPriceUsd}` : "-"}</td>
-                    <td className="p-3 font-semibold">
-                      <span className={prop.status === "AWAITING_APPROVAL" ? "text-amber-400 font-semibold" : prop.status === "CONSUMED" ? "text-emerald-400 font-semibold" : "text-slate-400"}>
-                        {prop.status}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      {prop.status === "AWAITING_APPROVAL" ? (
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 text-[11px] h-7 font-medium"
-                            disabled={actionLoading === prop.id}
-                            onClick={() => handleStatusChange(prop.id, "APPROVE_PROPOSAL")}
-                          >
-                            Approve Execution
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            className="px-2 py-1 text-[11px] h-7"
-                            disabled={actionLoading === prop.id}
-                            onClick={() => handleStatusChange(prop.id, "REJECT_PROPOSAL")}
-                          >
-                            Reject
-                          </Button>
-                        </div>
-                      ) : (
-                        <span className="text-slate-500 text-[11px]">-</span>
-                      )}
-                    </td>
-                    <td className="p-3 text-slate-400">{new Date(prop.createdAt).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
