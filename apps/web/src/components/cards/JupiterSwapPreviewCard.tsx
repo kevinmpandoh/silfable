@@ -6,7 +6,7 @@ import { WebProposal } from "@/lib/db";
 
 interface JupiterSwapPreviewCardProps {
   proposal: WebProposal;
-  status: "ready_for_user_signature" | "preview_only" | "signing" | "signed" | "failed";
+  status: WebProposal["status"];
   maxSlippageBps?: string;
   onExecute: () => void;
 }
@@ -22,7 +22,7 @@ export function JupiterSwapPreviewCard({
   maxSlippageBps = "100",
   onExecute,
 }: JupiterSwapPreviewCardProps) {
-  const disabled = status === "signed" || status === "signing" || !proposal.quoteResponse;
+  const disabled = ["signed", "signing", "submitted", "confirmed", "reverted", "unknown"].includes(status) || !proposal.quoteResponse;
 
   return (
     <div className="missionPreview border border-blue-500/25 bg-slate-950/70 rounded-xl p-4">
@@ -83,8 +83,14 @@ export function JupiterSwapPreviewCard({
           onClick={onExecute}
           className="primaryButton shrink-0 px-4 py-2 text-xs font-semibold"
         >
-          {status === "signed"
+          {status === "confirmed" || status === "signed"
             ? "Confirmed"
+            : status === "submitted"
+              ? "Confirming on-chain..."
+              : status === "unknown"
+                ? "Verification required"
+                : status === "reverted"
+                  ? "Reverted"
             : status === "signing"
               ? "Waiting for wallet..."
               : "Approve in Wallet"}

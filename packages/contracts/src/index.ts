@@ -1270,17 +1270,22 @@ export const EvmSwapQuoteEvidenceSchema = z.object({
   buyAmount: z.string().regex(/^[1-9]\d*$/u),
   minBuyAmount: z.string().regex(/^[1-9]\d*$/u).nullable(),
   blockNumber: z.string().regex(/^[1-9]\d*$/u).nullable(),
-  zeroExFeeAmount: z.string().regex(/^[1-9]\d*$/u).nullable(),
-  zeroExFeeToken: SessionEvmAddressSchema.nullable(),
+  zeroExFeeAmount: z.string().regex(/^\d+$/u).nullable().default(null),
+  zeroExFeeToken: SessionEvmAddressSchema.nullable().default(null),
   liquidityAvailable: z.boolean(),
   sellTokenSymbol: z.string().min(1).max(32),
   buyTokenSymbol: z.string().min(1).max(32),
   sellTokenMultiplier: z.string().min(1).max(64),
   buyTokenMultiplier: z.string().min(1).max(64),
+  provider: z.enum(["kyberswap", "uniswap"]).optional(),
+  routerAddress: SessionEvmAddressSchema.optional(),
+  routeNames: z.array(z.string().min(1).max(120)).max(16).optional(),
 }).strict();
 export const EvmSwapProposalSchema = z.object({
   id: z.string().uuid(),
-  chainId: z.literal(4663),
+  quoteId: z.string().uuid().optional(),
+  chainId: z.number().int().positive(),
+  chainKey: z.enum(["ethereum", "optimism", "polygon", "bsc", "base", "arbitrum", "avalanche", "robinhood"]).optional(),
   walletAddress: SessionEvmAddressSchema,
   slippageBps: z.number().int().min(0).max(1_000),
   quote: EvmSwapQuoteEvidenceSchema,
@@ -1289,21 +1294,51 @@ export const EvmSwapProposalSchema = z.object({
 }).strict();
 export const EvmSwapPreflightEvidenceSchema = z.object({
   id: z.string().uuid(),
+  provider: z.enum(["kyberswap", "uniswap"]),
+  action: z.enum(["approval", "swap"]),
+  chainKey: z.enum(["ethereum", "optimism", "polygon", "bsc", "base", "arbitrum", "avalanche", "robinhood"]),
+  chainId: z.number().int().positive(),
+  walletAddress: SessionEvmAddressSchema,
+  routerAddress: SessionEvmAddressSchema,
+  tokenIn: SessionEvmAddressSchema,
+  tokenOut: SessionEvmAddressSchema,
+  amountIn: z.string().regex(/^[1-9]\d*$/u),
+  expectedAmountOut: z.string().regex(/^[1-9]\d*$/u),
+  minimumAmountOut: z.string().regex(/^[1-9]\d*$/u),
+  nativeValueWei: z.string().regex(/^\d+$/u),
   expiresAt: z.string().datetime(),
   allowanceRequired: z.boolean(),
+  approvalSpender: SessionEvmAddressSchema,
   currentAllowance: z.string().regex(/^\d+$/u),
   gasLimit: z.string().regex(/^[1-9]\d*$/u),
   maxFeePerGas: z.string().regex(/^[1-9]\d*$/u),
-  maxGasCostWei: z.string().regex(/^\d+$/u),
-  expectedBuyAmount: z.string().regex(/^[1-9]\d*$/u),
-  minimumBuyAmount: z.string().regex(/^[1-9]\d*$/u),
+  maxPriorityFeePerGas: z.string().regex(/^\d+$/u),
+  maximumNetworkFeeWei: z.string().regex(/^\d+$/u),
+  nativeBalanceWei: z.string().regex(/^\d+$/u),
+  inputTokenBalance: z.string().regex(/^\d+$/u),
+  routerPolicyStatus: z.enum(["blocked", "allowlisted"]),
+  routerPolicyReason: z.string().min(1).max(500),
   preparedAt: z.string().datetime(),
+  // Renderer aliases retained for encrypted sessions created by older builds.
+  maxGasCostWei: z.string().regex(/^\d+$/u).optional(),
+  expectedBuyAmount: z.string().regex(/^[1-9]\d*$/u).optional(),
+  minimumBuyAmount: z.string().regex(/^[1-9]\d*$/u).optional(),
 }).strict();
 export const EvmSessionExecutionReceiptSchema = z.object({
   id: z.string().uuid(),
+  chainKey: z.enum(["ethereum", "optimism", "polygon", "bsc", "base", "arbitrum", "avalanche", "robinhood"]).optional(),
+  chainId: z.number().int().positive().optional(),
   transactionHash: z.string().regex(/^0x[0-9a-fA-F]+$/u),
+  walletAddress: SessionEvmAddressSchema.optional(),
   kind: z.enum(["approval", "swap"]),
   status: z.enum(["confirmed", "reverted", "unknown"]),
+  tokenIn: SessionEvmAddressSchema.optional(),
+  tokenOut: SessionEvmAddressSchema.optional(),
+  amountIn: z.string().regex(/^[1-9]\d*$/u).optional(),
+  expectedAmountOut: z.string().regex(/^[1-9]\d*$/u).optional(),
+  minimumAmountOut: z.string().regex(/^[1-9]\d*$/u).optional(),
+  networkFeeWei: z.string().regex(/^\d+$/u).optional(),
+  broadcastAt: z.string().datetime().optional(),
   reconciledAt: z.string().datetime(),
 }).strict();
 export type EvmSwapQuoteEvidence = z.infer<typeof EvmSwapQuoteEvidenceSchema>;
@@ -1752,7 +1787,13 @@ export type ClipboardWriteWalletAddressResponse = z.infer<typeof ClipboardWriteW
 const TransactionSignatureSchema = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{64,128}$/u);
 export const ClipboardWriteTransactionSignatureRequestSchema = RequestBaseSchema.extend({ signature: TransactionSignatureSchema }).strict();
 export const ClipboardWriteTransactionSignatureResponseSchema = RequestBaseSchema.extend({ copied: z.literal(true) }).strict();
-export const ExternalOpenTransactionRequestSchema = RequestBaseSchema.extend({ signature: TransactionSignatureSchema }).strict();
+export const ExternalOpenTransactionRequestSchema = z.union([
+  RequestBaseSchema.extend({ signature: TransactionSignatureSchema }).strict(),
+  RequestBaseSchema.extend({
+    chainKey: EvmChainKeySchema,
+    transactionHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/u),
+  }).strict(),
+]);
 export const ExternalOpenTransactionResponseSchema = RequestBaseSchema.extend({ opened: z.literal(true) }).strict();
 export type ClipboardWriteTransactionSignatureRequest = z.infer<typeof ClipboardWriteTransactionSignatureRequestSchema>;
 export type ClipboardWriteTransactionSignatureResponse = z.infer<typeof ClipboardWriteTransactionSignatureResponseSchema>;
@@ -2126,21 +2167,29 @@ export type EvmRpcMutationResponse = z.infer<typeof EvmRpcMutationResponseSchema
 export type EvmTestRpcResponse = z.infer<typeof EvmTestRpcResponseSchema>;
 
 export const EvmPrepareKyberSwapRequestSchema = RequestBaseSchema.extend({
+  sessionId: z.string().uuid(),
   chainKey: EvmChainKeySchema,
   walletAddress: SessionEvmAddressSchema,
-  sellToken: SessionEvmAddressSchema,
-  buyToken: SessionEvmAddressSchema,
-  sellAmount: z.string().regex(/^[1-9]\d*$/u),
+  quoteId: z.string().uuid(),
   slippageBps: z.number().int().min(0).max(1_000),
+  acknowledgedSimulationOnly: z.literal(true),
 }).strict();
 export const EvmPrepareKyberSwapResponseSchema = RequestBaseSchema.extend({
-  proposal: EvmSwapProposalSchema,
+  preflight: EvmSwapPreflightEvidenceSchema,
 }).strict();
 export const EvmExecuteKyberSwapRequestSchema = RequestBaseSchema.extend({
-  proposalId: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  chainKey: EvmChainKeySchema,
+  walletAddress: SessionEvmAddressSchema,
+  preflightId: z.string().uuid(),
+  action: z.enum(["approval", "swap"]),
   masterPassword: z.string().min(1).max(256),
-  confirmation: z.literal("EXECUTE EVM SWAP"),
-}).strict();
+  confirmation: z.enum(["APPROVE EVM MAINNET", "EXECUTE EVM MAINNET SWAP"]),
+  acknowledgedIrreversible: z.literal(true),
+}).strict().superRefine((value, context) => {
+  const expected = value.action === "approval" ? "APPROVE EVM MAINNET" : "EXECUTE EVM MAINNET SWAP";
+  if (value.confirmation !== expected) context.addIssue({ code: "custom", path: ["confirmation"], message: "Confirmation does not match the EVM action" });
+});
 export const EvmExecuteKyberSwapResponseSchema = RequestBaseSchema.extend({
   receipt: EvmSessionExecutionReceiptSchema,
 }).strict();

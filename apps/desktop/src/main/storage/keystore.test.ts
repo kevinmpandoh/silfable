@@ -86,6 +86,19 @@ test("concurrent secret mutations are serialized without lost records", async ()
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
+test("released legacy and venue-isolated record names keep an existing vault readable", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "silfable-keystore-compatible-"));
+  const path = join(directory, "secrets.json");
+  const keystore = new PortableEncryptedKeystore(path, new IntegrityStorage());
+  try {
+    keystore.unlock();
+    await keystore.setSecret("solana-rpc-url", "https://solana.example/v2/key");
+    await keystore.setSecret("hyperliquid-agent-secret", "encrypted-agent-record");
+    assert.equal(await keystore.getSecret("solana-rpc-url"), "https://solana.example/v2/key");
+    assert.equal(await keystore.getSecret("hyperliquid-agent-secret"), "encrypted-agent-record");
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 test("locked vault reset moves the encrypted keystore into a backup directory", async () => {
   const directory = await mkdtemp(join(tmpdir(), "silfable-keystore-reset-"));
   const path = join(directory, "secrets.json");

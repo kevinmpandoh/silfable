@@ -60,6 +60,77 @@ test("EVM wallet-scoped sessions receive only the typed EVM quote proposal from 
   assert.equal(names.includes("pump_token_analysis"), false);
 });
 
+test("Robinhood ETH and USDG aliases resolve locally from an Indonesian swap request", { concurrency: false }, async () => {
+  const secrets = new MemorySecrets();
+  secrets.values.set("openrouter-api-key", "sk-or-test");
+  const walletAddress = `0x${"11".repeat(20)}`;
+  let providerFetches = 0;
+  let quoteInput: Record<string, unknown> | null = null;
+  globalThis.fetch = async () => {
+    providerFetches += 1;
+    throw new Error("The direct alias route must not call the AI provider");
+  };
+  const proposal = {
+    id: "11111111-1111-4111-8111-111111111111",
+    quoteId: "22222222-2222-4222-8222-222222222222",
+    chainId: 4663,
+    chainKey: "robinhood" as const,
+    walletAddress,
+    slippageBps: 50,
+    quote: {
+      sellToken: "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+      buyToken: "0x0000000000000000000000000000000000000000",
+      sellAmount: "500000",
+      buyAmount: "250000000000000",
+      minBuyAmount: "248750000000000",
+      blockNumber: "1",
+      zeroExFeeAmount: null,
+      zeroExFeeToken: null,
+      liquidityAvailable: true,
+      sellTokenSymbol: "USDG",
+      buyTokenSymbol: "ETH",
+      sellTokenMultiplier: "1000000",
+      buyTokenMultiplier: "1000000000000000000",
+      provider: "uniswap" as const,
+      routerAddress: `0x${"22".repeat(20)}`,
+      routeNames: ["V3"],
+    },
+    status: "quote-only" as const,
+    createdAt: new Date().toISOString(),
+  };
+  const service = new AiService({
+    keystore: secrets,
+    settings: new MemorySettings(),
+    evmSwapQuotes: {
+      quote: async (input) => {
+        quoteInput = input;
+        return proposal;
+      },
+    },
+  });
+
+  const result = await service.chat({
+    prompt: "bantu saya untuk swap 0.5 usdg ke eth saya",
+    mode: "mission",
+    walletAddress,
+    walletScope: "evm",
+    evmChainKey: "robinhood",
+  });
+
+  assert.equal(providerFetches, 0);
+  assert.deepEqual(quoteInput, {
+    walletAddress,
+    chainKey: "robinhood",
+    sellToken: "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+    buyToken: "0x0000000000000000000000000000000000000000",
+    sellAmount: "500000",
+    slippageBps: 50,
+  });
+  assert.equal(result.evmSwapProposal, proposal);
+  assert.deepEqual(result.toolsUsed, ["robinhood_swap_quote"]);
+  assert.match(result.text, /USDG → ETH quote prepared/u);
+});
+
 test("new Solana wallet sessions expose Jupiter preparation but not legacy Pump or limit-order proposals", { concurrency: false }, async () => {
   const secrets = new MemorySecrets();
   secrets.values.set("openrouter-api-key", "sk-or-test");

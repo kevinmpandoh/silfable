@@ -33,6 +33,71 @@ html, body {
   text-rendering: optimizeLegibility;
 }
 
+.sessionWorkspaceChoices {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sessionWalletBinding {
+  display: grid;
+  gap: 12px;
+}
+
+.sessionWalletBinding label {
+  display: grid;
+  gap: 7px;
+  color: #7f8aa7;
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.sessionWalletBinding select,
+.linkWalletButton,
+.boundWallet {
+  min-height: 44px;
+  border: 1px solid rgba(123, 162, 255, 0.2);
+  border-radius: 9px;
+  background: rgba(4, 8, 20, 0.72);
+  color: #eef2ff;
+  padding: 10px 12px;
+}
+
+.linkWalletButton {
+  color: #67d8f4;
+  cursor: pointer;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-align: left;
+}
+
+.linkWalletButton:disabled { cursor: wait; opacity: 0.6; }
+.boundWallet { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.boundWallet span { color: #7f8aa7; font-family: var(--font-mono), monospace; font-size: 10px; }
+.sessionBindingError { color: #fb7185; font-size: 12px; line-height: 1.5; }
+
+.evmReleaseNotice {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  border-radius: 10px;
+  background: rgba(34, 211, 238, 0.05);
+  padding: 10px 12px;
+  color: #7f8aa7;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.evmReleaseNotice strong { color: #a5f3fc; font-family: var(--font-mono), monospace; font-size: 10px; text-transform: uppercase; }
+.evmWalletMismatch { border-color: rgba(251, 191, 36, 0.4); background: rgba(251, 191, 36, 0.07); }
+.evmWalletMismatch strong { color: #fbbf24; }
+
+@media (max-width: 720px) {
+  .sessionWorkspaceChoices { grid-template-columns: 1fr; }
+}
+
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 5rem;

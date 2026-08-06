@@ -669,7 +669,10 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     assertTrustedSender(event);
     const request = ExternalOpenTransactionRequestSchema.parse(raw);
     requireUnlocked();
-    await shell.openExternal(`https://explorer.solana.com/tx/${request.signature}`, { activate: true });
+    const explorerUrl = "signature" in request
+      ? `https://explorer.solana.com/tx/${request.signature}`
+      : `${getEvmChain(request.chainKey).explorerUrl}/tx/${request.transactionHash}`;
+    await shell.openExternal(explorerUrl, { activate: true });
     return ExternalOpenTransactionResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, opened: true });
   });
 
@@ -1042,7 +1045,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
       : session.walletScope === "solana"
         ? "Solana wallet workspace. You may use verified wallet reads and Jupiter-specific swap preparation only when the user explicitly asks. The user may also prepare a Pump.fun Token Launch draft from exact user-supplied metadata. In Mission mode, the AI may invoke trusted Bridge preparation only after the user supplies one enabled destination chain (Base, Arbitrum, Ethereum, Optimism, Polygon, Avalanche, or Robinhood), the exact destination recipient, ordinary decimal source USDC amount, ordinary decimal minimum destination USDC amount, and total fee cap; release-controlled desktop code converts decimals to raw units, selects the matching provider route, obtains the quote, runs unsigned simulation, and verifies Solana program scope and fee limits. Signing remains outside the AI and requires the master password plus an exact destination-bound confirmation, one source broadcast attempt, and a cross-chain receipt reconciled through source, relay, and destination settlement. Never claim Bridge completion without a destination-confirmed typed receipt. Use global Transaction Settings for fee limits; do not ask for per-session safety limits."
       : session.walletScope === "evm"
-        ? `${getEvmChain(sessionEvmChainKey ?? "robinhood").name} EVM wallet workspace. In Mission mode, use the typed EVM swap quote tool only from exact user-supplied token contracts and a raw sell amount. Robinhood Chain uses the official Uniswap Trading API with the release-pinned Universal Router; other released EVM chains use their code-pinned provider. The resulting card is quote-only. Deterministic desktop code—not the AI—checks the router, allowance and gas, requests an exact ERC-20 approval when needed, requires a fresh post-approval preflight, verifies the master password and final confirmation, signs locally, and persists receipts. Never claim an approval or swap succeeded without the typed receipt.`
+        ? `${getEvmChain(sessionEvmChainKey ?? "robinhood").name} EVM wallet workspace. In Mission mode, use the typed EVM swap quote tool. On Robinhood Chain, ETH and USDG are release-pinned aliases and must not require user-supplied contracts; ordinary decimal amounts are converted locally. Other assets require exact user-supplied contracts. Robinhood Chain uses the official Uniswap Trading API with the release-pinned Universal Router; other released EVM chains use their code-pinned provider. The resulting card is quote-only. Deterministic desktop code—not the AI—checks the router, allowance and gas, requests an exact ERC-20 approval when needed, requires a fresh post-approval preflight, verifies the master password and final confirmation, signs locally, and persists receipts. Never claim an approval or swap succeeded without the typed receipt.`
       : session.intent === "token-launch"
         ? "Token Launch session. The restricted desktop launch path can prepare and simulate a conservative SOL-paired, zero-initial-buy Pump.fun create_v2 transaction, then require fresh deterministic checks, the master password, an exact irreversible confirmation, local two-signer authorization, one broadcast attempt, and finalized mint proof. The AI can draft exact metadata but cannot sign, broadcast, or claim success without the typed finalized receipt. Do not use legacy Pump/PumpSwap trading tools."
         : session.intent === "evm-swap"
@@ -2125,9 +2128,20 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
       sessionRecord === null
       || sessionRecord.walletScope !== "evm"
       || sessionRecord.walletAddress?.toLowerCase() !== request.walletAddress.toLowerCase()
-      || sessionRecord.evmChainKey !== request.chainKey
+      || (sessionRecord.evmChainKey ?? "robinhood") !== request.chainKey
     ) {
       throw new Error("The EVM preflight must use this encrypted session's wallet and chain.");
+    }
+    const proposalMessage = sessionRecord.messages.find(
+      (message) => message.evmSwapProposal?.quoteId === request.quoteId,
+    );
+    if (proposalMessage?.evmSwapProposal === undefined) {
+      throw new Error("The EVM quote is not bound to this encrypted session.");
+    }
+    if (proposalMessage.evmExecutionReceipts?.some(
+      (receipt) => receipt.kind === "swap" && receipt.status === "confirmed",
+    )) {
+      throw new Error("This EVM swap is already confirmed and cannot be prepared again.");
     }
     if (!(await evmWallet.hasAddress(request.walletAddress))) {
       throw new Error("The selected EVM wallet is not registered in the encrypted local vault.");
@@ -2160,7 +2174,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
       sessionRecord === null
       || sessionRecord.walletScope !== "evm"
       || sessionRecord.walletAddress?.toLowerCase() !== request.walletAddress.toLowerCase()
-      || sessionRecord.evmChainKey !== request.chainKey
+      || (sessionRecord.evmChainKey ?? "robinhood") !== request.chainKey
     ) {
       throw new Error("The EVM execution must use this encrypted session's wallet and chain.");
     }

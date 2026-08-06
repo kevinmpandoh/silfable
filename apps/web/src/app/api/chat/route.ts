@@ -66,6 +66,9 @@ async function callOpenRouter(input: {
   walletAddress: string | null;
   maxTokens: number;
   temperature: number;
+  workspace: "solana" | "evm" | "bridge";
+  chainKey: string | null;
+  sessionWalletAddress: string | null;
 }) {
   const history = input.messages
     .slice(-12)
@@ -75,9 +78,9 @@ async function callOpenRouter(input: {
         : [],
     );
   const capabilityBoundary =
-    "You are Silfable Web's restricted Solana Mainnet assistant. " +
+    `You are Silfable Web's restricted ${input.workspace.toUpperCase()} Mainnet assistant. ` +
     "You may explain wallet data, perform read-only research, plan trades, and prepare restricted proposals. The web runtime may prepare a Jupiter SOL-to-USDC quote and an unsigned transaction for explicit approval by the connected browser wallet. " +
-    "Cloud signing, Auto DCA, scheduled execution, automated TP/SL, and discovery-to-buy are disabled. Pump.fun is preview-only on web. Bridge, EVM, Hyperliquid, autonomous signing, silent broadcast, and full access are unavailable. " +
+    "Cloud signing, Auto DCA, scheduled execution, automated TP/SL, and discovery-to-buy are disabled. Pump.fun is preview-only on web. EVM swap execution is release-gated; never invent an EVM quote or request token contracts unless a typed tool is available. Bridge preparation is available only through the deterministic Bridge panel, not through AI. Hyperliquid, autonomous signing, silent broadcast, and full access are unavailable. " +
     "Never request a private key, seed phrase, password, or API key. Never claim a transaction succeeded without a structured on-chain receipt from the application. " +
     "Answer in the user's language, use short headings and bullets when useful, and do not wrap the whole answer in a JSON object.";
   const system =
@@ -98,7 +101,7 @@ async function callOpenRouter(input: {
         { role: "system", content: system },
         {
           role: "system",
-          content: `Connected wallet context: ${input.walletAddress ?? "none (chat only)"}. This address is context, not authorization.`,
+          content: `Authenticated Solana identity: ${input.walletAddress ?? "none"}. Bound session context: workspace=${input.workspace}, chain=${input.chainKey ?? "solana-mainnet"}, execution wallet=${input.sessionWalletAddress ?? "none"}. These values are context, not signing authorization.`,
         },
         ...history,
       ],
@@ -141,18 +144,23 @@ async function callOpenRouter(input: {
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, settings, sessionMode, walletAddress } = (await req.json()) as {
+    const { messages, settings, sessionMode, walletAddress, workspace, chainKey, sessionWalletAddress } = (await req.json()) as {
       messages?: ChatMessage[];
       settings?: ChatSettings;
       sessionMode?: "agent" | "mission";
       walletAddress?: string | null;
+      workspace?: "solana" | "evm" | "bridge";
+      chainKey?: string;
+      sessionWalletAddress?: string;
     };
     const auth = await requireWalletAuth(req, walletAddress);
     if (isAuthFailure(auth)) return auth;
     const lastUserMessage = messages?.[messages.length - 1]?.content ?? "";
     const maxSlippageBps = Math.max(1, Math.min(500, Number(settings?.maxSlippageBps ?? "100") || 100));
 
-    if (isSolToUsdcSwap(lastUserMessage)) {
+    const selectedWorkspace = ["solana", "evm", "bridge"].includes(workspace ?? "") ? workspace! : "solana";
+
+    if (selectedWorkspace === "solana" && isSolToUsdcSwap(lastUserMessage)) {
       const solAmount = parseSolAmount(lastUserMessage) ?? 0.001;
       if (solAmount > 0.05) {
         return NextResponse.json({
@@ -258,6 +266,9 @@ export async function POST(req: NextRequest) {
         walletAddress: typeof walletAddress === "string" ? walletAddress.slice(0, 64) : null,
         maxTokens,
         temperature,
+        workspace: selectedWorkspace,
+        chainKey: typeof chainKey === "string" ? chainKey.slice(0, 32) : null,
+        sessionWalletAddress: typeof sessionWalletAddress === "string" ? sessionWalletAddress.slice(0, 64) : null,
       });
       return NextResponse.json({
         role: "assistant",

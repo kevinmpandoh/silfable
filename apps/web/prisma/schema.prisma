@@ -16,6 +16,39 @@ model User {
   chatSessions   ChatSession[]
   delegatedAuthorities DelegatedAuthority[]
   safetyState    WalletSafetyState?
+  linkedWallets  LinkedWallet[]
+  linkedWalletChallenges LinkedWalletChallenge[]
+}
+
+model LinkedWallet {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @db.ObjectId
+  user       User     @relation(fields: [userId], references: [id])
+  namespace  String
+  address    String
+  label      String?
+  verifiedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([namespace, address])
+  @@index([userId, namespace])
+}
+
+model LinkedWalletChallenge {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String    @db.ObjectId
+  user       User      @relation(fields: [userId], references: [id])
+  namespace  String
+  address    String
+  chainId    Int
+  nonceHash  String    @unique
+  message    String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, namespace, address, expiresAt])
 }
 
 model WalletAuthChallenge {
@@ -206,6 +239,9 @@ model ChatSession {
   user      User          @relation(fields: [userId], references: [id])
   title     String
   filter    String        @default("all") // all, agent, mission, pump, active, limit, custom
+  workspace String        @default("solana") // solana, evm, bridge
+  chainKey  String?
+  sessionWalletAddress String?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
   messages  ChatMessage[]

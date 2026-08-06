@@ -22,17 +22,20 @@ export type SolanaBridgeRequest = {
 export function SolanaBridgePanel({
   onPrepare,
   busy,
+  boundDestination,
 }: {
   onPrepare: (request: SolanaBridgeRequest) => Promise<void>;
   busy: boolean;
+  boundDestination?: SolanaBridgeRequest["destination"];
 }) {
   const [open, setOpen] = useState(false);
   const [destination, setDestination] = useState<SolanaBridgeRequest["destination"]>("base");
   const [destinationRecipient, setDestinationRecipient] = useState("");
   const [amountUsdc, setAmountUsdc] = useState("");
+  const effectiveDestination = boundDestination ?? destination;
 
   async function submit() {
-    await onPrepare({ destination, destinationRecipient: destinationRecipient.trim(), amountUsdc: amountUsdc.trim() });
+    await onPrepare({ destination: effectiveDestination, destinationRecipient: destinationRecipient.trim(), amountUsdc: amountUsdc.trim() });
   }
 
   return (
@@ -47,7 +50,7 @@ export function SolanaBridgePanel({
           <div className="webBridgeGrid">
             <label>
               <span>Destination</span>
-              <select value={destination} onChange={(event) => setDestination(event.target.value as SolanaBridgeRequest["destination"])}>
+              <select value={effectiveDestination} disabled={Boolean(boundDestination)} onChange={(event) => setDestination(event.target.value as SolanaBridgeRequest["destination"])}>
                 {destinations.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
               </select>
             </label>

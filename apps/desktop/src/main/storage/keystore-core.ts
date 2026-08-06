@@ -11,6 +11,7 @@ export type SecretName =
   | "uniswap-api-key"
   | "tavily-api-key"
   | "zeroex-api-key"
+  | "solana-rpc-url"
   | "ethereum-rpc-url"
   | "base-rpc-url"
   | "arbitrum-rpc-url"
@@ -30,7 +31,8 @@ export type SecretName =
   | "evm-bridge-receipt-store-key"
   | "mission-runtime-store-key"
   | "portfolio-history-store-key"
-  | "full-access-store-key";
+  | "full-access-store-key"
+  | "hyperliquid-agent-secret";
 
 type KeystoreFileV1 = {
   version: 1;
@@ -54,6 +56,7 @@ const SECRET_NAMES = new Set<string>([
   "uniswap-api-key",
   "tavily-api-key",
   "zeroex-api-key",
+  "solana-rpc-url",
   "ethereum-rpc-url",
   "base-rpc-url",
   "arbitrum-rpc-url",
@@ -74,6 +77,7 @@ const SECRET_NAMES = new Set<string>([
   "mission-runtime-store-key",
   "portfolio-history-store-key",
   "full-access-store-key",
+  "hyperliquid-agent-secret",
 ]);
 const MAX_KEYSTORE_BYTES = 1024 * 1024;
 

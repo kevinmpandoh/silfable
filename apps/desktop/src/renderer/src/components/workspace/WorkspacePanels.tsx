@@ -821,18 +821,13 @@ export function RightRail({
     </aside>
   );
 }
-export function PortfolioAssetRow({ symbol, amount, usdValue, pnl }: { symbol: string; amount: string; usdValue: number | null; pnl?: number | null }) {
+export function PortfolioAssetRow({ symbol, amount, usdValue }: { symbol: string; amount: string; usdValue: number | null }) {
   return (
     <div className="portfolioAssetRow">
       <span>{symbol}</span>
       <strong>{formatPortfolioAmount(amount)}</strong>
       <div>
         <em>{formatPortfolioUsd(usdValue)}</em>
-        {pnl !== undefined && pnl !== null && (
-          <span className={`portfolioAssetPnl ${pnl >= 0 ? "positive" : "negative"}`}>
-            {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}
-          </span>
-        )}
       </div>
     </div>
   );

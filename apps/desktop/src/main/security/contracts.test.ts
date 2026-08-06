@@ -9,6 +9,8 @@ import {
   EmergencyStopEngageRequestSchema,
   EmergencyStopReleaseRequestSchema,
   EmergencyStopStatusSchema,
+  EvmExecuteKyberSwapRequestSchema,
+  EvmPrepareKyberSwapRequestSchema,
   IPC_CHANNELS,
   JupiterSaveKeyRequestSchema,
   LimitOrderCancelExecuteRequestSchema,
@@ -138,6 +140,37 @@ test("mission simulation requires explicit simulation-only acknowledgement", () 
   assert.equal(MissionSimulateRequestSchema.safeParse(base).success, true);
   assert.equal(MissionSimulateRequestSchema.safeParse({ ...base, acknowledgedSimulationOnly: "true" }).success, false);
   assert.equal(MissionSimulateRequestSchema.safeParse({ ...base, executionEnabled: true }).success, false);
+});
+
+test("EVM prepare and execution contracts match the session-bound renderer workflow", () => {
+  const prepare = {
+    schemaVersion: 1,
+    requestId,
+    sessionId: requestId,
+    chainKey: "robinhood",
+    quoteId: requestId,
+    walletAddress: `0x${"11".repeat(20)}`,
+    slippageBps: 50,
+    acknowledgedSimulationOnly: true,
+  };
+  assert.equal(EvmPrepareKyberSwapRequestSchema.safeParse(prepare).success, true);
+  assert.equal(EvmPrepareKyberSwapRequestSchema.safeParse({ ...prepare, acknowledgedSimulationOnly: false }).success, false);
+  assert.equal(EvmPrepareKyberSwapRequestSchema.safeParse({ ...prepare, sellToken: `0x${"22".repeat(20)}` }).success, false);
+
+  const execute = {
+    schemaVersion: 1,
+    requestId,
+    sessionId: requestId,
+    chainKey: "robinhood",
+    walletAddress: prepare.walletAddress,
+    preflightId: requestId,
+    action: "swap",
+    masterPassword: "StrongPass1!",
+    confirmation: "EXECUTE EVM MAINNET SWAP",
+    acknowledgedIrreversible: true,
+  };
+  assert.equal(EvmExecuteKyberSwapRequestSchema.safeParse(execute).success, true);
+  assert.equal(EvmExecuteKyberSwapRequestSchema.safeParse({ ...execute, confirmation: "APPROVE EVM MAINNET" }).success, false);
 });
 
 test("Pump simulation accepts identifiers and simulation-only acknowledgement, never execution authority", () => {
@@ -293,4 +326,7 @@ test("receipt verification and transaction utilities accept identifiers only, ne
   assert.equal(ClipboardWriteTransactionSignatureRequestSchema.safeParse({ schemaVersion: 1, requestId, signature }).success, true);
   assert.equal(ExternalOpenTransactionRequestSchema.safeParse({ schemaVersion: 1, requestId, signature }).success, true);
   assert.equal(ExternalOpenTransactionRequestSchema.safeParse({ schemaVersion: 1, requestId, signature, url: "https://evil.invalid" }).success, false);
+  const evmTransaction = { schemaVersion: 1, requestId, chainKey: "robinhood", transactionHash: `0x${"ab".repeat(32)}` };
+  assert.equal(ExternalOpenTransactionRequestSchema.safeParse(evmTransaction).success, true);
+  assert.equal(ExternalOpenTransactionRequestSchema.safeParse({ ...evmTransaction, url: "https://evil.invalid" }).success, false);
 });

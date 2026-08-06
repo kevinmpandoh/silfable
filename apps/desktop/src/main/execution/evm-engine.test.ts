@@ -61,3 +61,25 @@ test("Robinhood EVM engine blocks broadcast before any RPC call when venue readi
     );
   });
 });
+
+test("EVM simulation returns bigint gas and fee evidence required by preflight", async () => {
+  const engine = new EvmEngine("https://rpc.invalid", 4663);
+  engine.estimateGasAndFees = async () => ({
+    gasLimit: 21_000n,
+    maxFeePerGas: 2_000_000_000n,
+    maxPriorityFeePerGas: 1_000_000_000n,
+  });
+
+  const result = await engine.simulateTransaction({
+    from: `0x${"11".repeat(20)}`,
+    to: `0x${"22".repeat(20)}`,
+    valueWei: 0n,
+  });
+
+  assert.deepEqual(result, {
+    gasLimit: 21_000n,
+    maxFeePerGas: 2_000_000_000n,
+    maxPriorityFeePerGas: 1_000_000_000n,
+  });
+  assert.equal(result.gasLimit * result.maxFeePerGas, 42_000_000_000_000n);
+});

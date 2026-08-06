@@ -24,7 +24,6 @@ const statusRows = [
   ["Release-gated", "Bridge", "Cross-chain swaps and transfers (e.g., Solana to EVM) are implemented with complete transaction signing and local receipt tracking."],
   ["Implemented", "Auto DCA", "Dollar-Cost Averaging policies are supported with strict local limits and deterministic execution bounds."],
   ["Implemented", "TP/SL & Exits", "Take Profit, Stop Loss, and dynamic Trailing Stop automation run securely in the background with strict oracle price boundaries."],
-  ["Implemented", "PnL Tracking", "Real-time Profit and Loss calculations and historical performance tracking across portfolios and active positions."],
   ["Preview", "Cloud Monitor", "Background monitoring and proposal infrastructure without signing or Mainnet broadcast authority."],
   ["Unavailable", "Autonomous and Full Access", "No cloud signer, approval bypass, unattended trading, or Hyperliquid execution is production-authorized."],
 ] as const;
@@ -244,7 +243,6 @@ export default function WhitepaperPage() {
                   ["Swap", "Solana and EVM swaps use separate typed contracts, provider evidence, policy, signer boundaries, and receipt recovery."],
                   ["Bridge", "Cross-chain transactions are fully supported with explicit pathing, signature verification, and synchronized state recovery."],
                   ["Auto DCA & Exits", "Automated Dollar-Cost Averaging and Exit Strategies (Take Profit, Stop Loss, Trailing Stop) are bound by tight daily limits and oracle price bounds, keeping background execution deterministic and safe."],
-                  ["PnL Tracking", "Integrated Profit and Loss accounting provides verifiable insights into position changes without granting the AI trading authority."],
                 ].map(([title, text]) => (
                   <div key={title} className="border-t border-black/20 pt-5">
                     <h3 className="font-serif text-2xl font-normal tracking-normal">{title}</h3>

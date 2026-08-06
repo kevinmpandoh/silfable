@@ -37,6 +37,16 @@ export function EvmSwapProposalCard({
   const approvalConfirmed = receipts.some(
     (receipt) => receipt.kind === "approval" && receipt.status === "confirmed",
   );
+  async function openEvmExplorer(receipt: EvmSessionExecutionReceipt): Promise<void> {
+    const chainKey = receipt.chainKey ?? proposal.chainKey;
+    if (!chainKey) throw new Error("This EVM receipt has no locked chain scope.");
+    await window.silfable.openTransactionInExplorer({
+      schemaVersion: 1,
+      requestId: crypto.randomUUID(),
+      chainKey,
+      transactionHash: receipt.transactionHash,
+    });
+  }
   return (
     <section className={`missionPreview ${proposal.quote.liquidityAvailable ? "ready" : "blocked"}`}>
       <header>
@@ -46,8 +56,14 @@ export function EvmSwapProposalCard({
             {proposal.quote.sellTokenSymbol} → {proposal.quote.buyTokenSymbol}
           </strong>
         </div>
-        <StatusPill tone={proposal.quote.liquidityAvailable ? "success" : "warning"}>
-          {proposal.quote.liquidityAvailable ? "Liquidity found" : "Blocked"}
+        <StatusPill tone={swapConfirmed || proposal.quote.liquidityAvailable ? "success" : "warning"}>
+          {swapConfirmed
+            ? "Swap confirmed"
+            : approvalConfirmed
+              ? "Approval confirmed"
+              : proposal.quote.liquidityAvailable
+                ? "Liquidity found"
+                : "Blocked"}
         </StatusPill>
       </header>
       <dl>
@@ -88,37 +104,42 @@ export function EvmSwapProposalCard({
                         ? "https://bscscan.com"
                         : chainKey === "avalanche"
                           ? "https://snowtrace.io"
-                          : "https://explorer.mainnet.chain.robinhood.com";
+                          : "https://robinhoodchain.blockscout.com";
             const explorerTxUrl = `${baseUrl}/tx/${receipt.transactionHash}`;
             return (
-              <div key={receipt.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "8px 12px" }}>
+              <div key={receipt.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "10px 14px", margin: "8px 14px", border: "1px solid rgba(59, 130, 246, 0.3)", borderRadius: "8px", background: "rgba(15, 23, 42, 0.75)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span className={receipt.status === "confirmed" ? "success" : "failed"}>
+                  <span style={{ padding: "3px 8px", borderRadius: "4px", font: "700 9px var(--mono)", textTransform: "uppercase", letterSpacing: "0.05em", color: receipt.status === "confirmed" ? "#34d399" : "#f87171", background: receipt.status === "confirmed" ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)", border: receipt.status === "confirmed" ? "1px solid rgba(16, 185, 129, 0.35)" : "1px solid rgba(239, 68, 68, 0.35)" }}>
                     {receipt.status}
                   </span>
-                  <div>
-                    <strong>{receipt.kind} · {shorten(receipt.transactionHash)}</strong>
-                    <small>{new Date(receipt.reconciledAt).toLocaleString()}</small>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                    <strong style={{ color: "#e2e8f0", font: "600 11px var(--mono)" }}>{receipt.kind} · {shorten(receipt.transactionHash)}</strong>
+                    <small style={{ color: "#64748b", font: "9px var(--mono)" }}>{new Date(receipt.reconciledAt).toLocaleTimeString()}</small>
                   </div>
                 </div>
                 <a
                   href={explorerTxUrl}
                   target="_blank"
                   rel="noreferrer"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    void openEvmExplorer(receipt);
+                  }}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    gap: "4px",
+                    gap: "5px",
                     padding: "5px 12px",
-                    background: "rgba(59, 130, 246, 0.15)",
+                    background: "rgba(30, 58, 138, 0.35)",
                     border: "1px solid rgba(59, 130, 246, 0.4)",
                     borderRadius: "6px",
                     color: "#60a5fa",
-                    fontSize: "11px",
+                    fontSize: "10px",
                     fontWeight: 600,
                     textDecoration: "none",
                     whiteSpace: "nowrap",
                     transition: "all 0.2s ease",
+                    flexShrink: 0,
                   }}
                 >
                   <span>🔗</span> Open Explorer
@@ -145,7 +166,7 @@ export function EvmSwapProposalCard({
           {swapConfirmed
             ? "Swap confirmed"
             : approvalConfirmed && !preflight
-              ? "Approval confirmed · fresh review required"
+              ? "Approval confirmed · swap not submitted · fresh review required"
               : "No signing authority granted"}
         </span>
         {!swapConfirmed && latestReceipt?.status !== "unknown" && !preflight && (

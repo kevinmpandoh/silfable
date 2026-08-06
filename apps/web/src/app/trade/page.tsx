@@ -26,7 +26,8 @@ import { PumpTradePreviewCard } from "@/components/cards/PumpTradePreviewCard";
 import { LimitOrderPreviewCard } from "@/components/cards/LimitOrderPreviewCard";
 import { JupiterSwapPreviewCard } from "@/components/cards/JupiterSwapPreviewCard";
 import { WebSetupWizard } from "@/components/trade/WebSetupWizard";
-import { WebNewSessionModal } from "@/components/trade/WebNewSessionModal";
+import { WebNewSessionModal, type LinkedWebWallet } from "@/components/trade/WebNewSessionModal";
+import { getWebEvmChain } from "@/lib/evm-chains";
 import { SolanaBridgePanel, type SolanaBridgeRequest } from "@/components/trade/SolanaBridgePanel";
 
 function base64ToBytes(value: string): Uint8Array {
@@ -36,6 +37,10 @@ function base64ToBytes(value: string): Uint8Array {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes;
+}
+
+function shortWallet(address?: string): string {
+  return address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "unbound";
 }
 
 function renderMessageContent(content: string) {
@@ -110,6 +115,10 @@ function setupStorageKey(walletAddress: string): string {
   return `silfable_web_setup_v1:${walletAddress}`;
 }
 
+function setupSecretStorageKey(walletAddress: string): string {
+  return `silfable_web_setup_secrets_v1:${walletAddress}`;
+}
+
 export default function TradePage() {
   const { publicKey, sendTransaction, connected } = useWallet();
   const walletAddress = publicKey?.toBase58() ?? null;
@@ -148,11 +157,45 @@ export default function TradePage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [bridgeBusy, setBridgeBusy] = useState(false);
+  const [linkedWallets, setLinkedWallets] = useState<LinkedWebWallet[]>([]);
+  const [activeEvmAddress, setActiveEvmAddress] = useState<string | null>(null);
+  const [activeEvmChainId, setActiveEvmChainId] = useState<number | null>(null);
 
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [portfolioAssets, setPortfolioAssets] = useState<{ symbol: string; amount: number; valueUsd: number }[]>([]);
   const [portfolioTotalUsd, setPortfolioTotalUsd] = useState<number | null>(null);
   const [portfolioStatus, setPortfolioStatus] = useState("Refreshing Mainnet balance...");
+  const activeSession = sessions.find((session) => session.id === activeSessionId);
+  const expectedEvmChain = activeSession?.chainKey ? getWebEvmChain(activeSession.chainKey) : null;
+  const evmWalletMatchesSession = activeSession?.workspace !== "evm"
+    || (activeEvmAddress?.toLowerCase() === activeSession.sessionWalletAddress?.toLowerCase()
+      && activeEvmChainId === expectedEvmChain?.chainId);
+
+  useEffect(() => {
+    const provider = window.ethereum;
+    if (!provider) return;
+    const refresh = async () => {
+      try {
+        const [accounts, chainIdHex] = await Promise.all([
+          provider.request({ method: "eth_accounts" }),
+          provider.request({ method: "eth_chainId" }),
+        ]);
+        setActiveEvmAddress(Array.isArray(accounts) && typeof accounts[0] === "string" ? accounts[0] : null);
+        setActiveEvmChainId(typeof chainIdHex === "string" ? Number.parseInt(chainIdHex, 16) : null);
+      } catch {
+        setActiveEvmAddress(null);
+        setActiveEvmChainId(null);
+      }
+    };
+    const onChange = () => void refresh();
+    void refresh();
+    provider.on?.("accountsChanged", onChange);
+    provider.on?.("chainChanged", onChange);
+    return () => {
+      provider.removeListener?.("accountsChanged", onChange);
+      provider.removeListener?.("chainChanged", onChange);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -217,13 +260,21 @@ export default function TradePage() {
 
         // Load Settings
         const savedSetup = localStorage.getItem(setupStorageKey(walletAddress));
+        const sessionSecrets = sessionStorage.getItem(setupSecretStorageKey(walletAddress));
         if (savedSetup) {
-          setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(savedSetup) });
+          setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(savedSetup), ...(sessionSecrets ? JSON.parse(sessionSecrets) : {}) });
           setSetupCompleted(true);
         }
 
         // Load IndexedDB Sessions
-        const storedSessions = await getAllSessions(walletAddress);
+        const [storedSessions, walletResponse] = await Promise.all([
+          getAllSessions(walletAddress),
+          fetch("/api/wallets", { cache: "no-store" }),
+        ]);
+        if (walletResponse.ok) {
+          const walletData = await walletResponse.json();
+          setLinkedWallets(Array.isArray(walletData.wallets) ? walletData.wallets : []);
+        }
         if (cancelled) return;
         const legacyPlaceholder = storedSessions.length === 1
           && ["Default Trading Workspace", "New trading workspace"].includes(storedSessions[0].title);
@@ -359,7 +410,9 @@ export default function TradePage() {
   function persistSettings() {
     if (!walletAddress) return;
     try {
-      localStorage.setItem(setupStorageKey(walletAddress), JSON.stringify(settings));
+      const { openRouterApiKey, jupiterApiKey, ...nonSecretSettings } = settings;
+      localStorage.setItem(setupStorageKey(walletAddress), JSON.stringify(nonSecretSettings));
+      sessionStorage.setItem(setupSecretStorageKey(walletAddress), JSON.stringify({ openRouterApiKey, jupiterApiKey }));
       setSetupCompleted(true);
     } catch {
       alert("Failed to save settings.");
@@ -414,6 +467,9 @@ export default function TradePage() {
           mode,
           sessionMode: activeSession?.filter === "mission" || activeSession?.filter === "pump" ? "mission" : "agent",
           walletAddress: publicKey?.toBase58() ?? null,
+          workspace: activeSession?.workspace ?? "solana",
+          chainKey: activeSession?.chainKey,
+          sessionWalletAddress: activeSession?.sessionWalletAddress ?? walletAddress,
           settings,
         }),
       });
@@ -466,6 +522,10 @@ export default function TradePage() {
       alert("Please connect your Solana wallet (Phantom / Solflare) first!");
       return;
     }
+    if (activeSession?.workspace !== "solana") {
+      alert("Jupiter Solana swap hanya dapat dijalankan dari session Solana yang terikat.");
+      return;
+    }
     const activeWalletAddress = walletAddress;
 
     if (!proposal.quoteResponse) {
@@ -481,6 +541,8 @@ export default function TradePage() {
       return;
     }
 
+    let submittedSignature: string | null = null;
+    let chainRejected = false;
     try {
       setMessages((prev) =>
         prev.map((m) =>
@@ -504,13 +566,13 @@ export default function TradePage() {
         throw new Error(swapData.error || "Jupiter did not return a transaction.");
       }
       const transaction = VersionedTransaction.deserialize(base64ToBytes(swapData.swapTransaction));
-      const signature = await sendTransaction(transaction, connection);
-      
-      // Update proposal status to "signed" immediately upon wallet signature & broadcast
+      const signature = await sendTransaction(transaction, connection, { skipPreflight: false, maxRetries: 2 });
+      submittedSignature = signature;
+
       setMessages((prev) =>
         prev.map((m) => {
           if ((m.id === msgId || (m.proposal && m.proposal.id === proposal.id)) && m.proposal) {
-            const updatedM = { ...m, proposal: { ...m.proposal, status: "signed" as const } };
+            const updatedM = { ...m, proposal: { ...m.proposal, status: "submitted" as const } };
             void saveMessage(activeWalletAddress, updatedM);
             return updatedM;
           }
@@ -518,11 +580,25 @@ export default function TradePage() {
         }),
       );
 
+      const receipt = await connection.confirmTransaction(signature, "confirmed");
+      if (receipt.value.err) {
+        chainRejected = true;
+        throw new Error(`Solana rejected the swap: ${JSON.stringify(receipt.value.err)}`);
+      }
+      setMessages((prev) => prev.map((message) => {
+        if ((message.id === msgId || message.proposal?.id === proposal.id) && message.proposal) {
+          const updated = { ...message, proposal: { ...message.proposal, status: "confirmed" as const } };
+          void saveMessage(activeWalletAddress, updated);
+          return updated;
+        }
+        return message;
+      }));
+
       const successMsg: WebMessage = {
         id: `sys_${Date.now()}`,
         sessionId: activeSessionId,
         role: "assistant",
-        content: `Mainnet swap submitted & confirmed successfully.\n\n[View on Solana Explorer](https://solscan.io/tx/${signature})`,
+        content: `Mainnet swap confirmed on Solana.\n\n[View verified transaction on Solana Explorer](https://solscan.io/tx/${signature})`,
         createdAt: Date.now(),
       };
       
@@ -544,14 +620,16 @@ export default function TradePage() {
         id: `sys_${Date.now()}`,
         sessionId: activeSessionId,
         role: "assistant",
-        content: `Swap cancelled or failed safely: ${message}`,
+        content: submittedSignature
+          ? `${chainRejected ? "Swap was rejected on-chain" : "Swap was submitted, but confirmation could not be verified"}. Do not submit it again until you inspect the signature.\n\n${message}\n\n[Inspect transaction](https://solscan.io/tx/${submittedSignature})`
+          : `Swap cancelled or failed before broadcast: ${message}`,
         createdAt: Date.now(),
       };
 
       setMessages((prev) => {
         const updated = prev.map((m) => {
           if ((m.id === msgId || (m.proposal && m.proposal.id === proposal.id)) && m.proposal) {
-            const updatedM = { ...m, proposal: { ...m.proposal, status: "failed" as const } };
+            const updatedM = { ...m, proposal: { ...m.proposal, status: submittedSignature ? (chainRejected ? "reverted" as const : "unknown" as const) : "failed" as const } };
             void saveMessage(activeWalletAddress, updatedM);
             return updatedM;
           }
@@ -583,7 +661,20 @@ export default function TradePage() {
       await saveMessage(walletAddress, errMsg);
       return;
     }
+    if (activeSession?.workspace !== "bridge" || request.destination !== activeSession.chainKey) {
+      const errMsg: WebMessage = {
+        id: `sys_${Date.now()}`,
+        sessionId: activeSessionId,
+        role: "assistant",
+        content: "Bridge request was blocked because its destination does not match the chain bound to this session.",
+        createdAt: Date.now(),
+      };
+      setMessages((prev) => [...prev, errMsg]);
+      await saveMessage(walletAddress, errMsg);
+      return;
+    }
     setBridgeBusy(true);
+    let submittedSignature: string | null = null;
     try {
       const response = await fetch("/api/bridge/solana-to-evm", {
         method: "POST",
@@ -595,13 +686,16 @@ export default function TradePage() {
         throw new Error(quote.error || "Bridge provider did not return an executable transaction.");
       }
       const transaction = VersionedTransaction.deserialize(base64ToBytes(quote.transaction));
-      const signature = await sendTransaction(transaction, connection);
-      
+      const signature = await sendTransaction(transaction, connection, { skipPreflight: false, maxRetries: 2 });
+      submittedSignature = signature;
+      const sourceReceipt = await connection.confirmTransaction(signature, "confirmed");
+      if (sourceReceipt.value.err) throw new Error(`Solana rejected the bridge source transaction: ${JSON.stringify(sourceReceipt.value.err)}`);
+
       const successMsg: WebMessage = {
         id: `sys_${Date.now()}`,
         sessionId: activeSessionId,
         role: "assistant",
-        content: `Bridge to ${quote.destination?.label ?? request.destination} confirmed & submitted successfully.\n\n[View on Solana Explorer](https://solscan.io/tx/${signature})`,
+        content: `Bridge source transaction confirmed on Solana. Destination settlement on ${quote.destination?.label ?? request.destination} is still pending and is not claimed as complete.\n\n[View source transaction on Solana Explorer](https://solscan.io/tx/${signature})${quote.requestId ? `\n\nRelay request: ${quote.requestId}` : ""}`,
         createdAt: Date.now(),
       };
       setMessages((prev) => [...prev.filter((m) => m.sessionId === activeSessionId), successMsg]);
@@ -619,7 +713,9 @@ export default function TradePage() {
         id: `sys_${Date.now()}`,
         sessionId: activeSessionId,
         role: "assistant",
-        content: `Bridge was not broadcast: ${message}`,
+        content: submittedSignature
+          ? `Bridge source transaction was submitted, but its confirmation could not be verified. Do not submit it again until you inspect the signature. Destination settlement is unknown.\n\n${message}\n\n[Inspect source transaction](https://solscan.io/tx/${submittedSignature})`
+          : `Bridge was not broadcast: ${message}`,
         createdAt: Date.now(),
       };
       setMessages((prev) => [...prev, errMsg]);
@@ -665,17 +761,25 @@ export default function TradePage() {
       <WebNewSessionModal
         isOpen={showSessionModal}
         walletAddress={walletAddress ?? ""}
+        linkedWallets={linkedWallets}
+        onWalletLinked={(linkedWallet) => setLinkedWallets((current) => [
+          ...current.filter((wallet) => !(wallet.namespace === linkedWallet.namespace && wallet.address.toLowerCase() === linkedWallet.address.toLowerCase())),
+          linkedWallet,
+        ])}
         onClose={() => setShowSessionModal(false)}
         onCancel={() => {
           setPendingSessionPrompt(null);
           setShowSessionModal(false);
         }}
-        onCreateRestrictedSession={async ({ title, mode }) => {
+        onCreateRestrictedSession={async ({ title, mode, workspace, chainKey, sessionWalletAddress }) => {
           if (!walletAddress) return;
           const draftSession: SessionItem = {
             id: "",
             title,
             filter: mode,
+            workspace,
+            chainKey,
+            sessionWalletAddress,
             createdAt: Date.now(),
             updatedAt: Date.now(),
           };
@@ -740,7 +844,7 @@ export default function TradePage() {
                 >
                   <div>
                     <strong>{s.title}</strong>
-                    <small>{new Date(s.updatedAt).toLocaleTimeString()}</small>
+                    <small>{s.workspace === "evm" ? `${getWebEvmChain(s.chainKey ?? "")?.name ?? "EVM"} · ${shortWallet(s.sessionWalletAddress)}` : s.workspace === "bridge" ? `Bridge → ${getWebEvmChain(s.chainKey ?? "")?.name ?? "EVM"}` : `Solana · ${new Date(s.updatedAt).toLocaleTimeString()}`}</small>
                   </div>
                   <span
                     onClick={(e) => handleDeleteSession(s.id, e)}
@@ -837,7 +941,7 @@ export default function TradePage() {
           ) : (
             <div className="conversation">
               <header>
-                <span>MODE / RESTRICTED MAINNET</span>
+                <span>MODE / {(activeSession?.workspace ?? "solana").toUpperCase()} · {activeSession?.chainKey ? getWebEvmChain(activeSession.chainKey)?.name.toUpperCase() : "MAINNET"}</span>
                 <span>RESTRICTED POSTURE</span>
               </header>
 
@@ -892,6 +996,21 @@ export default function TradePage() {
 
               {/* Quick Suggestions Chips & Composer */}
               <div className="conversationComposer">
+                {activeSession?.workspace === "bridge" && (
+                  <SolanaBridgePanel
+                    onPrepare={handlePrepareSolanaBridge}
+                    busy={bridgeBusy}
+                    boundDestination={activeSession.chainKey as SolanaBridgeRequest["destination"]}
+                  />
+                )}
+                {activeSession?.workspace === "evm" && (
+                  <div className={`evmReleaseNotice ${evmWalletMatchesSession ? "" : "evmWalletMismatch"}`}>
+                    <strong>{getWebEvmChain(activeSession.chainKey ?? "")?.name ?? "EVM"} · {shortWallet(activeSession.sessionWalletAddress)}</strong>
+                    <span>{evmWalletMatchesSession
+                      ? "Wallet ownership is verified and the browser account/chain match this session. EVM quoting, allowance, simulation, and execution remain release-gated until the deterministic transaction pipeline is installed."
+                      : `Execution locked: switch the browser wallet to ${shortWallet(activeSession.sessionWalletAddress)} on ${expectedEvmChain?.name ?? "the bound chain"}.`}</span>
+                  </div>
+                )}
                 <div className="suggestions">
                   <button
                     onClick={() =>
@@ -942,7 +1061,7 @@ export default function TradePage() {
           <section className="railSection">
             <h3 className="mb-4 text-[9px] tracking-[0.2em] text-[#7ba2ff] uppercase flex items-center gap-2"><span className="w-5 h-px bg-[#7ba2ff]" />PORTFOLIO</h3>
             <div className="mb-4">
-              <span className="text-[8px] tracking-[0.16em] uppercase text-[#7f8aa7]">VERIFIED PORTFOLIO</span>
+              <span className="text-[8px] tracking-[0.16em] uppercase text-[#7f8aa7]">{activeSession?.workspace === "evm" ? "AUTHENTICATED SOLANA IDENTITY" : "VERIFIED SOLANA PORTFOLIO"}</span>
               <div className="text-[28px] font-bold mt-1 text-white">
                 {portfolioTotalUsd !== null && portfolioTotalUsd > 0
                   ? `$${portfolioTotalUsd.toFixed(2)}`
@@ -976,6 +1095,13 @@ export default function TradePage() {
                   <button onClick={() => navigator.clipboard.writeText(publicKey.toBase58())} className="text-[8px] text-[#7ba2ff] tracking-[0.1em] uppercase hover:text-white">COPY</button>
                 </div>
               </div>
+
+              {activeSession?.workspace === "evm" && activeSession.sessionWalletAddress && (
+                <div className="flex items-center justify-between p-3 rounded-lg border border-cyan-400/20 bg-cyan-400/5">
+                  <div className="flex items-center gap-2 font-mono text-[9px] text-[#eef2ff]"><span className="text-cyan-300">SESSION EVM</span> {shortWallet(activeSession.sessionWalletAddress)}</div>
+                  <button onClick={() => navigator.clipboard.writeText(activeSession.sessionWalletAddress!)} className="text-[8px] text-[#7ba2ff] tracking-[0.1em] uppercase hover:text-white">COPY</button>
+                </div>
+              )}
 
             </div>
           </section>

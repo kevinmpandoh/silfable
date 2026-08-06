@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { Activity, ArrowUp, Bot, Brain, CirclePlus, Settings, ShieldCheck, Target } from 'lucide-react';
 import { Button, Modal } from '../ui';
 import { shorten, cn } from '../../lib/utils';
@@ -187,10 +187,17 @@ export function Conversation({
     receipt: MissionExecutionReceipt,
   ) => void;
 }) {
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  useLayoutEffect(() => {
+    const messages = messagesRef.current;
+    if (messages === null) return;
+    const scrollToLatest = () => {
+      messages.scrollTop = messages.scrollHeight;
+    };
+    scrollToLatest();
+    const frame = requestAnimationFrame(scrollToLatest);
+    return () => cancelAnimationFrame(frame);
   }, [session.id, session.messages.length]);
 
   return (
@@ -230,7 +237,7 @@ export function Conversation({
           />
         </div>
       )}
-      <div className="messages">
+      <div className="messages" ref={messagesRef}>
         {session.messages.map((message) => (
           <article className={message.role} key={message.id}>
             {message.role === "assistant" && <span className="avatar">S</span>}
@@ -505,7 +512,6 @@ export function Conversation({
           Every mutating action requires a validated contract, passed
           simulation, password recheck, and explicit approval.
         </Notice>
-        <div ref={messagesEndRef} />
         <Composer
           value={draft}
           setValue={setDraft}

@@ -8,6 +8,7 @@ import type { PumpRiskLedgerService } from "../pump/risk-ledger.js";
 import type { PumpRiskSettingsService } from "../pump/risk-settings.js";
 import type { LocalEncryptedKeystore } from "../storage/keystore.js";
 import type { EncryptedFullAccessGrantService } from "../security/full-access-grants.js";
+import type { WalletOnboardingService } from "../wallet/onboarding.js";
 
 export type AutonomousExecutorDependencies = {
   strategyManager: PositionStrategyManager;

@@ -3,13 +3,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cloudDb, isDbConfigured, safeDbQuery } from "@/lib/cloud-db";
 import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
+import { getWebEvmChain } from "@/lib/evm-chains";
 
 function isValidObjectId(id?: string): boolean {
   return typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id);
 }
 
 export async function GET(req: NextRequest) {
-  if (!isDbConfigured) {
+  if (!isDbConfigured()) {
     return NextResponse.json({ sessions: [] });
   }
 
@@ -46,6 +47,9 @@ export async function GET(req: NextRequest) {
       filter: s.filter,
       createdAt: s.createdAt.getTime(),
       updatedAt: s.updatedAt.getTime(),
+      workspace: s.workspace || "solana",
+      chainKey: s.chainKey ?? undefined,
+      sessionWalletAddress: s.sessionWalletAddress ?? undefined,
     }));
 
     return NextResponse.json({ sessions });
@@ -116,6 +120,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "session data is required" }, { status: 400 });
     }
 
+    const workspace = ["solana", "evm", "bridge"].includes(session.workspace) ? session.workspace : "solana";
+    const chainKey = workspace === "solana" ? null : session.chainKey;
+    const sessionWalletAddress = typeof session.sessionWalletAddress === "string" ? session.sessionWalletAddress : null;
+    if ((workspace === "evm" || workspace === "bridge") && (!chainKey || !getWebEvmChain(chainKey))) {
+      return NextResponse.json({ error: "A supported EVM chain is required." }, { status: 400 });
+    }
+    if ((workspace === "solana" || workspace === "bridge") && sessionWalletAddress && sessionWalletAddress !== auth.walletAddress) {
+      return NextResponse.json({ error: "The Solana source wallet must match the authenticated wallet." }, { status: 403 });
+    }
+    if (workspace === "evm") {
+      const linked = await cloudDb.linkedWallet.findFirst({ where: { userId: user.id, namespace: "evm", address: sessionWalletAddress ?? "" } });
+      if (!linked) return NextResponse.json({ error: "The selected EVM wallet is not linked to this account." }, { status: 403 });
+    }
+
     let savedSession;
 
     if (isValidObjectId(session.id)) {
@@ -133,6 +151,9 @@ export async function POST(req: NextRequest) {
             data: {
               title: session.title,
               filter: session.filter,
+              workspace,
+              chainKey,
+              sessionWalletAddress,
               updatedAt: new Date(),
             },
           }),
@@ -146,6 +167,9 @@ export async function POST(req: NextRequest) {
               userId: user.id,
               title: session.title || "New Chat",
               filter: session.filter || "all",
+              workspace,
+              chainKey,
+              sessionWalletAddress: sessionWalletAddress ?? auth.walletAddress,
             },
           }),
         null
@@ -164,6 +188,9 @@ export async function POST(req: NextRequest) {
         filter: savedSession.filter,
         createdAt: savedSession.createdAt.getTime(),
         updatedAt: savedSession.updatedAt.getTime(),
+        workspace: savedSession.workspace || "solana",
+        chainKey: savedSession.chainKey ?? undefined,
+        sessionWalletAddress: savedSession.sessionWalletAddress ?? undefined,
       },
     });
   } catch (error) {

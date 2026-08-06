@@ -116,15 +116,15 @@ export class EvmEngine {
     return await this.#publicClient.getBytecode({ address });
   }
 
-  async simulateTransaction(params: EvmExecutionParams & { from: Address }): Promise<{ gasLimit: bigint }> {
-    await this.assertExpectedChain();
-    const gasLimit = await this.#publicClient.estimateGas({
-      account: params.from,
-      to: params.to,
-      value: params.valueWei,
-      data: params.data,
-    });
-    return { gasLimit };
+  async simulateTransaction(params: EvmExecutionParams & { from: Address }): Promise<{
+    gasLimit: bigint;
+    maxFeePerGas: bigint;
+    maxPriorityFeePerGas: bigint;
+  }> {
+    // Every preflight and final execution computes a bounded maximum network
+    // fee. Returning only gasLimit left the fee fields undefined and caused a
+    // bigint multiplication failure in the caller.
+    return await this.estimateGasAndFees(params);
   }
 
   /** Returns the pending nonce used to create a one-time EIP-1559 transaction. */

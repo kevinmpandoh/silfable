@@ -1,6 +1,7 @@
 // @ts-nocheck
 import {
   AiProviderSettingSchema,
+  BRIDGE_ROBINHOOD_USDG_ADDRESS,
   BridgeContractSchema,
   EvmBridgeContractSchema,
   type AiProviderSetting,
@@ -11,6 +12,7 @@ import {
   type EvmBridgePreflight,
   type EvmBridgeQuote,
   type EvmSwapProposal,
+  type EvmChainKey,
   type SessionIntent,
   type SessionWalletScope,
   type TransactionSettings,
@@ -22,6 +24,7 @@ import { MissionPolicyService } from "../mission/policy.js";
 import { DEFAULT_TRANSACTION_SETTINGS, type TransactionSettingsService } from "../mission/transaction-settings.js";
 import { callOpenRouterChat, DEFAULT_OPENROUTER_MODEL, type ReadOnlyAiTool } from "./providers.js";
 import type { AutomationManager } from "../execution/automation-manager.js";
+import { UNISWAP_NATIVE_TOKEN_ADDRESS } from "../integrations/uniswap.js";
 
 type AiSecretStore = {
   getSecret(name: SecretName): Promise<string | null>;
@@ -37,6 +40,7 @@ type AiSettingsStore = {
 type EvmSwapQuoteService = {
   quote(input: {
     walletAddress: string;
+    chainKey: EvmChainKey;
     sellToken: string;
     buyToken: string;
     sellAmount: string;
@@ -122,9 +126,36 @@ export class AiService {
     return setting;
   }
 
-  async chat(input: { prompt: string; mode: "agent" | "mission"; walletAddress: string | null; sessionContext?: string; history?: Array<{ role: "user" | "assistant"; text: string }>; pumpScope?: PumpAiScope; intent?: SessionIntent; walletScope?: SessionWalletScope; transactionSettings?: TransactionSettings }) {
+  async chat(input: { prompt: string; mode: "agent" | "mission"; walletAddress: string | null; sessionContext?: string; history?: Array<{ role: "user" | "assistant"; text: string }>; pumpScope?: PumpAiScope; intent?: SessionIntent; walletScope?: SessionWalletScope; evmChainKey?: EvmChainKey; transactionSettings?: TransactionSettings }) {
     const apiKey = await this.#keystore.getSecret("openrouter-api-key");
     if (apiKey === null) throw new Error("OpenRouter is not configured");
+    const directEvmSwap = parseDirectRobinhoodSwap(input.prompt, input.walletScope, input.evmChainKey);
+    if (directEvmSwap !== null && input.mode === "mission" && input.walletAddress !== null && this.#evmSwapQuotes !== null) {
+      const settings = input.transactionSettings ?? this.#transactionSettings.get();
+      const proposal = await this.#evmSwapQuotes.quote({
+        walletAddress: input.walletAddress,
+        chainKey: "robinhood",
+        sellToken: directEvmSwap.sellToken,
+        buyToken: directEvmSwap.buyToken,
+        sellAmount: directEvmSwap.sellAmount,
+        slippageBps: Math.min(settings.defaultSlippageBps, settings.maxSlippageBps, 100),
+      });
+      return {
+        model: this.#model(),
+        text: `Robinhood ${directEvmSwap.sellSymbol} → ${directEvmSwap.buySymbol} quote prepared for review. No transaction was signed or submitted.`,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+        toolsUsed: ["robinhood_swap_quote" as const],
+        missionPreview: null,
+        pumpTokenIntelligence: null,
+        pumpDiscoverySnapshot: null,
+        pumpTradePreview: null,
+        limitOrderPreview: null,
+        evmSwapProposal: proposal,
+      };
+    }
     const { pumpScope, intent, walletScope, ...providerInput } = input;
     return { model: this.#model(), ...(await callOpenRouterChat({ apiKey, model: this.#model(), ...providerInput, tools: await this.#tools(input.walletAddress, input.mode, pumpScope, intent, walletScope, input.transactionSettings ?? this.#transactionSettings.get()) })) };
   }
@@ -134,7 +165,7 @@ export class AiService {
     if (walletScope === "evm" && mode === "mission" && walletAddress !== null && this.#evmSwapQuotes !== null) {
       tools.push({
         name: "robinhood_swap_quote",
-        description: "Create a typed quote-only Robinhood Chain Mainnet EVM swap proposal for the selected encrypted wallet. Use only exact user-supplied token contract addresses and a raw sell amount. The runtime verifies both contracts against the active official Robinhood asset registry, applies the restricted pilot token and slippage policy, and calls only the read-only 0x price endpoint. This never requests calldata, approval, signing, or broadcast.",
+        description: `Create a typed quote-only Robinhood Chain Mainnet EVM swap proposal for the selected encrypted wallet. Known release-pinned aliases are ETH=${UNISWAP_NATIVE_TOKEN_ADDRESS} (18 decimals) and USDG=${BRIDGE_ROBINHOOD_USDG_ADDRESS} (6 decimals); resolve those symbols without asking the user for contracts. Other assets require exact user-supplied contracts. The runtime verifies contracts against the active registry and applies the configured slippage policy. This never signs or broadcasts.`,
         parameters: {
           type: "object",
           properties: {
@@ -148,7 +179,7 @@ export class AiService {
         },
         execute: async (argumentsValue) => {
           const quote = toolEvmSwapQuote(argumentsValue, transactionSettings);
-          return this.#evmSwapQuotes!.quote({ walletAddress, ...quote });
+          return this.#evmSwapQuotes!.quote({ walletAddress, chainKey: "robinhood", ...quote });
         },
       });
     }
@@ -397,6 +428,39 @@ function toolEvmSwapQuote(value: unknown, settings: TransactionSettings): { sell
     throw new Error("EVM swap fields are invalid or exceed the configured slippage policy");
   }
   return { sellToken: input.sellToken, buyToken: input.buyToken, sellAmount: input.sellAmount, slippageBps };
+}
+
+type RobinhoodTokenSymbol = "ETH" | "USDG";
+
+function parseDirectRobinhoodSwap(
+  prompt: string,
+  walletScope: SessionWalletScope | undefined,
+  chainKey: EvmChainKey | undefined,
+): { sellToken: string; buyToken: string; sellAmount: string; sellSymbol: RobinhoodTokenSymbol; buySymbol: RobinhoodTokenSymbol } | null {
+  if (walletScope !== "evm" || (chainKey ?? "robinhood") !== "robinhood") return null;
+  const match = /\b(?:swap|tukar)\s+([0-9]+(?:[.,][0-9]+)?)\s+(eth|usdg)\s+(?:ke|to)\s+(eth|usdg)\b/iu.exec(prompt);
+  if (match === null) return null;
+  const sellSymbol = match[2]!.toUpperCase() as RobinhoodTokenSymbol;
+  const buySymbol = match[3]!.toUpperCase() as RobinhoodTokenSymbol;
+  if (sellSymbol === buySymbol) return null;
+  const decimals = sellSymbol === "ETH" ? 18 : 6;
+  const sellAmount = decimalToRawAmount(match[1]!.replace(",", "."), decimals);
+  if (sellAmount === null) return null;
+  return {
+    sellToken: sellSymbol === "ETH" ? UNISWAP_NATIVE_TOKEN_ADDRESS : BRIDGE_ROBINHOOD_USDG_ADDRESS,
+    buyToken: buySymbol === "ETH" ? UNISWAP_NATIVE_TOKEN_ADDRESS : BRIDGE_ROBINHOOD_USDG_ADDRESS,
+    sellAmount,
+    sellSymbol,
+    buySymbol,
+  };
+}
+
+function decimalToRawAmount(value: string, decimals: number): string | null {
+  if (!/^\d+(?:\.\d+)?$/u.test(value)) return null;
+  const [whole, fraction = ""] = value.split(".");
+  if (fraction.length > decimals) return null;
+  const raw = `${whole}${fraction.padEnd(decimals, "0")}`.replace(/^0+(?=\d)/u, "");
+  return /^[1-9]\d*$/u.test(raw) ? raw : null;
 }
 
 function toolLimitOrderDraft(value: unknown, settings = DEFAULT_TRANSACTION_SETTINGS): { goal: string; inputMint: string; outputMint: string; inputAmount: string; triggerMint: string; triggerCondition: "above" | "below"; triggerPriceUsd: number; maxSlippageBps: number; expiresAt: string } {

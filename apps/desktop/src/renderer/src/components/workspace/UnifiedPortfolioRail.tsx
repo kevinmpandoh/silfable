@@ -55,18 +55,13 @@ export function formatPortfolioAmount(value: string): string {
   return numeric.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
-export function PortfolioAssetRow({ symbol, amount, usdValue, pnl }: { symbol: string; amount: string; usdValue: number | null; pnl?: number | null }) {
+export function PortfolioAssetRow({ symbol, amount, usdValue }: { symbol: string; amount: string; usdValue: number | null }) {
   return (
     <div className="portfolioAssetRow">
       <span>{symbol}</span>
       <strong>{formatPortfolioAmount(amount)}</strong>
       <div>
         <em>{formatPortfolioUsd(usdValue)}</em>
-        {pnl !== undefined && pnl !== null && (
-          <span className={`portfolioAssetPnl ${pnl >= 0 ? "positive" : "negative"}`}>
-            {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}
-          </span>
-        )}
       </div>
     </div>
   );
@@ -256,27 +251,6 @@ export function UnifiedPortfolioRail({
         </small>
       )}
 
-      {costBasisSummary && (
-        <div className="portfolioPnlSummary flex items-center justify-between text-xs mt-2.5 p-2 bg-slate-900/60 rounded border border-slate-800/80">
-          <div className="flex flex-col">
-            <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider">Unrealized PnL</span>
-            <span className={costBasisSummary.unrealizedPnlUsd !== null && costBasisSummary.unrealizedPnlUsd !== undefined && costBasisSummary.unrealizedPnlUsd >= 0 ? "text-emerald-400 font-semibold" : "text-rose-400 font-semibold"}>
-              {costBasisSummary.unrealizedPnlUsd !== null && costBasisSummary.unrealizedPnlUsd !== undefined
-                ? `${costBasisSummary.unrealizedPnlUsd >= 0 ? "+" : ""}$${costBasisSummary.unrealizedPnlUsd.toFixed(2)}`
-                : "—"}
-            </span>
-          </div>
-          <div className="flex flex-col text-right">
-            <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider">Realized PnL</span>
-            <span className={costBasisSummary.realizedPnlUsd !== null && costBasisSummary.realizedPnlUsd !== undefined && costBasisSummary.realizedPnlUsd >= 0 ? "text-emerald-400 font-semibold" : "text-rose-400 font-semibold"}>
-              {costBasisSummary.realizedPnlUsd !== null && costBasisSummary.realizedPnlUsd !== undefined
-                ? `${costBasisSummary.realizedPnlUsd >= 0 ? "+" : ""}$${costBasisSummary.realizedPnlUsd.toFixed(2)}`
-                : "$0.00"}
-            </span>
-          </div>
-        </div>
-      )}
-      
       {!session && configuredCount > 1 && (
         <div className="portfolioScopeTabs" aria-label="Portfolio wallet scope">
           <button className={walletFilter === "all" ? "active" : ""} onClick={() => { setWalletFilter("all"); setChainFilter("all"); }}>All</button>
@@ -317,11 +291,8 @@ export function UnifiedPortfolioRail({
                 "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": "USDT",
               };
               const resolvedSymbol = knownMints[asset.mint] || shorten(asset.mint);
-              const assetPnl = costBasisSummary?.assets?.find(
-                (a: any) => a.assetId?.toLowerCase() === asset.mint.toLowerCase()
-              )?.unrealizedPnlUsd;
               return (
-                <PortfolioAssetRow key={asset.mint} symbol={resolvedSymbol} amount={asset.uiAmount} usdValue={asset.usdValue} pnl={assetPnl} />
+                <PortfolioAssetRow key={asset.mint} symbol={resolvedSymbol} amount={asset.uiAmount} usdValue={asset.usdValue} />
               );
             })}
           </div>

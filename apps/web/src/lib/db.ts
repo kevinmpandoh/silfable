@@ -6,6 +6,9 @@ export interface SessionItem {
   filter: "all" | "agent" | "mission" | "pump" | "active" | "limit" | "custom";
   createdAt: number;
   updatedAt: number;
+  workspace: "solana" | "evm" | "bridge";
+  chainKey?: string;
+  sessionWalletAddress?: string;
 }
 
 export interface WebProposal {
@@ -14,7 +17,7 @@ export interface WebProposal {
   mint: string;
   solAmount: string;
   estimatedTokens: string;
-  status: "ready_for_user_signature" | "preview_only" | "signing" | "signed" | "failed";
+  status: "ready_for_user_signature" | "preview_only" | "signing" | "submitted" | "confirmed" | "reverted" | "unknown" | "signed" | "failed";
   mode: string;
   explanation: string;
   checks?: Array<{ code: string; status: "pass" | "block"; message: string }>;

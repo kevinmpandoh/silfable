@@ -14,6 +14,7 @@ test("EVM registry pins released chains and routes Robinhood through Uniswap", (
   assert.equal(getEvmChain("arbitrum").kyberSlug, "arbitrum");
   assert.equal(getEvmChain("robinhood").quoteProvider, "uniswap");
   assert.equal(getEvmChain("robinhood").kyberSlug, "robinhood");
+  assert.equal(getEvmChain("robinhood").explorerUrl, "https://robinhoodchain.blockscout.com");
   assert.equal(listEvmChains().length, 8);
 });
 

@@ -147,7 +147,6 @@ export function DocsContent() {
               <tr><td className="py-5 text-ink">EVM Swap</td><td>Release-gated across supported EVM networks</td><td>Mainnet acceptance and recovery testing remain</td></tr>
               <tr><td className="py-5 text-ink">Bridge</td><td>Implemented cross-chain execution</td><td>Release-gated validation remains</td></tr>
               <tr><td className="py-5 text-ink">Auto DCA</td><td>Implemented deterministic recurring flows</td><td>Global limit verification remains</td></tr>
-              <tr><td className="py-5 text-ink">PnL Tracking</td><td>Implemented real-time accounting</td><td>Performance reconciliation review remains</td></tr>
             </tbody>
           </table>
         </div>

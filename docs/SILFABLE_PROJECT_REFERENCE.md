@@ -247,7 +247,7 @@ Full Access is deliberately narrower than VEX-style permission: grants bind a mi
 
 ### Portfolio
 
-Current desktop portfolio can show configured/session wallet balances, Solana token balances, recent chain activity, stored receipts, runtime cost, session context and scoped EVM readings. The quality of EVM data depends on a healthy verified RPC. Multi-chain PnL, historical cost basis and price provenance are evidence-scoped; do not label them comprehensive without verified sources.
+Current desktop portfolio can show configured/session wallet balances, Solana token balances, recent chain activity, stored receipts, runtime cost, session context and scoped EVM readings. The quality of EVM data depends on a healthy verified RPC.
 
 ## 11. Relationship to VEX
 

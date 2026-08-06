@@ -43,7 +43,7 @@ const CHAINS: readonly EvmChainDefinition[] = [
     chainId: 4_663,
     name: "Robinhood Chain",
     nativeSymbol: "ETH",
-    explorerUrl: "https://explorer.mainnet.chain.robinhood.com",
+    explorerUrl: "https://robinhoodchain.blockscout.com",
     kyberSlug: "robinhood",
     priceNetwork: null,
     wrappedNativeAddress: "0x0bd7d308f8e1639fab988df18a8011f41eacad73",

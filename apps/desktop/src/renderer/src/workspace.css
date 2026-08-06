@@ -403,7 +403,89 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .executionApproval .field { margin-top: 13px; }
 .executionApproval .riskCheck { display: flex; gap: 9px; align-items: flex-start; margin-top: 14px; color: #c8d0e5; font-size: 10px; line-height: 1.5; }
 .executionApproval .riskCheck input { width: auto; margin-top: 2px; }
-.executionApproval .dangerButton { min-width: 190px; border-color: #ff4e5d; color: #fff; background: #c52d3b; }
+.dangerButton,
+.executionApproval .dangerButton,
+.simulationApproval .dangerButton,
+.missionPreview .dangerButton,
+.missionPreview footer .dangerButton,
+.bridgeProposalCard .dangerButton,
+.bridgeProposalCard footer .dangerButton {
+  min-width: 170px !important;
+  padding: 10px 22px !important;
+  border: 1px solid #ff4e5d !important;
+  border-radius: 12px !important;
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  font-family: var(--mono) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 20px rgba(220, 38, 38, 0.5) !important;
+  opacity: 1 !important;
+  transition: all 0.2s ease !important;
+}
+.dangerButton:hover:not(:disabled),
+.executionApproval .dangerButton:hover:not(:disabled),
+.simulationApproval .dangerButton:hover:not(:disabled),
+.missionPreview .dangerButton:hover:not(:disabled),
+.missionPreview footer .dangerButton:hover:not(:disabled),
+.bridgeProposalCard .dangerButton:hover:not(:disabled),
+.bridgeProposalCard footer .dangerButton:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+  border-color: #f87171 !important;
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.7) !important;
+}
+.dangerButton:disabled,
+.executionApproval .dangerButton:disabled,
+.simulationApproval .dangerButton:disabled,
+.missionPreview .dangerButton:disabled,
+.missionPreview footer .dangerButton:disabled,
+.bridgeProposalCard .dangerButton:disabled,
+.bridgeProposalCard footer .dangerButton:disabled {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #64748b !important;
+  box-shadow: none !important;
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+.primaryButton,
+.missionPreview .primaryButton,
+.missionPreview footer .primaryButton {
+  min-width: 170px !important;
+  padding: 10px 22px !important;
+  border: 1px solid #3b82f6 !important;
+  border-radius: 12px !important;
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+  font-family: var(--mono) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.4) !important;
+  transition: all 0.2s ease !important;
+}
+.primaryButton:hover:not(:disabled),
+.missionPreview .primaryButton:hover:not(:disabled),
+.missionPreview footer .primaryButton:hover:not(:disabled) {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.6) !important;
+}
+.primaryButton:disabled,
+.missionPreview .primaryButton:disabled,
+.missionPreview footer .primaryButton:disabled {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #64748b !important;
+  box-shadow: none !important;
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
 .missionsView { height: 100%; overflow-y: auto; padding: clamp(38px, 6vw, 82px); scrollbar-color: var(--blue) transparent; }
 .missionsView > div:first-child h1 { margin: 8px 0; font-size: 42px; }
 .missionsView > div:first-child > p:last-child { color: var(--muted); }
