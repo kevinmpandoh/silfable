@@ -23,12 +23,15 @@ export function buildWalletAuthMessage(input: {
   nonce: string;
   issuedAt: Date;
   expiresAt: Date;
+  purpose?: "login" | "link";
 }): string {
   return [
     `${input.domain} wants you to sign in with your Solana account:`,
     input.walletAddress,
     "",
-    "Authenticate to Silfable restricted Mainnet. This signature does not authorize a transaction.",
+    input.purpose === "link"
+      ? "Link this public wallet to the authenticated Silfable account. This signature does not authorize a transaction."
+      : "Authenticate to Silfable restricted Mainnet. This signature does not authorize a transaction.",
     "",
     `URI: ${input.uri}`,
     "Version: 1",

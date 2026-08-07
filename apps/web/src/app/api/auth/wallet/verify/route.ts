@@ -8,6 +8,8 @@ import {
   verifyWalletSignature,
   WALLET_SESSION_TTL_MS,
 } from "@/lib/wallet-auth";
+import { normalizeEvmAddress } from "@/lib/evm-wallet-auth-core";
+import { verifyMessage } from "viem";
 
 function isObjectId(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{24}$/iu.test(value);
@@ -33,10 +35,13 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
-    const walletAddress = normalizeWalletAddress(body.walletAddress);
     const challenge = await cloudDb.walletAuthChallenge.findUnique({
       where: { id: body.challengeId },
     });
+    const namespace = challenge?.namespace === "evm" ? "evm" : "solana";
+    const walletAddress = namespace === "evm"
+      ? normalizeEvmAddress(String(body.walletAddress ?? ""))
+      : normalizeWalletAddress(body.walletAddress);
     if (
       !challenge ||
       challenge.walletAddress !== walletAddress ||
@@ -48,13 +53,10 @@ export async function POST(request: NextRequest) {
         { status: 401 },
       );
     }
-    if (
-      !verifyWalletSignature({
-        walletAddress,
-        message: challenge.message,
-        signature: body.signature,
-      })
-    ) {
+    const signatureValid = namespace === "evm"
+      ? await verifyMessage({ address: walletAddress as `0x${string}`, message: challenge.message, signature: body.signature as `0x${string}` }).catch(() => false)
+      : verifyWalletSignature({ walletAddress, message: challenge.message, signature: body.signature });
+    if (!signatureValid) {
       return NextResponse.json(
         { error: "The wallet signature is invalid.", code: "INVALID_WALLET_SIGNATURE" },
         { status: 401 },
@@ -84,21 +86,41 @@ export async function POST(request: NextRequest) {
 
     const token = createOpaqueToken();
     const expiresAt = new Date(Date.now() + WALLET_SESSION_TTL_MS);
+    const linkedWallet = await cloudDb.linkedWallet.findUnique({
+      where: { namespace_address: { namespace, address: walletAddress } },
+      include: { user: true },
+    });
+    let user = linkedWallet?.user ?? await cloudDb.user.findUnique({ where: { walletAddress } });
+    if (!user) {
+      user = await cloudDb.user.create({ data: { walletAddress, primaryNamespace: namespace } });
+    }
+    if (!linkedWallet) {
+      await cloudDb.linkedWallet.create({
+        data: {
+          userId: user.id,
+          namespace,
+          address: walletAddress,
+          label: namespace === "evm" ? "Primary EVM" : "Primary Solana",
+        },
+      }).catch(async () => {
+        const owner = await cloudDb.linkedWallet.findUnique({ where: { namespace_address: { namespace, address: walletAddress } } });
+        if (!owner || owner.userId !== user!.id) throw new Error("This wallet belongs to another Silfable account.");
+      });
+    }
+
     const session = await cloudDb.walletAuthSession.create({
       data: {
+        userId: user.id,
         walletAddress,
+        namespace,
         tokenHash: sha256(token),
         expiresAt,
       },
     });
-    await cloudDb.user.upsert({
-      where: { walletAddress },
-      create: { walletAddress },
-      update: {},
-    });
-
     const response = NextResponse.json({
       authenticated: true,
+      userId: user.id,
+      namespace,
       walletAddress,
       sessionId: session.id,
       expiresAt: expiresAt.toISOString(),

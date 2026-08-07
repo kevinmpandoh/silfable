@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { WEB_EVM_CHAINS, type WebEvmChainKey } from "@/lib/evm-chains";
-import { requestEvmAccount, signEvmAuthenticationMessage } from "@/lib/evm-browser-wallet";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import bs58 from "bs58";
+import { requestEvmAccount, signEvmAuthenticationMessage, switchToRobinhoodChain } from "@/lib/evm-browser-wallet";
 
 export type LinkedWebWallet = {
   id: string;
@@ -14,7 +16,6 @@ export type LinkedWebWallet = {
 
 interface WebNewSessionModalProps {
   isOpen: boolean;
-  walletAddress: string;
   linkedWallets: LinkedWebWallet[];
   onWalletLinked: (wallet: LinkedWebWallet) => void;
   onClose: () => void;
@@ -22,15 +23,14 @@ interface WebNewSessionModalProps {
   onCreateRestrictedSession: (session: {
     title: string;
     mode: "agent" | "mission";
-    workspace: "solana" | "evm" | "bridge";
-    chainKey?: WebEvmChainKey;
+    workspace: "solana" | "evm";
+    chainKey?: "robinhood";
     sessionWalletAddress: string;
   }) => Promise<void>;
 }
 
 export function WebNewSessionModal({
   isOpen,
-  walletAddress,
   linkedWallets,
   onWalletLinked,
   onClose,
@@ -38,21 +38,30 @@ export function WebNewSessionModal({
   onCreateRestrictedSession,
 }: WebNewSessionModalProps) {
   const [title, setTitle] = useState("New Mainnet session");
+  const { connected: solanaConnected, publicKey: solanaPublicKey, signMessage: signSolanaMessage } = useWallet();
+  const { setVisible: setSolanaWalletVisible } = useWalletModal();
   const [mode, setMode] = useState<"agent" | "mission">("agent");
-  const [workspace, setWorkspace] = useState<"solana" | "evm" | "bridge">("solana");
-  const [chainKey, setChainKey] = useState<WebEvmChainKey>("robinhood");
-  const [selectedEvmAddress, setSelectedEvmAddress] = useState("");
+  const [workspace, setWorkspace] = useState<"solana" | "evm">("solana");
   const [linking, setLinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const evmWallets = useMemo(() => linkedWallets.filter((wallet) => wallet.namespace === "evm"), [linkedWallets]);
-  const effectiveEvmAddress = selectedEvmAddress || evmWallets[0]?.address || "";
+  const solanaWallets = useMemo(() => linkedWallets.filter((wallet) => wallet.namespace === "solana"), [linkedWallets]);
+  const effectiveEvmAddress = evmWallets[0]?.address || "";
+  const effectiveSolanaAddress = solanaWallets[0]?.address || "";
   if (!isOpen) return null;
 
   async function linkEvmWallet() {
     setLinking(true);
     setError(null);
     try {
+      await switchToRobinhoodChain();
       const account = await requestEvmAccount();
+      if (effectiveEvmAddress) {
+        if (account.address.toLowerCase() !== effectiveEvmAddress.toLowerCase()) {
+          throw new Error(`Akun ini sudah terikat ke ${shortAddress(effectiveEvmAddress)}. Ganti account MetaMask/Rabby ke wallet tersebut.`);
+        }
+        return;
+      }
       const challengeResponse = await fetch("/api/wallets/evm/challenge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -69,7 +78,6 @@ export function WebNewSessionModal({
       const result = await verifyResponse.json();
       if (!verifyResponse.ok || !result.wallet) throw new Error(result.error || "EVM wallet tidak dapat ditautkan.");
       onWalletLinked(result.wallet as LinkedWebWallet);
-      setSelectedEvmAddress(result.wallet.address);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "EVM wallet tidak dapat ditautkan.");
     } finally {
@@ -77,17 +85,72 @@ export function WebNewSessionModal({
     }
   }
 
-  async function handleSubmit() {
-    const sessionWalletAddress = workspace === "evm" ? effectiveEvmAddress : walletAddress;
-    if (!sessionWalletAddress) {
-      setError("Tautkan dan pilih wallet EVM sebelum membuat session.");
+  async function linkSolanaWallet() {
+    if (!solanaConnected || !solanaPublicKey) {
+      setSolanaWalletVisible(true);
       return;
+    }
+    if (!signSolanaMessage) {
+      setError("Wallet Solana ini tidak mendukung message signing.");
+      return;
+    }
+    setLinking(true);
+    setError(null);
+    try {
+      const address = solanaPublicKey.toBase58();
+      if (effectiveSolanaAddress) {
+        if (address !== effectiveSolanaAddress) throw new Error(`Akun ini sudah terikat ke ${shortAddress(effectiveSolanaAddress)}. Ganti wallet Solana aktif ke wallet tersebut.`);
+        return;
+      }
+      const challengeResponse = await fetch("/api/wallets/solana/challenge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address }) });
+      const challenge = await challengeResponse.json();
+      if (!challengeResponse.ok || typeof challenge.message !== "string") throw new Error(challenge.error || "Solana verification challenge tidak tersedia.");
+      const signature = bs58.encode(await signSolanaMessage(new TextEncoder().encode(challenge.message)));
+      const verifyResponse = await fetch("/api/wallets/solana/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challengeId: challenge.challengeId, address, signature, label: "Browser Solana wallet" }) });
+      const result = await verifyResponse.json();
+      if (!verifyResponse.ok || !result.wallet) throw new Error(result.error || "Wallet Solana tidak dapat ditautkan.");
+      onWalletLinked(result.wallet as LinkedWebWallet);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Wallet Solana tidak dapat ditautkan.");
+    } finally {
+      setLinking(false);
+    }
+  }
+
+  async function handleSubmit() {
+    const sessionWalletAddress = workspace === "evm" ? effectiveEvmAddress : effectiveSolanaAddress;
+    if (!sessionWalletAddress) {
+      setError(workspace === "solana" ? "Connect dan verifikasi satu wallet Solana terlebih dahulu." : "Connect dan verifikasi satu wallet Robinhood terlebih dahulu.");
+      return;
+    }
+    if (workspace === "solana") {
+      if (!solanaConnected || !solanaPublicKey) {
+        setError("Connect wallet Solana terlebih dahulu.");
+        setSolanaWalletVisible(true);
+        return;
+      }
+      if (solanaPublicKey.toBase58() !== sessionWalletAddress) {
+        setError(`Ganti account Solana aktif ke ${shortAddress(sessionWalletAddress)} sebelum membuat session.`);
+        return;
+      }
+    } else {
+      try {
+        await switchToRobinhoodChain();
+        const account = await requestEvmAccount();
+        if (account.address.toLowerCase() !== sessionWalletAddress.toLowerCase()) {
+          setError(`Ganti account EVM aktif ke ${shortAddress(sessionWalletAddress)} sebelum membuat session.`);
+          return;
+        }
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Connect wallet Robinhood terlebih dahulu.");
+        return;
+      }
     }
     await onCreateRestrictedSession({
       title: title.trim() || "New Mainnet session",
       mode,
       workspace,
-      chainKey: workspace === "solana" ? undefined : chainKey,
+      chainKey: workspace === "evm" ? "robinhood" : undefined,
       sessionWalletAddress,
     });
     onClose();
@@ -119,11 +182,11 @@ export function WebNewSessionModal({
           <section className="sessionConfigSection">
             <div className="sectionLegend"><span>02</span><strong>Workspace</strong><small>Choose the source execution environment.</small></div>
             <div className="choiceGrid sessionWorkspaceChoices">
-              {(["solana", "evm", "bridge"] as const).map((value, index) => (
+              {(["solana", "evm"] as const).map((value, index) => (
                 <button type="button" key={value} className={workspace === value ? "active" : ""} onClick={() => setWorkspace(value)}>
                   <span className="choiceNumber">0{index + 1}</span>
-                  <strong>{value === "solana" ? "Solana" : value === "evm" ? "EVM" : "Bridge"}</strong>
-                  <small>{value === "solana" ? "Solana browser wallet" : value === "evm" ? "Linked EVM browser wallet" : "Solana source to an EVM chain"}</small>
+                  <strong>{value === "solana" ? "Solana" : "Robinhood Chain"}</strong>
+                  <small>{value === "solana" ? "Swap and bridge from Solana" : "EVM swap and bridge from Robinhood"}</small>
                 </button>
               ))}
             </div>
@@ -133,24 +196,17 @@ export function WebNewSessionModal({
             <div className="sectionLegend"><span>03</span><strong>Wallet and chain</strong><small>The binding is persisted with this session.</small></div>
             <div className="sessionWalletBinding">
               {workspace === "solana" ? (
-                <div className="boundWallet"><strong>Primary Solana</strong><span>{shortAddress(walletAddress)}</span></div>
-              ) : workspace === "bridge" ? (
-                <div className="boundWallet"><strong>Source · Solana</strong><span>{shortAddress(walletAddress)}</span></div>
+                <>
+                  {effectiveSolanaAddress && <div className="boundWallet"><strong>Solana wallet</strong><span>{shortAddress(effectiveSolanaAddress)}</span></div>}
+                  <button type="button" className="linkWalletButton" disabled={linking} onClick={() => void linkSolanaWallet()}>{linking ? "Awaiting wallet signature…" : effectiveSolanaAddress ? "Connect bound Solana wallet" : "+ Connect and verify Solana wallet"}</button>
+                </>
               ) : (
                 <>
-                  {evmWallets.length > 0 && (
-                    <label><span>Execution wallet</span><select value={effectiveEvmAddress} onChange={(event) => setSelectedEvmAddress(event.target.value)}>
-                      {evmWallets.map((wallet) => <option key={wallet.id} value={wallet.address}>{wallet.label || "EVM wallet"} · {shortAddress(wallet.address)}</option>)}
-                    </select></label>
-                  )}
-                  <button type="button" className="linkWalletButton" disabled={linking} onClick={() => void linkEvmWallet()}>{linking ? "Awaiting wallet signature…" : "+ Link another EVM wallet"}</button>
+                  {effectiveEvmAddress && <div className="boundWallet"><strong>Robinhood wallet</strong><span>{shortAddress(effectiveEvmAddress)}</span></div>}
+                  <button type="button" className="linkWalletButton" disabled={linking} onClick={() => void linkEvmWallet()}>{linking ? "Awaiting wallet signature…" : effectiveEvmAddress ? "Connect bound Robinhood wallet" : "+ Connect and verify Robinhood wallet"}</button>
                 </>
               )}
-              {workspace !== "solana" && (
-                <label><span>{workspace === "bridge" ? "Destination chain" : "Execution chain"}</span><select value={chainKey} onChange={(event) => setChainKey(event.target.value as WebEvmChainKey)}>
-                  {WEB_EVM_CHAINS.map((chain) => <option key={chain.key} value={chain.key}>{chain.name} · {chain.nativeSymbol}</option>)}
-                </select></label>
-              )}
+              {workspace === "evm" && <div className="boundWallet"><strong>Execution chain</strong><span>Robinhood Chain · 4663</span></div>}
               {error && <p className="sessionBindingError">{error}</p>}
             </div>
           </section>

@@ -14,6 +14,8 @@ export async function GET(request: NextRequest) {
   }
   return NextResponse.json({
     authenticated: true,
+    userId: identity.userId,
+    namespace: identity.namespace,
     walletAddress: identity.walletAddress,
     expiresAt: identity.expiresAt.toISOString(),
     authority: "restricted-browser-wallet",

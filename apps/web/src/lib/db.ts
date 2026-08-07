@@ -6,18 +6,18 @@ export interface SessionItem {
   filter: "all" | "agent" | "mission" | "pump" | "active" | "limit" | "custom";
   createdAt: number;
   updatedAt: number;
-  workspace: "solana" | "evm" | "bridge";
+  workspace: "solana" | "evm";
   chainKey?: string;
   sessionWalletAddress?: string;
 }
 
 export interface WebProposal {
   id: string;
-  type: "jupiter_swap" | "pump_fun_buy" | "limit_order";
+  type: "jupiter_swap" | "pump_fun_buy" | "limit_order" | "solana_bridge" | "evm_swap";
   mint: string;
   solAmount: string;
   estimatedTokens: string;
-  status: "ready_for_user_signature" | "preview_only" | "signing" | "submitted" | "confirmed" | "reverted" | "unknown" | "signed" | "failed";
+  status: "ready_for_user_signature" | "preview_only" | "signing" | "submitted" | "source_confirmed" | "confirmed" | "reverted" | "unknown" | "signed" | "failed";
   mode: string;
   explanation: string;
   checks?: Array<{ code: string; status: "pass" | "block"; message: string }>;
@@ -29,6 +29,26 @@ export interface WebProposal {
   outputSymbol?: string;
   venue?: string;
   quoteResponse?: unknown;
+  destination?: "robinhood";
+  destinationRecipient?: string;
+  amountUsdc?: string;
+  bridgeRequestId?: string;
+  bridgeTransaction?: string;
+  bridgeBlockhash?: string;
+  bridgeLastValidBlockHeight?: number;
+  bridgeQuoteExpiresAt?: number;
+  bridgeEstimatedSeconds?: number;
+  sourceUsdcBalance?: string;
+  sourceSolBalance?: string;
+  feeReserveSol?: string;
+  sourceTxHash?: string;
+  destinationTxHash?: string;
+  sellToken?: "USDG" | "ETH";
+  buyToken?: "USDG" | "ETH";
+  sellAmount?: string;
+  buyAmount?: string;
+  minimumBuyAmount?: string;
+  quoteExpiresAt?: number;
 }
 
 export interface WebMessage {

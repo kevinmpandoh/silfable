@@ -8,6 +8,7 @@ import {
 } from "@solana/web3.js";
 
 import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
+import { assertSolanaBridgeBalance } from "@/lib/solana-bridge-preflight";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,7 @@ const RELAY_SOURCE_PROGRAM = "99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2";
 const DEFAULT_SOLANA_RPC = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
 const EVM_ADDRESS = /^0x[a-fA-F0-9]{40}$/u;
 const DECIMAL_USDC = /^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/u;
+const RELAY_REQUEST_ID = /^0x[a-fA-F0-9]{64}$/u;
 
 const DESTINATIONS = {
   base: { chainId: 8453, asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", symbol: "USDC", label: "Base" },
@@ -92,9 +94,13 @@ export async function POST(request: NextRequest) {
     }
     const destination = DESTINATIONS[body.destination as DestinationKey];
     const amount = parseAmountUsdc(body.amountUsdc);
+    const connection = new Connection(DEFAULT_SOLANA_RPC, "confirmed");
+    const balancePreflight = await assertSolanaBridgeBalance(connection, walletAddress, BigInt(amount));
+    const relayHeaders: Record<string, string> = { "content-type": "application/json", accept: "application/json" };
+    if (process.env.RELAY_API_KEY) relayHeaders["x-api-key"] = process.env.RELAY_API_KEY;
     const quoteResponse = await fetch(`${RELAY_API}/quote/v2`, {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
+      headers: relayHeaders,
       cache: "no-store",
       signal: AbortSignal.timeout(20_000),
       body: JSON.stringify({
@@ -113,11 +119,15 @@ export async function POST(request: NextRequest) {
       }),
     });
     const quote = await quoteResponse.json() as Record<string, unknown>;
-    if (!quoteResponse.ok) throw new Error(`Relay quote request failed (${quoteResponse.status}).`);
+    if (!quoteResponse.ok) {
+      const relayMessage = typeof quote.message === "string" ? quote.message : typeof quote.error === "string" ? quote.error : null;
+      throw new Error(relayMessage ?? `Relay quote request failed (${quoteResponse.status}).`);
+    }
     const steps = quote.steps;
     if (!Array.isArray(steps)) throw new Error("Relay did not return transaction steps.");
     const step = steps.find((candidate) => typeof candidate === "object" && candidate !== null && Array.isArray((candidate as { items?: unknown }).items));
-    const items = step && Array.isArray((step as { items?: unknown }).items) ? (step as { items: unknown[] }).items : [];
+    const stepValue = step as { requestId?: unknown; items?: unknown[] } | undefined;
+    const items = Array.isArray(stepValue?.items) ? stepValue.items : [];
     if (items.length !== 1) throw new Error("Relay returned an unsupported multi-transaction bridge route.");
     const item = items[0] as { data?: { instructions?: unknown; addressLookupTableAddresses?: unknown } };
     const rawInstructions = item?.data?.instructions;
@@ -132,7 +142,6 @@ export async function POST(request: NextRequest) {
     if (rawTables !== undefined && (!Array.isArray(rawTables) || rawTables.length > 8 || rawTables.some((entry) => typeof entry !== "string"))) {
       throw new Error("Relay returned invalid address lookup tables.");
     }
-    const connection = new Connection(DEFAULT_SOLANA_RPC, "confirmed");
     const tables = await Promise.all((rawTables ?? []).map(async (address) => {
       const result = await connection.getAddressLookupTable(new PublicKey(address as string));
       if (result.value === null) throw new Error("A Relay address lookup table is unavailable.");
@@ -143,14 +152,22 @@ export async function POST(request: NextRequest) {
       new TransactionMessage({ payerKey: new PublicKey(walletAddress), recentBlockhash: latest.blockhash, instructions }).compileToV0Message(tables),
     );
     const details = quote.details as { currencyOut?: { amount?: unknown; minimumAmount?: unknown }; timeEstimate?: unknown } | undefined;
+    const requestIdCandidate = stepValue?.requestId ?? quote.requestId;
+    if (typeof requestIdCandidate !== "string" || !RELAY_REQUEST_ID.test(requestIdCandidate)) {
+      throw new Error("Relay did not return a trackable bridge request ID.");
+    }
     return NextResponse.json({
       transaction: Buffer.from(transaction.serialize()).toString("base64"),
-      requestId: typeof quote.requestId === "string" ? quote.requestId : null,
+      requestId: requestIdCandidate,
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: latest.lastValidBlockHeight,
+      quoteExpiresAt: Date.now() + 60_000,
       destination: { key: body.destination, label: destination.label, symbol: destination.symbol },
       amountIn: amount,
       estimatedAmountOut: typeof details?.currencyOut?.amount === "string" ? details.currencyOut.amount : null,
       minimumAmountOut: typeof details?.currencyOut?.minimumAmount === "string" ? details.currencyOut.minimumAmount : null,
       estimatedSeconds: typeof details?.timeEstimate === "number" ? details.timeEstimate : null,
+      balancePreflight,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Bridge quote could not be prepared.";

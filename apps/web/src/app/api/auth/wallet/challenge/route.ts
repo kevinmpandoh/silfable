@@ -7,6 +7,7 @@ import {
   sha256,
   WALLET_CHALLENGE_TTL_MS,
 } from "@/lib/wallet-auth";
+import { buildEvmWalletLinkMessage, normalizeEvmAddress } from "@/lib/evm-wallet-auth-core";
 
 export async function POST(request: NextRequest) {
   if (!isDbConfigured()) {
@@ -17,8 +18,15 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = (await request.json()) as { walletAddress?: unknown };
-    const walletAddress = normalizeWalletAddress(body.walletAddress);
+    const body = (await request.json()) as { walletAddress?: unknown; namespace?: unknown; chainId?: unknown };
+    const namespace = body.namespace === "evm" ? "evm" : "solana";
+    const walletAddress = namespace === "evm"
+      ? normalizeEvmAddress(String(body.walletAddress ?? ""))
+      : normalizeWalletAddress(body.walletAddress);
+    const chainId = namespace === "evm" && Number.isSafeInteger(body.chainId) && Number(body.chainId) > 0
+      ? Number(body.chainId)
+      : undefined;
+    if (namespace === "evm" && !chainId) throw new Error("A valid EVM chain ID is required.");
     const recentCount = await safeDbQuery(
       () =>
         cloudDb.walletAuthChallenge.count({
@@ -41,17 +49,14 @@ export async function POST(request: NextRequest) {
     const expiresAt = new Date(issuedAt.getTime() + WALLET_CHALLENGE_TTL_MS);
     const domain = request.nextUrl.host;
     const uri = request.nextUrl.origin;
-    const message = buildWalletAuthMessage({
-      domain,
-      uri,
-      walletAddress,
-      nonce,
-      issuedAt,
-      expiresAt,
-    });
+    const message = namespace === "evm"
+      ? buildEvmWalletLinkMessage({ domain, uri, address: walletAddress as `0x${string}`, chainId: chainId!, nonce, issuedAt, expiresAt, purpose: "login" })
+      : buildWalletAuthMessage({ domain, uri, walletAddress, nonce, issuedAt, expiresAt });
     const challenge = await cloudDb.walletAuthChallenge.create({
       data: {
         walletAddress,
+        namespace,
+        chainId,
         nonceHash: sha256(nonce),
         message,
         expiresAt,
@@ -64,6 +69,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       challengeId: challenge.id,
       walletAddress,
+      namespace,
+      chainId,
       message,
       expiresAt: expiresAt.toISOString(),
     });

@@ -25,10 +25,10 @@ import {
 import { PumpTradePreviewCard } from "@/components/cards/PumpTradePreviewCard";
 import { LimitOrderPreviewCard } from "@/components/cards/LimitOrderPreviewCard";
 import { JupiterSwapPreviewCard } from "@/components/cards/JupiterSwapPreviewCard";
+import { EvmSwapPreviewCard } from "@/components/cards/EvmSwapPreviewCard";
 import { WebSetupWizard } from "@/components/trade/WebSetupWizard";
 import { WebNewSessionModal, type LinkedWebWallet } from "@/components/trade/WebNewSessionModal";
 import { getWebEvmChain } from "@/lib/evm-chains";
-import { SolanaBridgePanel, type SolanaBridgeRequest } from "@/components/trade/SolanaBridgePanel";
 
 function base64ToBytes(value: string): Uint8Array {
   const binary = window.atob(value);
@@ -80,7 +80,9 @@ function parseWebUsage(value: unknown, fallbackModel: string): WebUsage | undefi
 
 export interface WebSetupSettings {
   customRpcUrl: string;
+  evmRpcUrl: string;
   jupiterApiKey: string;
+  uniswapApiKey: string;
   openRouterApiKey: string;
   aiModel: string;
   outputLimit: string;
@@ -90,7 +92,9 @@ export interface WebSetupSettings {
 
 const DEFAULT_SETTINGS: WebSetupSettings = {
   customRpcUrl: "",
+  evmRpcUrl: "",
   jupiterApiKey: "",
+  uniswapApiKey: "",
   openRouterApiKey: "",
   aiModel: "openai/gpt-4o-mini",
   outputLimit: "8192",
@@ -333,11 +337,63 @@ export default function TradePage() {
     };
   }, [activeSessionId, walletAddress]);
 
+const DEFAULT_ROBINHOOD_RPC = "https://rpc.mainnet.chain.robinhood.com";
+const ROBINHOOD_USDG_ADDRESS = "0x5fc5360d0400a0fd4f2af552add042d716f1d168";
+
+async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params }),
+      signal: controller.signal,
+    });
+    const json = await response.json().catch(() => null) as { result?: string; error?: { message?: string } } | null;
+    if (!response.ok || json?.error || typeof json?.result !== "string") throw new Error(json?.error?.message || `RPC error status ${response.status}`);
+    return json.result;
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === "AbortError") throw new Error("Robinhood RPC timed out. Configure a custom provider RPC in Settings → Network.");
+    throw cause;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
   // Fetch the single connected Mainnet wallet through the configured RPC.
   const fetchWalletBalance = useCallback(async () => {
-    if (!publicKey) return;
+    const activeSession = sessions.find((s) => s.id === activeSessionId);
     setPortfolioStatus("Refreshing Mainnet balance...");
     try {
+      if (activeSession?.workspace === "evm") {
+        const address = activeSession.sessionWalletAddress || activeEvmAddress;
+        if (!address) throw new Error("No EVM wallet connected to this session.");
+        const rpcUrl = settings.evmRpcUrl.trim() || DEFAULT_ROBINHOOD_RPC;
+        const balanceOfData = `0x70a08231000000000000000000000000${address.replace(/^0x/i, "").toLowerCase()}`;
+
+        const [nativeHex, usdgHex, blockHex] = await Promise.all([
+          queryEvmRpc(rpcUrl, "eth_getBalance", [address, "latest"]),
+          queryEvmRpc(rpcUrl, "eth_call", [{ to: ROBINHOOD_USDG_ADDRESS, data: balanceOfData }, "latest"]),
+          queryEvmRpc(rpcUrl, "eth_blockNumber", []),
+        ]);
+
+        const ethAmount = typeof nativeHex === "string" ? Number(BigInt(nativeHex)) / 1e18 : 0;
+        const usdgAmount = typeof usdgHex === "string" ? Number(BigInt(usdgHex)) / 1e6 : 0;
+
+        setWalletBalance(ethAmount);
+        setPortfolioAssets([
+          { symbol: "ETH", amount: ethAmount, valueUsd: 0 },
+          ...(usdgAmount > 0 ? [{ symbol: "USDG", amount: usdgAmount, valueUsd: usdgAmount }] : []),
+        ]);
+        setPortfolioTotalUsd(usdgAmount > 0 ? usdgAmount : null);
+        const block = typeof blockHex === "string" ? Number.parseInt(blockHex, 16) : null;
+        const rpcLabel = settings.evmRpcUrl.trim() ? "Custom Robinhood RPC" : "Robinhood RPC";
+        setPortfolioStatus(`${rpcLabel}${Number.isFinite(block) ? ` · block #${block}` : ""}`);
+        return;
+      }
+
+      if (!publicKey) return;
       const response = await fetch("/api/solana/portfolio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -361,14 +417,14 @@ export default function TradePage() {
       setPortfolioTotalUsd(null);
       setPortfolioStatus(error instanceof Error ? error.message : "Saldo Mainnet tidak dapat dimuat.");
     }
-  }, [publicKey, settings.customRpcUrl]);
+  }, [activeSessionId, sessions, activeEvmAddress, publicKey, settings.evmRpcUrl, settings.customRpcUrl]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void fetchWalletBalance();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [fetchWalletBalance]);
+  }, [activeSessionId, fetchWalletBalance]);
 
   // --------------------------------------------------------------------------
   // SESSION HANDLERS (IndexedDB CRUD)
@@ -410,9 +466,8 @@ export default function TradePage() {
   function persistSettings() {
     if (!walletAddress) return;
     try {
-      const { openRouterApiKey, jupiterApiKey, ...nonSecretSettings } = settings;
-      localStorage.setItem(setupStorageKey(walletAddress), JSON.stringify(nonSecretSettings));
-      sessionStorage.setItem(setupSecretStorageKey(walletAddress), JSON.stringify({ openRouterApiKey, jupiterApiKey }));
+      localStorage.setItem(setupStorageKey(walletAddress), JSON.stringify(settings));
+      sessionStorage.setItem(setupSecretStorageKey(walletAddress), JSON.stringify({ openRouterApiKey: settings.openRouterApiKey, jupiterApiKey: settings.jupiterApiKey, uniswapApiKey: settings.uniswapApiKey }));
       setSetupCompleted(true);
     } catch {
       alert("Failed to save settings.");
@@ -641,6 +696,46 @@ export default function TradePage() {
     }
   }
 
+  async function handlePrepareEvmSwap(proposal: WebProposal, msgId: string) {
+    if (!activeSession || activeSession.workspace !== "evm" || activeSession.chainKey !== "robinhood") {
+      alert("Robinhood EVM swap hanya dapat disiapkan dari session Robinhood yang terikat.");
+      return;
+    }
+    const sessionWallet = activeSession.sessionWalletAddress;
+    if (!sessionWallet || !evmWalletMatchesSession) {
+      alert("Hubungkan wallet EVM yang sama dengan session ini dan pindahkan ke Robinhood Chain terlebih dahulu.");
+      return;
+    }
+    if (!proposal.sellToken || !proposal.buyToken || !proposal.sellAmount) return;
+    setBridgeBusy(true);
+    try {
+      if (proposal.quoteResponse && proposal.buyAmount) {
+        const info: WebMessage = { id: `sys_${Date.now()}`, sessionId: activeSessionId, role: "assistant", content: "Live Uniswap quote sudah tersedia. Wallet-review dan broadcast EVM akan dirilis setelah pipeline transaksi Uniswap menjalani integrasi testnet dan audit; belum ada transaksi yang dibuka.", createdAt: Date.now() };
+        setMessages((previous) => [...previous.filter((message) => message.sessionId === activeSessionId), info]);
+        await saveMessage(walletAddress, info);
+        return;
+      }
+      const response = await fetch("/api/evm/uniswap/quote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ walletAddress: sessionWallet, apiKey: settings.uniswapApiKey, sellToken: proposal.sellToken, buyToken: proposal.buyToken, amount: proposal.sellAmount, slippageBps: settings.maxSlippageBps }) });
+      const quote = await response.json();
+      if (!response.ok || !quote.quote || typeof quote.outputAmount !== "string") throw new Error(quote.error || "Uniswap did not return a valid Robinhood quote.");
+      setMessages((previous) => previous.map((message) => {
+        if ((message.id === msgId || message.proposal?.id === proposal.id) && message.proposal) {
+          const updated = { ...message, proposal: { ...message.proposal, quoteResponse: quote.quote, inputAmount: quote.amountIn, buyAmount: quote.outputAmount, minimumBuyAmount: quote.minimumOutputAmount, quoteExpiresAt: quote.expiresAt, status: "ready_for_user_signature" as const } };
+          void saveMessage(walletAddress, updated);
+          return updated;
+        }
+        return message;
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to prepare the EVM quote.";
+      const failure: WebMessage = { id: `sys_${Date.now()}`, sessionId: activeSessionId, role: "assistant", content: `Robinhood swap quote was not prepared: ${message}`, createdAt: Date.now() };
+      setMessages((previous) => [...previous.filter((item) => item.sessionId === activeSessionId), failure]);
+      await saveMessage(walletAddress, failure);
+    } finally {
+      setBridgeBusy(false);
+    }
+  }
+
   useEffect(() => {
     if (!pendingSessionPrompt || !activeSessionId || loading) return;
     const prompt = pendingSessionPrompt;
@@ -739,6 +834,12 @@ export default function TradePage() {
   // --------------------------------------------------------------------------
   // GATE 2: SETUP / SETTINGS STEPPER GATE (FIRST TIME OR EDITING)
   // --------------------------------------------------------------------------
+  async function handleSignOut() {
+    if (!window.confirm("Sign out of Silfable Web? Your active session cookie will be cleared.")) return;
+    await fetch("/api/auth/wallet/session", { method: "DELETE" });
+    router.replace("/connect");
+  }
+
   if (!setupCompleted || editingSetup) {
     return (
       <WebSetupWizard
@@ -751,7 +852,7 @@ export default function TradePage() {
         setSettings={setSettings}
         onPersistSettings={persistSettings}
         onSaveSettings={handleSaveSettings}
-        onReturnToWorkspace={() => setEditingSetup(false)}
+        onReturnToWorkspace={handleSaveSettings}
       />
     );
   }
@@ -861,6 +962,7 @@ export default function TradePage() {
           <nav className="bottomNav">
             <button onClick={() => alert("Missions execution in the web version is coming soon!")}>Missions</button>
             <button onClick={openSettings}>Settings</button>
+            <button onClick={() => void handleSignOut()}>Sign out</button>
           </nav>
 
           <div className="runtimeBadge">
@@ -962,7 +1064,9 @@ export default function TradePage() {
                       </div>
 
                       {/* Desktop-Migrated Proposal Cards */}
-                      {msg.proposal && msg.proposal.type === "jupiter_swap" ? (
+                      {msg.proposal && msg.proposal.type === "evm_swap" ? (
+                        <EvmSwapPreviewCard proposal={msg.proposal} busy={bridgeBusy} onPrepare={() => handlePrepareEvmSwap(msg.proposal!, msg.id)} />
+                      ) : msg.proposal && msg.proposal.type === "jupiter_swap" ? (
                         <JupiterSwapPreviewCard
                           proposal={msg.proposal}
                           status={msg.proposal.status}
@@ -1007,7 +1111,7 @@ export default function TradePage() {
                   <div className={`evmReleaseNotice ${evmWalletMatchesSession ? "" : "evmWalletMismatch"}`}>
                     <strong>{getWebEvmChain(activeSession.chainKey ?? "")?.name ?? "EVM"} · {shortWallet(activeSession.sessionWalletAddress)}</strong>
                     <span>{evmWalletMatchesSession
-                      ? "Wallet ownership is verified and the browser account/chain match this session. EVM quoting, allowance, simulation, and execution remain release-gated until the deterministic transaction pipeline is installed."
+                      ? "Wallet ownership is verified and the browser account/chain match this session. USDG ↔ ETH quote preparation is available through Uniswap after its API key is configured; wallet broadcast remains gated pending transaction-pipeline validation."
                       : `Execution locked: switch the browser wallet to ${shortWallet(activeSession.sessionWalletAddress)} on ${expectedEvmChain?.name ?? "the bound chain"}.`}</span>
                   </div>
                 )}
@@ -1061,13 +1165,13 @@ export default function TradePage() {
           <section className="railSection">
             <h3 className="mb-4 text-[9px] tracking-[0.2em] text-[#7ba2ff] uppercase flex items-center gap-2"><span className="w-5 h-px bg-[#7ba2ff]" />PORTFOLIO</h3>
             <div className="mb-4">
-              <span className="text-[8px] tracking-[0.16em] uppercase text-[#7f8aa7]">{activeSession?.workspace === "evm" ? "AUTHENTICATED SOLANA IDENTITY" : "VERIFIED SOLANA PORTFOLIO"}</span>
+              <span className="text-[8px] tracking-[0.16em] uppercase text-[#7f8aa7]">{activeSession?.workspace === "evm" ? "ROBINHOOD PORTFOLIO" : "SOLANA PORTFOLIO"}</span>
               <div className="text-[28px] font-bold mt-1 text-white">
                 {portfolioTotalUsd !== null && portfolioTotalUsd > 0
                   ? `$${portfolioTotalUsd.toFixed(2)}`
                   : walletBalance === null
                     ? "—"
-                    : `${walletBalance.toFixed(6)} SOL`}
+                    : `${walletBalance.toFixed(6)} ${activeSession?.workspace === "evm" ? "ETH" : "SOL"}`}
               </div>
               <div className="text-[8px] text-[#7f8aa7] mt-1 mb-3">{portfolioStatus}</div>
               {portfolioAssets.length > 0 && (

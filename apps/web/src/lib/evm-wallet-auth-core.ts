@@ -12,12 +12,15 @@ export function buildEvmWalletLinkMessage(input: {
   nonce: string;
   issuedAt: Date;
   expiresAt: Date;
+  purpose?: "login" | "link";
 }): string {
   return [
     `${input.domain} wants you to verify an EVM wallet for Silfable:`,
     input.address,
     "",
-    "Link this public wallet to the authenticated Silfable account. This signature does not authorize a transaction.",
+    input.purpose === "login"
+      ? "Authenticate to Silfable restricted Mainnet. This signature does not authorize a transaction."
+      : "Link this public wallet to the authenticated Silfable account. This signature does not authorize a transaction.",
     "",
     `URI: ${input.uri}`,
     "Version: 1",
@@ -27,4 +30,3 @@ export function buildEvmWalletLinkMessage(input: {
     `Expiration Time: ${input.expiresAt.toISOString()}`,
   ].join("\n");
 }
-

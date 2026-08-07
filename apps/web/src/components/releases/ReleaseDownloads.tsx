@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const builds = [
-  { platform: "Linux", target: "Universal", file: "Silfable-0.1.0-x86_64.AppImage", size: "See GitHub", checksum: "SHA256SUMS.txt", href: "https://github.com/kevinmpandoh/silfable/releases/download/v0.1.0/Silfable-0.1.0-x86_64.AppImage", available: true },
-  { platform: "Linux", target: "Debian", file: "Silfable-0.1.0-amd64.deb", size: "See GitHub", checksum: "SHA256SUMS.txt", href: "https://github.com/kevinmpandoh/silfable/releases/download/v0.1.0/Silfable-0.1.0-amd64.deb", available: true },
+  { platform: "Linux", target: "Universal", file: "Silfable-0.1.0-x86_64.AppImage", size: "Preview", checksum: "SHA256SUMS.txt", href: "https://github.com/kevinmpandoh/silfable/releases/download/v0.1.0/Silfable-0.1.0-x86_64.AppImage", available: true },
+  { platform: "Linux", target: "Debian", file: "Silfable-0.1.0-amd64.deb", size: "Preview", checksum: "SHA256SUMS.txt", href: "https://github.com/kevinmpandoh/silfable/releases/download/v0.1.0/Silfable-0.1.0-amd64.deb", available: true },
   { platform: "macOS", target: "Apple Silicon & Intel", file: "Coming soon", size: "—", checksum: "—", href: null, available: false },
   { platform: "Windows", target: "Installer", file: "Coming soon", size: "—", checksum: "—", href: null, available: false },
 ] as const;

@@ -10,7 +10,6 @@ const footerLinks = [
   { label: "Docs", href: "/docs" },
   { label: "Whitepaper", href: "/whitepaper" },
   { label: "Releases", href: "/releases" },
-  { label: "GitHub", href: "https://github.com/kevinmpandoh/silfable" },
   { label: "Privacy", href: "#privacy" },
 ];
 

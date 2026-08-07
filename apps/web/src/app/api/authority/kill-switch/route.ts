@@ -18,15 +18,12 @@ export async function POST(request: NextRequest) {
       ? body.reason.trim().slice(0, 240)
       : "Emergency stop engaged by the authenticated wallet.";
   const now = new Date();
-  const user = await cloudDb.user.upsert({
-    where: { walletAddress: identity.walletAddress },
-    create: { walletAddress: identity.walletAddress },
-    update: {},
-  });
+  const user = await cloudDb.user.findUnique({ where: { id: identity.userId } });
+  if (!user) return NextResponse.json({ error: "Authenticated user was not found." }, { status: 404 });
 
   await Promise.all([
     cloudDb.walletSafetyState.upsert({
-      where: { walletAddress: identity.walletAddress },
+      where: { userId: identity.userId },
       create: {
         userId: user.id,
         walletAddress: identity.walletAddress,
@@ -41,7 +38,7 @@ export async function POST(request: NextRequest) {
       },
     }),
     cloudDb.delegatedAuthority.updateMany({
-      where: { walletAddress: identity.walletAddress, status: "ACTIVE" },
+      where: { userId: identity.userId, status: "ACTIVE" },
       data: {
         status: "REVOKED",
         revokedAt: now,
@@ -59,4 +56,3 @@ export async function POST(request: NextRequest) {
       "Disengagement is intentionally unavailable until a separate signed recovery challenge is implemented.",
   });
 }
-

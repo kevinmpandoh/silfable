@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
       take: 20,
     }),
     cloudDb.walletSafetyState.findUnique({
-      where: { walletAddress: identity.walletAddress },
+      where: { userId: identity.userId },
     }),
   ]);
   const killSwitchEngaged = safetyState?.killSwitchEngaged ?? false;
@@ -107,4 +107,3 @@ export async function DELETE(request: NextRequest) {
     executionAttempted: false,
   });
 }
-

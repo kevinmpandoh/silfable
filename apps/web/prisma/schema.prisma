@@ -10,6 +10,7 @@ datasource db {
 model User {
   id             String         @id @default(auto()) @map("_id") @db.ObjectId
   walletAddress  String         @unique
+  primaryNamespace String       @default("solana")
   createdAt      DateTime       @default(now())
   settings       UserSettings?
   agentSessions  AgentSession[]
@@ -18,6 +19,7 @@ model User {
   safetyState    WalletSafetyState?
   linkedWallets  LinkedWallet[]
   linkedWalletChallenges LinkedWalletChallenge[]
+  walletAuthSessions WalletAuthSession[]
 }
 
 model LinkedWallet {
@@ -32,7 +34,7 @@ model LinkedWallet {
   updatedAt  DateTime @updatedAt
 
   @@unique([namespace, address])
-  @@index([userId, namespace])
+  @@unique([userId, namespace])
 }
 
 model LinkedWalletChallenge {
@@ -54,6 +56,8 @@ model LinkedWalletChallenge {
 model WalletAuthChallenge {
   id            String    @id @default(auto()) @map("_id") @db.ObjectId
   walletAddress String
+  namespace     String    @default("solana")
+  chainId       Int?
   nonceHash     String    @unique
   message       String
   expiresAt     DateTime
@@ -66,6 +70,9 @@ model WalletAuthChallenge {
 model WalletAuthSession {
   id            String    @id @default(auto()) @map("_id") @db.ObjectId
   walletAddress String
+  namespace     String    @default("solana")
+  userId        String?   @db.ObjectId
+  user          User?     @relation(fields: [userId], references: [id])
   tokenHash     String    @unique
   expiresAt     DateTime
   revokedAt     DateTime?
@@ -73,6 +80,7 @@ model WalletAuthSession {
   lastSeenAt    DateTime  @default(now())
 
   @@index([walletAddress, expiresAt])
+  @@index([userId, expiresAt])
 }
 
 model DelegatedAuthorityChallenge {
@@ -239,7 +247,7 @@ model ChatSession {
   user      User          @relation(fields: [userId], references: [id])
   title     String
   filter    String        @default("all") // all, agent, mission, pump, active, limit, custom
-  workspace String        @default("solana") // solana, evm, bridge
+  workspace String        @default("solana") // solana, evm (Robinhood Chain)
   chainKey  String?
   sessionWalletAddress String?
   createdAt DateTime      @default(now())

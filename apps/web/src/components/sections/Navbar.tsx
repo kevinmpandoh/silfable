@@ -9,7 +9,6 @@ const navLinks = [
   { label: "Docs", href: "/docs" },
   { label: "Whitepaper", href: "/whitepaper" },
   { label: "Releases", href: "/releases" },
-  { label: "GitHub", href: "https://github.com/kevinmpandoh/silfable" },
 ];
 
 export function Navbar() {

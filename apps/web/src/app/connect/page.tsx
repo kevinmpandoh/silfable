@@ -6,6 +6,7 @@ import { ArrowRight, KeyRound, ShieldCheck, Wallet } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import bs58 from "bs58";
+import { requestEvmAccount, signEvmAuthenticationMessage } from "@/lib/evm-browser-wallet";
 
 function ConnectContent() {
   const { connected, publicKey, signMessage } = useWallet();
@@ -16,21 +17,16 @@ function ConnectContent() {
   const next = requestedNext.startsWith("/") && !requestedNext.startsWith("//")
     ? requestedNext
     : "/trade";
-  const [authState, setAuthState] = useState<"ready" | "signing">("ready");
+  const [authState, setAuthState] = useState<"ready" | "signing-solana" | "signing-evm">("ready");
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    if (!connected || !publicKey) {
-      return () => {
-        cancelled = true;
-      };
-    }
     fetch("/api/auth/wallet/session", { cache: "no-store" })
       .then((response) => response.json())
       .then((session) => {
         if (cancelled) return;
-        if (session.authenticated === true && session.walletAddress === publicKey.toBase58()) {
+        if (session.authenticated === true) {
           router.replace(next);
           return;
         }
@@ -42,9 +38,9 @@ function ConnectContent() {
     return () => {
       cancelled = true;
     };
-  }, [connected, publicKey, router, next]);
+  }, [router, next]);
 
-  const authenticateWallet = useCallback(async () => {
+  const authenticateSolanaWallet = useCallback(async () => {
     if (!connected || !publicKey) {
       setVisible(true);
       return;
@@ -53,7 +49,7 @@ function ConnectContent() {
       setAuthError("Wallet ini tidak mendukung message signing. Gunakan Phantom atau Solflare.");
       return;
     }
-    setAuthState("signing");
+    setAuthState("signing-solana");
     setAuthError(null);
     try {
       const walletAddress = publicKey.toBase58();
@@ -87,11 +83,38 @@ function ConnectContent() {
     }
   }, [connected, publicKey, router, setVisible, signMessage, next]);
 
+  const authenticateEvmWallet = useCallback(async () => {
+    setAuthState("signing-evm");
+    setAuthError(null);
+    try {
+      const account = await requestEvmAccount();
+      const challengeResponse = await fetch("/api/auth/wallet/challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: account.address, namespace: "evm", chainId: account.chainId }),
+      });
+      const challenge = await challengeResponse.json();
+      if (!challengeResponse.ok || typeof challenge.message !== "string") throw new Error(challenge.error || "Challenge autentikasi EVM tidak tersedia.");
+      const signature = await signEvmAuthenticationMessage(account.address, challenge.message);
+      const verifyResponse = await fetch("/api/auth/wallet/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ challengeId: challenge.challengeId, walletAddress: account.address, signature }),
+      });
+      const verified = await verifyResponse.json();
+      if (!verifyResponse.ok || verified.authenticated !== true) throw new Error(verified.error || "Signature EVM tidak dapat diverifikasi.");
+      router.replace(next);
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Autentikasi EVM gagal.");
+      setAuthState("ready");
+    }
+  }, [next, router]);
+
   const features = [
     {
       icon: Wallet,
       title: "Your wallet opens the workspace",
-      text: "Your public Solana address identifies your active Silfable web session and keeps each workspace separate.",
+      text: "A verified Solana or EVM address can open your Silfable account and its linked wallets.",
     },
     {
       icon: KeyRound,
@@ -116,22 +139,19 @@ function ConnectContent() {
             Connect your wallet to begin.
           </h1>
           <p className="mt-6 max-w-xl font-sans text-sm leading-relaxed text-zinc-500">
-            Use a Solana wallet to open your private Silfable workspace. Silfable can prepare multi-chain trades, bridge flows, and DCA plans, but every transaction still requires your explicit approval.
+            Sign in with a Solana wallet or an EVM wallet such as MetaMask/Rabby. Linked wallets open the same Silfable account, while every transaction still requires approval from its source wallet.
           </p>
 
-          <button
-            type="button"
-            onClick={() => void authenticateWallet()}
-            disabled={authState === "signing"}
-            className="mt-8 inline-flex min-w-56 items-center justify-center gap-3 bg-electric px-8 py-4 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-white transition-colors hover:bg-cyan-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050505]"
-          >
-            <Wallet className="h-4 w-4" />
-            {!connected
-              ? "Connect Wallet"
-              : authState === "signing"
-                ? "Awaiting Signature"
-                : "Sign In With Wallet"}
-          </button>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <button type="button" onClick={() => void authenticateSolanaWallet()} disabled={authState !== "ready"} className="inline-flex min-w-56 items-center justify-center gap-3 bg-electric px-8 py-4 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-white transition-colors hover:bg-cyan-500 disabled:opacity-60">
+              <Wallet className="h-4 w-4" />
+              {authState === "signing-solana" ? "Awaiting Solana Signature" : connected ? "Sign In With Solana" : "Connect Solana Wallet"}
+            </button>
+            <button type="button" onClick={() => void authenticateEvmWallet()} disabled={authState !== "ready"} className="inline-flex min-w-56 items-center justify-center gap-3 border border-cyan-400/35 bg-cyan-400/10 px-8 py-4 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-100 transition-colors hover:bg-cyan-400/20 disabled:opacity-60">
+              <Wallet className="h-4 w-4" />
+              {authState === "signing-evm" ? "Awaiting EVM Signature" : "Connect EVM Wallet"}
+            </button>
+          </div>
           {authError && (
             <p className="mt-4 max-w-xl text-sm leading-relaxed text-rose-400">{authError}</p>
           )}

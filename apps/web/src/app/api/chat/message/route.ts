@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     }
 
     const ownedSession = await cloudDb.chatSession.findFirst({
-      where: { id: sessionId, user: { walletAddress: auth.walletAddress } },
+      where: { id: sessionId, userId: auth.userId },
       select: { id: true },
     });
     if (!ownedSession) {
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid message payload or sessionId" }, { status: 400 });
     }
     const ownedSession = await cloudDb.chatSession.findFirst({
-      where: { id: message.sessionId, user: { walletAddress: auth.walletAddress } },
+      where: { id: message.sessionId, userId: auth.userId },
       select: { id: true },
     });
     if (!ownedSession) {

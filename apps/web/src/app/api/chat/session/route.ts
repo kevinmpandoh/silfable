@@ -3,7 +3,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cloudDb, isDbConfigured, safeDbQuery } from "@/lib/cloud-db";
 import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
-import { getWebEvmChain } from "@/lib/evm-chains";
 
 function isValidObjectId(id?: string): boolean {
   return typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id);
@@ -27,7 +26,7 @@ export async function GET(req: NextRequest) {
     const user = await safeDbQuery(
       () =>
         cloudDb.user.findUnique({
-          where: { walletAddress },
+          where: { id: auth.userId },
           include: {
             chatSessions: {
               orderBy: { updatedAt: "desc" },
@@ -47,8 +46,8 @@ export async function GET(req: NextRequest) {
       filter: s.filter,
       createdAt: s.createdAt.getTime(),
       updatedAt: s.updatedAt.getTime(),
-      workspace: s.workspace || "solana",
-      chainKey: s.chainKey ?? undefined,
+      workspace: s.workspace === "evm" ? "evm" : "solana",
+      chainKey: s.workspace === "evm" ? "robinhood" : undefined,
       sessionWalletAddress: s.sessionWalletAddress ?? undefined,
     }));
 
@@ -60,7 +59,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isDbConfigured) {
+  if (!isDbConfigured()) {
     return NextResponse.json({ error: "DATABASE_URL is not configured" }, { status: 400 });
   }
 
@@ -74,10 +73,7 @@ export async function POST(req: NextRequest) {
     const auth = await requireWalletAuth(req, walletAddress);
     if (isAuthFailure(auth)) return auth;
 
-    let user = await safeDbQuery(() => cloudDb.user.findUnique({ where: { walletAddress } }), null);
-    if (!user) {
-      user = await safeDbQuery(() => cloudDb.user.create({ data: { walletAddress } }), null);
-    }
+    const user = await safeDbQuery(() => cloudDb.user.findUnique({ where: { id: auth.userId } }), null);
 
     if (!user) {
       return NextResponse.json({ error: "Failed to connect to user database" }, { status: 500 });
@@ -120,19 +116,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "session data is required" }, { status: 400 });
     }
 
-    const workspace = ["solana", "evm", "bridge"].includes(session.workspace) ? session.workspace : "solana";
-    const chainKey = workspace === "solana" ? null : session.chainKey;
+    const workspace = session.workspace === "evm" ? "evm" : "solana";
+    const chainKey = workspace === "evm" ? "robinhood" : null;
     const sessionWalletAddress = typeof session.sessionWalletAddress === "string" ? session.sessionWalletAddress : null;
-    if ((workspace === "evm" || workspace === "bridge") && (!chainKey || !getWebEvmChain(chainKey))) {
-      return NextResponse.json({ error: "A supported EVM chain is required." }, { status: 400 });
-    }
-    if ((workspace === "solana" || workspace === "bridge") && sessionWalletAddress && sessionWalletAddress !== auth.walletAddress) {
-      return NextResponse.json({ error: "The Solana source wallet must match the authenticated wallet." }, { status: 403 });
-    }
-    if (workspace === "evm") {
-      const linked = await cloudDb.linkedWallet.findFirst({ where: { userId: user.id, namespace: "evm", address: sessionWalletAddress ?? "" } });
-      if (!linked) return NextResponse.json({ error: "The selected EVM wallet is not linked to this account." }, { status: 403 });
-    }
+    if (!sessionWalletAddress) return NextResponse.json({ error: "A verified session wallet is required." }, { status: 400 });
+    const linked = await cloudDb.linkedWallet.findFirst({ where: { userId: user.id, namespace: workspace, address: sessionWalletAddress } });
+    const isLegacyPrimary = user.walletAddress === sessionWalletAddress && (user.primaryNamespace || "solana") === workspace;
+    if (!linked && !isLegacyPrimary) return NextResponse.json({ error: `The selected ${workspace.toUpperCase()} wallet is not linked to this account.` }, { status: 403 });
 
     let savedSession;
 
@@ -188,8 +178,8 @@ export async function POST(req: NextRequest) {
         filter: savedSession.filter,
         createdAt: savedSession.createdAt.getTime(),
         updatedAt: savedSession.updatedAt.getTime(),
-        workspace: savedSession.workspace || "solana",
-        chainKey: savedSession.chainKey ?? undefined,
+        workspace: savedSession.workspace === "evm" ? "evm" : "solana",
+        chainKey: savedSession.workspace === "evm" ? "robinhood" : undefined,
         sessionWalletAddress: savedSession.sessionWalletAddress ?? undefined,
       },
     });

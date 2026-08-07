@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     if (isAuthFailure(auth)) return auth;
 
     const user = await cloudDb.user.findUnique({
-      where: { walletAddress },
+      where: { id: auth.userId },
       include: { settings: true },
     });
 

@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = bodySchema.parse(await request.json());
     const address = normalizeEvmAddress(body.address);
-    const user = await cloudDb.user.findUnique({ where: { walletAddress: auth.walletAddress } });
+    const user = await cloudDb.user.findUnique({ where: { id: auth.userId } });
     if (!user) return NextResponse.json({ error: "Authenticated user was not found." }, { status: 404 });
     const challenge = await cloudDb.linkedWalletChallenge.findFirst({
       where: { id: body.challengeId, userId: user.id, namespace: "evm", address },
@@ -34,6 +34,12 @@ export async function POST(request: NextRequest) {
       data: { usedAt: new Date() },
     });
     if (consumed.count !== 1) return NextResponse.json({ error: "Wallet-link challenge was already consumed." }, { status: 409 });
+
+    const assignedWallet = await cloudDb.linkedWallet.findFirst({ where: { userId: user.id, namespace: "evm" } });
+    const assignedAddress = assignedWallet?.address ?? (user.primaryNamespace === "evm" ? user.walletAddress : null);
+    if (assignedAddress && assignedAddress.toLowerCase() !== address.toLowerCase()) {
+      return NextResponse.json({ error: "This account already has a Robinhood wallet. Only one EVM wallet is allowed per account." }, { status: 409 });
+    }
 
     const existing = await cloudDb.linkedWallet.findUnique({
       where: { namespace_address: { namespace: "evm", address } },

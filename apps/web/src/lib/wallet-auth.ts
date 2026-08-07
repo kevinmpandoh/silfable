@@ -9,6 +9,7 @@ import {
   normalizeWalletAddress,
   sha256,
 } from "@/lib/wallet-auth-crypto";
+import { normalizeEvmAddress } from "@/lib/evm-wallet-auth-core";
 
 export {
   buildWalletAuthMessage,
@@ -24,7 +25,11 @@ export const WALLET_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 export type WalletAuthIdentity = {
   sessionId: string;
+  userId: string;
+  namespace: "solana" | "evm";
   walletAddress: string;
+  accountWalletAddress: string;
+  accountNamespace: "solana" | "evm";
   expiresAt: Date;
 };
 
@@ -42,9 +47,18 @@ export async function readWalletAuth(request: NextRequest): Promise<WalletAuthId
   );
   if (!session || session.revokedAt || session.expiresAt.getTime() <= Date.now()) return null;
 
+  const user = session.userId
+    ? await safeDbQuery(() => cloudDb.user.findUnique({ where: { id: session.userId! } }), null)
+    : await safeDbQuery(() => cloudDb.user.findUnique({ where: { walletAddress: session.walletAddress } }), null);
+  if (!user) return null;
+
   return {
     sessionId: session.id,
+    userId: user.id,
+    namespace: session.namespace === "evm" ? "evm" : "solana",
     walletAddress: session.walletAddress,
+    accountWalletAddress: user.walletAddress,
+    accountNamespace: user.primaryNamespace === "evm" ? "evm" : "solana",
     expiresAt: session.expiresAt,
   };
 }
@@ -64,14 +78,24 @@ export async function requireWalletAuth(
   if (requestedWallet !== undefined) {
     let normalized: string;
     try {
-      normalized = normalizeWalletAddress(requestedWallet);
+      normalized = typeof requestedWallet === "string" && /^0x[0-9a-f]{40}$/iu.test(requestedWallet)
+        ? normalizeEvmAddress(requestedWallet)
+        : normalizeWalletAddress(requestedWallet);
     } catch {
       return NextResponse.json(
         { error: "The requested wallet address is invalid.", code: "INVALID_WALLET" },
         { status: 400 },
       );
     }
-    if (normalized !== identity.walletAddress) {
+    const isAuthenticatedWallet = normalized.toLowerCase() === identity.walletAddress.toLowerCase();
+    const isAccountPrimary = normalized.toLowerCase() === identity.accountWalletAddress.toLowerCase();
+    const linkedWallet = isAuthenticatedWallet || isAccountPrimary
+      ? null
+      : await safeDbQuery(() => cloudDb.linkedWallet.findFirst({
+          where: { userId: identity.userId, address: normalized },
+          select: { id: true },
+        }), null);
+    if (!isAuthenticatedWallet && !isAccountPrimary && !linkedWallet) {
       return NextResponse.json(
         { error: "The authenticated wallet does not own this request.", code: "WALLET_SCOPE_MISMATCH" },
         { status: 403 },

@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = bodySchema.parse(await request.json());
     const address = normalizeEvmAddress(body.address);
-    const user = await cloudDb.user.findUnique({ where: { walletAddress: auth.walletAddress } });
+    const user = await cloudDb.user.findUnique({ where: { id: auth.userId } });
     if (!user) return NextResponse.json({ error: "Authenticated user was not found." }, { status: 404 });
 
     const recentCount = await cloudDb.linkedWalletChallenge.count({

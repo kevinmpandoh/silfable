@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       );
     }
     const safetyState = await cloudDb.walletSafetyState.findUnique({
-      where: { walletAddress: identity.walletAddress },
+      where: { userId: identity.userId },
     });
     if (safetyState?.killSwitchEngaged) {
       return NextResponse.json(
@@ -93,11 +93,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const user = await cloudDb.user.upsert({
-      where: { walletAddress: identity.walletAddress },
-      create: { walletAddress: identity.walletAddress },
-      update: {},
-    });
+    const user = await cloudDb.user.findUnique({ where: { id: identity.userId } });
+    if (!user) return NextResponse.json({ error: "Authenticated user was not found." }, { status: 404 });
     await cloudDb.delegatedAuthority.updateMany({
       where: { walletAddress: identity.walletAddress, status: "ACTIVE" },
       data: {
@@ -138,4 +135,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message, code: "AUTHORITY_ACTIVATION_FAILED" }, { status: 400 });
   }
 }
-

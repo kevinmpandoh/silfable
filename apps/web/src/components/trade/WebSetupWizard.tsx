@@ -20,6 +20,7 @@ interface WebSetupWizardProps {
 
 const steps = ["Network", "Agent", "Provider", "Review"];
 const reviewStep = steps.length;
+type OpenRouterModel = { id: string; name: string; contextLength: number | null };
 
 export function WebSetupWizard(props: WebSetupWizardProps) {
   const {
@@ -36,6 +37,8 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
   } = props;
   const [verifying, setVerifying] = useState<string | null>(null);
   const [verifyResult, setVerifyResult] = useState<Record<string, { ok: boolean; message: string } | undefined>>({});
+  const [openRouterModels, setOpenRouterModels] = useState<OpenRouterModel[]>([]);
+  const [openRouterVerified, setOpenRouterVerified] = useState(false);
 
   const activeStep = Math.min(Math.max(setupStep, 1), reviewStep);
   const isReview = activeStep === reviewStep;
@@ -75,6 +78,42 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
     }
   }
 
+  async function verifyAndSaveEvmRpc() {
+    const rawUrl = settings.evmRpcUrl.trim();
+    if (!rawUrl) {
+      saveInline();
+      setVerifyResult((previous) => ({ ...previous, evmRpc: { ok: true, message: "Saved. Using the default Robinhood RPC." } }));
+      return;
+    }
+
+    setVerifying("evm-rpc");
+    setVerifyResult((previous) => ({ ...previous, evmRpc: undefined }));
+    try {
+      const url = new URL(rawUrl);
+      if (url.protocol !== "https:" || url.username || url.password) {
+        throw new Error("RPC must be a valid HTTPS URL without embedded credentials.");
+      }
+      const response = await fetch(url.toString(), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: "silfable-robinhood-rpc-check", method: "eth_chainId", params: [] }),
+      });
+      const payload = await response.json().catch(() => null) as { result?: unknown; error?: { message?: unknown } } | null;
+      if (!response.ok || payload?.error || typeof payload?.result !== "string") {
+        const message = typeof payload?.error?.message === "string" ? payload.error.message : `HTTP ${response.status}`;
+        throw new Error(`RPC request failed: ${message}`);
+      }
+      const chainId = Number.parseInt(payload.result, 16);
+      if (chainId !== 4_663) throw new Error(`RPC is connected to chain ${chainId}, not Robinhood Chain (4663).`);
+      saveInline();
+      setVerifyResult((previous) => ({ ...previous, evmRpc: { ok: true, message: "Robinhood RPC verified and saved." } }));
+    } catch (error) {
+      setVerifyResult((previous) => ({ ...previous, evmRpc: { ok: false, message: errorMessage(error, "Could not query this RPC endpoint.") } }));
+    } finally {
+      setVerifying(null);
+    }
+  }
+
   function saveJupiter() {
     saveInline();
     setVerifyResult((previous) => ({
@@ -83,19 +122,54 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
     }));
   }
 
-  function saveOpenRouter() {
-    if (!settings.openRouterApiKey.trim()) {
-      setVerifyResult((previous) => ({ ...previous, openrouter: { ok: false, message: "An OpenRouter key is required for AI responses." } }));
+  function saveUniswap() {
+    saveInline();
+    setVerifyResult((previous) => ({
+      ...previous,
+      uniswap: settings.uniswapApiKey.trim()
+        ? { ok: true, message: "Uniswap key saved for this browser session." }
+        : { ok: false, message: "A Uniswap Trading API key is required for Robinhood swap quotes." },
+    }));
+  }
+
+  async function loadOpenRouterModels() {
+    const apiKey = settings.openRouterApiKey.trim();
+    if (!apiKey) {
+      setVerifyResult((previous) => ({ ...previous, openrouter: { ok: false, message: "Save an OpenRouter key before loading models." } }));
       return;
     }
-    saveInline();
-    setVerifyResult((previous) => ({ ...previous, openrouter: { ok: true, message: "OpenRouter key saved." } }));
+    setVerifying("openrouter-models");
+    try {
+      const response = await fetch("/api/ai/models", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ walletAddress: publicAddress, apiKey }),
+      });
+      const payload = await response.json() as { models?: OpenRouterModel[]; error?: string };
+      if (!response.ok || !Array.isArray(payload.models)) throw new Error(payload.error || "OpenRouter did not return a model catalog.");
+      const models = payload.models;
+      setOpenRouterModels(models);
+      setOpenRouterVerified(true);
+      const selectedStillAvailable = models.some((model) => model.id === settings.aiModel);
+      if (!selectedStillAvailable && models[0]) updateSettings({ aiModel: models[0].id });
+      saveInline();
+      setVerifyResult((previous) => ({ ...previous, openrouter: { ok: true, message: `Key verified. ${models.length} models are available to choose from.` } }));
+    } catch (error) {
+      setOpenRouterVerified(false);
+      setOpenRouterModels([]);
+      setVerifyResult((previous) => ({ ...previous, openrouter: { ok: false, message: errorMessage(error, "Could not load OpenRouter models.") } }));
+    } finally {
+      setVerifying(null);
+    }
   }
 
   function continueFromStep() {
+    if (activeStep === 3 && (!openRouterVerified || openRouterModels.length === 0)) {
+      setVerifyResult((previous) => ({ ...previous, openrouter: { ok: false, message: "Verify the OpenRouter key and choose a model before continuing." } }));
+      return;
+    }
     if (editingSetup) {
-      onPersistSettings();
-      setSetupStep(reviewStep);
+      onSaveSettings();
       return;
     }
     setSetupStep(Math.min(reviewStep, activeStep + 1));
@@ -142,9 +216,17 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
                 <p>Use a custom HTTPS RPC only when the default endpoint is slow or rate limited.</p>
                 <div className="field"><span>Custom RPC endpoint URL</span><div className="inlineInputAction"><input type="url" value={settings.customRpcUrl} onChange={(event) => updateSettings({ customRpcUrl: event.target.value })} placeholder="https://mainnet.helius-rpc.com/?api-key=..." /><button type="button" onClick={verifyAndSaveRpc} disabled={verifying === "rpc"}>{verifying === "rpc" ? "VERIFYING..." : "VERIFY & SAVE"}</button></div><Result value={verifyResult.rpc} /><small>Leave blank to use the default public RPC.</small></div>
               </IntegrationCard>
+              <IntegrationCard title="Robinhood EVM RPC" badge={settings.evmRpcUrl ? "CUSTOM" : "DEFAULT"} ok={Boolean(settings.evmRpcUrl)}>
+                <p>Optional HTTPS RPC for Robinhood Chain portfolio reads. Signing still happens only in MetaMask, Rabby, or another connected EVM wallet.</p>
+                <div className="field"><span>Custom EVM RPC endpoint URL</span><div className="inlineInputAction"><input type="url" value={settings.evmRpcUrl} onChange={(event) => updateSettings({ evmRpcUrl: event.target.value })} placeholder="https://your-robinhood-rpc.example" /><button type="button" onClick={verifyAndSaveEvmRpc} disabled={verifying === "evm-rpc"}>{verifying === "evm-rpc" ? "VERIFYING..." : "VERIFY & SAVE"}</button></div><Result value={verifyResult.evmRpc} /><small>Endpoint must report chain ID 4663. Leave blank to use the default Robinhood RPC.</small></div>
+              </IntegrationCard>
               <IntegrationCard title="Jupiter routing" badge={settings.jupiterApiKey ? "CONFIGURED" : "DEFAULT"} ok={Boolean(settings.jupiterApiKey)}>
                 <p>Used for Solana swap quotes and transaction preparation. A key is optional.</p>
                 <div className="field"><span>Jupiter API key</span><div className="inlineInputAction"><input type="password" value={settings.jupiterApiKey} onChange={(event) => updateSettings({ jupiterApiKey: event.target.value })} placeholder={settings.jupiterApiKey ? "Replace saved key" : "Optional Jupiter API key"} autoComplete="off" /><button type="button" onClick={saveJupiter}>SAVE</button></div><Result value={verifyResult.jupiter} /><small>The key is stored only in this browser.</small></div>
+              </IntegrationCard>
+              <IntegrationCard title="Uniswap Trading API" badge={settings.uniswapApiKey ? "CONFIGURED" : "REQUIRED FOR EVM SWAPS"} ok={Boolean(settings.uniswapApiKey)}>
+                <p>Required for USDG ↔ ETH Robinhood Chain quotes. This key stays in this browser session and is sent only to the quote endpoint.</p>
+                <div className="field"><span>Uniswap API key</span><div className="inlineInputAction"><input type="password" value={settings.uniswapApiKey} onChange={(event) => updateSettings({ uniswapApiKey: event.target.value })} placeholder={settings.uniswapApiKey ? "Replace saved key" : "Official Uniswap Trading API key"} autoComplete="off" /><button type="button" onClick={saveUniswap}>SAVE</button></div><Result value={verifyResult.uniswap} /><small>Create the key in your Uniswap developer account; web will never place it in a server environment file.</small></div>
               </IntegrationCard>
             </div>}
 
@@ -159,11 +241,59 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
             </div>}
 
             {activeStep === 3 && <div className="setupStepContent">
-              <IntegrationCard title="OpenRouter" badge={settings.openRouterApiKey ? "CONFIGURED" : "REQUIRED FOR AI"} ok={Boolean(settings.openRouterApiKey)}>
-                <p>Inference provider for the web AI agent.</p>
-                <div className="fieldGrid">
-                  <div className="field"><span>OpenRouter API key</span><div className="inlineInputAction"><input type="password" value={settings.openRouterApiKey} onChange={(event) => updateSettings({ openRouterApiKey: event.target.value })} placeholder={settings.openRouterApiKey ? "Replace saved key" : "sk-or-..."} autoComplete="off" /><button type="button" onClick={saveOpenRouter}>SAVE</button></div><Result value={verifyResult.openrouter} /></div>
-                  <div className="field"><span>AI model</span><select value={settings.aiModel} onChange={(event) => updateSettings({ aiModel: event.target.value })}><option value="openai/gpt-4o-mini">openai/gpt-4o-mini</option><option value="openai/gpt-4.1-mini">openai/gpt-4.1-mini</option><option value="anthropic/claude-3.5-sonnet">anthropic/claude-3.5-sonnet</option><option value="google/gemini-2.0-flash-001">google/gemini-2.0-flash-001</option></select></div>
+              <IntegrationCard title="OpenRouter provider" badge={openRouterVerified ? "VERIFIED" : "SETUP REQUIRED"} ok={openRouterVerified}>
+                <div className="providerStepRows">
+                  <div className="field">
+                    <span>OpenRouter API key</span>
+                    <div className="inlineInputAction">
+                      <input
+                        type="password"
+                        value={settings.openRouterApiKey}
+                        onChange={(event) => {
+                          updateSettings({ openRouterApiKey: event.target.value });
+                          setOpenRouterVerified(false);
+                          setOpenRouterModels([]);
+                          setVerifyResult((previous) => ({ ...previous, openrouter: undefined }));
+                        }}
+                        placeholder={settings.openRouterApiKey ? "••••••••••••••••••••••••" : "sk-or-..."}
+                        autoComplete="off"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void loadOpenRouterModels()}
+                        disabled={verifying === "openrouter-models"}
+                      >
+                        {verifying === "openrouter-models" ? "VERIFYING..." : "VERIFY KEY"}
+                      </button>
+                    </div>
+                    <Result value={verifyResult.openrouter} />
+                  </div>
+                  <div className="field">
+                    <span>AI model</span>
+                    <select
+                      value={settings.aiModel}
+                      onChange={(event) => {
+                        updateSettings({ aiModel: event.target.value });
+                      }}
+                      disabled={!openRouterVerified || openRouterModels.length === 0}
+                    >
+                      <option value={settings.aiModel}>
+                        {openRouterVerified ? settings.aiModel : "Verify key first"}
+                      </option>
+                      {openRouterModels
+                        .filter((model) => model.id !== settings.aiModel)
+                        .map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.name} · {model.id}
+                          </option>
+                        ))}
+                    </select>
+                    <small>
+                      {openRouterVerified
+                        ? "Choose a verified OpenRouter model, then click Save and Return to Review below."
+                        : "Model selection remains locked until key verification succeeds."}
+                    </small>
+                  </div>
                 </div>
               </IntegrationCard>
             </div>}

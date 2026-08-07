@@ -33,3 +33,23 @@ export async function signEvmAuthenticationMessage(address: `0x${string}`, messa
   return signature as `0x${string}`;
 }
 
+export async function switchToRobinhoodChain(customRpcUrl?: string): Promise<void> {
+  const provider = window.ethereum;
+  if (!provider) throw new Error("EVM wallet extension tidak tersedia.");
+  const chainId = "0x1237";
+  try {
+    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId }] });
+  } catch (cause) {
+    if ((cause as { code?: number }).code !== 4_902) throw cause;
+    await provider.request({
+      method: "wallet_addEthereumChain",
+      params: [{
+        chainId,
+        chainName: "Robinhood Chain",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: [customRpcUrl?.trim() || "https://rpc.mainnet.chain.robinhood.com"],
+        blockExplorerUrls: ["https://robinhoodchain.blockscout.com"],
+      }],
+    });
+  }
+}
