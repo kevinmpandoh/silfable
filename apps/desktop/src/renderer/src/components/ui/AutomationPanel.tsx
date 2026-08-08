@@ -178,7 +178,7 @@ export function AutomationPanel({
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-            <Bot className="h-6 w-6 text-cyan-400" />
+            <Bot className="h-6 w-6 text-emerald-400" />
             Autonomous Capital Execution
           </h2>
           <p className="text-xs text-slate-400 mt-1">
@@ -192,7 +192,7 @@ export function AutomationPanel({
               onClick={() => setFilterMode("ALL")}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all ${
                 filterMode === "ALL"
-                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shadow-sm"
+                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm"
                   : "text-slate-400 hover:text-slate-200"
               }`}
             >
@@ -204,7 +204,7 @@ export function AutomationPanel({
                 onClick={() => setFilterMode("SESSION")}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all ${
                   filterMode === "SESSION"
-                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shadow-sm"
+                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
               >
@@ -221,10 +221,10 @@ export function AutomationPanel({
         </div>
       </div>
 
-      <div className="rounded-xl border border-cyan-500/20 bg-cyan-950/20 p-4 text-xs text-cyan-200/90 flex items-start gap-3">
-        <Bot className="h-5 w-5 text-cyan-400 shrink-0 mt-0.5" />
+      <div className="rounded-xl border border-emerald-500/20 bg-emerald-950/20 p-4 text-xs text-emerald-200/90 flex items-start gap-3">
+        <Bot className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
         <div>
-          <span className="font-semibold text-cyan-300">How to Create Strategies:</span> Ask the AI Assistant in chat.
+          <span className="font-semibold text-emerald-300">How to Create Strategies:</span> Ask the AI Assistant in chat.
         </div>
       </div>
 
@@ -249,7 +249,7 @@ export function AutomationPanel({
                 <Card 
                   key={strategy.id} 
                   variant="elevated" 
-                  className={`relative border-slate-800/80 bg-slate-900/60 transition-all ${strategy.sessionId && onSelectSession ? "cursor-pointer hover:border-cyan-500/50" : ""}`}
+                  className={`relative border-slate-800/80 bg-slate-900/60 transition-all ${strategy.sessionId && onSelectSession ? "cursor-pointer hover:border-emerald-500/50" : ""}`}
                   onClick={(e) => {
                     if ((e.target as HTMLElement).closest("button")) return;
                     if (strategy.sessionId && onSelectSession) {
@@ -259,7 +259,7 @@ export function AutomationPanel({
                 >
                   <CardHeader className="flex flex-row items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wide uppercase bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wide uppercase bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
                         {strategy.kind}
                       </span>
                       <CardTitle className="text-sm font-bold text-slate-100 font-mono tracking-wide">
@@ -272,7 +272,7 @@ export function AutomationPanel({
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="text-[11px] text-cyan-400 hover:text-cyan-300"
+                          className="text-[11px] text-emerald-400 hover:text-emerald-300"
                           onClick={() => onSelectSession(strategy.sessionId!)}
                         >
                           Session →
@@ -289,14 +289,14 @@ export function AutomationPanel({
                         </div>
                         <div className="flex justify-between border-b border-slate-800/60 pb-1.5">
                           <span className="text-slate-400">Amount:</span>
-                          <span className="font-mono text-cyan-300 font-semibold">{formatOrderAmount(strategy.orderAmountRaw, strategy.inputMint)}</span>
+                          <span className="font-mono text-emerald-300 font-semibold">{formatOrderAmount(strategy.orderAmountRaw, strategy.inputMint)}</span>
                         </div>
                         {countdown && (
                           <div className="flex justify-between pb-1.5 items-center">
                             <span className="text-slate-400 flex items-center gap-1">
-                              <Timer className="h-3.5 w-3.5 text-cyan-400" /> Next:
+                              <Timer className="h-3.5 w-3.5 text-emerald-400" /> Next:
                             </span>
-                            <span className="font-mono text-cyan-300 font-bold bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-500/30">{countdown}</span>
+                            <span className="font-mono text-emerald-300 font-bold bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-500/30">{countdown}</span>
                           </div>
                         )}
                       </>
@@ -310,9 +310,9 @@ export function AutomationPanel({
                         {countdown && (
                           <div className="flex justify-between pb-1.5 items-center">
                             <span className="text-slate-400 flex items-center gap-1">
-                              <Timer className="h-3.5 w-3.5 text-cyan-400" /> Next:
+                              <Timer className="h-3.5 w-3.5 text-emerald-400" /> Next:
                             </span>
-                            <span className="font-mono text-cyan-300 font-bold bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-500/30">{countdown}</span>
+                            <span className="font-mono text-emerald-300 font-bold bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-500/30">{countdown}</span>
                           </div>
                         )}
                       </>

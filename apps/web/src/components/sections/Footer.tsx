@@ -15,7 +15,7 @@ const footerLinks = [
 
 export function Footer() {
   return (
-    <footer id="support" className="border-t border-cyan-300/20 bg-[radial-gradient(circle_at_78%_18%,rgb(22_183_214_/_0.24),transparent_28%),linear-gradient(135deg,#101b4a,#070914_62%)] text-white">
+    <footer id="support" className="border-t border-[var(--line)] bg-[radial-gradient(circle_at_78%_18%,rgb(89_222_192_/_0.18),transparent_28%),radial-gradient(circle_at_18%_74%,rgb(32_201_151_/_0.18),transparent_30%),#06121a] text-white">
       <div className="section-shell flex min-h-[78vh] flex-col justify-between py-20 sm:py-24 lg:min-h-screen lg:py-28">
         <div className="flex items-center justify-between border-b border-white/30 pb-5">
           <p className="font-mono text-[10px] uppercase tracking-[0.23em] text-white/70">The mission starts here</p>
@@ -25,14 +25,14 @@ export function Footer() {
         </div>
 
         <div className="py-20 lg:py-28">
-          <h2 className="font-serif text-[clamp(4.3rem,11.5vw,12rem)] leading-[0.75] tracking-[-0.07em]">
+          <h2 className="text-[clamp(4rem,11vw,11rem)] font-bold leading-[0.78] tracking-[-0.075em]">
             <span className="block">YOUR AI.</span>
-            <span className="block pl-[7vw] italic text-cyan-200">YOUR LIMITS.</span>
+            <span className="auroraText block pl-[7vw]">YOUR LIMITS.</span>
             <span className="block text-right">Your receipts.</span>
           </h2>
 
           <div className="mt-16 flex flex-col gap-3 sm:flex-row sm:justify-end lg:mt-24">
-            <Button asChild size="lg" className="border-cyan-200 bg-gradient-to-r from-[#5366e9] to-[#16b7d6] text-white hover:brightness-110">
+            <Button asChild size="lg" className="auroraButton text-white">
               <Link href="/#download">
                 Download Silfable <Download className="ml-4 size-4" />
               </Link>

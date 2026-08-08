@@ -129,55 +129,56 @@ function ConnectContent() {
   ];
 
   return (
-    <main className="min-h-screen bg-[#050505] px-4 py-16 text-[#f4f4f5] sm:px-6">
-      <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[0.95fr_1.05fr]">
-        <div>
-          <p className="mb-4 font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-electric">
+    <main className="publicPage connectPage flex min-h-screen items-center px-4 py-28 sm:px-6">
+      <div className="mx-auto grid w-full max-w-7xl overflow-hidden rounded-[2rem] border border-[var(--line)] lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="relative overflow-hidden bg-[radial-gradient(circle_at_15%_10%,rgb(32_201_151_/_0.18),transparent_26rem),var(--panel)] p-7 sm:p-12 lg:p-16">
+          <div className="absolute right-0 top-0 h-32 w-32 rounded-bl-full border-b border-l border-[var(--line)]" />
+          <p className="relative mb-5 font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-electric">
             Silfable Web Workspace
           </p>
-          <h1 className="font-serif text-5xl font-normal leading-none text-white sm:text-7xl">
-            Connect your wallet to begin.
+          <h1 className="relative max-w-xl text-5xl font-bold leading-[0.94] tracking-[-0.065em] text-[var(--paper)] sm:text-7xl">
+            Open a protected trading workspace.
           </h1>
-          <p className="mt-6 max-w-xl font-sans text-sm leading-relaxed text-zinc-500">
+          <p className="relative mt-7 max-w-xl text-base leading-7 text-[var(--muted)]">
             Sign in with a Solana wallet or an EVM wallet such as MetaMask/Rabby. Linked wallets open the same Silfable account, while every transaction still requires approval from its source wallet.
           </p>
 
-          <div className="mt-8 flex flex-wrap gap-3">
-            <button type="button" onClick={() => void authenticateSolanaWallet()} disabled={authState !== "ready"} className="inline-flex min-w-56 items-center justify-center gap-3 bg-electric px-8 py-4 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-white transition-colors hover:bg-cyan-500 disabled:opacity-60">
+          <div className="relative mt-10 grid max-w-xl gap-3 sm:grid-cols-2">
+            <button type="button" onClick={() => void authenticateSolanaWallet()} disabled={authState !== "ready"} className="auroraButton inline-flex min-h-14 items-center justify-center gap-3 px-5 font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-white disabled:opacity-60">
               <Wallet className="h-4 w-4" />
               {authState === "signing-solana" ? "Awaiting Solana Signature" : connected ? "Sign In With Solana" : "Connect Solana Wallet"}
             </button>
-            <button type="button" onClick={() => void authenticateEvmWallet()} disabled={authState !== "ready"} className="inline-flex min-w-56 items-center justify-center gap-3 border border-cyan-400/35 bg-cyan-400/10 px-8 py-4 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-100 transition-colors hover:bg-cyan-400/20 disabled:opacity-60">
+            <button type="button" onClick={() => void authenticateEvmWallet()} disabled={authState !== "ready"} className="outlineButton inline-flex min-h-14 items-center justify-center gap-3 px-5 font-mono text-[10px] font-bold uppercase tracking-[0.15em] disabled:opacity-60">
               <Wallet className="h-4 w-4" />
               {authState === "signing-evm" ? "Awaiting EVM Signature" : "Connect EVM Wallet"}
             </button>
           </div>
           {authError && (
-            <p className="mt-4 max-w-xl text-sm leading-relaxed text-rose-400">{authError}</p>
+            <p className="relative mt-4 max-w-xl rounded-xl border border-rose-400/30 bg-rose-400/10 p-3 text-sm leading-relaxed text-rose-300">{authError}</p>
           )}
           {connected && publicKey && authState === "ready" && (
-            <p className="mt-4 font-mono text-[9px] uppercase tracking-[0.14em] text-zinc-500">
+            <p className="relative mt-5 font-mono text-[9px] uppercase tracking-[0.14em] text-[var(--muted)]">
               Connected {publicKey.toBase58().slice(0, 6)}…{publicKey.toBase58().slice(-4)} · authentication signature only
             </p>
           )}
         </div>
 
-        <div className="border border-[#1a1a24] bg-[#0a0a0f]">
+        <div className="border-t border-[var(--line)] bg-[color-mix(in_srgb,var(--panel)_72%,#020b10)] lg:border-l lg:border-t-0">
           {features.map((item) => {
             const Icon = item.icon;
             return (
-              <div key={item.title} className="border-b border-[#1a1a24] p-6 last:border-b-0">
+              <div key={item.title} className="border-b border-[var(--line)] p-7 sm:p-9 last:border-b-0">
                 <Icon className="mb-5 h-6 w-6 text-electric" />
-                <h2 className="font-serif text-2xl text-white">{item.title}</h2>
-                <p className="mt-3 font-sans text-sm leading-relaxed text-zinc-500">{item.text}</p>
+                <h2 className="text-2xl font-semibold tracking-[-0.04em] text-[var(--paper)]">{item.title}</h2>
+                <p className="mt-3 max-w-xl text-sm leading-7 text-[var(--muted)]">{item.text}</p>
               </div>
             );
           })}
-          <div className="border-t border-[#1a1a24] bg-electric p-6 text-white">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-100">
+          <div className="bg-[var(--aurora)] p-7 text-white sm:p-9">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-white/75">
               After connecting
             </p>
-            <p className="mt-3 font-serif text-2xl">
+            <p className="mt-3 text-2xl font-semibold tracking-[-0.04em]">
               Connect, sign the authentication message, then continue to the restricted workspace.
               <ArrowRight className="ml-2 inline h-5 w-5" />
             </p>

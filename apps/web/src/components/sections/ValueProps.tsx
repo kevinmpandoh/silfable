@@ -1,93 +1,63 @@
 "use client";
 
+import { CheckCircle2, Fingerprint, WalletCards } from "lucide-react";
 import { motion } from "framer-motion";
 
-const articles = [
+const safeguards = [
   {
-    number: "I",
-    title: "Enforce",
-    statement: (
-      <>
-        Every action passes through <em className="font-serif text-electric">your rules</em> before it reaches the market.
-      </>
-    ),
+    step: "01",
+    icon: CheckCircle2,
+    eyebrow: "Policy boundary",
+    title: "Guardrails before the wallet",
+    text: "Each proposal is checked against the session, asset, amount, route, and execution policy before your wallet is ever asked to act.",
   },
   {
-    number: "II",
-    title: "Prove",
-    statement: (
-      <>
-        Every supported action leaves <em className="font-serif text-electric">a receipt</em> you can inspect and independently verify.
-      </>
-    ),
+    step: "02",
+    icon: Fingerprint,
+    eyebrow: "Verifiable trail",
+    title: "Evidence you can inspect",
+    text: "Quotes, simulations, approvals, and outcomes are kept as distinct states—so a draft is never presented as a completed trade.",
   },
   {
-    number: "III",
-    title: "Local",
-    statement: (
-      <>
-        Signing stays in your <em className="font-serif text-electric">local vault or connected wallet</em>, not with the AI.
-      </>
-    ),
+    step: "03",
+    icon: WalletCards,
+    eyebrow: "Signing boundary",
+    title: "Your wallet stays in control",
+    text: "The AI can assist with planning, but signing remains with your encrypted desktop vault or connected browser wallet.",
   },
 ];
 
-const reveal = {
-  hidden: { opacity: 0, y: 32 },
-  visible: { opacity: 1, y: 0 },
-};
+const reveal = { hidden: { opacity: 0, y: 24 }, visible: { opacity: 1, y: 0 } };
 
 export function ValueProps() {
   return (
-    <section id="docs" className="border-y border-white/10 bg-[#080b18] text-[#eef2ff]">
-      <div className="section-shell py-24 sm:py-32 lg:py-44">
-        <motion.div
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
-          transition={{ staggerChildren: 0.1 }}
-        >
-          <motion.div
-            variants={reveal}
-            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            className="mb-14 flex items-center gap-4 border-b border-white/10 pb-5 sm:mb-20"
-          >
-            <span className="size-2 rounded-full bg-electric" />
-            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-white/45">
-              A runtime, not a conversation
+    <section id="docs" className="relative overflow-hidden border-y border-[var(--line)] bg-[var(--ink)] text-[var(--paper)]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_60%,rgb(32_201_151_/_0.11),transparent_25rem),radial-gradient(circle_at_90%_15%,rgb(98_217_223_/_0.08),transparent_22rem)]" />
+      <div className="section-shell relative py-24 sm:py-32 lg:py-40">
+        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} transition={{ staggerChildren: 0.1 }}>
+          <motion.p variants={reveal} transition={{ duration: 0.55 }} className="font-mono text-[10px] uppercase tracking-[0.24em] text-[var(--blue-2)]">
+            Built for deliberate Mainnet actions
+          </motion.p>
+          <motion.div variants={reveal} transition={{ duration: 0.7 }} className="mt-5 grid gap-6 border-b border-[var(--line)] pb-10 lg:grid-cols-[minmax(0,1fr)_25rem] lg:items-end">
+            <h2 className="max-w-4xl text-[clamp(3rem,6.5vw,6.75rem)] font-bold leading-[0.93] tracking-[-0.065em]">
+              AI plans the route.<br /><span className="auroraText">You hold the authority.</span>
+            </h2>
+            <p className="max-w-md text-base leading-7 text-[var(--muted)] lg:pb-1">
+              Silfable is designed as a trading workspace with clear boundaries—not a black-box agent that acts beyond your review.
             </p>
           </motion.div>
-
-          <motion.h2
-            variants={reveal}
-            transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1] }}
-            className="max-w-[1320px] font-serif text-[clamp(3.1rem,7.1vw,7.6rem)] leading-[0.96] font-normal tracking-[-0.055em]"
-          >
-            Not a blind bot. A guarded workspace where AI drafts the proposal and deterministic services decide whether it may reach your approval.
-          </motion.h2>
         </motion.div>
 
-        <motion.div
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.2 }}
-          transition={{ staggerChildren: 0.12 }}
-          className="mt-24 border-t border-white/15 lg:mt-36"
-        >
-          {articles.map((article) => (
-            <motion.article
-              key={article.number}
-              variants={reveal}
-              transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-              className="grid gap-5 border-b border-white/15 py-8 sm:grid-cols-[8rem_1fr] sm:py-10 lg:grid-cols-[12rem_18rem_1fr] lg:items-baseline"
-            >
-              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-white/40">
-                Article {article.number}
-              </p>
-              <h3 className="font-serif text-3xl tracking-[-0.04em] sm:text-4xl">{article.title}</h3>
-              <p className="max-w-2xl text-base leading-7 text-white/60 sm:text-lg sm:leading-8 lg:justify-self-end">
-                {article.statement}
-              </p>
+        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} transition={{ staggerChildren: 0.1 }} className="mt-10 grid gap-4 lg:grid-cols-3">
+          {safeguards.map(({ step, icon: Icon, eyebrow, title, text }) => (
+            <motion.article key={step} variants={reveal} transition={{ duration: 0.55 }} className="group rounded-2xl border border-[var(--line)] bg-[color-mix(in_srgb,var(--panel)_88%,transparent)] p-6 transition duration-300 hover:-translate-y-1 hover:border-[color-mix(in_srgb,var(--electric)_60%,var(--line))] hover:shadow-[0_18px_48px_rgb(17_213_171_/_0.10)] sm:p-7">
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[10px] tracking-[0.2em] text-[var(--blue-2)]">{step}</span>
+                <span className="grid size-10 place-items-center rounded-xl border border-[color-mix(in_srgb,var(--electric)_30%,transparent)] bg-[color-mix(in_srgb,var(--electric)_10%,transparent)] text-[var(--electric)]"><Icon className="size-4" /></span>
+              </div>
+              <p className="mt-10 font-mono text-[9px] uppercase tracking-[0.16em] text-[var(--blue-2)]">{eyebrow}</p>
+              <h3 className="mt-3 text-2xl font-semibold tracking-[-0.04em]">{title}</h3>
+              <p className="mt-4 text-sm leading-7 text-[var(--muted)]">{text}</p>
             </motion.article>
           ))}
         </motion.div>

@@ -36,7 +36,7 @@ const features = [
 
 export function FeatureGrid() {
   return (
-    <section className="border-y border-cyan-200/15 bg-[#090d1d] text-paper">
+    <section className="border-y border-[var(--line)] bg-[var(--ink)] text-paper">
       <div className="section-shell py-24 sm:py-32 lg:py-40">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
@@ -45,7 +45,7 @@ export function FeatureGrid() {
           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
           className="mb-14 grid gap-7 lg:mb-20 lg:grid-cols-[1fr_0.7fr] lg:items-end"
         >
-          <h2 className="max-w-4xl font-serif text-[clamp(3rem,6vw,6.5rem)] leading-[0.9] tracking-[-0.055em]">
+          <h2 className="max-w-4xl text-[clamp(3rem,6vw,6.5rem)] font-bold leading-[0.9] tracking-[-0.06em]">
             Intelligence is not transaction <em className="text-electric">authority.</em>
           </h2>
           <p className="max-w-lg text-sm leading-7 text-white/50 lg:justify-self-end">
@@ -81,7 +81,7 @@ export function FeatureGrid() {
                 </div>
 
                 <div className="mt-auto pt-24">
-                  <h3 className="font-serif text-[clamp(4rem,7vw,7.5rem)] leading-none tracking-[-0.06em] transition-transform duration-500 group-hover:translate-x-2">
+                  <h3 className="text-[clamp(4rem,7vw,7.5rem)] font-bold leading-none tracking-[-0.07em] transition-transform duration-500 group-hover:translate-x-2">
                     {feature.title}
                   </h3>
                   <div className="mt-8 grid gap-6 border-t border-white/15 pt-6 xl:grid-cols-[1fr_auto] xl:items-end">

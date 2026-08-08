@@ -2,7 +2,7 @@ import { forwardRef, type InputHTMLAttributes, type SelectHTMLAttributes, type T
 
 import { cn } from "../../lib/utils";
 
-const inputClass = "flex min-h-10 w-full rounded-xl border border-input bg-[#0b1123]/90 px-3 py-2 text-sm text-foreground shadow-sm outline-none transition placeholder:text-muted-foreground focus:border-cyan-300/60 focus:ring-2 focus:ring-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-50";
+const inputClass = "flex min-h-10 w-full rounded-xl border border-input bg-[#08191f]/90 px-3 py-2 text-sm text-foreground shadow-sm outline-none transition placeholder:text-muted-foreground focus:border-emerald-300/60 focus:ring-2 focus:ring-emerald-400/15 disabled:cursor-not-allowed disabled:opacity-50";
 
 type FieldMeta = { label?: string | undefined; error?: string | undefined; helperText?: string | undefined };
 

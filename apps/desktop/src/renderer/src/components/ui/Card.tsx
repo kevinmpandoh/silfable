@@ -8,9 +8,9 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
 
 const variants = {
   default: "border-border bg-card/90",
-  elevated: "border-cyan-200/20 bg-linear-to-br from-[#1a2545] to-[#101426] shadow-2xl shadow-black/40",
+  elevated: "border-emerald-200/20 bg-linear-to-br from-[#102e2b] to-[#081b21] shadow-2xl shadow-black/40",
   bordered: "border-border bg-transparent",
-  gradient: "border-cyan-300/20 bg-linear-to-br from-cyan-400/10 via-[#111a38] to-[#0b0e1c]",
+  gradient: "border-emerald-300/20 bg-linear-to-br from-emerald-400/10 via-[#0d292a] to-[#07171d]",
 };
 
 export function Card({ children, variant = "default", className, ...props }: CardProps) {

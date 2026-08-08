@@ -26,7 +26,7 @@ const faqs = [
   {
     question: "Which markets and operating systems are supported?",
     answer:
-      "Desktop and web contain guarded Jupiter swaps and restricted Pump.fun Token Launch paths. Web Token Launch uses explicit Phantom/Solflare approval and never stores the ephemeral mint signer. Robinhood swaps and cross-chain bridges use browser-wallet approval. Hyperliquid, autonomous signing, and Full Access remain unavailable.",
+      "Desktop and web contain guarded Jupiter swaps, restricted Pump.fun Token Launch paths, Robinhood Chain swaps, and two-way Solana-USDC/Robinhood-USDG bridge flows. Every web transaction uses explicit browser-wallet approval. Other EVM chains, Hyperliquid, autonomous signing, and unattended Full Access are outside the active production scope.",
   },
 ];
 
@@ -44,7 +44,7 @@ export function FaqSection() {
               Autonomy should be legible. These are the direct answers that matter before software touches a market.
             </p>
             <a
-              href="#support"
+              href="/docs"
               className="mt-8 inline-flex items-center gap-3 border-b border-white/30 pb-2 text-xs font-semibold uppercase tracking-[0.15em] transition-colors hover:border-electric hover:text-electric"
             >
               Read documentation <ArrowUpRight className="size-4" />

@@ -13,7 +13,7 @@ const navLinks = [
 
 export function Navbar() {
   return (
-    <header className="fixed inset-x-0 top-0 z-50 border-b border-cyan-200/15 bg-[#070914]/80 text-paper backdrop-blur-xl">
+    <header className="publicNav fixed inset-x-0 top-0 z-50">
       <div className="section-shell grid h-20 grid-cols-[1fr_auto_1fr] items-center">
         <nav aria-label="Primary navigation" className="hidden items-center gap-7 lg:flex">
           {navLinks.map((link) => (
@@ -27,7 +27,7 @@ export function Navbar() {
           ))}
         </nav>
 
-        <Link href="/" className="flex items-center gap-3 font-serif text-2xl tracking-normal" aria-label="Silfable home">
+        <Link href="/" className="brandWordmark flex items-center gap-3 text-xl font-bold tracking-[-0.04em]" aria-label="Silfable home">
           <Image src="/logo.png" alt="" width={28} height={28} className="h-7 w-7 object-contain" priority />
           <span>Silfable</span>
         </Link>
@@ -42,13 +42,13 @@ export function Navbar() {
           </Link>
           <Link
             href="/connect"
-            className="hidden h-10 items-center bg-gradient-to-r from-[#5366e9] to-[#16b7d6] px-5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white transition hover:brightness-110 md:inline-flex"
+            className="auroraButton hidden h-10 items-center px-5 text-[10px] font-semibold uppercase tracking-[0.15em] text-white md:inline-flex"
           >
             Get started
           </Link>
           <Link
             href="/#download"
-            className="inline-flex h-10 items-center gap-2 border border-white/35 px-3 text-[10px] font-semibold uppercase tracking-[0.15em] transition-colors hover:bg-paper hover:text-ink sm:px-5"
+            className="outlineButton inline-flex h-10 items-center gap-2 px-3 text-[10px] font-semibold uppercase tracking-[0.15em] sm:px-5"
           >
             <Download className="size-3.5" />
             Download

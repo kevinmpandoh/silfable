@@ -752,7 +752,7 @@ export function RightRail({
 
                 return (
                   <div key={strat.id} className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1.5">
-                    <div className="flex items-center justify-between font-bold text-cyan-300">
+                    <div className="flex items-center justify-between font-bold text-emerald-300">
                       <span>{strat.kind} · {inSym} ➔ {outSym}</span>
                       <span className={`px-1.5 py-0.5 rounded text-[10px] ${strat.status === "ACTIVE" ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>
                         {strat.status}
@@ -760,10 +760,10 @@ export function RightRail({
                     </div>
                     <div className="flex justify-between text-[11px] text-slate-400">
                       <span>Progress: {strat.completedExecutions ?? 0}/{strat.maximumExecutions ?? "-"}</span>
-                      <span className="font-mono text-cyan-300 font-medium">{formatOrderAmount(strat.orderAmountRaw, strat.inputMint)}</span>
+                      <span className="font-mono text-emerald-300 font-medium">{formatOrderAmount(strat.orderAmountRaw, strat.inputMint)}</span>
                     </div>
                     {strat.status === "ACTIVE" && strat.nextWakeAt && (
-                      <div className="flex justify-between text-[11px] text-cyan-400 font-mono">
+                      <div className="flex justify-between text-[11px] text-emerald-400 font-mono">
                         <span>⏱ Next run:</span>
                         <span>{countdown}</span>
                       </div>

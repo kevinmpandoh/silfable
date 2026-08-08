@@ -1649,8 +1649,12 @@ async function assertEvmBridgeFunds(input: {
   if (!authChecked || !authenticatedWallet) {
     return (
       <div className="tradeDesktopShell gateScreenLayout">
-        <div className="flex items-center justify-center min-h-screen text-slate-400 font-mono text-sm">
-          Verifying wallet authentication...
+        <div className="authLoadingGate" role="status" aria-live="polite">
+          <div className="authLoaderOrbit"><span /><span /><span /></div>
+          <p className="authLoadingEyebrow">Silfable secure access</p>
+          <h1>Verifying your wallet</h1>
+          <p className="authLoadingCopy">Checking the signed session boundary. No transaction permission is requested.</p>
+          <div className="authLoadingProgress"><span /></div>
         </div>
       </div>
     );
@@ -1850,16 +1854,16 @@ async function assertEvmBridgeFunds(input: {
             />
           ) : sessions.length === 0 ? (
             <div className="homeState flex h-full flex-col items-center justify-center px-6 text-center">
-              <span className="brandMark large mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#3157ff]/50 bg-[rgba(49,87,255,0.1)]">
+              <span className="brandMark large mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[color-mix(in_srgb,var(--electric)_52%,transparent)] bg-[color-mix(in_srgb,var(--electric)_12%,transparent)]">
                 <Image src="/logo.png" alt="Silfable Logo" width={32} height={32} className="h-8 w-8 object-contain" />
               </span>
-              <p className="mb-4 font-mono text-[9px] uppercase tracking-[0.22em] text-[#3157ff]">
+              <p className="mb-4 font-mono text-[9px] uppercase tracking-[0.22em] text-[var(--blue-2)]">
                 Understand. Constrain. Verify.
               </p>
               <h1 className="mb-5 font-serif text-4xl font-bold leading-tight tracking-tight text-white md:text-5xl">
                 What should Silfable help you do?
               </h1>
-              <p className="mb-8 max-w-lg text-sm leading-6 text-[#7f8aa7]">
+              <p className="mb-8 max-w-lg text-sm leading-6 text-[var(--muted)]">
                 Start with a prompt. Silfable will create a restricted session for this connected wallet.
               </p>
               <div className="composer mx-auto max-w-[680px] w-full mb-6 relative">
@@ -1886,10 +1890,10 @@ async function assertEvmBridgeFunds(input: {
             </div>
           ) : messages.length === 0 ? (
             <div className="homeState flex flex-col justify-center items-center h-full px-6 text-center">
-              <span className="brandMark large mb-4 block w-14 h-14 border border-[#3157ff]/50 rounded-2xl bg-[rgba(49,87,255,0.1)] flex items-center justify-center">
+              <span className="brandMark large mb-4 block w-14 h-14 border border-[color-mix(in_srgb,var(--electric)_52%,transparent)] rounded-2xl bg-[color-mix(in_srgb,var(--electric)_12%,transparent)] flex items-center justify-center">
                 <Image src="/logo.png" alt="Silfable Logo" width={32} height={32} className="h-8 w-8 object-contain" />
               </span>
-              <p className="tagline text-[9px] tracking-[0.22em] uppercase text-[#3157ff] font-mono mb-4">Understand. Constrain. Verify.</p>
+              <p className="tagline text-[9px] tracking-[0.22em] uppercase text-[var(--blue-2)] font-mono mb-4">Understand. Constrain. Verify.</p>
               <h1 className="text-4xl md:text-5xl font-serif font-bold text-white mb-10 tracking-tight leading-tight">What should Silfable help you <br/>do?</h1>
               
               <div className="composer mx-auto max-w-[680px] w-full mb-6 relative">
@@ -1905,7 +1909,7 @@ async function assertEvmBridgeFunds(input: {
                   placeholder="Plan a Mainnet task or ask about your portfolio..."
                   rows={1}
                 />
-                <span>MODE / CHAT</span>
+                
                 <button disabled={!input.trim() || loading} onClick={() => handleSendMessage()}>↑</button>
               </div>
 
@@ -1932,7 +1936,7 @@ async function assertEvmBridgeFunds(input: {
                   <article key={msg.id} className={msg.role}>
                     {msg.role === "assistant" && <div className="avatar shrink-0">S</div>}
                     <div>
-                      <small className="text-[8px] tracking-[0.1em] text-[#7f8aa7] uppercase mb-1.5 block">
+                      <small className="text-[8px] tracking-[0.1em] text-[var(--muted)] uppercase mb-1.5 block">
                         {msg.role === "user" ? "USER" : "SILFABLE AGENT"}
                       </small>
                       <div className="markdownMessage">
@@ -2047,7 +2051,7 @@ async function assertEvmBridgeFunds(input: {
                     placeholder="Enter your AI trading instruction... e.g. Swap 0.001 SOL to USDC"
                     rows={1}
                   />
-                  <span>MODE / CHAT</span>
+                  
                   <button disabled={!input.trim() || loading} onClick={() => handleSendMessage()}>
                     ↑
                   </button>
@@ -2065,9 +2069,9 @@ async function assertEvmBridgeFunds(input: {
           </div>
 
           <section className="railSection">
-            <h3 className="mb-4 text-[9px] tracking-[0.2em] text-[#7ba2ff] uppercase flex items-center gap-2"><span className="w-5 h-px bg-[#7ba2ff]" />PORTFOLIO</h3>
+            <h3 className="mb-4 text-[9px] tracking-[0.2em] text-[var(--blue-2)] uppercase flex items-center gap-2"><span className="w-5 h-px bg-[var(--blue-2)]" />PORTFOLIO</h3>
             <div className="mb-4">
-              <span className="text-[8px] tracking-[0.16em] uppercase text-[#7f8aa7]">{activeSession?.workspace === "evm" ? "ROBINHOOD PORTFOLIO" : "SOLANA PORTFOLIO"}</span>
+              <span className="text-[8px] tracking-[0.16em] uppercase text-[var(--muted)]">{activeSession?.workspace === "evm" ? "ROBINHOOD PORTFOLIO" : "SOLANA PORTFOLIO"}</span>
               <div className="text-[28px] font-bold mt-1 text-white">
                 {portfolioTotalUsd !== null && portfolioTotalUsd > 0
                   ? `$${portfolioTotalUsd.toFixed(2)}`
@@ -2075,15 +2079,15 @@ async function assertEvmBridgeFunds(input: {
                     ? "—"
                     : `${walletBalance.toFixed(6)} ${activeSession?.workspace === "evm" ? "ETH" : "SOL"}`}
               </div>
-              <div className="text-[8px] text-[#7f8aa7] mt-1 mb-3">{portfolioStatus}</div>
+              <div className="text-[8px] text-[var(--muted)] mt-1 mb-3">{portfolioStatus}</div>
               {portfolioAssets.length > 0 && (
                 <div className="flex flex-col gap-1.5 mt-2">
                   {portfolioAssets.slice(0, 5).map((asset, idx) => (
                     <div key={idx} className="flex justify-between items-center text-[10px] bg-white/5 px-2 py-1.5 rounded">
-                      <span className="text-[#eef2ff] font-medium">{asset.symbol}</span>
+                      <span className="text-[var(--paper)] font-medium">{asset.symbol}</span>
                       <div className="text-right">
                         <span className="text-white block">{asset.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
-                        {asset.valueUsd > 0 && <span className="text-[#7ba2ff] text-[8px]">${asset.valueUsd.toFixed(2)}</span>}
+                        {asset.valueUsd > 0 && <span className="text-[var(--blue-2)] text-[8px]">${asset.valueUsd.toFixed(2)}</span>}
                       </div>
                     </div>
                   ))}
@@ -2093,19 +2097,19 @@ async function assertEvmBridgeFunds(input: {
 
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between p-3 rounded-lg border border-[rgb(148,163,184,0.16)] bg-transparent hover:bg-white/5 transition-colors">
-                <div className="flex items-center gap-2 font-mono text-[9px] text-[#eef2ff]">
-                  <span className="text-[#7f8aa7]">PRIMARY</span> {shortWallet(accountWalletAddress ?? undefined)}
+                <div className="flex items-center gap-2 font-mono text-[9px] text-[var(--paper)]">
+                  <span className="text-[var(--muted)]">PRIMARY</span> {shortWallet(accountWalletAddress ?? undefined)}
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={() => void fetchWalletBalance()} className="text-[8px] text-[#7ba2ff] tracking-[0.1em] uppercase hover:text-white">REFRESH</button>
-                  <button onClick={() => accountWalletAddress && navigator.clipboard.writeText(accountWalletAddress)} className="text-[8px] text-[#7ba2ff] tracking-[0.1em] uppercase hover:text-white">COPY</button>
+                  <button onClick={() => void fetchWalletBalance()} className="text-[8px] text-[var(--blue-2)] tracking-[0.1em] uppercase hover:text-white">REFRESH</button>
+                  <button onClick={() => accountWalletAddress && navigator.clipboard.writeText(accountWalletAddress)} className="text-[8px] text-[var(--blue-2)] tracking-[0.1em] uppercase hover:text-white">COPY</button>
                 </div>
               </div>
 
               {activeSession?.workspace === "evm" && activeSession.sessionWalletAddress && (
-                <div className="flex items-center justify-between p-3 rounded-lg border border-cyan-400/20 bg-cyan-400/5">
-                  <div className="flex items-center gap-2 font-mono text-[9px] text-[#eef2ff]"><span className="text-cyan-300">SESSION EVM</span> {shortWallet(activeSession.sessionWalletAddress)}</div>
-                  <button onClick={() => navigator.clipboard.writeText(activeSession.sessionWalletAddress!)} className="text-[8px] text-[#7ba2ff] tracking-[0.1em] uppercase hover:text-white">COPY</button>
+                <div className="flex items-center justify-between p-3 rounded-lg border border-emerald-400/20 bg-emerald-400/5">
+                  <div className="flex items-center gap-2 font-mono text-[9px] text-[var(--paper)]"><span className="text-emerald-300">SESSION EVM</span> {shortWallet(activeSession.sessionWalletAddress)}</div>
+                  <button onClick={() => navigator.clipboard.writeText(activeSession.sessionWalletAddress!)} className="text-[8px] text-[var(--blue-2)] tracking-[0.1em] uppercase hover:text-white">COPY</button>
                 </div>
               )}
 
@@ -2115,8 +2119,8 @@ async function assertEvmBridgeFunds(input: {
           {activeRailAutomations.length > 0 && (
             <section className="railSection">
               <div className="mb-4 flex items-center justify-between gap-3">
-                <h3 className="flex items-center gap-2 text-[9px] uppercase tracking-[0.2em] text-[#7ba2ff]"><span className="h-px w-5 bg-[#7ba2ff]" />AUTOMATION</h3>
-                <button type="button" onClick={() => setWorkspaceView("automation")} className="font-mono text-[8px] uppercase tracking-[0.12em] text-cyan-300 hover:text-white">VIEW ALL</button>
+            <h3 className="flex items-center gap-2 text-[9px] uppercase tracking-[0.2em] text-[var(--blue-2)]"><span className="h-px w-5 bg-[var(--blue-2)]" />AUTOMATION</h3>
+            <button type="button" onClick={() => setWorkspaceView("automation")} className="font-mono text-[8px] uppercase tracking-[0.12em] text-emerald-300 hover:text-white">VIEW ALL</button>
               </div>
               <div className="space-y-2.5">
                 {activeRailAutomations.slice(0, 3).map((strategy) => {
@@ -2128,22 +2132,22 @@ async function assertEvmBridgeFunds(input: {
                       key={strategy.id}
                       type="button"
                       onClick={() => setWorkspaceView("automation")}
-                      className={`w-full rounded-lg border p-3 text-left transition-colors ${pending ? "border-cyan-400/35 bg-cyan-400/[0.07] hover:bg-cyan-400/10" : "border-white/10 bg-white/[0.025] hover:bg-white/5"}`}
+                      className={`w-full rounded-lg border p-3 text-left transition-colors ${pending ? "border-emerald-400/35 bg-emerald-400/[0.07] hover:bg-emerald-400/10" : "border-white/10 bg-white/[0.025] hover:bg-white/5"}`}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <div><span className="font-mono text-[8px] uppercase tracking-[0.14em] text-cyan-300">{strategy.kind === "DCA" ? "DCA" : "TP / SL"}</span><strong className="mt-0.5 block text-[11px] text-white">{strategy.amount} {strategy.inputSymbol} → {strategy.outputSymbol}</strong></div>
-                        <span className={`rounded border px-1.5 py-0.5 font-mono text-[7px] uppercase tracking-wider ${pending ? "border-cyan-400/30 text-cyan-200" : strategy.status === "PAUSED" ? "border-amber-400/30 text-amber-200" : "border-emerald-400/25 text-emerald-300"}`}>{pending ? "ACTION READY" : strategy.status}</span>
+                        <div><span className="font-mono text-[8px] uppercase tracking-[0.14em] text-emerald-300">{strategy.kind === "DCA" ? "DCA" : "TP / SL"}</span><strong className="mt-0.5 block text-[11px] text-white">{strategy.amount} {strategy.inputSymbol} → {strategy.outputSymbol}</strong></div>
+                        <span className={`rounded border px-1.5 py-0.5 font-mono text-[7px] uppercase tracking-wider ${pending ? "border-emerald-400/30 text-emerald-200" : strategy.status === "PAUSED" ? "border-amber-400/30 text-amber-200" : "border-emerald-400/25 text-emerald-300"}`}>{pending ? "ACTION READY" : strategy.status}</span>
                       </div>
                       {strategy.kind === "DCA" ? (
                         <div className="mt-2.5">
                           <div className="mb-1.5 flex justify-between font-mono text-[8px] text-[#7f8aa7]"><span>{strategy.completedExecutions} / {strategy.maximumExecutions} cycles</span><span>{strategy.status === "PAUSED" ? "Paused" : pending ? "Due now · review in chat" : formatAutomationCountdown(strategy.nextWakeAt, automationClock)}</span></div>
-                          <div className="h-1 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-[#5366e9] to-[#16b7d6]" style={{ width: `${progress}%` }} /></div>
+                          <div className="h-1 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-300" style={{ width: `${progress}%` }} /></div>
                           <p className="mt-1.5 font-mono text-[8px] text-[#7f8aa7]">{pending ? "Awaiting wallet approval" : `Next review · ${formatAutomationCountdown(strategy.nextWakeAt, automationClock)}`} · every {Math.round((strategy.intervalSeconds ?? 0) / 60)} minutes</p>
                         </div>
                       ) : (
                         <div className="mt-2 grid grid-cols-2 gap-2 font-mono text-[8px] text-[#7f8aa7]"><span>TP <strong className="text-white">${strategy.takeProfitPriceUsd ?? "—"}</strong></span><span>SL <strong className="text-white">${strategy.stopLossPriceUsd ?? "—"}</strong></span></div>
                       )}
-                      {pending && <p className="mt-2 border-t border-cyan-400/15 pt-2 font-mono text-[8px] uppercase tracking-[0.12em] text-cyan-200">Open Automation to review proposal</p>}
+                      {pending && <p className="mt-2 border-t border-emerald-400/15 pt-2 font-mono text-[8px] uppercase tracking-[0.12em] text-emerald-200">Open Automation to review proposal</p>}
                     </button>
                   );
                 })}
@@ -2152,7 +2156,7 @@ async function assertEvmBridgeFunds(input: {
           )}
 
           <section className="railSection">
-            <h3 className="mb-4 text-[9px] tracking-[0.2em] text-[#7ba2ff] uppercase flex items-center gap-2"><span className="w-5 h-px bg-[#7ba2ff]" />RUNTIME & COST</h3>
+            <h3 className="mb-4 text-[9px] tracking-[0.2em] text-[var(--blue-2)] uppercase flex items-center gap-2"><span className="w-5 h-px bg-[var(--blue-2)]" />RUNTIME & COST</h3>
             <div className="text-[10px] font-mono text-white flex items-center gap-2 mb-4">
               <span className={`w-2 h-2 rounded-full ${runtimeUsage.totalTokens > 0 ? "bg-[#00df86]" : "bg-white opacity-50"}`} />
               {runtimeUsage.model}
@@ -2164,7 +2168,7 @@ async function assertEvmBridgeFunds(input: {
                 <span className="text-[#eef2ff]">{formatTokenCount(lastTurnContextTokens)} / {formatTokenCount(providerContextLimit)} · {contextUsagePercent}%</span>
               </div>
               <div className="h-1 overflow-hidden rounded-full bg-white/[0.12]">
-                <div className="h-full rounded-full bg-gradient-to-r from-[#5366e9] to-[#16b7d6] transition-[width] duration-200" style={{ width: `${contextUsagePercent}%` }} />
+                <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-300 transition-[width] duration-200" style={{ width: `${contextUsagePercent}%` }} />
               </div>
               <p className="mt-2 font-mono text-[8px] text-[#7f8aa7]">Output cap: {formatTokenCount(Number(settings.outputLimit) || 0)} tokens</p>
             </div>

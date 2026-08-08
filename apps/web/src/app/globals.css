@@ -2,20 +2,40 @@
 @import "tailwindcss";
 
 :root {
-  --ink: #070914;
-  --paper: #eef2ff;
-  --electric: #4d6ef5;
-  --bg: #050713;
-  --panel: #0a0f20;
-  --panel-2: #101735;
-  --line: rgb(123 162 255 / 0.18);
-  --muted: #92a0bd;
-  --blue: #4d6ef5;
-  --blue-2: #7ba2ff;
-  --green: #20d880;
-  --amber: #f7b733;
-  --red: #ff5f6d;
-  --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --ink: #06121a;
+  --paper: #edfdf8;
+  --electric: #20c997;
+  --bg: #06121a;
+  --panel: #0a1c25;
+  --panel-2: #102a32;
+  --surface: rgb(11 31 39 / .82);
+  --line: rgb(120 230 197 / 0.16);
+  --muted: #91aaa8;
+  --blue: #28c7a3;
+  --blue-2: #72e3c3;
+  --green: #39d98a;
+  --amber: #ffbd59;
+  --red: #ff6878;
+  --aurora: linear-gradient(108deg, #20c997 0%, #2dccb5 48%, #62dcc7 100%);
+  --aurora-hover: linear-gradient(108deg, #45e0ae 0%, #55ddc5 48%, #8be8d1 100%);
+  --mono: var(--font-mono), "IBM Plex Mono", ui-monospace, monospace;
+}
+
+:root[data-theme="light"] {
+  --ink: #effaf6;
+  --paper: #102923;
+  --electric: #087f63;
+  --bg: #effaf6;
+  --panel: #ffffff;
+  --panel-2: #e2f3ec;
+  --surface: rgb(255 255 255 / .84);
+  --line: rgb(8 127 99 / .16);
+  --muted: #627c74;
+  --blue: #159a78;
+  --blue-2: #087f63;
+  --green: #078965;
+  --amber: #ac6500;
+  --red: #ce4058;
 }
 
 * {
@@ -28,8 +48,8 @@ html, body {
   margin: 0;
   padding: 0;
   background: var(--bg);
-  color: #eef2ff;
-  font-family: var(--font-sans), Inter, ui-sans-serif, system-ui, sans-serif;
+  color: var(--paper);
+  font-family: var(--font-sans), Manrope, ui-sans-serif, system-ui, sans-serif;
   text-rendering: optimizeLegibility;
 }
 
@@ -110,7 +130,7 @@ html {
 }
 
 ::selection {
-  background: var(--blue);
+  background: var(--electric);
   color: #fff;
 }
 
@@ -250,6 +270,42 @@ body:not(:has(.tradeDesktopShell)) {
   border: 1px solid rgb(53 190 226 / .48);
 }
 
+/* Emerald Aurora public-product layer. Workspace-specific rules below retain all behavior. */
+.publicNav { border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 82%, transparent); color: var(--paper); backdrop-filter: blur(18px); }
+.brandWordmark { color: var(--paper); }
+.auroraButton, .primaryButton { border: 1px solid rgb(167 255 231 / .36); border-radius: 14px; background: var(--aurora); box-shadow: 0 10px 28px rgb(32 201 151 / .18); transition: transform .2s ease, box-shadow .2s ease, filter .2s ease; }
+.auroraButton:hover, .primaryButton:hover { background: var(--aurora-hover); box-shadow: 0 14px 34px rgb(39 137 232 / .2); transform: translateY(-1px); }
+.outlineButton, .themeToggle { border: 1px solid var(--line); border-radius: 14px; color: var(--paper); background: color-mix(in srgb, var(--panel) 72%, transparent); transition: border-color .2s ease, background .2s ease, color .2s ease; }
+.outlineButton:hover, .themeToggle:hover { border-color: color-mix(in srgb, var(--electric) 58%, transparent); background: color-mix(in srgb, var(--electric) 12%, var(--panel)); }
+.themeToggle { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 0 11px; font-family: var(--font-mono), monospace; font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.themeToggleCompact { width: 36px; padding: 0; }
+:root[data-theme="dark"] .heroAurora { background: radial-gradient(circle at 76% 24%, rgb(89 222 192 / .20), transparent 27%), radial-gradient(circle at 24% 82%, rgb(32 201 151 / .17), transparent 28%), linear-gradient(135deg, #06121a 0%, #071b20 54%, #071b19 100%); }
+:root[data-theme="light"] .heroAurora { background: radial-gradient(circle at 76% 24%, rgb(89 222 192 / .15), transparent 27%), radial-gradient(circle at 24% 82%, rgb(32 201 151 / .15), transparent 28%), #effaf6; }
+.heroGrid { opacity: .38; background-image: linear-gradient(rgb(119 238 204 / .07) 1px, transparent 1px), linear-gradient(90deg, rgb(119 238 204 / .07) 1px, transparent 1px); background-size: 52px 52px; mask-image: linear-gradient(to bottom, black, transparent 82%); }
+.heroOrb { width: 32rem; height: 32rem; border-radius: 999px; filter: blur(28px); opacity: .36; }
+.heroOrbOne { top: 15%; right: -8rem; background: #4bdcc3; }
+.heroOrbTwo { bottom: -17rem; left: 18%; background: #20c997; }
+.emeraldMockup { filter: hue-rotate(68deg) saturate(.78); }
+.auroraText { background: var(--aurora); background-clip: text; -webkit-background-clip: text; color: transparent; }
+:focus-visible { outline: 2px solid var(--blue-2); outline-offset: 3px; }
+
+:root[data-theme="light"] body { color: var(--paper); background: radial-gradient(circle at 12% 5%, rgb(60 215 166 / .16), transparent 25%), var(--bg); }
+:root[data-theme="light"] .publicNav { background: rgb(239 250 246 / .82); }
+:root[data-theme="light"] .publicNav [class*="text-white"] { color: var(--paper); }
+:root[data-theme="light"] .publicNav .outlineButton { color: var(--paper); }
+@media (prefers-reduced-motion: reduce) { .auroraButton, .primaryButton { transition: none; } .auroraButton:hover, .primaryButton:hover { transform: none; } }
+
+.tradeThemeControl { display: none; }
+.railThemeControl { display: flex; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.railThemeControl .themeToggle { width: 100%; min-height: 38px; }
+:root[data-theme="light"] main > section { background: transparent !important; border-color: var(--line) !important; color: var(--paper) !important; }
+:root[data-theme="light"] .section-shell .text-white, :root[data-theme="light"] .section-shell .text-paper { color: var(--paper) !important; }
+:root[data-theme="light"] .section-shell [class*="text-white/"] { color: color-mix(in srgb, var(--paper) 68%, transparent) !important; }
+:root[data-theme="light"] .workspace { background: radial-gradient(circle at 10% 3%, rgb(32 201 151 / .16), transparent 30%), var(--bg) !important; color: var(--paper); }
+:root[data-theme="light"] .workspace .leftRail, :root[data-theme="light"] .workspace .rightRail { background: linear-gradient(180deg, #ffffff, #edf8f4) !important; border-color: var(--line) !important; }
+:root[data-theme="light"] .workspace .centerStage, :root[data-theme="light"] .workspace .conversation { background: transparent !important; }
+:root[data-theme="light"] .workspace [class*="text-[#eef2ff]"], :root[data-theme="light"] .workspace [class*="text-white"] { color: var(--paper) !important; }
+
 .headerActions {
   display: flex;
   align-items: center;
@@ -353,9 +409,9 @@ body:not(:has(.tradeDesktopShell)) {
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: rgba(18, 26, 47, 0.8);
-  border: 1px solid rgba(60, 95, 220, 0.4);
-  box-shadow: inset 0 0 10px rgba(49, 87, 255, 0.15), 0 0 12px rgba(49, 87, 255, 0.1);
+  background: rgb(32 201 151 / .12);
+  border: 1px solid rgb(32 201 151 / .36);
+  box-shadow: inset 0 0 10px rgb(32 201 151 / .12), 0 0 12px rgb(32 201 151 / .08);
 }
 
 .railBrandTitle {
@@ -368,10 +424,10 @@ body:not(:has(.tradeDesktopShell)) {
 .newSession {
   margin: 14px 14px 10px;
   padding: 11px;
-  border: 1px solid var(--blue);
+  border: 1px solid rgb(117 239 202 / .52);
   border-radius: 20px;
   color: white;
-  background: linear-gradient(110deg, #5366e9, #16b7d6);
+  background: var(--aurora);
   font: 10px var(--mono);
   letter-spacing: 0.15em;
   text-transform: uppercase;
@@ -380,7 +436,7 @@ body:not(:has(.tradeDesktopShell)) {
 }
 
 .newSession:hover {
-  background: linear-gradient(110deg, #6474f3, #22c4df);
+  background: var(--aurora-hover);
 }
 
 .sessionFilters {
@@ -443,7 +499,7 @@ body:not(:has(.tradeDesktopShell)) {
 .bottomNav button:hover,
 .bottomNav button.active {
   color: #ffffff;
-  background: rgb(49 87 255 / 0.12);
+  background: rgb(32 201 151 / 0.11);
 }
 
 .sessionListHeader {
@@ -502,12 +558,12 @@ body:not(:has(.tradeDesktopShell)) {
 
 .sessionList > button:hover {
   background: rgb(255 255 255 / 0.04);
-  border-color: rgb(123 162 255 / 0.3);
+  border-color: rgb(32 201 151 / 0.32);
 }
 
 .sessionList > button.active {
-  border-color: var(--blue);
-  background: rgb(49 87 255 / 0.18);
+  border-color: var(--electric);
+  background: rgb(32 201 151 / 0.14);
   color: #ffffff;
 }
 
@@ -624,7 +680,7 @@ body:not(:has(.tradeDesktopShell)) {
 .markdownMessage {
   position: relative;
   margin-top: 6px;
-  color: #e6eaf5;
+  color: var(--paper);
   font-size: 13px;
   line-height: 1.7;
   overflow-wrap: break-word;
@@ -645,7 +701,7 @@ body:not(:has(.tradeDesktopShell)) {
 
 .messageBullet {
   padding-left: 10px;
-  color: #d9e2ff;
+  color: var(--paper);
 }
 
 .avatar {
@@ -712,17 +768,17 @@ body:not(:has(.tradeDesktopShell)) {
 }
 
 .markdownMessage code {
-  border: 1px solid rgba(123, 162, 255, 0.2);
+  border: 1px solid rgb(32 201 151 / .28);
   border-radius: 4px;
-  background: rgba(123, 162, 255, 0.08);
+  background: rgb(32 201 151 / .09);
   padding: 1px 4px;
-  color: #b9ccff;
+  color: #a8efd3;
   font-family: var(--font-geist-mono), monospace;
   font-size: 0.9em;
 }
 
 .markdownMessage a {
-  color: #67d7ff;
+  color: var(--blue-2);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -856,9 +912,9 @@ body:not(:has(.tradeDesktopShell)) {
   align-items: center;
   width: min(760px, 100%);
   padding: 6px 8px;
-  border: 1px solid rgb(123 162 255 / 0.35);
+  border: 1px solid rgb(117 239 202 / 0.28);
   border-radius: 28px;
-  background: rgb(8 11 24 / 0.9);
+  background: rgb(6 18 26 / 0.9);
   box-shadow: 0 14px 45px rgb(0 0 0 / 0.24);
 }
 
@@ -892,13 +948,13 @@ body:not(:has(.tradeDesktopShell)) {
   border: 1px solid var(--line);
   border-radius: 50%;
   color: white;
-  background: linear-gradient(135deg, rgb(83 102 233 / .86), rgb(22 183 214 / .88));
+  background: var(--aurora);
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .composer > button:hover:not(:disabled) {
-  background: linear-gradient(135deg, #6474f3, #22c4df);
+  background: var(--aurora-hover);
 }
 
 .sessionModalBackdrop {
@@ -1181,9 +1237,9 @@ body:not(:has(.tradeDesktopShell)) {
   max-width: 720px;
   margin-top: 12px;
   overflow: hidden;
-  border: 1px solid rgb(49 87 255 / 0.35);
+  border: 1px solid rgb(32 201 151 / 0.38);
   border-radius: 11px;
-  background: rgb(11 14 28 / 0.85);
+  background: rgb(7 22 29 / 0.86);
 }
 
 .missionPreview.autonomous {
@@ -1209,10 +1265,10 @@ body:not(:has(.tradeDesktopShell)) {
 
 .primaryButton {
   padding: 10px 18px;
-  border: 1px solid var(--blue);
+  border: 1px solid rgb(117 239 202 / .52);
   border-radius: 20px;
   color: white;
-  background: var(--blue);
+  background: var(--aurora);
   font: 9px var(--mono);
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1221,7 +1277,7 @@ body:not(:has(.tradeDesktopShell)) {
 }
 
 .primaryButton:hover:not(:disabled) {
-  background: #4566ff;
+  background: var(--aurora-hover);
 }
 
 .executeButton {
@@ -1244,7 +1300,7 @@ body:not(:has(.tradeDesktopShell)) {
   padding: 80px 24px 40px;
   overflow-x: hidden;
   overflow-y: auto;
-  background: radial-gradient(circle at 50% 44%, rgb(49 87 255 / 0.08), transparent 34%), linear-gradient(180deg, #080a15, #070914);
+  background: radial-gradient(circle at 50% 44%, rgb(32 201 151 / 0.12), transparent 34%), linear-gradient(180deg, var(--ink), #061119);
 }
 
 .setupContainer {
@@ -1256,7 +1312,7 @@ body:not(:has(.tradeDesktopShell)) {
 .setupCard {
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgb(11 14 28 / 0.96);
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
   box-shadow: 0 34px 90px rgb(0 0 0 / 0.4);
   overflow: hidden;
 }
@@ -1267,7 +1323,7 @@ body:not(:has(.tradeDesktopShell)) {
   gap: 16px;
   padding: 24px 28px;
   border-bottom: 1px solid var(--line);
-  background: rgb(8 11 24 / 0.6);
+  background: color-mix(in srgb, var(--ink) 62%, transparent);
 }
 
 .setupIcon {
@@ -1275,9 +1331,9 @@ body:not(:has(.tradeDesktopShell)) {
   width: 44px;
   height: 44px;
   place-items: center;
-  border: 1px solid rgb(49 87 255 / 0.5);
+  border: 1px solid color-mix(in srgb, var(--electric) 54%, transparent);
   border-radius: 12px;
-  background: rgb(49 87 255 / 0.1);
+  background: color-mix(in srgb, var(--electric) 12%, transparent);
   font-size: 20px;
 }
 
@@ -1813,6 +1869,72 @@ body:not(:has(.tradeDesktopShell)) {
   border-color: var(--blue);
 }
 
+/* Settings: keep the setup flow in the same emerald aurora system as the workspace. */
+.setupCard h1,
+.integrationCard h2,
+.walletRegistryHeader strong,
+.walletRegistryRow strong,
+.reviewCopy strong,
+.field input,
+.field textarea,
+.field select,
+.iconBtn:hover {
+  color: var(--paper);
+}
+
+.setupProgressItem,
+.setupProgressItem span,
+.editingBar,
+.integrationCard p,
+.setupFeedback,
+.securityBoundary,
+.reviewCopy small,
+.field > span {
+  color: var(--muted);
+}
+
+.setupProgressItem.active {
+  border-color: var(--electric);
+  color: var(--paper);
+}
+
+.setupProgressItem.active span,
+.editingBar button,
+.reviewEdit,
+.inlineInputAction button {
+  color: var(--blue-2);
+}
+
+.editingBar,
+.integrationCard,
+.walletRegistry,
+.reviewRow {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
+.setupFeedback {
+  border-color: color-mix(in srgb, var(--electric) 40%, transparent);
+  background: color-mix(in srgb, var(--electric) 9%, transparent);
+}
+
+.setupTab.active {
+  border-color: color-mix(in srgb, var(--electric) 48%, transparent);
+  background: color-mix(in srgb, var(--electric) 17%, transparent);
+}
+
+.field input,
+.field textarea,
+.field select {
+  background: color-mix(in srgb, var(--ink) 72%, var(--surface));
+}
+
+.field input:focus,
+.field textarea:focus,
+.field select:focus {
+  border-color: var(--electric);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--electric) 18%, transparent);
+}
+
 /* ==========================================================================
    SOLANA WALLET ADAPTER MODAL OVERRIDES (PIXEL-PERFECT FROM HELGEVILLAGE)
    ========================================================================== */
@@ -2229,3 +2351,68 @@ body:not(:has(.tradeDesktopShell)) {
 .sessionModalFooter button.createBtn:hover {
   background: linear-gradient(110deg, #6474f3, #22c4df);
 }
+
+/* Emerald Aurora visual layer. Applied last so legacy utility styling remains functional
+   while surfaces inherit the new theme in public and trading views. */
+.publicPage {
+  min-height: 100vh;
+  color: var(--paper);
+  background:
+    radial-gradient(circle at 84% 5%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 27rem),
+    radial-gradient(circle at 7% 16%, color-mix(in srgb, var(--cyan) 9%, transparent), transparent 26rem),
+    var(--ink);
+}
+.publicPage :is(h1, h2, h3, h4) { font-family: var(--font-sans), ui-sans-serif, sans-serif; letter-spacing: -0.035em; }
+.publicPage :is(p, li, span) { text-wrap: pretty; }
+.publicPage :is([class*="bg-white"], [class*="bg-zinc-"], [class*="bg-black"]) { background-color: color-mix(in srgb, var(--panel) 92%, transparent) !important; }
+.publicPage :is([class*="border-zinc"], [class*="border-black"], [class*="border-white"]) { border-color: color-mix(in srgb, var(--line) 86%, transparent) !important; }
+[data-theme="dark"] .publicPage :is([class*="text-black"], [class*="text-zinc-9"], [class*="text-zinc-8"]) { color: var(--paper) !important; }
+[data-theme="dark"] .publicPage :is([class*="text-black/"] , [class*="text-zinc-6"], [class*="text-zinc-5"]) { color: var(--muted) !important; }
+.connectPage {
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 35rem),
+    var(--ink) !important;
+}
+.connectPage > div { border-color: color-mix(in srgb, var(--line) 92%, transparent) !important; background: color-mix(in srgb, var(--panel) 88%, transparent) !important; box-shadow: 0 28px 80px color-mix(in srgb, var(--ink) 54%, transparent); }
+.workspace { background: radial-gradient(circle at 50% -15%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 42rem), var(--ink); }
+.workspace :is(.leftSidebar, .rightRail, .workspaceHeader) { background-color: color-mix(in srgb, var(--panel) 90%, transparent); border-color: color-mix(in srgb, var(--line) 92%, transparent); }
+.workspace :is(.messageCard, .proposalCard, .railSection, .sessionItem, .sessionModal, .setupCard) { border-color: color-mix(in srgb, var(--line) 92%, transparent); }
+.workspace :is(.sessionItem.active, .proposalCard.confirmed) { border-color: color-mix(in srgb, var(--accent) 70%, var(--line)); box-shadow: inset 3px 0 0 var(--accent), 0 12px 30px color-mix(in srgb, var(--accent) 8%, transparent); }
+[data-theme="light"] .publicPage, [data-theme="light"] .workspace { background-color: var(--ink); }
+[data-theme="light"] .publicPage :is([class*="bg-white"], [class*="bg-zinc-"], [class*="bg-black"]) { background-color: var(--panel) !important; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* Legacy public content still uses Tailwind's static light-paper utilities.
+   Scope their dark replacements to documentation, whitepaper, and releases. */
+:root[data-theme="dark"] .publicPage :is(.text-ink, h1, h2, h3, h4, strong, th) { color: var(--paper) !important; }
+:root[data-theme="dark"] .publicPage:is(.docsTheme, .whitepaperTheme, .releasesTheme) [class*="text-black"] { color: var(--muted) !important; }
+:root[data-theme="dark"] .publicPage:is(.docsTheme, .whitepaperTheme, .releasesTheme) :is(h1, h2, h3, h4, strong, th, .text-ink) { color: var(--paper) !important; }
+:root[data-theme="dark"] .docsTheme .prose :is(h1, h2, h3, h4, strong, code) { color: var(--paper) !important; }
+:root[data-theme="dark"] .docsTheme .doc-lead { color: var(--muted); }
+:root[data-theme="dark"] .publicPage:is(.docsTheme, .whitepaperTheme, .releasesTheme) [class*="border-black"] { border-color: var(--line) !important; }
+:root[data-theme="dark"] .publicPage:is(.docsTheme, .whitepaperTheme, .releasesTheme) [class*="divide-black"] { --tw-divide-opacity: 1; border-color: var(--line) !important; }
+:root[data-theme="dark"] .whitepaperTheme [class*="bg-black/"] { background-color: color-mix(in srgb, var(--panel) 60%, transparent) !important; }
+:root[data-theme="dark"] .whitepaperTheme [class*="bg-rose-"] { color: #ffabb5 !important; background: rgb(206 64 88 / .13) !important; border-color: rgb(255 104 120 / .38) !important; }
+:root[data-theme="dark"] .docsTheme [class*="bg-blue-"] { color: var(--paper) !important; background: rgb(32 201 151 / .10) !important; border-color: rgb(32 201 151 / .45) !important; }
+:root[data-theme="dark"] .releasesTheme :is(.bg-card, [class*="bg-white"], [class*="bg-blue-"]) { color: var(--paper) !important; background-color: color-mix(in srgb, var(--panel) 94%, transparent) !important; border-color: var(--line) !important; }
+
+/* Emerald Aurora workspace layer: presentation-only replacements for the older blue UI. */
+.tradeDesktopShell, .tradeHeader, .workspace, .leftRail, .rightRail { background-color: var(--ink) !important; }
+.tradeHeader, .leftRail, .rightRail { border-color: var(--line) !important; }
+.brandMark { border-color: color-mix(in srgb, var(--electric) 52%, var(--line)) !important; background: linear-gradient(145deg, rgb(32 201 151 / .24), transparent) !important; }
+.newSession, .workspace .primaryButton, .workspace .composer button:not(:disabled) { border-color: color-mix(in srgb, var(--electric) 70%, transparent) !important; background: var(--aurora) !important; box-shadow: 0 10px 24px rgb(32 201 151 / .15); }
+.workspace .primaryButton:hover:not(:disabled), .workspace .composer button:not(:disabled):hover { background: var(--aurora-hover) !important; }
+.workspace [class*="text-cyan-300"], .workspace [class*="text-blue"] { color: var(--blue-2) !important; }
+.workspace [class*="bg-gradient-to-r"], .workspace [class*="bg-blue"], .workspace [class*="bg-cyan"] { background-image: none !important; background-color: color-mix(in srgb, var(--electric) 16%, var(--panel)) !important; }
+.workspace [class*="border-cyan"], .workspace [class*="border-blue"] { border-color: color-mix(in srgb, var(--electric) 48%, var(--line)) !important; }
+.workspace [class*="from-[#5366e9]"], .workspace [class*="to-[#16b7d6]"] { background: var(--aurora) !important; }
+.workspace .railSection, .workspace .sessionItem, .workspace .missionPreview { border-color: var(--line) !important; }
+.workspace .sessionItem.active, .workspace .missionPreview { box-shadow: inset 3px 0 0 var(--electric), 0 10px 24px rgb(32 201 151 / .07); }
+.gateScreenLayout { background: radial-gradient(circle at 50% 42%, rgb(32 201 151 / .14), transparent 32rem), linear-gradient(160deg, var(--ink), #071b1b) !important; }
+.authLoadingGate { display: grid; width: min(28rem, calc(100vw - 48px)); justify-items: center; gap: 15px; padding: 42px 34px; border: 1px solid var(--line); border-radius: 24px; background: color-mix(in srgb, var(--panel) 88%, transparent); box-shadow: 0 30px 90px rgb(0 0 0 / .35), inset 0 1px 0 rgb(255 255 255 / .04); text-align: center; }
+.authLoaderOrbit { position: relative; width: 68px; height: 68px; border: 1px solid rgb(32 201 151 / .22); border-radius: 999px; animation: auroraOrbit 2.8s linear infinite; }
+.authLoaderOrbit::before { position: absolute; inset: 12px; border: 2px solid transparent; border-top-color: var(--electric); border-right-color: var(--blue-2); border-radius: inherit; content: ""; }
+.authLoaderOrbit span { position: absolute; width: 7px; height: 7px; border-radius: 50%; background: var(--electric); box-shadow: 0 0 15px var(--electric); }
+.authLoaderOrbit span:nth-child(1) { top: 1px; left: 50%; transform: translateX(-50%); }.authLoaderOrbit span:nth-child(2) { right: 6px; bottom: 12px; background: var(--blue-2); }.authLoaderOrbit span:nth-child(3) { bottom: 8px; left: 9px; background: #a1f1d0; }
+.authLoadingEyebrow { margin: 8px 0 0; color: var(--blue-2); font: 10px var(--mono); letter-spacing: .19em; text-transform: uppercase; }.authLoadingGate h1 { margin: 0; color: var(--paper); font-size: 26px; letter-spacing: -.045em; }.authLoadingCopy { max-width: 23rem; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; }.authLoadingProgress { width: 100%; height: 3px; overflow: hidden; border-radius: 999px; background: rgb(255 255 255 / .08); }.authLoadingProgress span { display: block; width: 42%; height: 100%; border-radius: inherit; background: var(--aurora); animation: auroraProgress 1.5s ease-in-out infinite; }
+@keyframes auroraOrbit { to { transform: rotate(360deg); } } @keyframes auroraProgress { 0% { transform: translateX(-120%); } 55%,100% { transform: translateX(260%); } }

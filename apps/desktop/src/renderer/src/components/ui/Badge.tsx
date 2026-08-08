@@ -11,7 +11,7 @@ const variants = {
   success: "border-emerald-300/25 bg-emerald-400/10 text-emerald-300",
   warning: "border-amber-300/25 bg-amber-400/10 text-amber-200",
   danger: "border-red-300/25 bg-red-400/10 text-red-300",
-  info: "border-cyan-300/25 bg-cyan-400/10 text-cyan-200",
+  info: "border-emerald-300/25 bg-emerald-400/10 text-emerald-200",
   neutral: "border-slate-300/15 bg-slate-400/10 text-slate-300",
 };
 

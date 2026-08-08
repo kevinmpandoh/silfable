@@ -1,25 +1,21 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono, Playfair_Display } from "next/font/google";
+import { IBM_Plex_Mono, Manrope } from "next/font/google";
 
 import { ConditionalFooter } from "@/components/sections/ConditionalFooter";
 import { ConditionalNavbar } from "@/components/sections/ConditionalNavbar";
 import { SolanaProvider } from "@/components/providers/SolanaProvider";
+import { ThemeProvider } from "@/components/ui/ThemeProvider";
 import "./globals.css";
 
-const serif = Playfair_Display({
-  subsets: ["latin"],
-  variable: "--font-serif",
-  display: "swap",
-});
-
-const sans = Inter({
+const sans = Manrope({
   subsets: ["latin"],
   variable: "--font-sans",
   display: "swap",
 });
 
-const mono = JetBrains_Mono({
+const mono = IBM_Plex_Mono({
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
   variable: "--font-mono",
   display: "swap",
 });
@@ -41,13 +37,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${serif.variable} ${sans.variable} ${mono.variable}`}>
+    <html lang="en" className={`${sans.variable} ${mono.variable}`} data-theme="dark">
       <body>
-        <SolanaProvider>
-          <ConditionalNavbar />
-          {children}
-          <ConditionalFooter />
-        </SolanaProvider>
+        <ThemeProvider>
+          <SolanaProvider>
+            <ConditionalNavbar />
+            {children}
+            <ConditionalFooter />
+          </SolanaProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

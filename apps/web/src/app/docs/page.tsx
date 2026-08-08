@@ -13,7 +13,7 @@ import { PageTransition } from "@/components/ui/PageTransition";
 export default function DocsPage() {
   return (
     <PageTransition>
-      <main className="min-h-screen bg-paper text-ink">
+      <main className="publicPage docsTheme min-h-screen bg-paper text-ink">
         <div className="section-shell pt-20">
           <div className="lg:hidden"><DocsSidebar /></div>
           <div className="grid gap-16 py-16 lg:grid-cols-[250px_minmax(0,1fr)] lg:py-24">

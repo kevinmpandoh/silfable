@@ -4,7 +4,7 @@
 >
 > Update this document in the same change set whenever a venue, execution boundary, provider, configuration requirement, or production claim changes. Historical documents have intentionally been consolidated into this file to avoid contradictory status claims.
 
-**Last reviewed:** 2026-08-03  
+**Last reviewed:** 2026-08-08
 **Repository:** `silfable-web`  
 **Primary product:** Electron desktop runtime; web workspace is a separate wallet-connected surface.  
 **Network policy:** Mainnet only. Development/test networks are not exposed in the product UI.
@@ -47,7 +47,7 @@ If any step fails, the default is **fail closed**: no signature, no broadcast, a
 ### Desktop
 
 - A master password unlocks a local encrypted vault.
-- Solana and EVM private keys stay in the local main process; renderer and AI only receive non-secret addresses and typed results.
+- Solana and Robinhood Chain private keys stay in the local main process; renderer and AI only receive non-secret addresses and typed results.
 - IPC validates trusted sender, parses shared schemas and requires an unlocked vault for privileged methods.
 - Every real broadcast requires the exact reviewed contract, fresh preflight, explicit confirmation string, password recheck, kill-switch check and one broadcast attempt.
 - A timed-out or unknown broadcast is reconciled by transaction signature/order. It must never be blindly re-broadcast.
@@ -81,9 +81,9 @@ The setup wizard and the Settings review use the same saved configuration. After
 | Section | Purpose |
 |---|---|
 | Security | Local encrypted vault and master-password lifecycle. |
-| Wallets | Generate/import Solana and EVM wallets; select a primary wallet; copy public address. Secret material is never shown after import. |
+| Wallets | Generate/import Solana and Robinhood Chain wallets; select a primary wallet; copy public address. Secret material is never shown after import. |
 | Integrations | Solana RPC, Jupiter API key, optional Tavily and managed Pinata/IPFS configuration where applicable. |
-| EVM configuration | Chain-scoped RPC override, quote-provider configuration and transaction bounds. A valid override must prove the expected chain and serve a current block. |
+| Robinhood configuration | Robinhood Chain RPC override, Uniswap provider configuration and transaction bounds. A valid override must prove chain ID 4663 and serve a current block. |
 | Agent core | Context/output limits, temperature and bounded subagent tuning. |
 | Provider | OpenRouter/provider credential and selected model. |
 | Transaction settings | Default slippage/deadline/priority and fee caps. These are the source of session defaults. |
@@ -95,7 +95,7 @@ New session chooses a wallet/chain workspace and a mode. It does **not** authori
 | Workspace | Available work |
 |---|---|
 | Solana | Jupiter swaps, Token Launch Studio, Solana-source bridge, positions/activity. |
-| EVM | Chain-scoped swap and EVM-source bridge review, positions/activity. |
+| Robinhood Chain | ETH/USDG swap, Robinhood-source bridge review, positions/activity. Other EVM chains are outside the active desktop product scope. |
 | General | Read-only planning, research and non-chain-specific work. |
 
 Modes:
@@ -124,14 +124,14 @@ Status terms:
 | Solana arbitrary Jupiter pairs | Works only for valid Jupiter-routable mint pairs and only after provider quote + program allowlist + fee guard. | JUP test demonstrated fee/rent guard can block unsafe economics. | Restricted; route/token-dependent. Not a promise for every token. |
 | Pump.fun Token Launch | Local draft, managed Pinata/IPFS immutable metadata, ephemeral mint signer, create-v2 preflight, final checks, local signing, receipt. | Controlled Mainnet token launch completed/finalized and visible on Pump.fun. | **Verified restricted token-launch lane.** Token trading/buy/sell automation is separate and not implied. |
 | Pump.fun/PumpSwap assisted trading | Legacy analysis/pilot UI and risk concepts exist. | No production trading acceptance. | **Not production-enabled.** |
-| Solana→EVM bridge | Dynamic relay/deBridge-compatible route contract, quote, source simulation, policy, final approval, source receipt and reconciliation. | Solana USDC→Robinhood USDG controlled source broadcast completed; provider reported fulfillment, while destination hash may be absent from provider response. | **Conditional/reconciliation-required.** Do not call fully production-complete until destination receipt/amount is independently reconciled for supported. |
-| EVM Bridge (EVM → Solana & EVM → EVM) | Typed relay architecture, EVM engine, source simulation/execution and encrypted receipts are implemented. | TERUJI BERHASIL (AiService dan RelayEvmBridgeService terhubung, EVM Bridge tool berfungsi). | **Verified Mainnet acceptance.** |
-| EVM multi-chain swaps | Chain registry, provider adapters, typed quote/build, preflight/allowlist, signer, execution receipt and recovery structure. | No complete EVM Mainnet swap acceptance. Robinhood quote reliability is under active infrastructure validation. | **Implemented, release-gated.** |
+| Solana USDC → Robinhood USDG bridge | Relay route, quote, source simulation, balance/fee policy, explicit final approval, source receipt and destination reconciliation. | Controlled Mainnet transfers completed in web and desktop, including source confirmation and independently checked destination settlement. | **Verified restricted bridge lane.** Route, liquidity, RPC health and settlement evidence remain mandatory per transfer. |
+| Robinhood USDG → Solana USDC bridge | Relay route, exact USDG approval when required, EVM source preflight/execution, source receipt and Solana destination reconciliation. | Controlled Mainnet transfers completed in web and desktop, including Robinhood source confirmation and independently checked Solana settlement. | **Verified restricted bridge lane.** Approval and deposit remain separate wallet actions when required. |
 | Robinhood EVM swap | Robinhood Chain ID 4663; official RPC with public fallback; Uniswap adapter is pinned because Kyber may not index USDG. | Controlled ETH→USDG and USDG→ETH Mainnet swaps completed and finalized. | **Verified restricted swap lane.** Keep per-release acceptance and monitoring. |
-| Other EVM chains | Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain and Avalanche registry support. Kyber is primary on supported chains. | Per-chain production acceptance pending. | **Release-gated.** |
+| Other EVM chains | Historical registry and adapter code may remain in the repository while the product is narrowed. | No active desktop release claim. | **Outside active desktop scope.** Do not advertise or expose as supported until deliberately reintroduced and accepted. |
 | Hyperliquid | Restricted proposal/preflight structure. | No Mainnet execution acceptance. | **Release-gated.** |
 | Jupiter Trigger/limit order | MVP lifecycle and receipt structures exist. | No controlled Mainnet end-to-end acceptance recorded. | **Release-gated.** |
-| DCA, TP/SL, scheduled missions | Persistent lifecycle/strategy structures exist. | No independently accepted autonomous execution. | **Not production-enabled.** |
+| Auto DCA | Persistent schedules can detect a due cycle, prepare a fresh bounded quote, and route the exact action to explicit wallet review. | Controlled wallet-approved DCA execution has been demonstrated and reconciled. | **Verified restricted automation lane.** Every due transaction still requires explicit wallet approval. |
+| TP/SL and scheduled exits | Persistent price conditions can monitor and prepare a fresh bounded exit proposal for explicit wallet review. | No completed, independently reconciled Mainnet trigger is recorded yet. | **Operational restricted.** Promote to verified restricted only after a finalized trigger receipt is recorded. |
 | Guarded Full Access | Grants, constraints, revocation and local policy boundaries exist. | No unrestricted autonomous capital execution claim. | **Guarded only.** |
 
 ### 5.2 Mainnet results already recorded
@@ -141,8 +141,9 @@ These are evidence of controlled functions, not a blanket approval for unrelated
 1. **SOL → USDC Jupiter swap:** finalized, with a persisted receipt and Solana Explorer confirmation.
 2. **USDC → SOL Jupiter reverse swap:** finalized, with expected/actual output and fee receipt.
 3. **Pump.fun Token Launch:** metadata uploaded to Pinata/IPFS; unsigned `create_v2` preflight passed; final authorization/broadcast finalized; token page visible on Pump.fun.
-4. **Solana USDC → Robinhood USDG bridge:** source transaction was submitted, and the destination wallet balance was observed. The provider did not return a destination transaction hash, so the receipt must remain `relay-pending`/reconciled based on independent destination evidence rather than being falsely labelled fully finalized.
-5. **Robinhood EVM Swap:** Controlled ETH→USDG and USDG→ETH swaps completed; exact approvals for Swap Proxy verified; transactions submitted and independently reconciled.
+4. **Solana USDC → Robinhood USDG bridge:** controlled web and desktop transfers completed; source confirmation and destination settlement were independently checked. A provider may omit the destination hash, in which case the receipt must preserve the actual evidence used and must not invent a hash.
+5. **Robinhood USDG → Solana USDC bridge:** controlled web and desktop transfers completed; Robinhood source confirmation and Solana destination settlement were independently checked.
+6. **Robinhood EVM Swap:** Controlled ETH→USDG and USDG→ETH swaps completed; exact approvals for the pinned router were verified; transactions were submitted and independently reconciled.
 
 ## 6. Solana execution details
 
@@ -212,17 +213,16 @@ Route availability is provider- and liquidity-dependent, not a permanent promise
 
 ## 9. EVM swap and Robinhood policy
 
-### Supported EVM model
+### Active Robinhood EVM model
 
-- An EVM session is bound to one selected EVM wallet and chain.
-- Swapping is **within the selected EVM chain**. Example: Robinhood USDG → native ETH is a Robinhood-chain swap; it is not a bridge.
-- Moving assets from Solana to Robinhood/Base/Arbitrum/Ethereum is a **bridge**, then a separate EVM swap may happen on that destination.
-- Multi-chain registry: Ethereum, Base, Arbitrum One, Optimism, Polygon, BNB Chain, Avalanche C-Chain and Robinhood Chain.
+- A desktop EVM session is bound to one selected Robinhood Chain wallet on chain ID 4663.
+- Robinhood USDG → native ETH and ETH → USDG are same-chain swaps; they are not bridges.
+- Moving Solana USDC to Robinhood USDG, or Robinhood USDG back to Solana USDC, uses the separate two-way bridge lifecycle.
+- Other EVM chain registry entries or adapters are historical implementation scaffolding, not active desktop product support.
 
 ### Provider policy
 
-- KyberSwap is the primary adapter for its supported EVM chains.
-- Uniswap-compatible adapter is available as a separately allowlisted route. Robinhood is currently pinned to Uniswap because Kyber does not reliably index every Robinhood asset such as USDG.
+- Robinhood is pinned to the allowlisted Uniswap-compatible route because other providers do not reliably index every Robinhood asset such as USDG.
 - Provider selection does not replace the chain RPC. A quote may come from a router API, while EVM chain ID, block, allowance, gas estimate, simulation and receipt must come from a healthy verified RPC.
 
 ### Robinhood Chain troubleshooting
@@ -267,8 +267,8 @@ Silfable takes architectural reference from the local VEX source under `D:\Web3\
 | Area | VEX | Silfable |
 |---|---|---|
 | Solana launch | No Pump.fun token launch identified in the audited VEX lane. | Restricted Pump.fun token creation with Pinata/IPFS metadata and a completed controlled acceptance. |
-| EVM venues | Kyber primary where supported; Uniswap is a classified fallback option. | Chain-specific Kyber/Uniswap adapters; Robinhood currently pins Uniswap due USDG indexing limitations. |
-| Bridge | Broader provider/router abstraction and runtime-driven workflow. | Dynamic provider route contract, but live acceptance is still route-by-route. |
+| EVM venues | Kyber primary where supported; Uniswap is a classified fallback option. | Active desktop scope is Robinhood Chain only, with a pinned Uniswap-compatible route due USDG indexing limitations. |
+| Bridge | Broader provider/router abstraction and runtime-driven workflow. | Active scope is the verified restricted Solana USDC ↔ Robinhood USDG route in web and desktop. |
 | Web workspace | Desktop/local-first emphasis. | Browser-wallet web workspace exists; desktop is the custody-heavy product. |
 | Full permission | Can run registered mutating tools without per-tool prompt subject to its mission/policy model. | Guarded Full Access retains more explicit local limits/revocation and is not unattended execution. |
 
@@ -276,11 +276,11 @@ Silfable takes architectural reference from the local VEX source under `D:\Web3\
 
 ### Must complete before a broad production claim
 
-1. **Bridge reconciliation:** Verify destination transaction hash and actual destination settlement for each supported live route; document provider fallback and refund/timeout behavior.
-2. **EVM acceptance:** Run controlled Mainnet quote → preflight → approval/allowance → swap → finalized receipt for at least one supported chain, then repeat Robinhood only after a stable dedicated RPC and valid router liquidity.
+1. **Per-release bridge evidence:** retain source transaction, Relay request/order, destination settlement evidence, actual received amount and timeout/refund behavior for both supported directions.
+2. **Per-release Robinhood evidence:** repeat a small controlled quote → preflight → approval/allowance → swap → finalized receipt against a stable verified Robinhood RPC.
 3. **Security review:** vault/private-key, IPC, program/router allowlists, logging/secrets, dependency and packaging/code-signing review.
 4. **Recovery drill:** restart/lock/unlock after each receipt, reconcile an unknown-broadcast test, and prove that no duplicate broadcast occurs.
-5. **Release evidence:** packaged Windows build, clean install/update behavior, signed binary/code-signing process and per-venue acceptance records.
+5. **Release evidence:** packaged Windows build, clean install/update behavior, signed binary/code-signing process and public or internally archived per-lane acceptance records.
 
 ### Deferred or not production enabled
 

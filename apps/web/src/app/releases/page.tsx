@@ -15,7 +15,7 @@ import { PageTransition } from "@/components/ui/PageTransition";
 export default function ReleasesPage() {
   return (
     <PageTransition>
-      <main className="bg-paper text-ink">
+      <main className="publicPage releasesTheme bg-paper text-ink">
         <ReleaseHero />
         <div className="section-shell">
           <ReleaseDownloads />

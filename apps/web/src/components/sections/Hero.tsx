@@ -13,9 +13,11 @@ const reveal = {
 
 export function Hero() {
   return (
-    <section id="top" className="relative flex min-h-screen overflow-hidden border-b border-cyan-200/15 bg-[radial-gradient(circle_at_72%_28%,rgb(22_183_214_/_0.18),transparent_24%),radial-gradient(circle_at_24%_82%,rgb(83_102_233_/_0.16),transparent_30%),#070914] pt-20">
-      <div className="pointer-events-none absolute inset-y-0 right-[24%] hidden w-px bg-white/10 xl:block" />
-      <div className="section-shell flex min-h-[calc(100vh-5rem)] flex-col justify-between py-14 sm:py-18 lg:py-20">
+    <section id="top" className="heroAurora relative overflow-hidden">
+      <div className="heroGrid pointer-events-none absolute inset-0" />
+      <div className="heroOrb heroOrbOne pointer-events-none absolute" />
+      <div className="heroOrb heroOrbTwo pointer-events-none absolute" />
+      <div className="section-shell flex min-h-[44rem] flex-col justify-between py-16 sm:min-h-[48rem] sm:py-20 lg:min-h-[52rem] lg:py-24">
         <motion.div
           initial="hidden"
           animate="visible"
@@ -25,18 +27,18 @@ export function Hero() {
           <motion.p
             variants={reveal}
             transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-            className="mb-7 font-mono text-[10px] uppercase tracking-[0.22em] text-white/45"
+            className="mb-7 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--blue-2)]"
           >
-            AI-assisted planning / Deterministic limits
+            Secure AI trading / Wallet-approved execution
           </motion.p>
 
           <motion.h1
             variants={reveal}
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-            className="max-w-[1480px] font-serif text-7xl font-normal leading-[0.84] tracking-normal text-paper sm:text-8xl md:text-9xl xl:text-[8.4rem] 2xl:text-[9rem]"
+            className="max-w-[1200px] text-6xl font-bold leading-[0.92] tracking-[-0.07em] text-paper sm:text-8xl md:text-9xl xl:text-[8.15rem]"
           >
-            PLAN WITH AI.
-            <span className="block italic text-electric sm:pl-16 lg:pl-28">APPROVE WITH PROOF.</span>
+            TRADE WITH CLARITY.
+            <span className="auroraText block sm:pl-14 lg:pl-24">APPROVE WITH CONTROL.</span>
           </motion.h1>
         </motion.div>
 
@@ -44,28 +46,27 @@ export function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.65, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-          className="mt-16 grid gap-8 border-t border-white/15 pt-8 lg:grid-cols-[1fr_auto] lg:items-end"
+          className="mt-16 grid gap-8 border-t border-[var(--line)] pt-8 lg:grid-cols-[1fr_auto] lg:items-end"
         >
           <div>
-            <p className="max-w-md text-lg leading-relaxed text-white/65 sm:text-xl">
-              Mainnet actions stay gated. Proven in production.
+            <p className="max-w-md text-lg leading-relaxed text-[var(--paper)] sm:text-xl">
+              AI can plan the move. Your wallet still makes the decision.
             </p>
-            <p className="mt-2 max-w-lg text-sm leading-6 text-white/35">
-              Give the agent a mission. Silfable checks policy, records evidence, and asks for approval before any supported transaction.
-              Backed by successful real-world testing as documented in our whitepaper.
+            <p className="mt-2 max-w-lg text-sm leading-6 text-[var(--muted)]">
+              Swap, bridge, and automation proposals stay bound to your session, policy, and explicit wallet approval before any supported Mainnet action.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Button asChild size="lg" className="hover:!text-white">
+            <Button asChild size="lg" className="auroraButton hover:!text-white">
               <Link href="/connect">
                 Get started
                 <ArrowDownRight className="ml-4 size-4" />
               </Link>
             </Button>
-            <Button asChild size="lg">
-              <a href="#download" className="border border-white/30 bg-transparent text-white hover:bg-white hover:!text-black">
-                Download desktop app
+            <Button asChild size="lg" className="outlineButton">
+              <a href="#docs" className="bg-transparent">
+                Explore safety model
                 <ArrowDownRight className="ml-4 size-4" />
               </a>
             </Button>

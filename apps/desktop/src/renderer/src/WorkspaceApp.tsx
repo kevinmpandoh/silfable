@@ -313,6 +313,7 @@ export function WorkspaceApp() {
       );
   }, []);
 
+
   function saveSetup(next: SetupState): void {
     setSetup(next);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -1702,7 +1703,7 @@ function MainWorkspace({
       />
     );
   return (
-   <main className="workspace">
+   <main className="workspace" data-theme="dark">
       <aside className="leftRail">
         <button
           className="railBrand"

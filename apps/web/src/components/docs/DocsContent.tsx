@@ -16,7 +16,7 @@ export function DocsContent() {
           Silfable documentation
         </h1>
         <p className="mt-9 max-w-2xl text-lg leading-8 text-black/55">
-          Silfable is a guarded Mainnet workspace for AI-assisted Token Launch, Solana swaps, EVM swap pilots, and cross-chain route review. Reasoning, deterministic policy, signing, and receipt verification remain separate authorities.
+          Silfable is a guarded Mainnet workspace for AI-assisted Token Launch, Solana swaps, Robinhood Chain swaps, and two-way Solana-Robinhood bridges. Reasoning, deterministic policy, signing, and receipt verification remain separate authorities.
         </p>
         <div className="mt-10 grid border-t border-l border-black/15 sm:grid-cols-3">
           {["Mainnet only", "Policy enforced", "Receipt recorded"].map((item) => (
@@ -33,8 +33,8 @@ export function DocsContent() {
         <ol className="mt-10 space-y-7">
           {[
             ["Choose", "Use desktop for encrypted local-vault signing. Use web for the single connected browser wallet and explicit wallet approval."],
-            ["Configure", "Desktop stores wallet, RPC, Jupiter or 0x credentials, inference provider, and global transaction limits in Settings."],
-            ["Create", "Select a Solana or supported EVM wallet network. The task you enter determines the typed proposal; session creation does not authorize a transaction."],
+            ["Configure", "Desktop stores wallet, Solana and Robinhood RPC settings, Jupiter or Uniswap provider credentials, inference provider, and transaction limits in Settings."],
+            ["Create", "Select a Solana or Robinhood Chain wallet. The task you enter determines the typed proposal; session creation does not authorize a transaction."],
             ["Review", "Inspect exact assets, amount, route, simulation, fees, and freshness. Approve only a supported lane and verify its persisted receipt."],
           ].map(([title, text], index) => (
             <li key={title} className="grid gap-3 border-t border-black/10 pt-6 sm:grid-cols-[3rem_8rem_1fr]">
@@ -142,11 +142,11 @@ export function DocsContent() {
               <tr><th className="py-4 font-normal">Lane</th><th className="py-4 font-normal">Current state</th><th className="py-4 font-normal">Release boundary</th></tr>
             </thead>
             <tbody className="divide-y divide-black/10 text-black/55">
-              <tr><td className="py-5 text-ink">Solana Swap</td><td>Guarded desktop Jupiter path</td><td>Signed-build, recovery, and Mainnet acceptance gates remain</td></tr>
-              <tr><td className="py-5 text-ink">Token Launch</td><td>Restricted Pump.fun desktop and browser-wallet web implementation</td><td>Unsigned simulation, exact final review, explicit signing, and controlled Mainnet acceptance remain mandatory</td></tr>
-              <tr><td className="py-5 text-ink">EVM Swap</td><td>Release-gated across supported EVM networks</td><td>Mainnet acceptance and recovery testing remain</td></tr>
-              <tr><td className="py-5 text-ink">Bridge</td><td>Implemented cross-chain execution</td><td>Release-gated validation remains</td></tr>
-              <tr><td className="py-5 text-ink">Auto DCA</td><td>Implemented deterministic recurring flows</td><td>Global limit verification remains</td></tr>
+              <tr><td className="py-5 text-ink">Solana Swap</td><td>Verified restricted Jupiter path</td><td>Fresh checks and explicit wallet approval remain mandatory</td></tr>
+              <tr><td className="py-5 text-ink">Token Launch</td><td>Verified restricted Pump.fun desktop and browser-wallet web implementation</td><td>Unsigned simulation, exact final review, explicit signing, and receipt verification remain mandatory</td></tr>
+              <tr><td className="py-5 text-ink">Robinhood Swap</td><td>Verified restricted ETH-USDG execution</td><td>Healthy Robinhood RPC, live route, balance, gas, and wallet approval are required</td></tr>
+              <tr><td className="py-5 text-ink">Bridge</td><td>Verified restricted Solana-Robinhood execution in both directions</td><td>Provider route, liquidity, source confirmation, and destination settlement are checked per transfer</td></tr>
+              <tr><td className="py-5 text-ink">DCA / TP-SL</td><td>Monitoring and proposal lifecycle implemented</td><td>No autonomous signing or unattended broadcast</td></tr>
             </tbody>
           </table>
         </div>
