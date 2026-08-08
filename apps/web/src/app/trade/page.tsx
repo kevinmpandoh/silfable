@@ -7,7 +7,7 @@ import React, { useCallback, useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
-import { VersionedTransaction } from "@solana/web3.js";
+import { Keypair, VersionedTransaction } from "@solana/web3.js";
 import { Trash2 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -23,12 +23,17 @@ import {
   WebUsage,
 } from "@/lib/db";
 import { PumpTradePreviewCard } from "@/components/cards/PumpTradePreviewCard";
+import { PumpAnalysisCard } from "@/components/cards/PumpAnalysisCard";
 import { LimitOrderPreviewCard } from "@/components/cards/LimitOrderPreviewCard";
 import { JupiterSwapPreviewCard } from "@/components/cards/JupiterSwapPreviewCard";
 import { EvmSwapPreviewCard } from "@/components/cards/EvmSwapPreviewCard";
+import { EvmBridgePreviewCard } from "@/components/cards/EvmBridgePreviewCard";
+import { TokenLaunchPreviewCard } from "@/components/cards/TokenLaunchPreviewCard";
 import { WebSetupWizard } from "@/components/trade/WebSetupWizard";
 import { WebNewSessionModal, type LinkedWebWallet } from "@/components/trade/WebNewSessionModal";
 import { WebMissionsView } from "@/components/trade/WebMissionsView";
+import { WebAutomationView } from "@/components/trade/WebAutomationView";
+import { TokenLaunchPanel, type PublishedTokenLaunchDraft } from "@/components/trade/TokenLaunchPanel";
 import { getWebEvmChain } from "@/lib/evm-chains";
 import { switchToRobinhoodChain } from "@/lib/evm-browser-wallet";
 
@@ -45,23 +50,67 @@ function shortWallet(address?: string): string {
   return address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "unbound";
 }
 
+function bytesToBase64(value: Uint8Array): string {
+  let binary = "";
+  for (const byte of value) binary += String.fromCharCode(byte);
+  return window.btoa(binary);
+}
+
+function normalizeWalletActionError(cause: unknown, fallback: string): string {
+  const error = cause && typeof cause === "object" ? cause as { code?: unknown; message?: unknown } : null;
+  if (error?.code === 4001 || error?.code === "ACTION_REJECTED" || (typeof error?.message === "string" && /user (?:denied|rejected)|cancelled/iu.test(error.message))) {
+    return "Wallet request was cancelled. Nothing was signed or broadcast.";
+  }
+  return typeof error?.message === "string" && error.message.trim() ? error.message : fallback;
+}
+
+function isLegacyEvmBridgeProgressMessage(message: WebMessage): boolean {
+  if (message.role !== "assistant" || message.proposal) return false;
+  return /^(?:Exact USDG approval confirmed\.|Bridge source transaction confirmed on Robinhood Chain\.|Robinhood (?:â†’|→) Solana bridge confirmed after independent Solana USDC balance verification\.)/u.test(message.content.trim());
+}
+
 function renderMessageContent(content: string) {
   return content.split(/\n+/u).filter(Boolean).map((line, index) => {
     const trimmed = line.trim();
     if (trimmed.startsWith("### ")) {
-      return <h3 key={`${trimmed}-${index}`}>{trimmed.replace(/^###\s+/u, "")}</h3>;
+      return <h3 key={`${trimmed}-${index}`}>{renderInlineMarkdown(trimmed.replace(/^###\s+/u, ""))}</h3>;
     }
     if (trimmed.startsWith("## ")) {
-      return <h2 key={`${trimmed}-${index}`}>{trimmed.replace(/^##\s+/u, "")}</h2>;
+      return <h2 key={`${trimmed}-${index}`}>{renderInlineMarkdown(trimmed.replace(/^##\s+/u, ""))}</h2>;
     }
     if (/^[-*]\s+/u.test(trimmed)) {
-      return <p key={`${trimmed}-${index}`} className="messageBullet">{trimmed.replace(/^[-*]\s+/u, "• ")}</p>;
+      return <p key={`${trimmed}-${index}`} className="messageBullet">• {renderInlineMarkdown(trimmed.replace(/^[-*]\s+/u, ""))}</p>;
     }
     if (/^\d+\.\s+/u.test(trimmed)) {
-      return <p key={`${trimmed}-${index}`} className="messageBullet">{trimmed}</p>;
+      const match = /^(\d+\.)\s+(.+)$/u.exec(trimmed);
+      return <p key={`${trimmed}-${index}`} className="messageBullet">{match?.[1]} {renderInlineMarkdown(match?.[2] ?? trimmed)}</p>;
     }
-    return <p key={`${trimmed}-${index}`}>{trimmed}</p>;
+    return <p key={`${trimmed}-${index}`}>{renderInlineMarkdown(trimmed)}</p>;
   });
+}
+
+function renderInlineMarkdown(text: string): React.ReactNode[] {
+  const pattern = /(\*\*[^*\n]+\*\*|`[^`\n]+`|\[[^\]\n]+\]\(https?:\/\/[^)\s]+\))/gu;
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(pattern)) {
+    const start = match.index ?? 0;
+    if (start > cursor) nodes.push(text.slice(cursor, start));
+    const token = match[0];
+    if (token.startsWith("**")) {
+      nodes.push(<strong key={`${start}-strong`}>{token.slice(2, -2)}</strong>);
+    } else if (token.startsWith("`")) {
+      nodes.push(<code key={`${start}-code`}>{token.slice(1, -1)}</code>);
+    } else {
+      const link = /^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/u.exec(token);
+      nodes.push(link
+        ? <a key={`${start}-link`} href={link[2]} target="_blank" rel="noopener noreferrer">{link[1]}</a>
+        : token);
+    }
+    cursor = start + token.length;
+  }
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return nodes;
 }
 
 function parseWebUsage(value: unknown, fallbackModel: string): WebUsage | undefined {
@@ -79,6 +128,37 @@ function parseWebUsage(value: unknown, fallbackModel: string): WebUsage | undefi
     model: typeof usage.model === "string" && usage.model ? usage.model : fallbackModel,
   };
 }
+
+type PreparedEvmBridgeQuote = {
+  action: "approval" | "deposit";
+  transaction: { kind: "approval" | "deposit"; from: string; to: string; data: string; value: string; chainId: number };
+  requestId: string;
+  amountIn: string;
+  estimatedAmountOut: string;
+  minimumAmountOut: string;
+  totalFeeUsd: number;
+  estimatedSeconds: number;
+  destinationRecipient: string;
+  quoteExpiresAt: number;
+};
+
+type RailAutomationStrategy = {
+  id: string;
+  sessionId: string;
+  kind: "DCA" | "EXIT";
+  status: string;
+  inputSymbol: string;
+  outputSymbol: string;
+  amount: string;
+  intervalSeconds?: number | null;
+  maximumExecutions?: number | null;
+  completedExecutions: number;
+  takeProfitPriceUsd?: number | null;
+  stopLossPriceUsd?: number | null;
+  nextWakeAt?: number | null;
+  expiresAt: number;
+  proposals: Array<{ id: string; reason: string; status: string; expiresAt: number }>;
+};
 
 export interface WebSetupSettings {
   customRpcUrl: string;
@@ -126,7 +206,7 @@ function setupSecretStorageKey(walletAddress: string): string {
 }
 
 export default function TradePage() {
-  const { publicKey, sendTransaction, connected } = useWallet();
+  const { publicKey, sendTransaction, signTransaction, connected } = useWallet();
   const walletAddress = publicKey?.toBase58() ?? null;
   const activeWalletAddressRef = useRef<string | null>(walletAddress);
   const { connection } = useConnection();
@@ -151,7 +231,7 @@ export default function TradePage() {
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string>("");
   const [sessionFilter, setSessionFilter] = useState<"all" | "agent" | "mission">("all");
-  const [workspaceView, setWorkspaceView] = useState<"chat" | "missions">("chat");
+  const [workspaceView, setWorkspaceView] = useState<"chat" | "missions" | "automation">("chat");
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [newSessionMode, setNewSessionMode] = useState<"agent" | "mission">("agent");
   const [sessionModalKey, setSessionModalKey] = useState(0);
@@ -159,24 +239,341 @@ export default function TradePage() {
   const [deletingSessions, setDeletingSessions] = useState(false);
   const [pendingSessionPrompt, setPendingSessionPrompt] = useState<string | null>(null);
   const [messages, setMessages] = useState<WebMessage[]>([]);
+  const messagesRef = useRef<WebMessage[]>([]);
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
+  const preparedEvmBridgeQuotesRef = useRef(new Map<string, PreparedEvmBridgeQuote>());
   const portfolioRequestRef = useRef(0);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [bridgeBusy, setBridgeBusy] = useState(false);
+  const [tokenLaunchBusyId, setTokenLaunchBusyId] = useState<string | null>(null);
+  const [showTokenLaunchPanel, setShowTokenLaunchPanel] = useState(false);
   const [linkedWallets, setLinkedWallets] = useState<LinkedWebWallet[]>([]);
   const [activeEvmAddress, setActiveEvmAddress] = useState<string | null>(null);
   const [activeEvmChainId, setActiveEvmChainId] = useState<number | null>(null);
+  const tokenLaunchMintSignersRef = useRef(new Map<string, Keypair>());
 
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [portfolioAssets, setPortfolioAssets] = useState<{ symbol: string; amount: number; valueUsd: number }[]>([]);
   const [portfolioTotalUsd, setPortfolioTotalUsd] = useState<number | null>(null);
   const [portfolioStatus, setPortfolioStatus] = useState("Refreshing Mainnet balance...");
+  const [automationStrategies, setAutomationStrategies] = useState<RailAutomationStrategy[]>([]);
+  const [automationClock, setAutomationClock] = useState(() => Date.now());
+  const autoPreparingAutomationProposalIdsRef = useRef(new Set<string>());
   const accountWalletAddress = authenticatedWallet ?? walletAddress;
+  const activeSession = sessions.find((session) => session.id === activeSessionId);
+
+  const refreshAutomation = useCallback(async () => {
+    const evmAutomation = activeSession?.workspace === "evm" && activeSession.chainKey === "robinhood";
+    const automationWallet = evmAutomation ? activeEvmAddress : walletAddress;
+    if (!automationWallet || !setupCompleted) return;
+    const response = await fetch(`${evmAutomation ? "/api/evm/automation" : "/api/automation"}?walletAddress=${encodeURIComponent(automationWallet)}`, {
+      headers: evmAutomation
+        ? (settings.uniswapApiKey ? { "x-uniswap-api-key": settings.uniswapApiKey } : {})
+        : (settings.jupiterApiKey ? { "x-jupiter-api-key": settings.jupiterApiKey } : {}),
+    });
+    if (!response.ok) return;
+    const result = await response.json() as { strategies?: RailAutomationStrategy[] };
+    const strategies = result.strategies ?? [];
+    setAutomationStrategies(strategies);
+
+    // Monitoring creates only a durable proposal. Once the browser sees that
+    // proposal, prepare its fresh quote and put the review card in the source
+    // chat session. Automation never opens the wallet or signs anything.
+    const due = strategies
+      .flatMap((strategy) => strategy.proposals.map((proposal) => ({ strategy, proposal })))
+      .find(({ proposal }) => proposal.status === "AWAITING_APPROVAL" && !autoPreparingAutomationProposalIdsRef.current.has(proposal.id));
+    if (!due) return;
+
+    autoPreparingAutomationProposalIdsRef.current.add(due.proposal.id);
+    try {
+      const prepareResponse = await fetch(evmAutomation ? "/api/evm/automation" : "/api/automation", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(evmAutomation
+            ? (settings.uniswapApiKey ? { "x-uniswap-api-key": settings.uniswapApiKey } : {})
+            : (settings.jupiterApiKey ? { "x-jupiter-api-key": settings.jupiterApiKey } : {})),
+          "x-slippage-bps": settings.maxSlippageBps || "100",
+        },
+        body: JSON.stringify({ walletAddress: automationWallet, proposalId: due.proposal.id, action: "prepare" }),
+      });
+      const prepared = await prepareResponse.json() as { proposal?: WebProposal };
+      if (!prepareResponse.ok || !prepared.proposal) throw new Error("Automation quote preparation was unavailable.");
+      await handleAutomationPrepared(due.strategy.sessionId, prepared.proposal);
+      setAutomationStrategies((current) => current.map((strategy) => strategy.id === due.strategy.id
+        ? { ...strategy, status: "AWAITING_APPROVAL", proposals: strategy.proposals.map((proposal) => proposal.id === due.proposal.id ? { ...proposal, status: "PREPARED" } : proposal) }
+        : strategy));
+    } catch (error) {
+      console.warn("[Automation quote preparation]", error);
+      autoPreparingAutomationProposalIdsRef.current.delete(due.proposal.id);
+    }
+  }, [activeEvmAddress, activeSession?.chainKey, activeSession?.workspace, settings.jupiterApiKey, settings.maxSlippageBps, settings.uniswapApiKey, setupCompleted, walletAddress]);
+
+  useEffect(() => {
+    if (!setupCompleted || (!walletAddress && !activeEvmAddress)) return;
+    const initialTimer = window.setTimeout(() => void refreshAutomation(), 0);
+    const interval = window.setInterval(() => void refreshAutomation(), 20_000);
+    return () => { window.clearTimeout(initialTimer); window.clearInterval(interval); };
+  }, [activeEvmAddress, refreshAutomation, setupCompleted, walletAddress]);
+
+  // The strategy API is polled less frequently, but the visible next-run timer should
+  // stay accurate between refreshes without performing any extra network requests.
+  useEffect(() => {
+    const interval = window.setInterval(() => setAutomationClock(Date.now()), 1_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  async function patchProposal(messageId: string, proposalId: string, patch: Partial<WebProposal>) {
+    if (!accountWalletAddress) return;
+    const current = messagesRef.current.find((message) => (message.id === messageId || message.proposal?.id === proposalId) && message.proposal);
+    if (!current?.proposal) return;
+    const updated: WebMessage = { ...current, proposal: { ...current.proposal, ...patch } };
+    const nextMessages = messagesRef.current.map((message) => (message.id === current.id || message.proposal?.id === proposalId) ? updated : message);
+    messagesRef.current = nextMessages;
+    setMessages(nextMessages);
+    const saved = await saveMessage(accountWalletAddress, updated);
+    if (saved && saved.id !== updated.id) {
+      const persistedMessages = messagesRef.current.map((message) => message.id === updated.id ? saved : message);
+      messagesRef.current = persistedMessages;
+      setMessages(persistedMessages);
+    }
+  }
+
+  async function handleAutomationPrepared(sessionId: string, proposal: WebProposal) {
+    if (!accountWalletAddress) return;
+    const message: WebMessage = {
+      id: `automation_${Date.now()}`,
+      sessionId,
+      role: "assistant",
+      content: `${proposal.automationReason?.replaceAll("_", " ") ?? "Automation"} triggered. A live Jupiter quote is ready for review; nothing has been signed or broadcast.`,
+      proposal,
+      createdAt: Date.now(),
+    };
+    const saved = await saveMessage(accountWalletAddress, message);
+    setActiveSessionId(sessionId);
+    setWorkspaceView("chat");
+    setMessages((current) => [...current.filter((item) => item.sessionId === sessionId), saved ?? message]);
+  }
+
+  async function checkEvmBridgeSettlement(proposal: WebProposal, messageId: string) {
+    const sessionWallet = activeSession?.sessionWalletAddress;
+    if (!sessionWallet || !proposal.bridgeRequestId || !proposal.destinationRecipient || !proposal.minimumOutputAmount) {
+      throw new Error("Bridge settlement evidence is incomplete. Do not submit the bridge again.");
+    }
+    const response = await fetch("/api/bridge/evm-to-solana/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        walletAddress: sessionWallet,
+        requestId: proposal.bridgeRequestId,
+        destinationRecipient: proposal.destinationRecipient,
+        minimumAmountOut: proposal.minimumOutputAmount,
+      }),
+    });
+    const result = await response.json() as { error?: string; relayStatus?: string; destinationConfirmed?: boolean; destinationTxHash?: string | null; receivedAmount?: string; warning?: string };
+    if (!response.ok) throw new Error(result.error || "Bridge settlement could not be checked.");
+    if (result.destinationConfirmed && result.destinationTxHash) {
+      await patchProposal(messageId, proposal.id, { status: "confirmed", destinationTxHash: result.destinationTxHash, outputAmount: result.receivedAmount ?? proposal.outputAmount, bridgeStatusMessage: "Bridge confirmed after independent Solana USDC balance verification.", bridgeError: undefined });
+      void fetchWalletBalance();
+      return;
+    }
+    if (["failure", "refund", "refunded"].includes(result.relayStatus ?? "")) {
+      await patchProposal(messageId, proposal.id, { status: "unknown", bridgeError: `Relay reports bridge status ${result.relayStatus}. Do not submit the bridge again until the source transaction and any refund are reconciled.` });
+      return;
+    }
+    await patchProposal(messageId, proposal.id, { status: "source_confirmed", bridgeStatusMessage: `Robinhood source transaction is confirmed. Solana settlement is still ${result.relayStatus ?? "pending"}; no completion is claimed yet.`, bridgeError: undefined });
+  }
+
+  async function handlePrepareEvmBridge(proposal: WebProposal, messageId: string) {
+    if (!activeSession || activeSession.workspace !== "evm" || activeSession.chainKey !== "robinhood") {
+      alert("Robinhood → Solana bridge hanya dapat disiapkan dari session Robinhood yang terikat.");
+      return;
+    }
+    const sessionWallet = activeSession.sessionWalletAddress;
+    if (!sessionWallet || !evmWalletMatchesSession) {
+      alert("Hubungkan wallet EVM yang sama dengan session ini dan pindahkan ke Robinhood Chain terlebih dahulu.");
+      return;
+    }
+    if (!proposal.amountUsdg || !proposal.destinationRecipient) return;
+    setBridgeBusy(true);
+    let submittedHash: string | null = null;
+    let submittedAction: "approval" | "deposit" | null = null;
+    let confirmedSourceHash: string | null = null;
+    let confirmedApprovalHash: string | null = null;
+    let revertedHash: string | null = null;
+    let settlementOnly = false;
+    try {
+      if ((proposal.status === "source_confirmed" || proposal.status === "unknown") && proposal.sourceTxHash) {
+        settlementOnly = true;
+        await checkEvmBridgeSettlement(proposal, messageId);
+        return;
+      }
+
+      let prepared = preparedEvmBridgeQuotesRef.current.get(proposal.id);
+      if (!prepared || prepared.quoteExpiresAt <= Date.now()) {
+        preparedEvmBridgeQuotesRef.current.delete(proposal.id);
+        const response = await fetch("/api/bridge/evm-to-solana/quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            walletAddress: sessionWallet,
+            destinationRecipient: proposal.destinationRecipient,
+            amountUsdg: proposal.amountUsdg,
+            maxSlippageBps: settings.maxSlippageBps,
+          }),
+        });
+        const result = await response.json() as PreparedEvmBridgeQuote & { error?: string };
+        if (!response.ok || !result.transaction || !result.requestId) throw new Error(result.error || "Relay did not return a valid Robinhood to Solana quote.");
+        if (result.action === "approval" && proposal.bridgeApprovalTxHash) {
+          throw new Error("Relay has not indexed the confirmed USDG allowance yet. Wait a few seconds, then prepare the deposit quote again; do not approve USDG twice.");
+        }
+        prepared = result;
+        preparedEvmBridgeQuotesRef.current.set(proposal.id, prepared);
+        await patchProposal(messageId, proposal.id, {
+          status: "ready_for_user_signature",
+          bridgeAction: prepared.action,
+          bridgeRequestId: prepared.requestId,
+          inputAmount: prepared.amountIn,
+          outputAmount: prepared.estimatedAmountOut,
+          minimumOutputAmount: prepared.minimumAmountOut,
+          bridgeTotalFeeUsd: prepared.totalFeeUsd,
+          bridgeEstimatedSeconds: prepared.estimatedSeconds,
+          quoteExpiresAt: prepared.quoteExpiresAt,
+          bridgeStatusMessage: prepared.action === "approval" ? "Live quote prepared. Review the exact USDG approval in your wallet." : "Live quote prepared. Review the bridge deposit in your wallet.",
+          bridgeError: undefined,
+        });
+        return;
+      }
+
+      await switchToRobinhoodChain(settings.evmRpcUrl);
+      const provider = window.ethereum;
+      if (!provider) throw new Error("EVM wallet extension is not available.");
+      const [accounts, chainId, latestBlock] = await Promise.all([
+        provider.request({ method: "eth_accounts" }),
+        provider.request({ method: "eth_chainId" }),
+        provider.request({ method: "eth_getBlockByNumber", params: ["latest", false] }),
+      ]);
+      if (!Array.isArray(accounts) || typeof accounts[0] !== "string" || accounts[0].toLowerCase() !== sessionWallet.toLowerCase()) throw new Error("The active EVM account no longer matches this session.");
+      if (chainId !== "0x1237" || !latestBlock) throw new Error("The wallet is not connected to a healthy Robinhood Chain RPC.");
+      const balances = await assertEvmBridgeFunds({
+        rpcUrl: settings.evmRpcUrl.trim() || DEFAULT_ROBINHOOD_RPC,
+        walletAddress: sessionWallet,
+        amountIn: prepared.amountIn,
+        transaction: prepared.transaction,
+      });
+      await patchProposal(messageId, proposal.id, {
+        status: "signing",
+        bridgeStatusMessage: prepared.action === "approval" ? "Waiting for USDG approval in the EVM wallet." : "Waiting for bridge deposit approval in the EVM wallet.",
+        bridgeError: undefined,
+        checks: [
+          ...(proposal.checks ?? []).filter((check) => !["source_usdg_balance", "source_eth_fee"].includes(check.code)),
+          { code: "source_usdg_balance", status: "pass", message: `Live balance verified: ${balances.availableUsdg} USDG.` },
+          { code: "source_eth_fee", status: "pass", message: `ETH fee reserve verified: ${balances.availableEth} ETH available; estimated action fee ${balances.estimatedNetworkFeeEth} ETH.` },
+        ],
+      });
+      const hash = await provider.request({
+        method: "eth_sendTransaction",
+        params: [{ from: prepared.transaction.from, to: prepared.transaction.to, data: prepared.transaction.data, value: prepared.transaction.value }],
+      });
+      if (typeof hash !== "string" || !/^0x[0-9a-f]{64}$/iu.test(hash)) throw new Error("Wallet did not return a valid Robinhood transaction hash.");
+      submittedHash = hash;
+      submittedAction = prepared.action;
+      let confirmed = false;
+      for (let attempt = 0; attempt < 24; attempt += 1) {
+        const receipt = await provider.request({ method: "eth_getTransactionReceipt", params: [hash] });
+        if (receipt && typeof receipt === "object") {
+          const status = (receipt as { status?: unknown }).status;
+          if (status === "0x0" || status === 0) {
+            revertedHash = hash;
+            submittedHash = null;
+            await patchProposal(messageId, proposal.id, { status: "reverted", sourceTxHash: prepared.action === "deposit" ? hash : proposal.sourceTxHash, bridgeApprovalTxHash: prepared.action === "approval" ? hash : proposal.bridgeApprovalTxHash });
+            throw new Error(`Robinhood transaction reverted: ${hash}`);
+          }
+          confirmed = true;
+          break;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 2_500));
+      }
+      if (!confirmed) throw new Error(`Transaction was submitted but confirmation is still pending: ${hash}`);
+      preparedEvmBridgeQuotesRef.current.delete(proposal.id);
+
+      if (prepared.action === "approval") {
+        confirmedApprovalHash = hash;
+        submittedHash = null;
+        await patchProposal(messageId, proposal.id, {
+          status: "approval_confirmed",
+          bridgeAction: undefined,
+          bridgeRequestId: undefined,
+          quoteExpiresAt: undefined,
+          bridgeApprovalTxHash: hash,
+          outputAmount: undefined,
+          minimumOutputAmount: undefined,
+          bridgeTotalFeeUsd: undefined,
+          bridgeEstimatedSeconds: undefined,
+          bridgeStatusMessage: "Exact USDG approval confirmed. Prepare a fresh Relay quote for the bridge deposit.",
+          bridgeError: undefined,
+          checks: [
+            ...(proposal.checks ?? []).filter((check) => check.code !== "bridge_approval_confirmed"),
+            { code: "bridge_approval_confirmed", status: "pass", message: "Exact USDG approval confirmed on Robinhood Chain." },
+          ],
+        });
+        return;
+      }
+
+      const sourceConfirmedProposal = {
+        ...proposal,
+        status: "source_confirmed" as const,
+        sourceTxHash: hash,
+        bridgeRequestId: prepared.requestId,
+        minimumOutputAmount: prepared.minimumAmountOut,
+        outputAmount: prepared.estimatedAmountOut,
+      };
+      confirmedSourceHash = hash;
+      await patchProposal(messageId, proposal.id, {
+        status: "source_confirmed",
+        sourceTxHash: hash,
+        bridgeRequestId: prepared.requestId,
+        minimumOutputAmount: prepared.minimumAmountOut,
+        outputAmount: prepared.estimatedAmountOut,
+        bridgeStatusMessage: "Bridge source transaction confirmed on Robinhood Chain. Solana settlement is pending.",
+        bridgeError: undefined,
+      });
+      submittedHash = null;
+      await checkEvmBridgeSettlement(sourceConfirmedProposal, messageId);
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error ? (error as { code?: unknown }).code : undefined;
+      const cancelled = code === 4001 || code === "4001";
+      const rawMessage = error instanceof Error ? error.message : "Robinhood to Solana bridge could not be prepared.";
+      const message = cancelled ? "Wallet approval cancelled. No new transaction was signed or broadcast." : rawMessage;
+      if (settlementOnly) {
+        await patchProposal(messageId, proposal.id, { status: proposal.status === "unknown" ? "unknown" : "source_confirmed", bridgeError: `Settlement verification is temporarily unavailable. The source transaction has already been submitted; do not submit the bridge again. ${message}` });
+      } else if (revertedHash) {
+        await patchProposal(messageId, proposal.id, { status: "reverted", sourceTxHash: submittedAction === "deposit" ? revertedHash : proposal.sourceTxHash, bridgeApprovalTxHash: submittedAction === "approval" ? revertedHash : proposal.bridgeApprovalTxHash, bridgeError: message });
+      } else if (confirmedSourceHash) {
+        await patchProposal(messageId, proposal.id, { status: "source_confirmed", sourceTxHash: confirmedSourceHash, bridgeError: `Robinhood source transaction is confirmed, but Solana settlement could not be checked. Do not submit the bridge again; use Check settlement later. ${message}` });
+      } else if (confirmedApprovalHash) {
+        preparedEvmBridgeQuotesRef.current.delete(proposal.id);
+        await patchProposal(messageId, proposal.id, { status: "approval_confirmed", bridgeAction: undefined, bridgeRequestId: undefined, quoteExpiresAt: undefined, bridgeApprovalTxHash: confirmedApprovalHash, outputAmount: undefined, minimumOutputAmount: undefined, bridgeTotalFeeUsd: undefined, bridgeEstimatedSeconds: undefined, bridgeStatusMessage: "Exact USDG approval confirmed. Prepare a fresh Relay quote for the bridge deposit.", bridgeError: undefined });
+      } else if (submittedHash) {
+        await patchProposal(messageId, proposal.id, { status: "unknown", sourceTxHash: submittedAction === "deposit" ? submittedHash : proposal.sourceTxHash, bridgeApprovalTxHash: submittedAction === "approval" ? submittedHash : proposal.bridgeApprovalTxHash, bridgeError: `A Robinhood transaction was submitted, but confirmation is unknown. Do not submit it again until it is inspected. ${message}` });
+      } else {
+        await patchProposal(messageId, proposal.id, { status: proposal.bridgeAction ? "ready_for_user_signature" : proposal.bridgeApprovalTxHash ? "approval_confirmed" : "preview_only", bridgeError: message });
+      }
+    } finally {
+      setBridgeBusy(false);
+    }
+  }
+
   useEffect(() => {
     activeWalletAddressRef.current = accountWalletAddress;
   }, [accountWalletAddress]);
-  const activeSession = sessions.find((session) => session.id === activeSessionId);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+  const activeRailAutomations = automationStrategies.filter((strategy) =>
+    strategy.sessionId === activeSessionId && !["CANCELLED", "COMPLETED", "EXPIRED"].includes(strategy.status),
+  );
   const activeMessageCount = messages.reduce((count, message) => count + (message.sessionId === activeSessionId ? 1 : 0), 0);
   const expectedEvmChain = activeSession?.chainKey ? getWebEvmChain(activeSession.chainKey) : null;
   const evmWalletMatchesSession = activeSession?.workspace !== "evm"
@@ -327,14 +724,30 @@ export default function TradePage() {
   // Load Messages when Active Session changes
   useEffect(() => {
     let cancelled = false;
+    const loadStartedAt = Date.now();
     setMessages([]);
+    messagesRef.current = [];
 
     async function loadActiveMessages() {
       if (!accountWalletAddress || !activeSessionId) return;
       const targetId = activeSessionId;
       const msgs = await getSessionMessages(accountWalletAddress, targetId);
       if (!cancelled) {
-        setMessages(msgs.filter((m) => m.sessionId === targetId));
+        const persisted = msgs.filter((message) => message.sessionId === targetId);
+        const localUpdates = messagesRef.current.filter((message) => message.sessionId === targetId && message.createdAt >= loadStartedAt);
+        const merged = [...persisted];
+        for (const local of localUpdates) {
+          const alreadyPresent = merged.some((message) => message.id === local.id || (
+            message.role === local.role
+            && message.content === local.content
+            && message.proposal?.id === local.proposal?.id
+            && Math.abs(message.createdAt - local.createdAt) < 10_000
+          ));
+          if (!alreadyPresent) merged.push(local);
+        }
+        merged.sort((left, right) => left.createdAt - right.createdAt);
+        messagesRef.current = merged;
+        setMessages(merged);
       }
     }
     void loadActiveMessages();
@@ -378,6 +791,18 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
   }
 }
 
+function formatAutomationCountdown(timestamp?: number | null, now = Date.now()): string {
+  if (!timestamp) return "Waiting for evaluation";
+  const remaining = Math.max(0, timestamp - now);
+  if (remaining === 0) return "Due now";
+  const seconds = Math.ceil(remaining / 1000);
+  if (seconds < 60) return `Due in ${seconds}s`;
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) return `Due in ${minutes}m`;
+  const hours = Math.ceil(minutes / 60);
+  return `Due in ${hours}h`;
+}
+
 function formatEvmUnits(value: bigint, decimals: number): string {
   const scale = BigInt(10) ** BigInt(decimals);
   const whole = value / scale;
@@ -408,6 +833,35 @@ async function assertEvmSwapFunds(input: {
   if (input.sellToken === "USDG" && BigInt(usdgBalance) < BigInt(input.amountIn)) {
     throw new Error(`Insufficient USDG. Swap requires ${formatEvmUnits(BigInt(input.amountIn), 6)} USDG, available ${formatEvmUnits(BigInt(usdgBalance), 6)} USDG.`);
   }
+}
+
+async function assertEvmBridgeFunds(input: {
+  rpcUrl: string;
+  walletAddress: string;
+  amountIn: string;
+  transaction: { from: string; to: string; data: string; value: string };
+}) {
+  const balanceOfData = `0x70a08231000000000000000000000000${input.walletAddress.replace(/^0x/i, "").toLowerCase()}`;
+  const [nativeBalance, usdgBalance, targetCode, gasLimit, gasPrice] = await Promise.all([
+    queryEvmRpc(input.rpcUrl, "eth_getBalance", [input.walletAddress, "latest"]),
+    queryEvmRpc(input.rpcUrl, "eth_call", [{ to: ROBINHOOD_USDG_ADDRESS, data: balanceOfData }, "latest"]),
+    queryEvmRpc(input.rpcUrl, "eth_getCode", [input.transaction.to, "latest"]),
+    queryEvmRpc(input.rpcUrl, "eth_estimateGas", [{ from: input.transaction.from, to: input.transaction.to, data: input.transaction.data, value: input.transaction.value }]),
+    queryEvmRpc(input.rpcUrl, "eth_gasPrice", []),
+  ]);
+  if (targetCode === "0x" || targetCode === "0x0") throw new Error("Relay transaction target has no deployed contract code on Robinhood Chain.");
+  if (BigInt(usdgBalance) < BigInt(input.amountIn)) {
+    throw new Error(`Insufficient USDG. Bridge requires ${formatEvmUnits(BigInt(input.amountIn), 6)} USDG, available ${formatEvmUnits(BigInt(usdgBalance), 6)} USDG.`);
+  }
+  const requiredNative = BigInt(input.transaction.value) + BigInt(gasLimit) * BigInt(gasPrice);
+  if (BigInt(nativeBalance) < requiredNative) {
+    throw new Error(`Insufficient ETH for the bridge action and network fee. Required about ${formatEvmUnits(requiredNative, 18)} ETH, available ${formatEvmUnits(BigInt(nativeBalance), 18)} ETH.`);
+  }
+  return {
+    availableUsdg: formatEvmUnits(BigInt(usdgBalance), 6),
+    availableEth: formatEvmUnits(BigInt(nativeBalance), 18),
+    estimatedNetworkFeeEth: formatEvmUnits(BigInt(gasLimit) * BigInt(gasPrice), 18),
+  };
 }
 
   // Fetch the single connected Mainnet wallet through the configured RPC.
@@ -573,13 +1027,24 @@ async function assertEvmSwapFunds(input: {
       createdAt: Date.now(),
     };
 
-    setMessages((prev) => [...prev.filter((m) => m.sessionId === activeSessionId), userMsg]);
-    await saveMessage(accountWalletAddress, userMsg);
+    setMessages((prev) => {
+      const next = [...prev.filter((m) => m.sessionId === activeSessionId), userMsg];
+      messagesRef.current = next;
+      return next;
+    });
+    const savedUserMsg = await saveMessage(accountWalletAddress, userMsg);
+    if (savedUserMsg) {
+      setMessages((prev) => {
+        const next = prev.map((message) => message.id === userMsg.id ? savedUserMsg : message);
+        messagesRef.current = next;
+        return next;
+      });
+    }
     if (!promptText) setInput("");
     setLoading(true);
 
     try {
-      const activeSession = sessions.find((session) => session.id === activeSessionId);
+  const activeSession = sessions.find((session) => session.id === activeSessionId);
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -591,6 +1056,7 @@ async function assertEvmSwapFunds(input: {
           workspace: activeSession?.workspace ?? "solana",
           chainKey: activeSession?.chainKey,
           sessionWalletAddress: activeSession?.sessionWalletAddress ?? accountWalletAddress,
+          sessionId: activeSession?.id,
           settings,
         }),
       });
@@ -609,8 +1075,14 @@ async function assertEvmSwapFunds(input: {
         createdAt: Date.now(),
       };
 
-      setMessages((prev) => [...prev.filter((m) => m.sessionId === activeSessionId), assistantMsg]);
-      await saveMessage(accountWalletAddress, assistantMsg);
+      const savedAssistantMsg = await saveMessage(accountWalletAddress, assistantMsg);
+      const displayedAssistantMsg = savedAssistantMsg ?? assistantMsg;
+      setMessages((prev) => {
+        const next = [...prev.filter((m) => m.sessionId === activeSessionId), displayedAssistantMsg];
+        messagesRef.current = next;
+        return next;
+      });
+      if (data.automationCreated === true) void refreshAutomation();
 
       // Update session timestamp in IndexedDB
       const activeSess = sessions.find((s) => s.id === activeSessionId);
@@ -636,6 +1108,197 @@ async function assertEvmSwapFunds(input: {
         setLoading(false);
       }
     }
+  }
+
+  async function handleTokenLaunchDraftPublished(draft: PublishedTokenLaunchDraft) {
+    if (!accountWalletAddress || !activeSession || activeSession.workspace !== "solana" || !activeSession.sessionWalletAddress) return;
+    const message: WebMessage = {
+      id: `launch_${Date.now()}`,
+      sessionId: activeSession.id,
+      role: "assistant",
+      content: `Token Launch draft ${draft.name} (${draft.symbol}) telah dibuat. Metadata sudah dipublikasikan ke IPFS; belum ada transaksi, signature, atau broadcast.`,
+      createdAt: Date.now(),
+      proposal: {
+        id: `token_launch_${crypto.randomUUID()}`,
+        type: "token_launch",
+        mint: draft.metadataUri,
+        solAmount: "0",
+        estimatedTokens: draft.symbol,
+        status: "preview_only",
+        mode: "restricted_browser_wallet",
+        explanation: "Pump.fun create_v2 requires unsigned simulation, final Mainnet checks, and explicit browser-wallet approval.",
+        venue: "Pump.fun create_v2",
+        launchName: draft.name,
+        launchSymbol: draft.symbol,
+        launchDescription: draft.description,
+        launchImageUri: draft.imageUri,
+        launchMetadataUri: draft.metadataUri,
+        launchMetadataGatewayUrl: draft.metadataGatewayUrl,
+        launchMetadataSha256: draft.metadataSha256,
+        launchCreatorWallet: activeSession.sessionWalletAddress,
+        launchStage: "draft",
+        maxCreatorOutflowLamports: draft.maxCreatorOutflowLamports,
+        maxPriorityFeeLamports: draft.maxPriorityFeeLamports,
+      },
+    };
+    const saved = await saveMessage(accountWalletAddress, message);
+    const displayed = saved ?? message;
+    setMessages((current) => {
+      const next = [...current.filter((item) => item.sessionId === activeSession.id), displayed];
+      messagesRef.current = next;
+      return next;
+    });
+    setShowTokenLaunchPanel(false);
+  }
+
+  async function handlePrepareTokenLaunch(proposal: WebProposal, messageId: string, finalReview: boolean) {
+    if (!connected || !publicKey || !walletAddress || !activeSession || activeSession.workspace !== "solana") {
+      await patchProposal(messageId, proposal.id, { launchError: "Connect the Solana wallet bound to this session before preparing Token Launch." });
+      return;
+    }
+    if (activeSession.sessionWalletAddress !== walletAddress || proposal.launchCreatorWallet !== walletAddress) {
+      await patchProposal(messageId, proposal.id, { launchError: "The connected Solana wallet does not match this Token Launch session." });
+      return;
+    }
+    if (!proposal.launchName || !proposal.launchSymbol || !proposal.launchMetadataUri) return;
+    setTokenLaunchBusyId(proposal.id);
+    try {
+      let mintSigner = tokenLaunchMintSignersRef.current.get(proposal.id);
+      if (!finalReview || !mintSigner) {
+        mintSigner = Keypair.generate();
+        tokenLaunchMintSignersRef.current.set(proposal.id, mintSigner);
+      }
+      const response = await fetch("/api/token-launch/prepare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: activeSession.id,
+          walletAddress,
+          mintAddress: mintSigner.publicKey.toBase58(),
+          name: proposal.launchName,
+          symbol: proposal.launchSymbol,
+          metadataUri: proposal.launchMetadataUri,
+          maxCreatorOutflowLamports: proposal.maxCreatorOutflowLamports ?? "10000000",
+          maxPriorityFeeLamports: proposal.maxPriorityFeeLamports ?? "100000",
+          customRpcUrl: settings.customRpcUrl,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || typeof result.transactionBase64 !== "string") throw new Error(result.error || "Token Launch preflight failed safely.");
+      await patchProposal(messageId, proposal.id, {
+        status: "ready_for_user_signature",
+        launchStage: finalReview ? "final-review" : "preflight",
+        launchMintAddress: result.mintAddress,
+        launchTransactionBase64: result.transactionBase64,
+        launchTransactionDigest: result.transactionDigest,
+        launchSimulationSlot: result.simulationSlot,
+        launchComputeUnitsConsumed: result.computeUnitsConsumed,
+        launchNetworkFeeLamports: result.networkFeeLamports,
+        launchPriorityFeeLamports: result.priorityFeeLamports,
+        launchRentLamports: result.rentLamports,
+        launchTotalEstimatedOutflowLamports: result.totalEstimatedOutflowLamports,
+        launchLastValidBlockHeight: result.lastValidBlockHeight,
+        launchExpiresAt: result.expiresAt,
+        launchError: undefined,
+      });
+    } catch (cause) {
+      await patchProposal(messageId, proposal.id, { launchError: cause instanceof Error ? cause.message : "Token Launch preflight failed safely." });
+    } finally {
+      setTokenLaunchBusyId(null);
+    }
+  }
+
+  async function handleExecuteTokenLaunch(proposal: WebProposal, messageId: string) {
+    const mintSigner = tokenLaunchMintSignersRef.current.get(proposal.id);
+    if (!signTransaction || !walletAddress || !activeSession || !mintSigner || !proposal.launchTransactionBase64 || !proposal.launchMintAddress) {
+      await patchProposal(messageId, proposal.id, { launchError: "The final launch review expired. Prepare a fresh unsigned preflight." });
+      return;
+    }
+    if (proposal.launchExpiresAt && Date.now() >= proposal.launchExpiresAt) {
+      tokenLaunchMintSignersRef.current.delete(proposal.id);
+      await patchProposal(messageId, proposal.id, { launchStage: "draft", launchError: "The launch blockhash expired. Prepare a fresh unsigned preflight." });
+      return;
+    }
+    setTokenLaunchBusyId(proposal.id);
+    try {
+      const transaction = VersionedTransaction.deserialize(base64ToBytes(proposal.launchTransactionBase64));
+      transaction.sign([mintSigner]);
+      const signed = await signTransaction(transaction);
+      const response = await fetch("/api/token-launch/broadcast", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: activeSession.id,
+          walletAddress,
+          mintAddress: proposal.launchMintAddress,
+          signedTransaction: bytesToBase64(signed.serialize()),
+          customRpcUrl: settings.customRpcUrl,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Token Launch broadcast failed safely.");
+      tokenLaunchMintSignersRef.current.delete(proposal.id);
+      await patchProposal(messageId, proposal.id, {
+        status: result.status === "confirmed" ? "confirmed" : result.status === "failed" ? "failed" : "submitted",
+        launchStage: result.status === "confirmed" ? "confirmed" : result.status === "failed" ? "failed" : result.status === "unknown" ? "unknown" : "submitted",
+        launchSignature: result.signature,
+        launchExplorerUrl: result.explorerUrl,
+        launchError: result.error,
+      });
+      if (result.status === "confirmed") void refreshPortfolio();
+    } catch (cause) {
+      const error = normalizeWalletActionError(cause, "Token Launch was not submitted.");
+      await patchProposal(messageId, proposal.id, { launchError: error });
+    } finally {
+      setTokenLaunchBusyId(null);
+    }
+  }
+
+  async function handleVerifyTokenLaunch(proposal: WebProposal, messageId: string) {
+    if (!walletAddress || !proposal.launchSignature || !proposal.launchMintAddress) return;
+    setTokenLaunchBusyId(proposal.id);
+    try {
+      const response = await fetch("/api/token-launch/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress, signature: proposal.launchSignature, mintAddress: proposal.launchMintAddress, customRpcUrl: settings.customRpcUrl }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Token Launch verification failed.");
+      await patchProposal(messageId, proposal.id, {
+        status: result.status === "confirmed" ? "confirmed" : result.status === "failed" ? "failed" : "submitted",
+        launchStage: result.status === "confirmed" ? "confirmed" : result.status === "failed" ? "failed" : "unknown",
+        launchExplorerUrl: result.explorerUrl ?? proposal.launchExplorerUrl,
+        launchNetworkFeeLamports: result.networkFeeLamports == null ? proposal.launchNetworkFeeLamports : String(result.networkFeeLamports),
+        launchError: result.error,
+      });
+      if (result.status === "confirmed") void refreshPortfolio();
+    } catch (cause) {
+      await patchProposal(messageId, proposal.id, { launchError: cause instanceof Error ? cause.message : "Token Launch verification failed." });
+    } finally {
+      setTokenLaunchBusyId(null);
+    }
+  }
+
+  async function waitForSolanaHttpConfirmation(signature: string, ownerWallet: string): Promise<"confirmed" | "failed"> {
+    const deadline = Date.now() + 45_000;
+    let lastError = "";
+    while (Date.now() < deadline) {
+      try {
+        const response = await fetch("/api/solana/transaction-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ walletAddress: ownerWallet, signature, customRpcUrl: settings.customRpcUrl || undefined }),
+        });
+        const result = await response.json() as { status?: "confirmed" | "failed" | "pending"; error?: string };
+        if (!response.ok) lastError = result.error || "HTTP confirmation request failed.";
+        else if (result.status === "confirmed" || result.status === "failed") return result.status;
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : "HTTP confirmation request failed.";
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 1_500));
+    }
+    throw new Error(`Transaction was submitted but HTTP confirmation is still pending after 45 seconds.${lastError ? ` ${lastError}` : ""}`);
   }
 
   async function handleExecuteJupiterSwap(proposal: WebProposal, msgId: string) {
@@ -693,7 +1356,7 @@ async function assertEvmSwapFunds(input: {
       setMessages((prev) =>
         prev.map((m) => {
           if ((m.id === msgId || (m.proposal && m.proposal.id === proposal.id)) && m.proposal) {
-            const updatedM = { ...m, proposal: { ...m.proposal, status: "submitted" as const } };
+            const updatedM = { ...m, proposal: { ...m.proposal, status: "submitted" as const, transactionSignature: signature } };
             void saveMessage(activeWalletAddress, updatedM);
             return updatedM;
           }
@@ -701,30 +1364,35 @@ async function assertEvmSwapFunds(input: {
         }),
       );
 
-      const receipt = await connection.confirmTransaction(signature, "confirmed");
-      if (receipt.value.err) {
+      const confirmation = await waitForSolanaHttpConfirmation(signature, activeWalletAddress);
+      if (confirmation === "failed") {
         chainRejected = true;
-        throw new Error(`Solana rejected the swap: ${JSON.stringify(receipt.value.err)}`);
+        throw new Error("Solana rejected the swap.");
       }
       setMessages((prev) => prev.map((message) => {
         if ((message.id === msgId || message.proposal?.id === proposal.id) && message.proposal) {
-          const updated = { ...message, proposal: { ...message.proposal, status: "confirmed" as const } };
+          const updated = { ...message, proposal: { ...message.proposal, status: "confirmed" as const, transactionSignature: signature } };
           void saveMessage(activeWalletAddress, updated);
           return updated;
         }
         return message;
       }));
 
-      const successMsg: WebMessage = {
-        id: `sys_${Date.now()}`,
-        sessionId: activeSessionId,
-        role: "assistant",
-        content: `Mainnet swap confirmed on Solana.\n\n[View verified transaction on Solana Explorer](https://solscan.io/tx/${signature})`,
-        createdAt: Date.now(),
-      };
-      
-      setMessages((prev) => [...prev.filter((m) => m.sessionId === activeSessionId), successMsg]);
-      await saveMessage(activeWalletAddress, successMsg);
+      if (proposal.automationProposalId) {
+        // The swap is confirmed first; a tracking update must never relabel a
+        // confirmed Mainnet transaction as failed if the monitor is briefly unavailable.
+        try {
+          const completion = await fetch("/api/automation", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ walletAddress: activeWalletAddress, proposalId: proposal.automationProposalId, action: "complete", transactionSignature: signature, customRpcUrl: settings.customRpcUrl || undefined }),
+          });
+          if (!completion.ok) console.warn("[Automation completion]", await completion.text());
+          else await refreshAutomation();
+        } catch (error) {
+          console.warn("[Automation completion]", error);
+        }
+      }
 
       setTimeout(() => {
         void fetchWalletBalance();
@@ -750,7 +1418,7 @@ async function assertEvmSwapFunds(input: {
       setMessages((prev) => {
         const updated = prev.map((m) => {
           if ((m.id === msgId || (m.proposal && m.proposal.id === proposal.id)) && m.proposal) {
-            const updatedM = { ...m, proposal: { ...m.proposal, status: submittedSignature ? (chainRejected ? "reverted" as const : "unknown" as const) : "failed" as const } };
+            const updatedM = { ...m, proposal: { ...m.proposal, status: submittedSignature ? (chainRejected ? "reverted" as const : "unknown" as const) : "failed" as const, transactionSignature: submittedSignature ?? m.proposal.transactionSignature } };
             void saveMessage(activeWalletAddress, updatedM);
             return updatedM;
           }
@@ -836,6 +1504,17 @@ async function assertEvmSwapFunds(input: {
           }
           return message;
         }));
+        if (proposal.automationProposalId) {
+          try {
+            const completion = await fetch("/api/evm/automation", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ walletAddress: sessionWallet, proposalId: proposal.automationProposalId, action: "complete", transactionHash: swapHash }),
+            });
+            if (!completion.ok) console.warn("[EVM automation completion]", await completion.text());
+            else await refreshAutomation();
+          } catch (error) { console.warn("[EVM automation completion]", error); }
+        }
         void fetchWalletBalance();
         return;
       }
@@ -856,6 +1535,7 @@ async function assertEvmSwapFunds(input: {
         }
         return message;
       }));
+
     } catch (error) {
       const walletErrorCode = error && typeof error === "object" && "code" in error ? (error as { code?: unknown }).code : undefined;
       const wasCancelled = walletErrorCode === 4001 || walletErrorCode === "4001";
@@ -1136,6 +1816,7 @@ async function assertEvmSwapFunds(input: {
 
           <nav className="bottomNav">
             <button className={workspaceView === "missions" ? "active" : ""} onClick={() => setWorkspaceView("missions")}>Missions</button>
+            <button className={workspaceView === "automation" ? "active" : ""} onClick={() => setWorkspaceView("automation")}>Automation</button>
             <button onClick={openSettings}>Settings</button>
             <button onClick={() => void handleSignOut()}>Sign out</button>
           </nav>
@@ -1147,7 +1828,18 @@ async function assertEvmSwapFunds(input: {
 
         {/* CENTER STAGE: CONVERSATION CHAT FEED & COMPOSER */}
         <section className="centerStage">
-          {workspaceView === "missions" ? (
+          {workspaceView === "automation" ? (
+            <WebAutomationView
+              walletAddress={activeSession?.workspace === "evm" ? activeEvmAddress : walletAddress}
+              jupiterApiKey={settings.jupiterApiKey}
+              uniswapApiKey={settings.uniswapApiKey}
+              workspace={activeSession?.workspace === "evm" ? "evm" : "solana"}
+              onOpenSession={(sessionId) => {
+                setActiveSessionId(sessionId);
+                setWorkspaceView("chat");
+              }}
+            />
+          ) : workspaceView === "missions" ? (
             <WebMissionsView
               sessions={sessions.filter((session) => session.filter === "mission" || session.filter === "pump")}
               onCreateMission={() => openNewSession("", "mission")}
@@ -1235,7 +1927,7 @@ async function assertEvmSwapFunds(input: {
               <div className="messages" ref={messagesViewportRef}>
 
                 {messages
-                  .filter((msg) => msg.sessionId === activeSessionId)
+                  .filter((msg) => msg.sessionId === activeSessionId && !isLegacyEvmBridgeProgressMessage(msg))
                   .map((msg) => (
                   <article key={msg.id} className={msg.role}>
                     {msg.role === "assistant" && <div className="avatar shrink-0">S</div>}
@@ -1248,7 +1940,20 @@ async function assertEvmSwapFunds(input: {
                       </div>
 
                       {/* Desktop-Migrated Proposal Cards */}
-                      {msg.proposal && msg.proposal.type === "evm_swap" ? (
+                      {msg.proposal && msg.proposal.type === "token_launch" ? (
+                        <TokenLaunchPreviewCard
+                          proposal={msg.proposal}
+                          busy={tokenLaunchBusyId === msg.proposal.id}
+                          hasVolatileMint={tokenLaunchMintSignersRef.current.has(msg.proposal.id)}
+                          onPrepare={(finalReview) => void handlePrepareTokenLaunch(msg.proposal!, msg.id, finalReview)}
+                          onExecute={() => void handleExecuteTokenLaunch(msg.proposal!, msg.id)}
+                          onVerify={() => void handleVerifyTokenLaunch(msg.proposal!, msg.id)}
+                        />
+                      ) : msg.proposal && msg.proposal.type === "pump_analysis" && msg.proposal.pumpIntelligence ? (
+                        <PumpAnalysisCard intelligence={msg.proposal.pumpIntelligence} />
+                      ) : msg.proposal && msg.proposal.type === "evm_bridge" ? (
+                        <EvmBridgePreviewCard proposal={msg.proposal} busy={bridgeBusy} onPrepare={() => handlePrepareEvmBridge(msg.proposal!, msg.id)} />
+                      ) : msg.proposal && msg.proposal.type === "evm_swap" ? (
                         <EvmSwapPreviewCard proposal={msg.proposal} busy={bridgeBusy} onPrepare={() => handlePrepareEvmSwap(msg.proposal!, msg.id)} />
                       ) : msg.proposal && msg.proposal.type === "jupiter_swap" ? (
                         <JupiterSwapPreviewCard
@@ -1284,6 +1989,14 @@ async function assertEvmSwapFunds(input: {
 
               {/* Quick Suggestions Chips & Composer */}
               <div className="conversationComposer">
+                {activeSession?.workspace === "solana" && showTokenLaunchPanel && activeSession.sessionWalletAddress && (
+                  <TokenLaunchPanel
+                    creatorWallet={activeSession.sessionWalletAddress}
+                    walletReady={connected && walletAddress === activeSession.sessionWalletAddress}
+                    onClose={() => setShowTokenLaunchPanel(false)}
+                    onPublished={(draft) => void handleTokenLaunchDraftPublished(draft)}
+                  />
+                )}
                 {activeSession?.workspace === "bridge" && (
                   <SolanaBridgePanel
                     onPrepare={handlePrepareSolanaBridge}
@@ -1300,6 +2013,11 @@ async function assertEvmSwapFunds(input: {
                   </div>
                 )}
                 <div className="suggestions">
+                  {activeSession?.workspace === "solana" && (
+                    <button onClick={() => setShowTokenLaunchPanel((value) => !value)}>
+                      {showTokenLaunchPanel ? "CLOSE TOKEN LAUNCH" : "TOKEN LAUNCH"}
+                    </button>
+                  )}
                   <button
                     onClick={() =>
                       handleSendMessage(
@@ -1393,6 +2111,45 @@ async function assertEvmSwapFunds(input: {
 
             </div>
           </section>
+
+          {activeRailAutomations.length > 0 && (
+            <section className="railSection">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h3 className="flex items-center gap-2 text-[9px] uppercase tracking-[0.2em] text-[#7ba2ff]"><span className="h-px w-5 bg-[#7ba2ff]" />AUTOMATION</h3>
+                <button type="button" onClick={() => setWorkspaceView("automation")} className="font-mono text-[8px] uppercase tracking-[0.12em] text-cyan-300 hover:text-white">VIEW ALL</button>
+              </div>
+              <div className="space-y-2.5">
+                {activeRailAutomations.slice(0, 3).map((strategy) => {
+                  const pending = strategy.proposals.find((proposal) => proposal.status === "AWAITING_APPROVAL" || proposal.status === "PREPARED");
+                  const maximum = strategy.maximumExecutions ?? 1;
+                  const progress = strategy.kind === "DCA" ? Math.min(100, Math.round((strategy.completedExecutions / maximum) * 100)) : 0;
+                  return (
+                    <button
+                      key={strategy.id}
+                      type="button"
+                      onClick={() => setWorkspaceView("automation")}
+                      className={`w-full rounded-lg border p-3 text-left transition-colors ${pending ? "border-cyan-400/35 bg-cyan-400/[0.07] hover:bg-cyan-400/10" : "border-white/10 bg-white/[0.025] hover:bg-white/5"}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div><span className="font-mono text-[8px] uppercase tracking-[0.14em] text-cyan-300">{strategy.kind === "DCA" ? "DCA" : "TP / SL"}</span><strong className="mt-0.5 block text-[11px] text-white">{strategy.amount} {strategy.inputSymbol} → {strategy.outputSymbol}</strong></div>
+                        <span className={`rounded border px-1.5 py-0.5 font-mono text-[7px] uppercase tracking-wider ${pending ? "border-cyan-400/30 text-cyan-200" : strategy.status === "PAUSED" ? "border-amber-400/30 text-amber-200" : "border-emerald-400/25 text-emerald-300"}`}>{pending ? "ACTION READY" : strategy.status}</span>
+                      </div>
+                      {strategy.kind === "DCA" ? (
+                        <div className="mt-2.5">
+                          <div className="mb-1.5 flex justify-between font-mono text-[8px] text-[#7f8aa7]"><span>{strategy.completedExecutions} / {strategy.maximumExecutions} cycles</span><span>{strategy.status === "PAUSED" ? "Paused" : pending ? "Due now · review in chat" : formatAutomationCountdown(strategy.nextWakeAt, automationClock)}</span></div>
+                          <div className="h-1 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-[#5366e9] to-[#16b7d6]" style={{ width: `${progress}%` }} /></div>
+                          <p className="mt-1.5 font-mono text-[8px] text-[#7f8aa7]">{pending ? "Awaiting wallet approval" : `Next review · ${formatAutomationCountdown(strategy.nextWakeAt, automationClock)}`} · every {Math.round((strategy.intervalSeconds ?? 0) / 60)} minutes</p>
+                        </div>
+                      ) : (
+                        <div className="mt-2 grid grid-cols-2 gap-2 font-mono text-[8px] text-[#7f8aa7]"><span>TP <strong className="text-white">${strategy.takeProfitPriceUsd ?? "—"}</strong></span><span>SL <strong className="text-white">${strategy.stopLossPriceUsd ?? "—"}</strong></span></div>
+                      )}
+                      {pending && <p className="mt-2 border-t border-cyan-400/15 pt-2 font-mono text-[8px] uppercase tracking-[0.12em] text-cyan-200">Open Automation to review proposal</p>}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           <section className="railSection">
             <h3 className="mb-4 text-[9px] tracking-[0.2em] text-[#7ba2ff] uppercase flex items-center gap-2"><span className="w-5 h-px bg-[#7ba2ff]" />RUNTIME & COST</h3>

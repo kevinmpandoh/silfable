@@ -706,6 +706,27 @@ body:not(:has(.tradeDesktopShell)) {
   background: #080b18;
 }
 
+.markdownMessage strong {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.markdownMessage code {
+  border: 1px solid rgba(123, 162, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(123, 162, 255, 0.08);
+  padding: 1px 4px;
+  color: #b9ccff;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.9em;
+}
+
+.markdownMessage a {
+  color: #67d7ff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .webBridgePanel {
   width: min(760px, 100%);
   border: 1px solid rgb(123 162 255 / .2);

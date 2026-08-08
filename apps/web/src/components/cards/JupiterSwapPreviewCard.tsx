@@ -16,6 +16,14 @@ function formatUsdc(raw?: string): string {
   return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 6 }) : "0";
 }
 
+function formatRaw(raw: string | undefined, decimals: number): string {
+  if (!raw) return "0";
+  const padded = raw.padStart(decimals + 1, "0");
+  const whole = decimals ? padded.slice(0, -decimals) : padded;
+  const fraction = decimals ? padded.slice(-decimals).replace(/0+$/u, "") : "";
+  return fraction ? `${whole}.${fraction}` : whole;
+}
+
 export function JupiterSwapPreviewCard({
   proposal,
   status,
@@ -23,6 +31,16 @@ export function JupiterSwapPreviewCard({
   onExecute,
 }: JupiterSwapPreviewCardProps) {
   const disabled = ["signed", "signing", "submitted", "confirmed", "reverted", "unknown"].includes(status) || !proposal.quoteResponse;
+  const inputSymbol = proposal.inputSymbol ?? "SOL";
+  const outputSymbol = proposal.outputSymbol ?? "USDC";
+  const inputDisplay = proposal.inputAmount
+    ? formatRaw(proposal.inputAmount, proposal.inputDecimals ?? 9)
+    : proposal.solAmount;
+  const outputDisplay = proposal.outputDecimals == null
+    ? formatUsdc(proposal.outputAmount)
+    : formatRaw(proposal.outputAmount, proposal.outputDecimals);
+  const isConfirmed = status === "confirmed" || status === "signed";
+  const explorerUrl = proposal.transactionSignature ? `https://solscan.io/tx/${proposal.transactionSignature}` : null;
 
   return (
     <div className="missionPreview border border-blue-500/25 bg-slate-950/70 rounded-xl p-4">
@@ -32,22 +50,22 @@ export function JupiterSwapPreviewCard({
             JUPITER MAINNET SWAP PROPOSAL
           </span>
           <strong className="text-sm text-white font-mono flex items-center gap-2">
-            SOL <ArrowRight className="size-3.5 text-blue-300" /> {proposal.outputSymbol ?? "USDC"}
+            {inputSymbol} <ArrowRight className="size-3.5 text-blue-300" /> {outputSymbol}
           </strong>
         </div>
-        <span className="statusPill bg-amber-500/10 text-amber-300 border border-amber-500/30">
-          Restricted
+        <span className={`statusPill border ${isConfirmed ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300" : status === "unknown" ? "border-amber-400/30 bg-amber-400/10 text-amber-300" : "border-amber-500/30 bg-amber-500/10 text-amber-300"}`}>
+          {isConfirmed ? "Confirmed" : status === "unknown" ? "Verification required" : "Restricted"}
         </span>
       </header>
 
       <dl className="grid grid-cols-2 gap-2 text-xs mb-3 bg-black/30 p-2.5 rounded-lg border border-white/5">
         <div>
           <dt className="text-slate-500 font-mono">Input</dt>
-          <dd className="text-emerald-400 font-semibold">{proposal.solAmount} SOL</dd>
+          <dd className="text-emerald-400 font-semibold">{inputDisplay} {inputSymbol}</dd>
         </div>
         <div>
           <dt className="text-slate-500 font-mono">Expected Output</dt>
-          <dd className="text-slate-200 font-mono">{formatUsdc(proposal.outputAmount)} USDC</dd>
+          <dd className="text-slate-200 font-mono">{outputDisplay} {outputSymbol}</dd>
         </div>
         <div>
           <dt className="text-slate-500 font-mono">Max Slippage</dt>
@@ -77,24 +95,27 @@ export function JupiterSwapPreviewCard({
             {proposal.explanation}
           </small>
         </div>
-
-        <button
-          disabled={disabled}
-          onClick={onExecute}
-          className="primaryButton shrink-0 px-4 py-2 text-xs font-semibold"
-        >
-          {status === "confirmed" || status === "signed"
-            ? "Confirmed"
-            : status === "submitted"
+        {explorerUrl ? (
+          <a href={explorerUrl} target="_blank" rel="noopener noreferrer" className="primaryButton shrink-0 px-4 py-2 text-xs font-semibold">
+            Open Explorer
+          </a>
+        ) : (
+          <button
+            disabled={disabled}
+            onClick={onExecute}
+            className="primaryButton shrink-0 px-4 py-2 text-xs font-semibold"
+          >
+            {status === "submitted"
               ? "Confirming on-chain..."
               : status === "unknown"
                 ? "Verification required"
                 : status === "reverted"
                   ? "Reverted"
-            : status === "signing"
-              ? "Waiting for wallet..."
-              : "Approve in Wallet"}
-        </button>
+                  : status === "signing"
+                    ? "Waiting for wallet..."
+                    : "Approve in Wallet"}
+          </button>
+        )}
       </footer>
     </div>
   );

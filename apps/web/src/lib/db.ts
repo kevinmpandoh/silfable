@@ -1,5 +1,7 @@
 // Backend API helper for Web App Chat History & Sessions (backed by MongoDB)
 
+import type { PumpTokenIntelligence } from "@silfable/contracts";
+
 export interface SessionItem {
   id: string;
   title: string;
@@ -13,11 +15,11 @@ export interface SessionItem {
 
 export interface WebProposal {
   id: string;
-  type: "jupiter_swap" | "pump_fun_buy" | "limit_order" | "solana_bridge" | "evm_swap";
+  type: "jupiter_swap" | "pump_fun_buy" | "pump_analysis" | "limit_order" | "solana_bridge" | "evm_bridge" | "evm_swap" | "token_launch";
   mint: string;
   solAmount: string;
   estimatedTokens: string;
-  status: "ready_for_user_signature" | "preview_only" | "signing" | "submitted" | "source_confirmed" | "confirmed" | "reverted" | "unknown" | "signed" | "failed";
+  status: "ready_for_user_signature" | "preview_only" | "approval_confirmed" | "signing" | "submitted" | "source_confirmed" | "confirmed" | "reverted" | "unknown" | "signed" | "failed";
   mode: string;
   explanation: string;
   checks?: Array<{ code: string; status: "pass" | "block"; message: string }>;
@@ -27,17 +29,26 @@ export interface WebProposal {
   inputMint?: string;
   outputMint?: string;
   outputSymbol?: string;
+  inputSymbol?: string;
+  inputDecimals?: number;
+  outputDecimals?: number;
   venue?: string;
   quoteResponse?: unknown;
-  destination?: "robinhood";
+  destination?: "robinhood" | "solana";
   destinationRecipient?: string;
   amountUsdc?: string;
+  amountUsdg?: string;
   bridgeRequestId?: string;
   bridgeTransaction?: string;
   bridgeBlockhash?: string;
   bridgeLastValidBlockHeight?: number;
   bridgeQuoteExpiresAt?: number;
   bridgeEstimatedSeconds?: number;
+  bridgeAction?: "approval" | "deposit";
+  bridgeTotalFeeUsd?: number;
+  bridgeApprovalTxHash?: string;
+  bridgeStatusMessage?: string;
+  bridgeError?: string;
   sourceUsdcBalance?: string;
   sourceSolBalance?: string;
   feeReserveSol?: string;
@@ -50,6 +61,35 @@ export interface WebProposal {
   minimumBuyAmount?: string;
   quoteExpiresAt?: number;
   transactionHash?: string;
+  transactionSignature?: string;
+  launchName?: string;
+  launchSymbol?: string;
+  launchDescription?: string;
+  launchImageUri?: string;
+  launchMetadataUri?: string;
+  launchMetadataGatewayUrl?: string;
+  launchMetadataSha256?: string;
+  launchCreatorWallet?: string;
+  launchMintAddress?: string;
+  launchStage?: "draft" | "preflight" | "final-review" | "submitted" | "confirmed" | "failed" | "unknown";
+  launchTransactionBase64?: string;
+  launchTransactionDigest?: string;
+  launchSimulationSlot?: number;
+  launchComputeUnitsConsumed?: number | null;
+  launchNetworkFeeLamports?: string;
+  launchPriorityFeeLamports?: string;
+  launchRentLamports?: string;
+  launchTotalEstimatedOutflowLamports?: string;
+  launchLastValidBlockHeight?: number;
+  launchExpiresAt?: number;
+  launchSignature?: string;
+  launchExplorerUrl?: string;
+  launchError?: string;
+  maxCreatorOutflowLamports?: string;
+  maxPriorityFeeLamports?: string;
+  pumpIntelligence?: PumpTokenIntelligence;
+  automationProposalId?: string;
+  automationReason?: "DCA_DUE" | "TAKE_PROFIT" | "STOP_LOSS";
 }
 
 export interface WebMessage {

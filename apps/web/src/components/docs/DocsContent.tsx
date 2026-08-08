@@ -143,7 +143,7 @@ export function DocsContent() {
             </thead>
             <tbody className="divide-y divide-black/10 text-black/55">
               <tr><td className="py-5 text-ink">Solana Swap</td><td>Guarded desktop Jupiter path</td><td>Signed-build, recovery, and Mainnet acceptance gates remain</td></tr>
-              <tr><td className="py-5 text-ink">Token Launch</td><td>Restricted Pump.fun desktop implementation</td><td>Controlled Mainnet acceptance and security review remain</td></tr>
+              <tr><td className="py-5 text-ink">Token Launch</td><td>Restricted Pump.fun desktop and browser-wallet web implementation</td><td>Unsigned simulation, exact final review, explicit signing, and controlled Mainnet acceptance remain mandatory</td></tr>
               <tr><td className="py-5 text-ink">EVM Swap</td><td>Release-gated across supported EVM networks</td><td>Mainnet acceptance and recovery testing remain</td></tr>
               <tr><td className="py-5 text-ink">Bridge</td><td>Implemented cross-chain execution</td><td>Release-gated validation remains</td></tr>
               <tr><td className="py-5 text-ink">Auto DCA</td><td>Implemented deterministic recurring flows</td><td>Global limit verification remains</td></tr>

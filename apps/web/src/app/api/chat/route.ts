@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Connection } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
 import { resolveSolanaBridgeIntent } from "@/lib/bridge-intent";
 import { assertSolanaBridgeBalance } from "@/lib/solana-bridge-preflight";
 import { resolveRobinhoodSwapIntent } from "@/lib/evm-swap-intent";
+import { resolveEvmToSolanaBridgeIntent } from "@/lib/evm-bridge-intent";
+import { resolvePumpAnalysisIntent } from "@/lib/pump-analysis-utils";
+import { runPumpAnalysisAiTool } from "@/lib/pump-ai-tool";
+import { runSolanaAutomationAiTool } from "@/lib/solana-automation-ai-tool";
+import { runEvmAutomationAiTool } from "@/lib/evm-automation-ai-tool";
+import { selectSolanaRpc } from "@/lib/server-solana-rpc";
 
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -11,6 +17,7 @@ const LAMPORTS_PER_SOL = 1_000_000_000;
 const SOLANA_RPC = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
 
 type ChatSettings = {
+  customRpcUrl?: string;
   maxSlippageBps?: string;
   jupiterApiKey?: string;
   openRouterApiKey?: string;
@@ -45,6 +52,14 @@ function findPumpMint(text: string): string | null {
 
 function isLimitOrder(text: string): boolean {
   return /\blimit\b|\border\b|\bdip buy\b|\btake profit\b/i.test(text);
+}
+
+function isTokenLaunchIntent(text: string): boolean {
+  return /\btoken launch\b|\blaunch (?:a )?token\b|\bcreate (?:a )?(?:token|coin)\b|\bbuat(?:kan)? (?:token|koin)\b|\bluncurkan (?:token|koin)\b/iu.test(text);
+}
+
+function isSolanaAutomationIntent(text: string): boolean {
+  return /\bdca\b|\bautomation\b|\botomasi\b|\btake[ -]?profit\b|\bstop[ -]?loss\b|\b(?:tp|sl)\b/iu.test(text);
 }
 
 async function getJupiterQuote(inputAmountLamports: number, slippageBps: number, apiKey?: string) {
@@ -84,7 +99,7 @@ async function callOpenRouter(input: {
     );
   const capabilityBoundary =
     `You are Silfable Web's ${input.workspace.toUpperCase()} AI trading assistant. ` +
-    "You help users analyze wallets, research tokens/markets, prepare Jupiter SOL-to-USDC swap quotes, and plan cross-chain bridges (Solana USDC to Robinhood USDG). In a Robinhood EVM session, ETH and USDG are recognized assets; do not ask the user to provide their token addresses. " +
+    "You help users analyze wallets, research tokens/markets, configure monitor-and-propose Solana DCA/take-profit/stop-loss automations, prepare guarded Pump.fun Token Launch drafts in Solana sessions, prepare Jupiter swap quotes, and plan cross-chain bridges between Solana USDC and Robinhood USDG in the direction supported by the active workspace. In a Robinhood EVM session, ETH and USDG are recognized assets; do not ask the user to provide their token addresses. " +
     "Safety Guardrails: Transactions are prepared by application code and ALWAYS require explicit browser wallet approval. Web cannot auto-trade, cloud sign, or perform silent execution. Never invent fake quotes, token mints, or balances. USDG and ETH Robinhood swap intents are handled by deterministic application code before this model is called. " +
     "Communication Style: Respond naturally, directly, and concisely in the user's language. Do NOT print mechanical boilerplate, repetitive disclaimer templates, or rigid 'What I can / cannot do' lists unless the user explicitly asks for system boundaries.";
   const system =
@@ -148,7 +163,7 @@ async function callOpenRouter(input: {
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, settings, sessionMode, walletAddress, workspace, chainKey, sessionWalletAddress } = (await req.json()) as {
+    const { messages, settings, sessionMode, walletAddress, workspace, chainKey, sessionWalletAddress, sessionId } = (await req.json()) as {
       messages?: ChatMessage[];
       settings?: ChatSettings;
       sessionMode?: "agent" | "mission";
@@ -156,6 +171,7 @@ export async function POST(req: NextRequest) {
       workspace?: "solana" | "evm";
       chainKey?: string;
       sessionWalletAddress?: string;
+      sessionId?: string;
     };
     const auth = await requireWalletAuth(req, walletAddress);
     if (isAuthFailure(auth)) return auth;
@@ -185,12 +201,71 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const evmBridgeIntent = resolveEvmToSolanaBridgeIntent(messages ?? []);
+    if (evmBridgeIntent.requested) {
+      if (selectedWorkspace !== "evm" || chainKey !== "robinhood") {
+        return NextResponse.json({
+          role: "assistant",
+          content: "Buka session Robinhood Chain yang terikat ke wallet EVM sumber terlebih dahulu. Tidak ada quote atau transaksi yang disiapkan.",
+        });
+      }
+      if (!evmBridgeIntent.amountUsdg) {
+        return NextResponse.json({
+          role: "assistant",
+          content: "Tuliskan jumlah USDG yang ingin di-bridge dari Robinhood Chain. Contoh: Bridge 1 USDG ke Solana.",
+        });
+      }
+      if (!evmBridgeIntent.destinationRecipient) {
+        return NextResponse.json({
+          role: "assistant",
+          content: "Jumlah sudah terbaca. Sekarang tuliskan alamat wallet Solana tujuan lengkap; jumlah USDG dari pesan sebelumnya akan tetap digunakan.",
+        });
+      }
+      const amount = Number(evmBridgeIntent.amountUsdg);
+      if (!Number.isFinite(amount) || amount < 0.01 || amount > 1_000) {
+        return NextResponse.json({ role: "assistant", content: "Jumlah bridge harus antara 0.01 dan 1,000 USDG. Tidak ada transaksi yang disiapkan." });
+      }
+      try {
+        new PublicKey(evmBridgeIntent.destinationRecipient);
+      } catch {
+        return NextResponse.json({ role: "assistant", content: "Alamat tujuan Solana tidak valid. Tidak ada quote atau transaksi yang disiapkan." });
+      }
+      if (typeof sessionWalletAddress !== "string" || !/^0x[0-9a-f]{40}$/iu.test(sessionWalletAddress)) {
+        return NextResponse.json({ role: "assistant", content: "Session Robinhood belum terikat ke wallet EVM sumber yang valid." });
+      }
+      return NextResponse.json({
+        role: "assistant",
+        content: `Proposal bridge ${evmBridgeIntent.amountUsdg} USDG dari Robinhood Chain ke USDC Solana sudah disiapkan. Klik Prepare quote untuk memperoleh rute Relay; belum ada approval, signature, atau broadcast.`,
+        proposal: {
+          id: `evm_bridge_${Date.now()}`,
+          type: "evm_bridge",
+          mint: "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+          solAmount: "0",
+          estimatedTokens: "Quote pending",
+          amountUsdg: evmBridgeIntent.amountUsdg,
+          destination: "solana",
+          destinationRecipient: evmBridgeIntent.destinationRecipient,
+          outputSymbol: "USDC",
+          status: "preview_only",
+          mode: "restricted_browser_wallet",
+          venue: "Relay",
+          explanation: "AI only creates the typed bridge intent. Deterministic application code validates Relay calldata, balances, network fees, source receipt, and destination settlement.",
+          checks: [
+            { code: "source_workspace", status: "pass", message: `Source wallet is pinned to Robinhood Chain: ${sessionWalletAddress}.` },
+            { code: "destination_chain", status: "pass", message: "Destination is pinned to Solana Mainnet USDC." },
+            { code: "recipient_bound", status: "pass", message: `Exact Solana recipient: ${evmBridgeIntent.destinationRecipient}.` },
+            { code: "wallet_approval", status: "pass", message: "Any USDG approval and bridge deposit require separate MetaMask/Rabby confirmations." },
+          ],
+        },
+      });
+    }
+
     const bridgeIntent = resolveSolanaBridgeIntent(messages ?? []);
     if (bridgeIntent.requested) {
       if (selectedWorkspace !== "solana") {
         return NextResponse.json({
           role: "assistant",
-          content: "Bridge Robinhood Chain ke Solana belum dirilis karena allowance EVM, source receipt, dan destination settlement Solana belum tersedia. Tidak ada transaksi yang disiapkan.",
+          content: "Gunakan format: Bridge 1 USDG dari Robinhood ke Solana <alamat Solana>. Tidak ada transaksi yang disiapkan dari permintaan yang belum lengkap.",
         });
       }
       const { amountUsdc, destinationRecipient } = bridgeIntent;
@@ -248,6 +323,47 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (isTokenLaunchIntent(lastUserMessage)) {
+      return NextResponse.json({
+        role: "assistant",
+        content: selectedWorkspace === "solana"
+          ? "Token Launch tersedia di session Solana ini. Klik **TOKEN LAUNCH** di bawah percakapan, isi metadata dan batas biaya, lalu ikuti tahapan unsigned preflight → final Mainnet checks → approval Phantom/Solflare. Tidak ada transaksi yang dibuat hanya dari pesan chat ini."
+          : "Token Launch Pump.fun harus dibuat dari session Solana yang terikat ke wallet Phantom/Solflare. Buka atau buat session Solana terlebih dahulu; tidak ada transaksi yang disiapkan dari session EVM ini.",
+      });
+    }
+
+    if (isSolanaAutomationIntent(lastUserMessage)) {
+      if (typeof sessionId !== "string" || !/^[0-9a-f]{24}$/iu.test(sessionId) || typeof sessionWalletAddress !== "string") {
+        return NextResponse.json({ role: "assistant", content: "Create automation from a wallet-bound Solana or Robinhood session." });
+      }
+      const openRouterApiKey = settings?.openRouterApiKey?.trim();
+      if (!openRouterApiKey) {
+        return NextResponse.json({ role: "assistant", content: "AI tool untuk membuat automation belum dikonfigurasi. Buka **Settings → Provider**, verifikasi OpenRouter API key, pilih model yang mendukung tool calling, lalu simpan." });
+      }
+      try {
+        if (selectedWorkspace === "evm") {
+          if (chainKey !== "robinhood" || !/^0x[0-9a-f]{40}$/iu.test(sessionWalletAddress)) return NextResponse.json({ role: "assistant", content: "Robinhood automation requires a Robinhood Chain session bound to the connected MetaMask/Rabby wallet." });
+          const result = await runEvmAutomationAiTool({ userId: auth.userId, sessionId, walletAddress: sessionWalletAddress, text: lastUserMessage });
+          return NextResponse.json({ role: "assistant", content: result.content, automationCreated: result.created });
+        }
+        if (selectedWorkspace !== "solana") return NextResponse.json({ role: "assistant", content: "Automation is available only in a Solana or Robinhood Chain session." });
+        const result = await runSolanaAutomationAiTool({
+          apiKey: openRouterApiKey,
+          model: settings?.aiModel?.trim() || "openai/gpt-4o-mini",
+          messages: messages ?? [],
+          userId: auth.userId,
+          sessionId,
+          walletAddress: sessionWalletAddress,
+          maxTokens: Math.max(256, Math.min(2_048, Number(settings?.outputLimit ?? "1200") || 1_200)),
+          temperature: Math.max(0, Math.min(1, Number(settings?.temperature ?? "0.3") || 0.3)),
+        });
+        return NextResponse.json({ role: "assistant", content: result.content, usage: result.usage, automationCreated: result.created });
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : "Automation AI tool failed.";
+        return NextResponse.json({ role: "assistant", content: `Automation belum dibuat: ${message}` });
+      }
+    }
+
     if (selectedWorkspace === "solana" && isSolToUsdcSwap(lastUserMessage)) {
       const solAmount = parseSolAmount(lastUserMessage) ?? 0.001;
       const inputAmount = Math.floor(solAmount * LAMPORTS_PER_SOL);
@@ -286,6 +402,54 @@ export async function POST(req: NextRequest) {
           quoteResponse: quote,
         },
       });
+    }
+
+    const pumpAnalysisIntent = resolvePumpAnalysisIntent(lastUserMessage);
+    if (pumpAnalysisIntent.requested) {
+      if (selectedWorkspace !== "solana") {
+        return NextResponse.json({ role: "assistant", content: "Analisis Pump.fun hanya tersedia di session Solana. Buka atau buat session Solana yang terikat terlebih dahulu." });
+      }
+      if (!pumpAnalysisIntent.mint) {
+        return NextResponse.json({ role: "assistant", content: "Kirim alamat mint Solana lengkap yang ingin dianalisis. Contoh: Analisa token Pump.fun <mint>." });
+      }
+      const openRouterApiKey = settings?.openRouterApiKey?.trim();
+      if (!openRouterApiKey) {
+        return NextResponse.json({ role: "assistant", content: "AI Pump analysis belum dapat dijalankan. Buka **Settings → Provider**, verifikasi OpenRouter API key, pilih model yang mendukung tool calling, lalu simpan." });
+      }
+      try {
+        const model = settings?.aiModel?.trim() || "openai/gpt-4o-mini";
+        const result = await runPumpAnalysisAiTool({
+          apiKey: openRouterApiKey,
+          model,
+          messages: messages ?? [],
+          exactMint: pumpAnalysisIntent.mint,
+          referenceBuyLamports: pumpAnalysisIntent.referenceBuyLamports,
+          rpcUrl: selectSolanaRpc(settings?.customRpcUrl),
+          maxTokens: Math.max(512, Math.min(4_096, Number(settings?.outputLimit ?? "1200") || 1_200)),
+          temperature: Math.max(0, Math.min(1, Number(settings?.temperature ?? "0.3") || 0.3)),
+        });
+        return NextResponse.json({
+          role: "assistant",
+          content: result.content,
+          usage: result.usage,
+          proposal: {
+            id: `pump_analysis_${Date.now()}`,
+            type: "pump_analysis",
+            mint: result.intelligence.mint,
+            solAmount: String(Number(result.intelligence.metrics.referenceBuyInputLamports) / LAMPORTS_PER_SOL),
+            estimatedTokens: "Finalized read-only intelligence",
+            status: "preview_only",
+            mode: "read_only_ai_tool",
+            venue: result.intelligence.venue,
+            explanation: "The AI selected a scoped read-only tool. Deterministic server code independently verified finalized Pump/PumpSwap evidence; no transaction was built, signed, or broadcast.",
+            checks: result.intelligence.researchEligibility?.checks.map((check) => ({ code: check.id, status: check.passed ? "pass" : "block", message: check.message })),
+            pumpIntelligence: result.intelligence,
+          },
+        });
+      } catch (cause) {
+        const message = cause instanceof Error ? cause.message : "Pump analysis failed.";
+        return NextResponse.json({ role: "assistant", content: `Analisis Pump.fun gagal aman: ${message} Tidak ada transaksi yang dibuat atau disiarkan.` });
+      }
     }
 
     const pumpMint = findPumpMint(lastUserMessage);

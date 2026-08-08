@@ -26,7 +26,7 @@ const faqs = [
   {
     question: "Which markets and operating systems are supported?",
     answer:
-      "Desktop contains guarded Jupiter swaps, a restricted Pump.fun Token Launch path, and a release-locked Robinhood Chain/0x EVM pilot. Bridge remains quote-only. Web supports browser-wallet restricted flows but does not yet match every desktop execution lane. Hyperliquid, autonomous signing, and Full Access are unavailable.",
+      "Desktop and web contain guarded Jupiter swaps and restricted Pump.fun Token Launch paths. Web Token Launch uses explicit Phantom/Solflare approval and never stores the ephemeral mint signer. Robinhood swaps and cross-chain bridges use browser-wallet approval. Hyperliquid, autonomous signing, and Full Access remain unavailable.",
   },
 ];
 
