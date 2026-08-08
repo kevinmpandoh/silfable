@@ -711,10 +711,16 @@ body:not(:has(.tradeDesktopShell)) {
   min-width: 26px;
   height: 26px;
   place-items: center;
-  border-radius: 50%;
-  color: white;
-  background: var(--blue);
-  font: 11px Georgia, serif;
+  border: 1px solid rgb(69 224 174 / .34);
+  border-radius: 9px;
+  background: linear-gradient(145deg, rgb(20 74 65), rgb(8 35 35));
+  box-shadow: 0 8px 22px rgb(9 201 151 / .12);
+}
+
+.avatarLogo {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 
 .typingIndicator {

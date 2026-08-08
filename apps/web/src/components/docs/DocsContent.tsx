@@ -146,7 +146,7 @@ export function DocsContent() {
               <tr><td className="py-5 text-ink">Token Launch</td><td>Verified restricted Pump.fun desktop and browser-wallet web implementation</td><td>Unsigned simulation, exact final review, explicit signing, and receipt verification remain mandatory</td></tr>
               <tr><td className="py-5 text-ink">Robinhood Swap</td><td>Verified restricted ETH-USDG execution</td><td>Healthy Robinhood RPC, live route, balance, gas, and wallet approval are required</td></tr>
               <tr><td className="py-5 text-ink">Bridge</td><td>Verified restricted Solana-Robinhood execution in both directions</td><td>Provider route, liquidity, source confirmation, and destination settlement are checked per transfer</td></tr>
-              <tr><td className="py-5 text-ink">DCA / TP-SL</td><td>Monitoring and proposal lifecycle implemented</td><td>No autonomous signing or unattended broadcast</td></tr>
+              <tr><td className="py-5 text-ink">DCA / TP-SL</td><td>Verified restricted monitoring, proposal, wallet-approval, and receipt lifecycle</td><td>No autonomous signing or unattended broadcast</td></tr>
             </tbody>
           </table>
         </div>

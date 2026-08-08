@@ -50,6 +50,13 @@ function shortWallet(address?: string): string {
   return address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "unbound";
 }
 
+function formatMessageTime(timestamp: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
 function bytesToBase64(value: Uint8Array): string {
   let binary = "";
   for (const byte of value) binary += String.fromCharCode(byte);
@@ -1934,10 +1941,14 @@ async function assertEvmBridgeFunds(input: {
                   .filter((msg) => msg.sessionId === activeSessionId && !isLegacyEvmBridgeProgressMessage(msg))
                   .map((msg) => (
                   <article key={msg.id} className={msg.role}>
-                    {msg.role === "assistant" && <div className="avatar shrink-0">S</div>}
+                    {msg.role === "assistant" && (
+                      <div className="avatar shrink-0" aria-hidden="true">
+                        <Image src="/logo.png" alt="" width={20} height={20} className="avatarLogo" />
+                      </div>
+                    )}
                     <div>
                       <small className="text-[8px] tracking-[0.1em] text-[var(--muted)] uppercase mb-1.5 block">
-                        {msg.role === "user" ? "USER" : "SILFABLE AGENT"}
+                        {msg.role === "user" ? "You" : "Silfable"} <span aria-hidden="true">·</span> <time dateTime={new Date(msg.createdAt).toISOString()}>{formatMessageTime(msg.createdAt)}</time>
                       </small>
                       <div className="markdownMessage">
                         {renderMessageContent(msg.content)}

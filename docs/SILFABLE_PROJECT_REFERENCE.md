@@ -131,7 +131,7 @@ Status terms:
 | Hyperliquid | Restricted proposal/preflight structure. | No Mainnet execution acceptance. | **Release-gated.** |
 | Jupiter Trigger/limit order | MVP lifecycle and receipt structures exist. | No controlled Mainnet end-to-end acceptance recorded. | **Release-gated.** |
 | Auto DCA | Persistent schedules can detect a due cycle, prepare a fresh bounded quote, and route the exact action to explicit wallet review. | Controlled wallet-approved DCA execution has been demonstrated and reconciled. | **Verified restricted automation lane.** Every due transaction still requires explicit wallet approval. |
-| TP/SL and scheduled exits | Persistent price conditions can monitor and prepare a fresh bounded exit proposal for explicit wallet review. | No completed, independently reconciled Mainnet trigger is recorded yet. | **Operational restricted.** Promote to verified restricted only after a finalized trigger receipt is recorded. |
+| TP/SL and scheduled exits | Persistent price conditions can monitor and prepare a fresh bounded exit proposal for explicit wallet review. | A controlled Solana TP trigger has produced a fresh bounded proposal, completed through explicit wallet approval, and been reconciled on Mainnet. | **Verified restricted automation lane.** Every triggered transaction still requires explicit wallet approval. |
 | Guarded Full Access | Grants, constraints, revocation and local policy boundaries exist. | No unrestricted autonomous capital execution claim. | **Guarded only.** |
 
 ### 5.2 Mainnet results already recorded

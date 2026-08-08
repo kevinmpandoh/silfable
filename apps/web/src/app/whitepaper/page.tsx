@@ -23,7 +23,7 @@ const statusRows = [
   ["Verified restricted", "Robinhood Chain Swap", "Controlled ETH-to-USDG and USDG-to-ETH swaps have completed. The active desktop EVM scope is Robinhood Chain only, using a verified Robinhood RPC and a pinned Uniswap-compatible route."],
   ["Verified restricted", "Solana-Robinhood Bridge", "Controlled Solana USDC-to-Robinhood USDG and Robinhood USDG-to-Solana USDC bridges have completed in web and desktop. Each transfer remains route-, liquidity-, RPC-, wallet-, and receipt-dependent."],
   ["Verified restricted", "Auto DCA", "Controlled DCA cycles have detected a due schedule, obtained a fresh quote, completed only after explicit wallet approval, and been reconciled on Mainnet. The schedule never signs on the user's behalf."],
-  ["Operational restricted", "TP/SL & Exits", "Price conditions can be stored and monitored to open a bounded exit swap for review. Triggering a condition is not signing authority: every resulting transaction still requires explicit wallet approval. This lane becomes verified after a completed and reconciled Mainnet trigger."],
+  ["Verified restricted", "TP/SL & Exits", "Controlled TP/SL conditions have triggered a bounded Mainnet exit proposal and completed only after explicit wallet approval and receipt reconciliation. Triggering a condition never grants unattended signing authority."],
 ] as const;
 
 const principles = [
