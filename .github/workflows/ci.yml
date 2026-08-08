@@ -10,6 +10,8 @@ permissions:
 
 jobs:
   verify:
+    env:
+      DATABASE_URL: mongodb://localhost:27017/silfable_ci
     strategy:
       fail-fast: false
       matrix:
@@ -28,6 +30,9 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      - name: Generate Prisma Client
+        run: npm run db:generate --workspace @silfable/web
 
       - name: Typecheck workspaces
         run: npm run typecheck

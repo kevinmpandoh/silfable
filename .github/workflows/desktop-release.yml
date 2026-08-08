@@ -28,6 +28,11 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Generate Prisma Client
+        env:
+          DATABASE_URL: mongodb://localhost:27017/silfable_ci
+        run: npm run db:generate --workspace @silfable/web
+
       - name: Validate release version
         env:
           VERSION: ${{ inputs.version }}
