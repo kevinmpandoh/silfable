@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ quote, amountIn, outputAmount, minimumOutputAmount, tokenIn, tokenOut, expiresAt: Date.now() + 300_000 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to prepare the Uniswap quote.";
+    console.error("[EVM Uniswap quote]", error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

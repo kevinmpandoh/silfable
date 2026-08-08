@@ -16,6 +16,7 @@ export type LinkedWebWallet = {
 
 interface WebNewSessionModalProps {
   isOpen: boolean;
+  customEvmRpcUrl?: string;
   linkedWallets: LinkedWebWallet[];
   onWalletLinked: (wallet: LinkedWebWallet) => void;
   onClose: () => void;
@@ -31,6 +32,7 @@ interface WebNewSessionModalProps {
 
 export function WebNewSessionModal({
   isOpen,
+  customEvmRpcUrl,
   linkedWallets,
   onWalletLinked,
   onClose,
@@ -54,7 +56,7 @@ export function WebNewSessionModal({
     setLinking(true);
     setError(null);
     try {
-      await switchToRobinhoodChain();
+      await switchToRobinhoodChain(customEvmRpcUrl);
       const account = await requestEvmAccount();
       if (effectiveEvmAddress) {
         if (account.address.toLowerCase() !== effectiveEvmAddress.toLowerCase()) {
@@ -135,7 +137,7 @@ export function WebNewSessionModal({
       }
     } else {
       try {
-        await switchToRobinhoodChain();
+        await switchToRobinhoodChain(customEvmRpcUrl);
         const account = await requestEvmAccount();
         if (account.address.toLowerCase() !== sessionWalletAddress.toLowerCase()) {
           setError(`Ganti account EVM aktif ke ${shortAddress(sessionWalletAddress)} sebelum membuat session.`);

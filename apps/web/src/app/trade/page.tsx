@@ -134,13 +134,6 @@ export default function TradePage() {
     activeWalletAddressRef.current = walletAddress;
   }, [walletAddress]);
 
-  // Redirect to /connect if wallet is not connected
-  useEffect(() => {
-    if (!connected || !publicKey) {
-      router.replace("/connect");
-    }
-  }, [connected, publicKey, router]);
-
   // Workspace Mode: restricted Mainnet parity with the desktop app.
   const mode = "restricted";
 
@@ -148,6 +141,7 @@ export default function TradePage() {
   const [setupCompleted, setSetupCompleted] = useState<boolean>(false);
   const [editingSetup, setEditingSetup] = useState<boolean>(false);
   const [authenticatedWallet, setAuthenticatedWallet] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [settings, setSettings] = useState<WebSetupSettings>(DEFAULT_SETTINGS);
   const [setupStep, setSetupStep] = useState<number>(1);
 
@@ -156,8 +150,11 @@ export default function TradePage() {
   const [activeSessionId, setActiveSessionId] = useState<string>("");
   const [sessionFilter, setSessionFilter] = useState<"all" | "agent" | "mission">("all");
   const [showSessionModal, setShowSessionModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<SessionItem | "all" | null>(null);
+  const [deletingSessions, setDeletingSessions] = useState(false);
   const [pendingSessionPrompt, setPendingSessionPrompt] = useState<string | null>(null);
   const [messages, setMessages] = useState<WebMessage[]>([]);
+  const messagesViewportRef = useRef<HTMLDivElement | null>(null);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [bridgeBusy, setBridgeBusy] = useState(false);
@@ -169,7 +166,12 @@ export default function TradePage() {
   const [portfolioAssets, setPortfolioAssets] = useState<{ symbol: string; amount: number; valueUsd: number }[]>([]);
   const [portfolioTotalUsd, setPortfolioTotalUsd] = useState<number | null>(null);
   const [portfolioStatus, setPortfolioStatus] = useState("Refreshing Mainnet balance...");
+  const accountWalletAddress = authenticatedWallet ?? walletAddress;
+  useEffect(() => {
+    activeWalletAddressRef.current = accountWalletAddress;
+  }, [accountWalletAddress]);
   const activeSession = sessions.find((session) => session.id === activeSessionId);
+  const activeMessageCount = messages.reduce((count, message) => count + (message.sessionId === activeSessionId ? 1 : 0), 0);
   const expectedEvmChain = activeSession?.chainKey ? getWebEvmChain(activeSession.chainKey) : null;
   const evmWalletMatchesSession = activeSession?.workspace !== "evm"
     || (activeEvmAddress?.toLowerCase() === activeSession.sessionWalletAddress?.toLowerCase()
@@ -203,26 +205,25 @@ export default function TradePage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!connected || !walletAddress) return () => {
-      cancelled = true;
-    };
     fetch("/api/auth/wallet/session", { cache: "no-store" })
       .then((response) => response.json())
       .then((session) => {
         if (cancelled) return;
-        if (session.authenticated === true && session.walletAddress === walletAddress) {
-          setAuthenticatedWallet(walletAddress);
+        if (session.authenticated === true && typeof session.walletAddress === "string") {
+          setAuthenticatedWallet(session.walletAddress);
           return;
         }
         router.replace("/connect?next=/trade");
       })
       .catch(() => {
         if (!cancelled) router.replace("/connect?next=/trade");
+      }).finally(() => {
+        if (!cancelled) setAuthChecked(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [connected, walletAddress, router]);
+  }, [router]);
 
   const runtimeUsage = messages.reduce(
     (total, message) => {
@@ -251,7 +252,7 @@ export default function TradePage() {
     let cancelled = false;
 
     async function initWorkspace() {
-      if (!walletAddress) return;
+      if (!accountWalletAddress) return;
       try {
         setSetupCompleted(false);
         setEditingSetup(false);
@@ -263,8 +264,8 @@ export default function TradePage() {
         setLoading(false);
 
         // Load Settings
-        const savedSetup = localStorage.getItem(setupStorageKey(walletAddress));
-        const sessionSecrets = sessionStorage.getItem(setupSecretStorageKey(walletAddress));
+        const savedSetup = localStorage.getItem(setupStorageKey(accountWalletAddress));
+        const sessionSecrets = sessionStorage.getItem(setupSecretStorageKey(accountWalletAddress));
         if (savedSetup) {
           setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(savedSetup), ...(sessionSecrets ? JSON.parse(sessionSecrets) : {}) });
           setSetupCompleted(true);
@@ -272,7 +273,7 @@ export default function TradePage() {
 
         // Load IndexedDB Sessions
         const [storedSessions, walletResponse] = await Promise.all([
-          getAllSessions(walletAddress),
+          getAllSessions(accountWalletAddress),
           fetch("/api/wallets", { cache: "no-store" }),
         ]);
         if (walletResponse.ok) {
@@ -286,7 +287,7 @@ export default function TradePage() {
           const placeholderMessages = await getSessionMessages(walletAddress, storedSessions[0].id);
           if (cancelled) return;
           if (placeholderMessages.length === 0) {
-            await deleteSession(walletAddress, storedSessions[0].id);
+            await deleteSession(accountWalletAddress, storedSessions[0].id);
             if (cancelled) return;
             setSessions([]);
             setActiveSessionId("");
@@ -308,14 +309,14 @@ export default function TradePage() {
       }
     }
 
-    if (connected && walletAddress) {
+    if (accountWalletAddress) {
       void initWorkspace();
     }
 
     return () => {
       cancelled = true;
     };
-  }, [connected, walletAddress]);
+  }, [accountWalletAddress]);
 
   // Load Messages when Active Session changes
   useEffect(() => {
@@ -323,9 +324,9 @@ export default function TradePage() {
     setMessages([]);
 
     async function loadActiveMessages() {
-      if (!walletAddress || !activeSessionId) return;
+      if (!accountWalletAddress || !activeSessionId) return;
       const targetId = activeSessionId;
-      const msgs = await getSessionMessages(walletAddress, targetId);
+      const msgs = await getSessionMessages(accountWalletAddress, targetId);
       if (!cancelled) {
         setMessages(msgs.filter((m) => m.sessionId === targetId));
       }
@@ -335,7 +336,17 @@ export default function TradePage() {
     return () => {
       cancelled = true;
     };
-  }, [activeSessionId, walletAddress]);
+  }, [activeSessionId, accountWalletAddress]);
+
+  // Open every session at its newest message, after the async history load has painted.
+  useEffect(() => {
+    const viewport = messagesViewportRef.current;
+    if (!viewport || !activeSessionId) return;
+    const frame = window.requestAnimationFrame(() => {
+      viewport.scrollTop = viewport.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeSessionId, activeMessageCount]);
 
 const DEFAULT_ROBINHOOD_RPC = "https://rpc.mainnet.chain.robinhood.com";
 const ROBINHOOD_USDG_ADDRESS = "0x5fc5360d0400a0fd4f2af552add042d716f1d168";
@@ -430,44 +441,51 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
   // SESSION HANDLERS (IndexedDB CRUD)
   // --------------------------------------------------------------------------
   async function handleDeleteSession(id: string, e: React.MouseEvent) {
-    if (!walletAddress) return;
     e.stopPropagation();
     const target = sessions.find((session) => session.id === id);
-    if (!window.confirm(`Delete "${target?.title ?? "this session"}" and all of its messages?`)) {
-      return;
-    }
-    await deleteSession(walletAddress, id);
-    const updated = await getAllSessions(walletAddress);
-    setSessions(updated);
-    if (activeSessionId === id) {
-      const remaining = updated.filter((s) => s.id !== id);
-      const nextSession = remaining[0];
-      setMessages([]);
-      setActiveSessionId(nextSession?.id ?? "");
-    }
+    if (target) setDeleteTarget(target);
   }
 
-  async function handleDeleteAllSessions() {
-    if (!walletAddress) return;
-    if (!window.confirm("Delete every web session and its messages? Wallet settings and API configuration will be kept.")) {
-      return;
-    }
+  function handleDeleteAllSessions() {
+    if (sessions.length > 0) setDeleteTarget("all");
+  }
 
-    await deleteAllSessions(walletAddress);
-    setSessions([]);
-    setActiveSessionId("");
-    setMessages([]);
-    setInput("");
+  async function confirmDeleteSessions() {
+    if (!accountWalletAddress) return;
+    const target = deleteTarget;
+    if (!target) return;
+    setDeletingSessions(true);
+    try {
+      if (target === "all") {
+        await deleteAllSessions(accountWalletAddress);
+        setSessions([]);
+        setActiveSessionId("");
+        setMessages([]);
+        setInput("");
+      } else {
+        await deleteSession(accountWalletAddress, target.id);
+        const updated = await getAllSessions(accountWalletAddress);
+        setSessions(updated);
+        if (activeSessionId === target.id) {
+          const nextSession = updated[0];
+          setMessages([]);
+          setActiveSessionId(nextSession?.id ?? "");
+        }
+      }
+      setDeleteTarget(null);
+    } finally {
+      setDeletingSessions(false);
+    }
   }
 
   // --------------------------------------------------------------------------
   // SETTINGS HANDLERS
   // --------------------------------------------------------------------------
   function persistSettings() {
-    if (!walletAddress) return;
+    if (!accountWalletAddress) return;
     try {
-      localStorage.setItem(setupStorageKey(walletAddress), JSON.stringify(settings));
-      sessionStorage.setItem(setupSecretStorageKey(walletAddress), JSON.stringify({ openRouterApiKey: settings.openRouterApiKey, jupiterApiKey: settings.jupiterApiKey, uniswapApiKey: settings.uniswapApiKey }));
+      localStorage.setItem(setupStorageKey(accountWalletAddress), JSON.stringify(settings));
+      sessionStorage.setItem(setupSecretStorageKey(accountWalletAddress), JSON.stringify({ openRouterApiKey: settings.openRouterApiKey, jupiterApiKey: settings.jupiterApiKey, uniswapApiKey: settings.uniswapApiKey }));
       setSetupCompleted(true);
     } catch {
       alert("Failed to save settings.");
@@ -495,8 +513,8 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
   // --------------------------------------------------------------------------
   async function handleSendMessage(promptText?: string) {
     const text = promptText || input;
-    if (!walletAddress || !activeSessionId || !text.trim() || loading) return;
-    const requestWalletAddress = walletAddress;
+    if (!accountWalletAddress || !activeSessionId || !text.trim() || loading) return;
+    const requestWalletAddress = accountWalletAddress;
 
     const activeSessionMessages = messages.filter((m) => m.sessionId === activeSessionId);
     const userMsg: WebMessage = {
@@ -508,7 +526,7 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
     };
 
     setMessages((prev) => [...prev.filter((m) => m.sessionId === activeSessionId), userMsg]);
-    await saveMessage(walletAddress, userMsg);
+    await saveMessage(accountWalletAddress, userMsg);
     if (!promptText) setInput("");
     setLoading(true);
 
@@ -521,10 +539,10 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
           messages: [...activeSessionMessages, userMsg],
           mode,
           sessionMode: activeSession?.filter === "mission" || activeSession?.filter === "pump" ? "mission" : "agent",
-          walletAddress: publicKey?.toBase58() ?? null,
+          walletAddress: accountWalletAddress,
           workspace: activeSession?.workspace ?? "solana",
           chainKey: activeSession?.chainKey,
-          sessionWalletAddress: activeSession?.sessionWalletAddress ?? walletAddress,
+          sessionWalletAddress: activeSession?.sessionWalletAddress ?? accountWalletAddress,
           settings,
         }),
       });
@@ -544,14 +562,14 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
       };
 
       setMessages((prev) => [...prev.filter((m) => m.sessionId === activeSessionId), assistantMsg]);
-      await saveMessage(walletAddress, assistantMsg);
+      await saveMessage(accountWalletAddress, assistantMsg);
 
       // Update session timestamp in IndexedDB
       const activeSess = sessions.find((s) => s.id === activeSessionId);
       if (activeSess) {
         const updated = { ...activeSess, updatedAt: Date.now() };
-        await saveSession(walletAddress, updated);
-        const reloaded = await getAllSessions(walletAddress);
+        await saveSession(accountWalletAddress, updated);
+        const reloaded = await getAllSessions(accountWalletAddress);
         setSessions(reloaded);
       }
     } catch {
@@ -564,7 +582,7 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
         createdAt: Date.now(),
       };
       setMessages((prev) => [...prev, errMsg]);
-      await saveMessage(walletAddress, errMsg);
+      await saveMessage(accountWalletAddress, errMsg);
     } finally {
       if (activeWalletAddressRef.current === requestWalletAddress) {
         setLoading(false);
@@ -708,16 +726,64 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
     }
     if (!proposal.sellToken || !proposal.buyToken || !proposal.sellAmount) return;
     setBridgeBusy(true);
+    let submittedEvmHash: string | null = null;
     try {
       if (proposal.quoteResponse && proposal.buyAmount) {
-        const info: WebMessage = { id: `sys_${Date.now()}`, sessionId: activeSessionId, role: "assistant", content: "Live Uniswap quote sudah tersedia. Wallet-review dan broadcast EVM akan dirilis setelah pipeline transaksi Uniswap menjalani integrasi testnet dan audit; belum ada transaksi yang dibuka.", createdAt: Date.now() };
-        setMessages((previous) => [...previous.filter((message) => message.sessionId === activeSessionId), info]);
-        await saveMessage(walletAddress, info);
+        setMessages((previous) => previous.map((message) => (message.id === msgId && message.proposal ? { ...message, proposal: { ...message.proposal, status: "signing" as const } } : message)));
+        const buildResponse = await fetch("/api/evm/uniswap/build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ walletAddress: sessionWallet, apiKey: settings.uniswapApiKey, quote: proposal.quoteResponse, tokenIn: proposal.sellToken === "USDG" ? "0x5fc5360d0400a0fd4f2af552add042d716f1d168" : "0x0000000000000000000000000000000000000000", amountIn: proposal.inputAmount }) });
+        const built = await buildResponse.json();
+        if (!buildResponse.ok) throw new Error(built.error || "Uniswap could not build the wallet transaction.");
+        const provider = window.ethereum;
+        if (!provider) throw new Error("EVM wallet extension is not available.");
+        const sendAndConfirm = async (transaction: { from: string; to: string; data: string; value: string }) => {
+          const hash = await provider.request({ method: "eth_sendTransaction", params: [transaction] });
+          if (typeof hash !== "string" || !/^0x[0-9a-f]{64}$/iu.test(hash)) throw new Error("Wallet did not return a valid transaction hash.");
+          submittedEvmHash = hash;
+          for (let attempt = 0; attempt < 24; attempt += 1) {
+            const receipt = await provider.request({ method: "eth_getTransactionReceipt", params: [hash] });
+            if (receipt && typeof receipt === "object") {
+              const status = (receipt as { status?: unknown }).status;
+              if (status === "0x0" || status === 0) throw new Error(`Transaction reverted on Robinhood Chain: ${hash}`);
+              return hash;
+            }
+            await new Promise((resolve) => window.setTimeout(resolve, 2_500));
+          }
+          throw new Error(`Transaction was submitted but confirmation is still pending: ${hash}`);
+        };
+        if (built.approvalRequired === true && built.approval) {
+          const approvalHash = await sendAndConfirm(built.approval);
+          submittedEvmHash = null;
+          setMessages((previous) => previous.map((message) => (message.id === msgId && message.proposal ? { ...message, proposal: { ...message.proposal, status: "ready_for_user_signature" as const } } : message)));
+          const info: WebMessage = { id: `sys_${Date.now()}`, sessionId: activeSessionId, role: "assistant", content: `USDG allowance confirmed. Click **PREPARE WALLET REVIEW** once more to build and sign the swap transaction.\n\n[Open approval in Robinhood Explorer](https://robinhoodchain.blockscout.com/tx/${approvalHash})`, createdAt: Date.now() };
+          setMessages((previous) => [...previous.filter((message) => message.sessionId === activeSessionId), info]);
+          await saveMessage(walletAddress, info);
+          return;
+        }
+        if (!built.transaction) throw new Error("Uniswap did not return a swap transaction.");
+        const swapHash = await sendAndConfirm(built.transaction);
+        setMessages((previous) => previous.map((message) => {
+          if ((message.id === msgId || message.proposal?.id === proposal.id) && message.proposal) {
+            const updated = { ...message, proposal: { ...message.proposal, status: "confirmed" as const } };
+            void saveMessage(walletAddress, updated);
+            return updated;
+          }
+          return message;
+        }));
+        const success: WebMessage = { id: `sys_${Date.now()}`, sessionId: activeSessionId, role: "assistant", content: `Robinhood USDG → ETH swap confirmed.\n\n[Open swap in Robinhood Explorer](https://robinhoodchain.blockscout.com/tx/${swapHash})`, createdAt: Date.now() };
+        setMessages((previous) => [...previous.filter((message) => message.sessionId === activeSessionId), success]);
+        await saveMessage(walletAddress, success);
+        void fetchWalletBalance();
         return;
       }
       const response = await fetch("/api/evm/uniswap/quote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ walletAddress: sessionWallet, apiKey: settings.uniswapApiKey, sellToken: proposal.sellToken, buyToken: proposal.buyToken, amount: proposal.sellAmount, slippageBps: settings.maxSlippageBps }) });
-      const quote = await response.json();
-      if (!response.ok || !quote.quote || typeof quote.outputAmount !== "string") throw new Error(quote.error || "Uniswap did not return a valid Robinhood quote.");
+      const rawResponse = await response.text();
+      let quote: { quote?: unknown; outputAmount?: unknown; error?: unknown; amountIn?: unknown; minimumOutputAmount?: unknown; expiresAt?: unknown };
+      try {
+        quote = JSON.parse(rawResponse) as typeof quote;
+      } catch {
+        throw new Error(`Robinhood quote endpoint returned HTTP ${response.status}, not JSON: ${rawResponse.slice(0, 180)}`);
+      }
+      if (!response.ok || !quote.quote || typeof quote.outputAmount !== "string") throw new Error(typeof quote.error === "string" ? quote.error : "Uniswap did not return a valid Robinhood quote.");
       setMessages((previous) => previous.map((message) => {
         if ((message.id === msgId || message.proposal?.id === proposal.id) && message.proposal) {
           const updated = { ...message, proposal: { ...message.proposal, quoteResponse: quote.quote, inputAmount: quote.amountIn, buyAmount: quote.outputAmount, minimumBuyAmount: quote.minimumOutputAmount, quoteExpiresAt: quote.expiresAt, status: "ready_for_user_signature" as const } };
@@ -727,8 +793,18 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
         return message;
       }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to prepare the EVM quote.";
-      const failure: WebMessage = { id: `sys_${Date.now()}`, sessionId: activeSessionId, role: "assistant", content: `Robinhood swap quote was not prepared: ${message}`, createdAt: Date.now() };
+      console.error("[EVM swap preparation]", error);
+      const serializedError = typeof error === "string" ? error : JSON.stringify(error);
+      const rawMessage = error instanceof Error ? error.message : serializedError || "Unable to prepare the EVM quote.";
+      const message = rawMessage.includes("RPC endpoint returned too many errors") || rawMessage.includes("eth_getBlockByNumber")
+        ? "RPC Robinhood di wallet extension sedang gagal atau rate-limited. Tidak ada transaksi yang disiarkan. Buka MetaMask/Rabby → Settings → Networks → Robinhood Chain, lalu ganti RPC URL dengan endpoint custom yang sudah Anda verifikasi di Settings → Network Silfable. Setelah itu reload halaman dan buat quote baru."
+        : rawMessage;
+      if (submittedEvmHash) {
+        setMessages((previous) => previous.map((entry) => (entry.id === msgId && entry.proposal ? { ...entry, proposal: { ...entry.proposal, status: "unknown" as const } } : entry)));
+      } else {
+        setMessages((previous) => previous.map((entry) => (entry.id === msgId && entry.proposal && entry.proposal.status === "signing" ? { ...entry, proposal: { ...entry.proposal, status: "ready_for_user_signature" as const } } : entry)));
+      }
+      const failure: WebMessage = { id: `sys_${Date.now()}`, sessionId: activeSessionId, role: "assistant", content: submittedEvmHash ? `Swap was submitted, but confirmation is unknown. Do not submit it again until you inspect the transaction.\n\n${message}\n\n[Open transaction in Robinhood Explorer](https://robinhoodchain.blockscout.com/tx/${submittedEvmHash})` : `Robinhood swap was not prepared: ${message}`, createdAt: Date.now() };
       setMessages((previous) => [...previous.filter((item) => item.sessionId === activeSessionId), failure]);
       await saveMessage(walletAddress, failure);
     } finally {
@@ -821,7 +897,7 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
   }
 
   // Loading Gate while checking Wallet Connection
-  if (!connected || !publicKey || authenticatedWallet !== walletAddress) {
+  if (!authChecked || !authenticatedWallet) {
     return (
       <div className="tradeDesktopShell gateScreenLayout">
         <div className="flex items-center justify-center min-h-screen text-slate-400 font-mono text-sm">
@@ -843,7 +919,7 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
   if (!setupCompleted || editingSetup) {
     return (
       <WebSetupWizard
-        publicAddress={publicKey.toBase58()}
+        publicAddress={accountWalletAddress ?? ""}
         setupCompleted={setupCompleted}
         editingSetup={editingSetup}
         setupStep={setupStep}
@@ -861,7 +937,8 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
     <div className="layout">
       <WebNewSessionModal
         isOpen={showSessionModal}
-        walletAddress={walletAddress ?? ""}
+        customEvmRpcUrl={settings.evmRpcUrl}
+        walletAddress={accountWalletAddress ?? ""}
         linkedWallets={linkedWallets}
         onWalletLinked={(linkedWallet) => setLinkedWallets((current) => [
           ...current.filter((wallet) => !(wallet.namespace === linkedWallet.namespace && wallet.address.toLowerCase() === linkedWallet.address.toLowerCase())),
@@ -873,7 +950,7 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
           setShowSessionModal(false);
         }}
         onCreateRestrictedSession={async ({ title, mode, workspace, chainKey, sessionWalletAddress }) => {
-          if (!walletAddress) return;
+          if (!accountWalletAddress) return;
           const draftSession: SessionItem = {
             id: "",
             title,
@@ -884,7 +961,7 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
             createdAt: Date.now(),
             updatedAt: Date.now(),
           };
-          const saved = await saveSession(walletAddress, draftSession);
+          const saved = await saveSession(accountWalletAddress, draftSession);
           if (saved) {
             setSessions((prev) => [saved, ...prev.filter((s) => s.id !== saved.id)]);
             setMessages([]);
@@ -892,6 +969,29 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
           }
         }}
       />
+      {deleteTarget && (
+        <div className="modalBackdrop" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !deletingSessions) setDeleteTarget(null);
+        }}>
+          <section className="deleteSessionDialog" role="dialog" aria-modal="true" aria-labelledby="delete-session-title" style={{ width: "min(500px, calc(100vw - 44px))", overflow: "hidden", border: "1px solid rgba(123, 162, 255, 0.36)", borderRadius: "16px", background: "linear-gradient(145deg, #151c34, #0d1224 72%)", boxShadow: "0 42px 120px rgba(0, 0, 0, 0.68)" }}>
+            <header style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "22px", padding: "24px 26px 20px", borderBottom: "1px solid rgba(123, 162, 255, 0.18)" }}>
+              <div>
+                <p className="modalKicker">SESSION MANAGEMENT</p>
+                <h2 id="delete-session-title" style={{ margin: "6px 0 0", color: "#f3f6ff", fontSize: "22px", fontWeight: 600, letterSpacing: "-0.025em" }}>{deleteTarget === "all" ? "Delete all sessions" : "Delete session"}</h2>
+              </div>
+              <button type="button" className="modalClose" onClick={() => setDeleteTarget(null)} disabled={deletingSessions} aria-label="Close delete confirmation">×</button>
+            </header>
+            <div className="deleteSessionDialogBody" style={{ display: "grid", gap: "16px", padding: "24px 26px", color: "#d4dbeb", fontSize: "14px", lineHeight: 1.55 }}>
+              <p style={{ margin: 0 }}>{deleteTarget === "all" ? "Are you sure you want to delete every web session?" : <>Are you sure you want to delete <strong>“{deleteTarget.title}”</strong>?</>}</p>
+              <div className="deleteSessionWarning" style={{ display: "grid", gridTemplateColumns: "26px minmax(0, 1fr)", gap: "10px", alignItems: "start", padding: "14px", border: "1px solid rgba(255, 95, 109, 0.38)", borderRadius: "10px", color: "#f5bbc1", background: "rgba(255, 95, 109, 0.08)", fontSize: "12px" }}><span>!</span><p style={{ margin: 0 }}>{deleteTarget === "all" ? "All sessions, messages, and local session history will be permanently removed. Wallet connections and API settings will remain unchanged." : "All messages and history associated with this session will be permanently removed."}</p></div>
+            </div>
+            <footer className="modalFooterActions" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "10px", margin: 0, padding: "16px 26px 22px", borderTop: "1px solid rgba(123, 162, 255, 0.18)" }}>
+              <button type="button" className="railBtn" style={{ minWidth: "96px", padding: "10px 15px" }} onClick={() => setDeleteTarget(null)} disabled={deletingSessions}>Cancel</button>
+              <button type="button" className="dangerButton" style={{ minWidth: "148px", padding: "10px 15px", border: "1px solid rgba(255, 95, 109, 0.82)", borderRadius: "20px", color: "#fff", background: "rgba(235, 66, 81, 0.92)", fontFamily: "var(--mono)", fontSize: "9px", letterSpacing: "0.1em", textTransform: "uppercase", cursor: deletingSessions ? "wait" : "pointer" }} onClick={() => void confirmDeleteSessions()} disabled={deletingSessions}>{deletingSessions ? "Deleting..." : deleteTarget === "all" ? "Delete all sessions" : "Delete session"}</button>
+            </footer>
+          </section>
+        </div>
+      )}
 
       {/* 3-Column Desktop Workspace Shell */}
       <main className="workspace">
@@ -1048,7 +1148,7 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
               </header>
 
               {/* Messages Feed */}
-              <div className="messages">
+              <div className="messages" ref={messagesViewportRef}>
 
                 {messages
                   .filter((msg) => msg.sessionId === activeSessionId)
@@ -1192,11 +1292,11 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between p-3 rounded-lg border border-[rgb(148,163,184,0.16)] bg-transparent hover:bg-white/5 transition-colors">
                 <div className="flex items-center gap-2 font-mono text-[9px] text-[#eef2ff]">
-                  <span className="text-[#7f8aa7]">PRIMARY</span> {publicKey.toBase58().slice(0, 6)}...{publicKey.toBase58().slice(-4)}
+                  <span className="text-[#7f8aa7]">PRIMARY</span> {shortWallet(accountWalletAddress ?? undefined)}
                 </div>
                 <div className="flex items-center gap-3">
                   <button onClick={() => void fetchWalletBalance()} className="text-[8px] text-[#7ba2ff] tracking-[0.1em] uppercase hover:text-white">REFRESH</button>
-                  <button onClick={() => navigator.clipboard.writeText(publicKey.toBase58())} className="text-[8px] text-[#7ba2ff] tracking-[0.1em] uppercase hover:text-white">COPY</button>
+                  <button onClick={() => accountWalletAddress && navigator.clipboard.writeText(accountWalletAddress)} className="text-[8px] text-[#7ba2ff] tracking-[0.1em] uppercase hover:text-white">COPY</button>
                 </div>
               </div>
 
