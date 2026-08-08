@@ -16,6 +16,7 @@ export type LinkedWebWallet = {
 
 interface WebNewSessionModalProps {
   isOpen: boolean;
+  defaultMode?: "agent" | "mission";
   customEvmRpcUrl?: string;
   linkedWallets: LinkedWebWallet[];
   onWalletLinked: (wallet: LinkedWebWallet) => void;
@@ -32,6 +33,7 @@ interface WebNewSessionModalProps {
 
 export function WebNewSessionModal({
   isOpen,
+  defaultMode = "agent",
   customEvmRpcUrl,
   linkedWallets,
   onWalletLinked,
@@ -42,7 +44,7 @@ export function WebNewSessionModal({
   const [title, setTitle] = useState("New Mainnet session");
   const { connected: solanaConnected, publicKey: solanaPublicKey, signMessage: signSolanaMessage } = useWallet();
   const { setVisible: setSolanaWalletVisible } = useWalletModal();
-  const [mode, setMode] = useState<"agent" | "mission">("agent");
+  const [mode, setMode] = useState<"agent" | "mission">(defaultMode);
   const [workspace, setWorkspace] = useState<"solana" | "evm">("solana");
   const [linking, setLinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +52,7 @@ export function WebNewSessionModal({
   const solanaWallets = useMemo(() => linkedWallets.filter((wallet) => wallet.namespace === "solana"), [linkedWallets]);
   const effectiveEvmAddress = evmWallets[0]?.address || "";
   const effectiveSolanaAddress = solanaWallets[0]?.address || "";
+
   if (!isOpen) return null;
 
   async function linkEvmWallet() {

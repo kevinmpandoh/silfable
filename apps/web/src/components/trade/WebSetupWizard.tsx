@@ -105,8 +105,18 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
       }
       const chainId = Number.parseInt(payload.result, 16);
       if (chainId !== 4_663) throw new Error(`RPC is connected to chain ${chainId}, not Robinhood Chain (4663).`);
+      const blockResponse = await fetch(url.toString(), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: "silfable-robinhood-rpc-block-check", method: "eth_getBlockByNumber", params: ["latest", false] }),
+      });
+      const blockPayload = await blockResponse.json().catch(() => null) as { result?: { number?: unknown }; error?: { message?: unknown } } | null;
+      if (!blockResponse.ok || blockPayload?.error || !blockPayload?.result?.number) {
+        const message = typeof blockPayload?.error?.message === "string" ? blockPayload.error.message : `HTTP ${blockResponse.status}`;
+        throw new Error(`RPC cannot read Robinhood blocks: ${message}`);
+      }
       saveInline();
-      setVerifyResult((previous) => ({ ...previous, evmRpc: { ok: true, message: "Robinhood RPC verified and saved." } }));
+      setVerifyResult((previous) => ({ ...previous, evmRpc: { ok: true, message: "Robinhood RPC verified for chain ID and latest-block reads, then saved." } }));
     } catch (error) {
       setVerifyResult((previous) => ({ ...previous, evmRpc: { ok: false, message: errorMessage(error, "Could not query this RPC endpoint.") } }));
     } finally {

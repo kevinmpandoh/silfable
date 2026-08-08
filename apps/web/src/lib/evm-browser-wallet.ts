@@ -37,19 +37,32 @@ export async function switchToRobinhoodChain(customRpcUrl?: string): Promise<voi
   const provider = window.ethereum;
   if (!provider) throw new Error("EVM wallet extension tidak tersedia.");
   const chainId = "0x1237";
+  const network = {
+    chainId,
+    chainName: "Robinhood Chain",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: [customRpcUrl?.trim() || "https://rpc.mainnet.chain.robinhood.com"],
+    blockExplorerUrls: ["https://robinhoodchain.blockscout.com"],
+  };
+  // Wallet extensions own their network list. Re-register the configured RPC
+  // first so extensions that support updating an existing network can use it.
+  if (customRpcUrl?.trim()) {
+    try {
+      await provider.request({ method: "wallet_addEthereumChain", params: [network] });
+    } catch (cause) {
+      if ((cause as { code?: number }).code === 4_001) throw cause;
+      // Some wallets reject an existing chain instead of updating it. The
+      // switch below still confirms the active chain; their UI remains the
+      // authority for editing an existing RPC entry.
+    }
+  }
   try {
     await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId }] });
   } catch (cause) {
     if ((cause as { code?: number }).code !== 4_902) throw cause;
     await provider.request({
       method: "wallet_addEthereumChain",
-      params: [{
-        chainId,
-        chainName: "Robinhood Chain",
-        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-        rpcUrls: [customRpcUrl?.trim() || "https://rpc.mainnet.chain.robinhood.com"],
-        blockExplorerUrls: ["https://robinhoodchain.blockscout.com"],
-      }],
+      params: [network],
     });
   }
 }

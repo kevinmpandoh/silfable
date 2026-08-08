@@ -28,7 +28,9 @@ import { JupiterSwapPreviewCard } from "@/components/cards/JupiterSwapPreviewCar
 import { EvmSwapPreviewCard } from "@/components/cards/EvmSwapPreviewCard";
 import { WebSetupWizard } from "@/components/trade/WebSetupWizard";
 import { WebNewSessionModal, type LinkedWebWallet } from "@/components/trade/WebNewSessionModal";
+import { WebMissionsView } from "@/components/trade/WebMissionsView";
 import { getWebEvmChain } from "@/lib/evm-chains";
+import { switchToRobinhoodChain } from "@/lib/evm-browser-wallet";
 
 function base64ToBytes(value: string): Uint8Array {
   const binary = window.atob(value);
@@ -149,12 +151,16 @@ export default function TradePage() {
   const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string>("");
   const [sessionFilter, setSessionFilter] = useState<"all" | "agent" | "mission">("all");
+  const [workspaceView, setWorkspaceView] = useState<"chat" | "missions">("chat");
   const [showSessionModal, setShowSessionModal] = useState(false);
+  const [newSessionMode, setNewSessionMode] = useState<"agent" | "mission">("agent");
+  const [sessionModalKey, setSessionModalKey] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<SessionItem | "all" | null>(null);
   const [deletingSessions, setDeletingSessions] = useState(false);
   const [pendingSessionPrompt, setPendingSessionPrompt] = useState<string | null>(null);
   const [messages, setMessages] = useState<WebMessage[]>([]);
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
+  const portfolioRequestRef = useRef(0);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [bridgeBusy, setBridgeBusy] = useState(false);
@@ -372,10 +378,46 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
   }
 }
 
+function formatEvmUnits(value: bigint, decimals: number): string {
+  const scale = BigInt(10) ** BigInt(decimals);
+  const whole = value / scale;
+  const fraction = (value % scale).toString().padStart(decimals, "0").replace(/0+$/u, "").slice(0, 6);
+  return fraction ? `${whole}.${fraction}` : whole.toString();
+}
+
+async function assertEvmSwapFunds(input: {
+  rpcUrl: string;
+  walletAddress: string;
+  sellToken: "USDG" | "ETH";
+  amountIn: string;
+  transaction: { from: string; to: string; data: string; value: string };
+}) {
+  const balanceOfData = `0x70a08231000000000000000000000000${input.walletAddress.replace(/^0x/i, "").toLowerCase()}`;
+  const [nativeBalance, gasLimit, gasPrice, usdgBalance] = await Promise.all([
+    queryEvmRpc(input.rpcUrl, "eth_getBalance", [input.walletAddress, "latest"]),
+    queryEvmRpc(input.rpcUrl, "eth_estimateGas", [{ from: input.transaction.from, to: input.transaction.to, data: input.transaction.data, value: input.transaction.value }]),
+    queryEvmRpc(input.rpcUrl, "eth_gasPrice", []),
+    input.sellToken === "USDG"
+      ? queryEvmRpc(input.rpcUrl, "eth_call", [{ to: ROBINHOOD_USDG_ADDRESS, data: balanceOfData }, "latest"])
+      : Promise.resolve("0x0"),
+  ]);
+  const nativeRequired = BigInt(input.transaction.value) + BigInt(gasLimit) * BigInt(gasPrice);
+  if (BigInt(nativeBalance) < nativeRequired) {
+    throw new Error(`Insufficient ETH for this swap and network fee. Required about ${formatEvmUnits(nativeRequired, 18)} ETH, available ${formatEvmUnits(BigInt(nativeBalance), 18)} ETH.`);
+  }
+  if (input.sellToken === "USDG" && BigInt(usdgBalance) < BigInt(input.amountIn)) {
+    throw new Error(`Insufficient USDG. Swap requires ${formatEvmUnits(BigInt(input.amountIn), 6)} USDG, available ${formatEvmUnits(BigInt(usdgBalance), 6)} USDG.`);
+  }
+}
+
   // Fetch the single connected Mainnet wallet through the configured RPC.
   const fetchWalletBalance = useCallback(async () => {
     const activeSession = sessions.find((s) => s.id === activeSessionId);
+    const requestId = ++portfolioRequestRef.current;
     setPortfolioStatus("Refreshing Mainnet balance...");
+    setWalletBalance(null);
+    setPortfolioAssets([]);
+    setPortfolioTotalUsd(null);
     try {
       if (activeSession?.workspace === "evm") {
         const address = activeSession.sessionWalletAddress || activeEvmAddress;
@@ -391,6 +433,8 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
 
         const ethAmount = typeof nativeHex === "string" ? Number(BigInt(nativeHex)) / 1e18 : 0;
         const usdgAmount = typeof usdgHex === "string" ? Number(BigInt(usdgHex)) / 1e6 : 0;
+
+        if (requestId !== portfolioRequestRef.current) return;
 
         setWalletBalance(ethAmount);
         setPortfolioAssets([
@@ -417,12 +461,14 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
       if (!response.ok || typeof result.sol !== "number") {
         throw new Error(typeof result.error === "string" ? result.error : "Saldo Mainnet tidak dapat dimuat.");
       }
+      if (requestId !== portfolioRequestRef.current) return;
       setWalletBalance(result.sol);
       setPortfolioAssets(result.assets ?? []);
       setPortfolioTotalUsd(typeof result.totalUsd === "number" ? result.totalUsd : null);
       const source = result.source === "custom" ? "Custom RPC" : "Default Mainnet RPC";
       setPortfolioStatus(`${source}${typeof result.slot === "number" ? ` - slot ${result.slot.toLocaleString()}` : ""}`);
     } catch (error) {
+      if (requestId !== portfolioRequestRef.current) return;
       setWalletBalance(null);
       setPortfolioAssets([]);
       setPortfolioTotalUsd(null);
@@ -502,8 +548,10 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
     setEditingSetup(true);
   }
 
-  function openNewSession(prompt = "") {
+  function openNewSession(prompt = "", sessionMode: "agent" | "mission" = "agent") {
     setPendingSessionPrompt(prompt.trim() || null);
+    setNewSessionMode(sessionMode);
+    setSessionModalKey((value) => value + 1);
     setInput("");
     setShowSessionModal(true);
   }
@@ -729,12 +777,31 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
     let submittedEvmHash: string | null = null;
     try {
       if (proposal.quoteResponse && proposal.buyAmount) {
+        await switchToRobinhoodChain(settings.evmRpcUrl);
+        const walletProvider = window.ethereum;
+        if (!walletProvider) throw new Error("EVM wallet extension is not available.");
+        const [latestBlock, gasPrice] = await Promise.all([
+          walletProvider.request({ method: "eth_getBlockByNumber", params: ["latest", false] }),
+          walletProvider.request({ method: "eth_gasPrice" }),
+        ]);
+        if (!latestBlock || typeof gasPrice !== "string" || !/^0x[0-9a-f]+$/iu.test(gasPrice)) {
+          throw new Error("Wallet RPC could not retrieve Robinhood block and gas data.");
+        }
         setMessages((previous) => previous.map((message) => (message.id === msgId && message.proposal ? { ...message, proposal: { ...message.proposal, status: "signing" as const } } : message)));
         const buildResponse = await fetch("/api/evm/uniswap/build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ walletAddress: sessionWallet, apiKey: settings.uniswapApiKey, quote: proposal.quoteResponse, tokenIn: proposal.sellToken === "USDG" ? "0x5fc5360d0400a0fd4f2af552add042d716f1d168" : "0x0000000000000000000000000000000000000000", amountIn: proposal.inputAmount }) });
         const built = await buildResponse.json();
         if (!buildResponse.ok) throw new Error(built.error || "Uniswap could not build the wallet transaction.");
         const provider = window.ethereum;
         if (!provider) throw new Error("EVM wallet extension is not available.");
+        const transactionForPreflight = built.approvalRequired === true ? built.approval : built.transaction;
+        if (!transactionForPreflight) throw new Error("Uniswap did not return a wallet transaction for balance verification.");
+        await assertEvmSwapFunds({
+          rpcUrl: settings.evmRpcUrl.trim() || DEFAULT_ROBINHOOD_RPC,
+          walletAddress: sessionWallet,
+          sellToken: proposal.sellToken,
+          amountIn: proposal.inputAmount,
+          transaction: transactionForPreflight,
+        });
         const sendAndConfirm = async (transaction: { from: string; to: string; data: string; value: string }) => {
           const hash = await provider.request({ method: "eth_sendTransaction", params: [transaction] });
           if (typeof hash !== "string" || !/^0x[0-9a-f]{64}$/iu.test(hash)) throw new Error("Wallet did not return a valid transaction hash.");
@@ -763,15 +830,12 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
         const swapHash = await sendAndConfirm(built.transaction);
         setMessages((previous) => previous.map((message) => {
           if ((message.id === msgId || message.proposal?.id === proposal.id) && message.proposal) {
-            const updated = { ...message, proposal: { ...message.proposal, status: "confirmed" as const } };
+            const updated = { ...message, proposal: { ...message.proposal, status: "confirmed" as const, transactionHash: swapHash } };
             void saveMessage(walletAddress, updated);
             return updated;
           }
           return message;
         }));
-        const success: WebMessage = { id: `sys_${Date.now()}`, sessionId: activeSessionId, role: "assistant", content: `Robinhood USDG → ETH swap confirmed.\n\n[Open swap in Robinhood Explorer](https://robinhoodchain.blockscout.com/tx/${swapHash})`, createdAt: Date.now() };
-        setMessages((previous) => [...previous.filter((message) => message.sessionId === activeSessionId), success]);
-        await saveMessage(walletAddress, success);
         void fetchWalletBalance();
         return;
       }
@@ -793,10 +857,15 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
         return message;
       }));
     } catch (error) {
-      console.error("[EVM swap preparation]", error);
+      const walletErrorCode = error && typeof error === "object" && "code" in error ? (error as { code?: unknown }).code : undefined;
+      const wasCancelled = walletErrorCode === 4001 || walletErrorCode === "4001";
+      if (wasCancelled) console.info("[EVM swap preparation] Wallet approval cancelled by user.");
+      else console.error("[EVM swap preparation]", error);
       const serializedError = typeof error === "string" ? error : JSON.stringify(error);
       const rawMessage = error instanceof Error ? error.message : serializedError || "Unable to prepare the EVM quote.";
-      const message = rawMessage.includes("RPC endpoint returned too many errors") || rawMessage.includes("eth_getBlockByNumber")
+      const message = wasCancelled
+        ? "Wallet approval cancelled. No transaction was signed or broadcast."
+        : rawMessage.includes("RPC endpoint returned too many errors") || rawMessage.includes("eth_getBlockByNumber")
         ? "RPC Robinhood di wallet extension sedang gagal atau rate-limited. Tidak ada transaksi yang disiarkan. Buka MetaMask/Rabby → Settings → Networks → Robinhood Chain, lalu ganti RPC URL dengan endpoint custom yang sudah Anda verifikasi di Settings → Network Silfable. Setelah itu reload halaman dan buat quote baru."
         : rawMessage;
       if (submittedEvmHash) {
@@ -804,7 +873,7 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
       } else {
         setMessages((previous) => previous.map((entry) => (entry.id === msgId && entry.proposal && entry.proposal.status === "signing" ? { ...entry, proposal: { ...entry.proposal, status: "ready_for_user_signature" as const } } : entry)));
       }
-      const failure: WebMessage = { id: `sys_${Date.now()}`, sessionId: activeSessionId, role: "assistant", content: submittedEvmHash ? `Swap was submitted, but confirmation is unknown. Do not submit it again until you inspect the transaction.\n\n${message}\n\n[Open transaction in Robinhood Explorer](https://robinhoodchain.blockscout.com/tx/${submittedEvmHash})` : `Robinhood swap was not prepared: ${message}`, createdAt: Date.now() };
+      const failure: WebMessage = { id: `sys_${Date.now()}`, sessionId: activeSessionId, role: "assistant", content: submittedEvmHash ? `Swap was submitted, but confirmation is unknown. Do not submit it again until you inspect the transaction.\n\n${message}\n\n[Open transaction in Robinhood Explorer](https://robinhoodchain.blockscout.com/tx/${submittedEvmHash})` : message, createdAt: Date.now() };
       setMessages((previous) => [...previous.filter((item) => item.sessionId === activeSessionId), failure]);
       await saveMessage(walletAddress, failure);
     } finally {
@@ -936,7 +1005,9 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
   return (
     <div className="layout">
       <WebNewSessionModal
+        key={sessionModalKey}
         isOpen={showSessionModal}
+        defaultMode={newSessionMode}
         customEvmRpcUrl={settings.evmRpcUrl}
         walletAddress={accountWalletAddress ?? ""}
         linkedWallets={linkedWallets}
@@ -966,6 +1037,7 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
             setSessions((prev) => [saved, ...prev.filter((s) => s.id !== saved.id)]);
             setMessages([]);
             setActiveSessionId(saved.id);
+            setWorkspaceView("chat");
           }
         }}
       />
@@ -1040,7 +1112,10 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
               .map((s) => (
                 <button
                   key={s.id}
-                  onClick={() => setActiveSessionId(s.id)}
+                  onClick={() => {
+                    setActiveSessionId(s.id);
+                    setWorkspaceView("chat");
+                  }}
                   className={activeSessionId === s.id ? "active" : ""}
                 >
                   <div>
@@ -1060,7 +1135,7 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
           </div>
 
           <nav className="bottomNav">
-            <button onClick={() => alert("Missions execution in the web version is coming soon!")}>Missions</button>
+            <button className={workspaceView === "missions" ? "active" : ""} onClick={() => setWorkspaceView("missions")}>Missions</button>
             <button onClick={openSettings}>Settings</button>
             <button onClick={() => void handleSignOut()}>Sign out</button>
           </nav>
@@ -1072,7 +1147,16 @@ async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
 
         {/* CENTER STAGE: CONVERSATION CHAT FEED & COMPOSER */}
         <section className="centerStage">
-          {sessions.length === 0 ? (
+          {workspaceView === "missions" ? (
+            <WebMissionsView
+              sessions={sessions.filter((session) => session.filter === "mission" || session.filter === "pump")}
+              onCreateMission={() => openNewSession("", "mission")}
+              onOpenSession={(sessionId) => {
+                setActiveSessionId(sessionId);
+                setWorkspaceView("chat");
+              }}
+            />
+          ) : sessions.length === 0 ? (
             <div className="homeState flex h-full flex-col items-center justify-center px-6 text-center">
               <span className="brandMark large mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#3157ff]/50 bg-[rgba(49,87,255,0.1)]">
                 <Image src="/logo.png" alt="Silfable Logo" width={32} height={32} className="h-8 w-8 object-contain" />

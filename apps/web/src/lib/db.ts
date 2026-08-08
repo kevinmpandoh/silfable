@@ -49,6 +49,7 @@ export interface WebProposal {
   buyAmount?: string;
   minimumBuyAmount?: string;
   quoteExpiresAt?: number;
+  transactionHash?: string;
 }
 
 export interface WebMessage {
