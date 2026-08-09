@@ -15,15 +15,7 @@ export type EvmChainDefinition = Readonly<{
    * against the pinned chain ID before it is used.
    */
   fallbackRpcUrls?: readonly `https://${string}`[];
-  rpcSecretName:
-    | "ethereum-rpc-url"
-    | "base-rpc-url"
-    | "arbitrum-rpc-url"
-    | "optimism-rpc-url"
-    | "polygon-rpc-url"
-    | "bsc-rpc-url"
-    | "avalanche-rpc-url"
-    | "robinhood-rpc-url";
+  rpcSecretName: "robinhood-rpc-url";
   quoteProvider: "kyberswap" | "uniswap";
   universalRouterAddress?: `0x${string}`;
   universalRouterVersion?: "2.1.1";
@@ -31,13 +23,6 @@ export type EvmChainDefinition = Readonly<{
 }>;
 
 const CHAINS: readonly EvmChainDefinition[] = [
-  { key: "ethereum", chainId: 1, name: "Ethereum", nativeSymbol: "ETH", explorerUrl: "https://etherscan.io", kyberSlug: "ethereum", priceNetwork: "eth", wrappedNativeAddress: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", defaultRpcUrl: "https://ethereum-rpc.publicnode.com", rpcSecretName: "ethereum-rpc-url", quoteProvider: "kyberswap", executionStatus: "release-gated" },
-  { key: "base", chainId: 8_453, name: "Base", nativeSymbol: "ETH", explorerUrl: "https://basescan.org", kyberSlug: "base", priceNetwork: "base", wrappedNativeAddress: "0x4200000000000000000000000000000000000006", defaultRpcUrl: "https://mainnet.base.org", rpcSecretName: "base-rpc-url", quoteProvider: "kyberswap", executionStatus: "release-gated" },
-  { key: "arbitrum", chainId: 42_161, name: "Arbitrum One", nativeSymbol: "ETH", explorerUrl: "https://arbiscan.io", kyberSlug: "arbitrum", priceNetwork: "arbitrum", wrappedNativeAddress: "0x82af49447d8a07e3bd95bd0d56f35241523fbab1", defaultRpcUrl: "https://arb1.arbitrum.io/rpc", rpcSecretName: "arbitrum-rpc-url", quoteProvider: "kyberswap", executionStatus: "release-gated" },
-  { key: "optimism", chainId: 10, name: "Optimism", nativeSymbol: "ETH", explorerUrl: "https://optimistic.etherscan.io", kyberSlug: "optimism", priceNetwork: "optimism", wrappedNativeAddress: "0x4200000000000000000000000000000000000006", defaultRpcUrl: "https://mainnet.optimism.io", rpcSecretName: "optimism-rpc-url", quoteProvider: "kyberswap", executionStatus: "release-gated" },
-  { key: "polygon", chainId: 137, name: "Polygon", nativeSymbol: "POL", explorerUrl: "https://polygonscan.com", kyberSlug: "polygon", priceNetwork: "polygon_pos", wrappedNativeAddress: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270", defaultRpcUrl: "https://polygon-bor-rpc.publicnode.com", rpcSecretName: "polygon-rpc-url", quoteProvider: "kyberswap", executionStatus: "release-gated" },
-  { key: "bsc", chainId: 56, name: "BNB Chain", nativeSymbol: "BNB", explorerUrl: "https://bscscan.com", kyberSlug: "bsc", priceNetwork: "bsc", wrappedNativeAddress: "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c", defaultRpcUrl: "https://bsc-dataseed.bnbchain.org", rpcSecretName: "bsc-rpc-url", quoteProvider: "kyberswap", executionStatus: "release-gated" },
-  { key: "avalanche", chainId: 43_114, name: "Avalanche C-Chain", nativeSymbol: "AVAX", explorerUrl: "https://snowtrace.io", kyberSlug: "avalanche", priceNetwork: "avax", wrappedNativeAddress: "0xb31f66aa3c1e785363f0875a1b74e27b85fd66c7", defaultRpcUrl: "https://api.avax.network/ext/bc/C/rpc", rpcSecretName: "avalanche-rpc-url", quoteProvider: "kyberswap", executionStatus: "release-gated" },
   {
     key: "robinhood",
     chainId: 4_663,

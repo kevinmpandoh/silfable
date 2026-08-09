@@ -474,6 +474,8 @@ export function IntegrationStep({
   );
   const [uniswapKey, setUniswapKey] = useState("");
   const [uniswapConfigured, setUniswapConfigured] = useState(false);
+  const [robinhoodRpcUrl, setRobinhoodRpcUrl] = useState("");
+  const [robinhoodRpcConfigured, setRobinhoodRpcConfigured] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
@@ -486,6 +488,10 @@ export function IntegrationStep({
     window.silfable
       .getUniswapSettings()
       .then((uniswap) => setUniswapConfigured(uniswap.configured))
+      .catch(() => undefined);
+    window.silfable
+      .getEvmSettings()
+      .then((settings) => setRobinhoodRpcConfigured(settings.chains.find((chain) => chain.chainKey === "robinhood")?.rpcConfigured === true))
       .catch(() => undefined);
   }, []);
   async function saveKey(): Promise<void> {
@@ -523,6 +529,24 @@ export function IntegrationStep({
       setMessage("Uniswap API key verified and encrypted in the local vault.");
     } catch (error) {
       setMessage(error instanceof Error ? `Uniswap key could not be verified: ${error.message}` : "Uniswap key could not be verified. Unlock the vault and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveRobinhoodRpc(): Promise<void> {
+    const rpcUrl = robinhoodRpcUrl.trim();
+    if (!rpcUrl) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const request = { schemaVersion: 1 as const, requestId: crypto.randomUUID(), chainKey: "robinhood" as const, rpcUrl };
+      await window.silfable.testEvmRpc(request);
+      await window.silfable.saveEvmRpcUrl(request);
+      setRobinhoodRpcUrl("");
+      setRobinhoodRpcConfigured(true);
+      setMessage("Robinhood Chain RPC verified and encrypted in the local vault.");
+    } catch (error) {
+      setMessage(error instanceof Error ? `Robinhood RPC could not be saved: ${error.message}` : "Robinhood RPC could not be saved. The default endpoint remains active.");
     } finally {
       setBusy(false);
     }
@@ -591,6 +615,35 @@ export function IntegrationStep({
         </Field>
         <small className="providerHint">
           Required only for Robinhood Chain EVM swaps. It is encrypted locally and never sent to the AI model.
+        </small>
+      </ProviderCard>
+      <ProviderCard
+        name="Robinhood Chain RPC"
+        tag={robinhoodRpcConfigured ? "Custom endpoint" : "Default endpoint"}
+        description="Optional HTTPS RPC for Robinhood balances, preflight, and transaction verification."
+      >
+        <Field label="Robinhood HTTPS RPC URL">
+          <div className="inputWithAction">
+            <input
+              type="url"
+              value={robinhoodRpcUrl}
+              onChange={(event) => setRobinhoodRpcUrl(event.target.value)}
+              placeholder={robinhoodRpcConfigured ? "Replace saved Robinhood RPC" : "https://..."}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={busy || robinhoodRpcUrl.trim().length < 12}
+              onClick={() => void saveRobinhoodRpc()}
+            >
+              {busy ? "Testing" : "Save & test"}
+            </Button>
+          </div>
+        </Field>
+        <small className="providerHint">
+          Optional. If no custom endpoint is saved, Silfable uses its verified Robinhood default and public fallback endpoints. A saved URL is encrypted on this device and is checked against Robinhood Chain ID 4663 before use.
         </small>
       </ProviderCard>
       {message && <p className="inlineMessage">{message}</p>}

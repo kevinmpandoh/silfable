@@ -226,7 +226,7 @@ export function WebNewSessionModal({
 
           <section className="sessionConfigSection">
             <div className="sectionLegend"><span>05</span><strong>Permission</strong><small>Restricted browser-wallet authority.</small></div>
-            <div className="choiceGrid"><button type="button" className="active"><span className="choiceNumber">01</span><strong>Restricted</strong><small>Every transaction requires deterministic checks and approval in the bound wallet.</small></button><button type="button" className="unavailableChoice" disabled><span className="choiceNumber">02 · LOCKED</span><strong>Full access</strong><small>Cloud signing and private-key storage remain disabled.</small></button></div>
+            <div className="choiceGrid"><button type="button" className="active"><span className="choiceNumber">01</span><strong>Restricted</strong><small>Every transaction requires deterministic checks and approval in the bound wallet.</small></button><button type="button" className="unavailableChoice" disabled><span className="choiceNumber">02 · DESKTOP ONLY</span><strong>Full access</strong><small>Unattended local signing is available only through a future paired desktop agent. Web never stores a private key or signs in the cloud.</small></button></div>
           </section>
         </div>
 

@@ -89,25 +89,9 @@ export function EvmSwapProposalCard({
       {receipts.length > 0 && (
         <div className="activityList">
           {receipts.map((receipt) => {
-            const chainKey = proposal.chainKey ?? "robinhood";
-            const baseUrl = chainKey === "base"
-              ? "https://basescan.org"
-              : chainKey === "ethereum"
-                ? "https://etherscan.io"
-                : chainKey === "arbitrum"
-                  ? "https://arbiscan.io"
-                  : chainKey === "optimism"
-                    ? "https://optimistic.etherscan.io"
-                    : chainKey === "polygon"
-                      ? "https://polygonscan.com"
-                      : chainKey === "bsc"
-                        ? "https://bscscan.com"
-                        : chainKey === "avalanche"
-                          ? "https://snowtrace.io"
-                          : "https://robinhoodchain.blockscout.com";
-            const explorerTxUrl = `${baseUrl}/tx/${receipt.transactionHash}`;
+            const explorerTxUrl = `https://robinhoodchain.blockscout.com/tx/${receipt.transactionHash}`;
             return (
-              <div key={receipt.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "10px 14px", margin: "8px 14px", border: "1px solid rgba(59, 130, 246, 0.3)", borderRadius: "8px", background: "rgba(15, 23, 42, 0.75)" }}>
+              <div key={receipt.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "10px 14px", margin: "8px 14px", border: "1px solid rgba(32, 201, 151, 0.3)", borderRadius: "8px", background: "rgba(5, 25, 27, 0.75)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                   <span style={{ padding: "3px 8px", borderRadius: "4px", font: "700 9px var(--mono)", textTransform: "uppercase", letterSpacing: "0.05em", color: receipt.status === "confirmed" ? "#34d399" : "#f87171", background: receipt.status === "confirmed" ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)", border: receipt.status === "confirmed" ? "1px solid rgba(16, 185, 129, 0.35)" : "1px solid rgba(239, 68, 68, 0.35)" }}>
                     {receipt.status}

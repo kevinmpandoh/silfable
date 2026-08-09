@@ -36,11 +36,11 @@ export function TerminalMockup() {
           className="overflow-hidden rounded-[1.25rem] border border-emerald-300/20 bg-[var(--panel)] shadow-[0_26px_90px_rgb(0_0_0_/_0.35)] sm:rounded-[1.75rem]"
         >
           <Image
-            src="/ss1.png"
+            src="/hero-app.png"
             alt="Silfable Desktop Application Interface"
             width={1920}
             height={1080}
-            className="emeraldMockup w-full object-cover"
+            className="w-full object-cover"
             priority
           />
         </motion.div>

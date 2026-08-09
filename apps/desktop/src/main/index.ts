@@ -343,9 +343,7 @@ async function createVerifiedEvmEngine(
 ): Promise<EvmEngine> {
   const chain = getEvmChain(chainKey);
   const configured = await secretStore.getSecret(chain.rpcSecretName);
-  const usableConfigured = chain.key === "polygon" && configured?.replace(/\/$/u, "") === "https://polygon-rpc.com"
-    ? undefined
-    : configured?.trim() || undefined;
+  const usableConfigured = configured?.trim() || undefined;
   const candidates = [...new Set([
     usableConfigured,
     chain.defaultRpcUrl,

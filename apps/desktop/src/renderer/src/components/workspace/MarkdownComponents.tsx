@@ -21,7 +21,7 @@ export function BridgePreparationForm({
   }) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
-  const [destinationChain, setDestinationChain] = useState<BridgeDestinationChain>("base");
+  const [destinationChain, setDestinationChain] = useState<BridgeDestinationChain>("robinhood");
   const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("1.00");
   // Small cross-chain transfers can have a meaningful fixed relayer cost. This is
@@ -147,7 +147,7 @@ export function AnimatedMarkdownMessage({
       onComplete();
       return;
     }
-    
+
     setLength(0);
     const textLen = message.text.length;
     const increment = Math.max(10, Math.ceil(textLen / 20));
@@ -266,4 +266,4 @@ export function renderInlineMarkdown(value: string): React.ReactNode[] {
         part
       ),
     );
-}
+}
