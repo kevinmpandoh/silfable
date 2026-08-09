@@ -24,6 +24,7 @@ const statusRows = [
   ["Verified restricted", "Solana-Robinhood Bridge", "Controlled Solana USDC-to-Robinhood USDG and Robinhood USDG-to-Solana USDC bridges have completed in web and desktop. Each transfer remains route-, liquidity-, RPC-, wallet-, and receipt-dependent."],
   ["Verified restricted", "Auto DCA", "Controlled DCA cycles have detected a due schedule, obtained a fresh quote, completed only after explicit wallet approval, and been reconciled on Mainnet. The schedule never signs on the user's behalf."],
   ["Verified restricted", "TP/SL & Exits", "Controlled TP/SL conditions have triggered a bounded Mainnet exit proposal and completed only after explicit wallet approval and receipt reconciliation. Triggering a condition never grants unattended signing authority."],
+  ["Desktop-only", "Full Access / autonomous signing", "Not available in the web runtime. Any future unattended signing must use a paired desktop agent and an encrypted local vault; Silfable web never receives a private key or runs a cloud signer."],
 ] as const;
 
 const principles = [
@@ -35,7 +36,7 @@ const principles = [
   {
     icon: LockKeyhole,
     title: "Restricted Execution",
-    text: "The connected browser wallet must explicitly approve every production web transaction. Full Access cloud execution is unavailable.",
+    text: "The connected browser wallet must explicitly approve every production web transaction. Full Access is desktop-only; the web runtime never stores a private key or signs in the cloud.",
   },
   {
     icon: CheckCircle2,
@@ -108,7 +109,7 @@ export default function WhitepaperPage() {
                 <li><strong>Intent-based research, deterministic execution:</strong> The AI may analyze markets and draft actions, but supported transactions must pass strict, hard-coded deterministic policy checks before execution.</li>
                 <li><strong>Separated transaction authority:</strong> Desktop keys remain in the local encrypted vault; web signing remains in the connected browser wallet.</li>
                 <li><strong>Transparent Execution Receipts:</strong> Every quote, simulation, confirmation, rejection, and failure should be readable and independently reconciled. Desktop receipts remain encrypted locally.</li>
-                <li><strong>Restricted execution:</strong> Every supported web transaction requires explicit browser-wallet approval. Full Access cloud execution is unavailable.</li>
+                <li><strong>Restricted execution:</strong> Every supported web transaction requires explicit browser-wallet approval. Full Access is desktop-only; web never stores a private key or signs in the cloud.</li>
                 <li><strong>Wallet-scoped authentication:</strong> Web access requires an expiring, one-time wallet challenge signature. It authenticates the workspace but never authorizes a transaction.</li>
               </ul>
             </div>

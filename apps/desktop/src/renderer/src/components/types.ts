@@ -8,35 +8,17 @@ import type {
   TransactionSettings,
 } from "@silfable/contracts";
 import {
-  BRIDGE_ARBITRUM_CHAIN_ID,
-  BRIDGE_ARBITRUM_USDC_ADDRESS,
-  BRIDGE_AVALANCHE_CHAIN_ID,
-  BRIDGE_AVALANCHE_USDC_ADDRESS,
-  BRIDGE_BASE_CHAIN_ID,
-  BRIDGE_BASE_USDC_ADDRESS,
-  BRIDGE_ETHEREUM_CHAIN_ID,
-  BRIDGE_ETHEREUM_USDC_ADDRESS,
-  BRIDGE_OPTIMISM_CHAIN_ID,
-  BRIDGE_OPTIMISM_USDC_ADDRESS,
-  BRIDGE_POLYGON_CHAIN_ID,
-  BRIDGE_POLYGON_USDC_ADDRESS,
   BRIDGE_ROBINHOOD_CHAIN_ID,
   BRIDGE_ROBINHOOD_USDG_ADDRESS,
 } from "@silfable/contracts";
 
-export const BRIDGE_DESTINATIONS: Record<BridgeDestinationChain, {
+export const BRIDGE_DESTINATIONS: Partial<Record<BridgeDestinationChain, {
   label: string;
   chainId: BridgeProposal["contract"]["destinationChainId"];
   assetAddress: string;
   symbol: "USDC" | "USDG";
-  confirmation: "BRIDGE USDC TO BASE" | "BRIDGE USDC TO ARBITRUM" | "BRIDGE USDC TO ETHEREUM" | "BRIDGE USDC TO OPTIMISM" | "BRIDGE USDC TO POLYGON" | "BRIDGE USDC TO AVALANCHE" | "BRIDGE USDC TO ROBINHOOD";
-}> = {
-  base: { label: "Base", chainId: BRIDGE_BASE_CHAIN_ID, assetAddress: BRIDGE_BASE_USDC_ADDRESS, symbol: "USDC", confirmation: "BRIDGE USDC TO BASE" },
-  arbitrum: { label: "Arbitrum", chainId: BRIDGE_ARBITRUM_CHAIN_ID, assetAddress: BRIDGE_ARBITRUM_USDC_ADDRESS, symbol: "USDC", confirmation: "BRIDGE USDC TO ARBITRUM" },
-  ethereum: { label: "Ethereum", chainId: BRIDGE_ETHEREUM_CHAIN_ID, assetAddress: BRIDGE_ETHEREUM_USDC_ADDRESS, symbol: "USDC", confirmation: "BRIDGE USDC TO ETHEREUM" },
-  optimism: { label: "Optimism", chainId: BRIDGE_OPTIMISM_CHAIN_ID, assetAddress: BRIDGE_OPTIMISM_USDC_ADDRESS, symbol: "USDC", confirmation: "BRIDGE USDC TO OPTIMISM" },
-  polygon: { label: "Polygon", chainId: BRIDGE_POLYGON_CHAIN_ID, address: BRIDGE_POLYGON_USDC_ADDRESS, symbol: "USDC", confirmation: "BRIDGE USDC TO POLYGON" },
-  avalanche: { label: "Avalanche", chainId: BRIDGE_AVALANCHE_CHAIN_ID, assetAddress: BRIDGE_AVALANCHE_USDC_ADDRESS, symbol: "USDC", confirmation: "BRIDGE USDC TO AVALANCHE" },
+  confirmation: "BRIDGE USDC TO ROBINHOOD";
+}>> = {
   robinhood: { label: "Robinhood", chainId: BRIDGE_ROBINHOOD_CHAIN_ID, assetAddress: BRIDGE_ROBINHOOD_USDG_ADDRESS, symbol: "USDG", confirmation: "BRIDGE USDC TO ROBINHOOD" },
 };
 
@@ -50,7 +32,7 @@ export function isControlledBridgeAcceptance(proposal: BridgeProposal): boolean 
     && BigInt(proposal.contract.minimumDestinationAmount) > 0n;
 }
 
-export type EvmBridgeChainKey = Exclude<EvmChainKey, "bsc">;
+export type EvmBridgeChainKey = "robinhood";
 
 export const EVM_BRIDGE_ASSETS: Record<EvmBridgeChainKey, {
   label: string;
@@ -58,12 +40,6 @@ export const EVM_BRIDGE_ASSETS: Record<EvmBridgeChainKey, {
   address: `0x${string}`;
   symbol: "USDC" | "USDG";
 }> = {
-  ethereum: { label: "Ethereum", chainId: BRIDGE_ETHEREUM_CHAIN_ID, address: BRIDGE_ETHEREUM_USDC_ADDRESS, symbol: "USDC" },
-  base: { label: "Base", chainId: BRIDGE_BASE_CHAIN_ID, address: BRIDGE_BASE_USDC_ADDRESS, symbol: "USDC" },
-  arbitrum: { label: "Arbitrum", chainId: BRIDGE_ARBITRUM_CHAIN_ID, address: BRIDGE_ARBITRUM_USDC_ADDRESS, symbol: "USDC" },
-  optimism: { label: "Optimism", chainId: BRIDGE_OPTIMISM_CHAIN_ID, address: BRIDGE_OPTIMISM_USDC_ADDRESS, symbol: "USDC" },
-  polygon: { label: "Polygon", chainId: BRIDGE_POLYGON_CHAIN_ID, address: BRIDGE_POLYGON_USDC_ADDRESS, symbol: "USDC" },
-  avalanche: { label: "Avalanche", chainId: BRIDGE_AVALANCHE_CHAIN_ID, address: BRIDGE_AVALANCHE_USDC_ADDRESS, symbol: "USDC" },
   robinhood: { label: "Robinhood Chain", chainId: BRIDGE_ROBINHOOD_CHAIN_ID, address: BRIDGE_ROBINHOOD_USDG_ADDRESS, symbol: "USDG" },
 };
 
@@ -73,17 +49,10 @@ export const EVM_PORTFOLIO_CHAINS: ReadonlyArray<{
   token?: { address: `0x${string}`; symbol: "USDC" | "USDG"; decimals: 6 };
 }> = [
   { key: "robinhood", label: "Robinhood", token: { address: BRIDGE_ROBINHOOD_USDG_ADDRESS, symbol: "USDG", decimals: 6 } },
-  { key: "ethereum", label: "Ethereum", token: { address: BRIDGE_ETHEREUM_USDC_ADDRESS, symbol: "USDC", decimals: 6 } },
-  { key: "base", label: "Base", token: { address: BRIDGE_BASE_USDC_ADDRESS, symbol: "USDC", decimals: 6 } },
-  { key: "arbitrum", label: "Arbitrum", token: { address: BRIDGE_ARBITRUM_USDC_ADDRESS, symbol: "USDC", decimals: 6 } },
-  { key: "optimism", label: "Optimism", token: { address: BRIDGE_OPTIMISM_USDC_ADDRESS, symbol: "USDC", decimals: 6 } },
-  { key: "polygon", label: "Polygon", token: { address: BRIDGE_POLYGON_USDC_ADDRESS, symbol: "USDC", decimals: 6 } },
-  { key: "avalanche", label: "Avalanche", token: { address: BRIDGE_AVALANCHE_USDC_ADDRESS, symbol: "USDC", decimals: 6 } },
-  { key: "bsc", label: "BNB Chain" },
 ];
 
 export function bridgeDestination(chainId: BridgeProposal["contract"]["destinationChainId"]) {
-  return Object.values(BRIDGE_DESTINATIONS).find((candidate) => candidate.chainId === chainId) ?? BRIDGE_DESTINATIONS.base;
+  return Object.values(BRIDGE_DESTINATIONS).find((candidate) => candidate?.chainId === chainId) ?? BRIDGE_DESTINATIONS.robinhood!;
 }
 
 export type SetupState = {

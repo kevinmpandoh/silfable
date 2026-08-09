@@ -1,16 +1,4 @@
 import {
-  BRIDGE_ARBITRUM_CHAIN_ID,
-  BRIDGE_ARBITRUM_USDC_ADDRESS,
-  BRIDGE_AVALANCHE_CHAIN_ID,
-  BRIDGE_AVALANCHE_USDC_ADDRESS,
-  BRIDGE_BASE_CHAIN_ID,
-  BRIDGE_BASE_USDC_ADDRESS,
-  BRIDGE_ETHEREUM_CHAIN_ID,
-  BRIDGE_ETHEREUM_USDC_ADDRESS,
-  BRIDGE_OPTIMISM_CHAIN_ID,
-  BRIDGE_OPTIMISM_USDC_ADDRESS,
-  BRIDGE_POLYGON_CHAIN_ID,
-  BRIDGE_POLYGON_USDC_ADDRESS,
   BRIDGE_ROBINHOOD_CHAIN_ID,
   BRIDGE_ROBINHOOD_USDG_ADDRESS,
   BRIDGE_SOLANA_CHAIN_ID,
@@ -51,12 +39,6 @@ const solanaUsdc: CrossChainBridgeAsset = {
 };
 
 const evmAssets: readonly CrossChainBridgeAsset[] = [
-  { chainKey: "ethereum", chainId: BRIDGE_ETHEREUM_CHAIN_ID, address: BRIDGE_ETHEREUM_USDC_ADDRESS, symbol: "USDC", decimals: 6 },
-  { chainKey: "base", chainId: BRIDGE_BASE_CHAIN_ID, address: BRIDGE_BASE_USDC_ADDRESS, symbol: "USDC", decimals: 6 },
-  { chainKey: "arbitrum", chainId: BRIDGE_ARBITRUM_CHAIN_ID, address: BRIDGE_ARBITRUM_USDC_ADDRESS, symbol: "USDC", decimals: 6 },
-  { chainKey: "optimism", chainId: BRIDGE_OPTIMISM_CHAIN_ID, address: BRIDGE_OPTIMISM_USDC_ADDRESS, symbol: "USDC", decimals: 6 },
-  { chainKey: "polygon", chainId: BRIDGE_POLYGON_CHAIN_ID, address: BRIDGE_POLYGON_USDC_ADDRESS, symbol: "USDC", decimals: 6 },
-  { chainKey: "avalanche", chainId: BRIDGE_AVALANCHE_CHAIN_ID, address: BRIDGE_AVALANCHE_USDC_ADDRESS, symbol: "USDC", decimals: 6 },
   { chainKey: "robinhood", chainId: BRIDGE_ROBINHOOD_CHAIN_ID, address: BRIDGE_ROBINHOOD_USDG_ADDRESS, symbol: "USDG", decimals: 6 },
 ];
 

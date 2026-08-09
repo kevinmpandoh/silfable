@@ -241,25 +241,21 @@ export function UnifiedPortfolioRail({
       <div className="portfolioHeadingRow">
         <span className="totalLabel">{session
           ? "Session wallet assets"
-          : walletFilter === "solana" ? "Solana wallets" : walletFilter === "evm" ? "EVM wallets" : "All configured wallets"}</span>
+          : walletFilter === "solana" ? "Solana wallets" : walletFilter === "evm" ? "Robinhood wallets" : "All configured wallets"}</span>
         <small>{configuredCount} {configuredCount === 1 ? "wallet" : "wallets"}</small>
       </div>
       <strong className="portfolioTotal">{configuredCount === 0 ? "$0.00" : totalLabel}</strong>
-      {session && (
-        <small>
-          Read-only balances for the wallet bound to this session.
-        </small>
-      )}
+  
 
       {!session && configuredCount > 1 && (
         <div className="portfolioScopeTabs" aria-label="Portfolio wallet scope">
           <button className={walletFilter === "all" ? "active" : ""} onClick={() => { setWalletFilter("all"); setChainFilter("all"); }}>All</button>
           <button className={walletFilter === "solana" ? "active" : ""} disabled={solanaWallets.length === 0} onClick={() => { setWalletFilter("solana"); setChainFilter("all"); }}>Solana</button>
-          <button className={walletFilter === "evm" ? "active" : ""} disabled={evmWallets.length === 0} onClick={() => { setWalletFilter("evm"); setChainFilter("all"); }}>EVM</button>
+          <button className={walletFilter === "evm" ? "active" : ""} disabled={evmWallets.length === 0} onClick={() => { setWalletFilter("evm"); setChainFilter("robinhood"); }}>Robinhood</button>
         </div>
       )}
 
-      {hasEvmSelection && (
+      {hasEvmSelection && EVM_PORTFOLIO_CHAINS.length > 1 && (
         <div className="portfolioChainTabs" aria-label="EVM chain scope">
           <button className={chainFilter === "all" ? "active" : ""} onClick={() => setChainFilter("all")}>All</button>
           {EVM_PORTFOLIO_CHAINS.map((chain) => (
@@ -313,10 +309,10 @@ export function UnifiedPortfolioRail({
 
       <div className="portfolioWallets">
         {(session
-          ? [...solanaTargets.map((wallet) => ({ ...wallet, family: "SOL" })), ...evmTargets.map((wallet) => ({ ...wallet, family: "EVM" }))]
+          ? [...solanaTargets.map((wallet) => ({ ...wallet, family: "SOL" })), ...evmTargets.map((wallet) => ({ ...wallet, family: "ROBINHOOD" }))]
           : [
             ...(walletFilter !== "evm" ? solanaWallets.map((wallet) => ({ ...wallet, family: "SOL" })) : []),
-            ...(walletFilter !== "solana" ? evmWallets.map((wallet) => ({ ...wallet, family: "EVM" })) : []),
+            ...(walletFilter !== "solana" ? evmWallets.map((wallet) => ({ ...wallet, family: "ROBINHOOD" })) : []),
           ]
         ).map((wallet) => (
           <div className="walletLine" key={`${wallet.family}:${wallet.address}`}>

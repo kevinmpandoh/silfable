@@ -501,7 +501,7 @@ export function Conversation({
             )}
           </>
         )}
-        {session.walletScope === "evm" && session.walletAddress !== null && session.evmChainKey && session.evmChainKey !== "bsc" && (
+        {session.walletScope === "evm" && session.walletAddress !== null && session.evmChainKey === "robinhood" && (
           <EvmBridgeWorkspace
             sessionId={session.id}
             sourceChainKey={session.evmChainKey}

@@ -55,8 +55,8 @@ export function WebAutomationView({ walletAddress, jupiterApiKey, uniswapApiKey,
 
   return <div className="mx-auto h-full max-w-[1000px] overflow-y-auto px-8 py-10">
     <header className="mb-7 flex items-start justify-between gap-6">
-      <div><p className="font-mono text-[10px] uppercase tracking-[0.22em] text-cyan-300">{workspace === "evm" ? "Robinhood automation" : "Solana automation"}</p><h1 className="mt-2 text-4xl font-semibold text-white">Monitor & propose</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">Strategies are created by the AI tool in the active wallet-bound session. This page monitors existing strategies and their proposals.</p></div>
-      <span className="rounded-md border border-amber-400/25 bg-amber-400/10 px-3 py-2 font-mono text-[9px] uppercase tracking-wider text-amber-200">No cloud signing</span>
+      <div><p className="font-mono text-[10px] uppercase tracking-[0.22em] text-cyan-300">{workspace === "evm" ? "Robinhood automation" : "Solana automation"}</p><h1 className="mt-2 text-4xl font-semibold text-white">Monitor & propose</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">Strategies are created by the AI tool in the active wallet-bound session. This web runtime detects schedules and conditions, then delivers a fresh proposal for wallet review.</p></div>
+      <span className="rounded-md border border-amber-400/25 bg-amber-400/10 px-3 py-2 font-mono text-[9px] uppercase tracking-wider text-amber-200">Wallet approval required</span>
     </header>
 
     {error && <p className="mb-4 rounded-lg border border-rose-400/25 bg-rose-400/10 p-3 text-xs text-rose-200">{error}</p>}
