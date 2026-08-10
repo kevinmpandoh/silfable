@@ -15,10 +15,10 @@ test("maps only structurally valid Solana and EVM transaction identifiers", () =
   }), `https://explorer.solana.com/tx/${SOLANA_SIGNATURE}`);
   assert.equal(activityExplorerUrl({
     family: "evm",
-    chainKey: "base",
+    chainKey: "robinhood",
     transactionId: EVM_HASH,
     venue: "evm-swap",
-  }), `https://basescan.org/tx/${EVM_HASH}`);
+  }), `https://robinhoodchain.blockscout.com/tx/${EVM_HASH}`);
   assert.equal(activityExplorerUrl({
     family: "offchain",
     chainKey: "hyperliquid",
@@ -29,15 +29,15 @@ test("maps only structurally valid Solana and EVM transaction identifiers", () =
 
 test("allows only release-controlled HTTPS transaction explorer URLs", () => {
   assert.equal(
-    assertAllowedExplorerUrl(`https://basescan.org/tx/${EVM_HASH}`).hostname,
-    "basescan.org",
+    assertAllowedExplorerUrl(`https://robinhoodchain.blockscout.com/tx/${EVM_HASH}`).hostname,
+    "robinhoodchain.blockscout.com",
   );
   assert.throws(
     () => assertAllowedExplorerUrl(`https://example.com/tx/${EVM_HASH}`),
     /release-controlled/u,
   );
   assert.throws(
-    () => assertAllowedExplorerUrl("https://basescan.org/address/0x1111111111111111111111111111111111111111"),
+    () => assertAllowedExplorerUrl("https://robinhoodchain.blockscout.com/address/0x1111111111111111111111111111111111111111"),
     /release-controlled/u,
   );
 });

@@ -19,6 +19,10 @@ type CommonStrategy = {
   id: string;
   sessionId: string;
   walletFingerprint: string;
+  /** Network is persisted with the strategy so sessions cannot dispatch a
+   * Solana proposal through an EVM signer (or vice versa). Old records are
+   * interpreted as Solana records. */
+  chainKey: "solana" | "robinhood";
   inputMint: string;
   outputMint: string;
   status: StrategyStatus;
@@ -71,6 +75,7 @@ export type CreateDcaAutomationInput = {
   id?: string;
   sessionId: string;
   walletAddress: string;
+  chainKey?: "solana" | "robinhood";
   inputMint?: string;
   outputMint: string;
   orderAmountRaw: string;
@@ -84,6 +89,7 @@ export type CreateExitAutomationInput = {
   id?: string;
   sessionId: string;
   walletAddress: string;
+  chainKey?: "solana" | "robinhood";
   inputMint: string;
   outputMint?: string;
   amountRaw: string;
@@ -94,8 +100,12 @@ export type CreateExitAutomationInput = {
   expiresAt: string;
 };
 
-function requireAddress(value: string, label: string): string {
+function requireAddress(value: string, label: string, chainKey: "solana" | "robinhood" = "solana"): string {
   const normalized = value.trim();
+  if (chainKey === "robinhood") {
+    if (!/^0x[0-9a-fA-F]{40}$/u.test(normalized)) throw new Error(`${label} must be an exact EVM address.`);
+    return normalized.toLowerCase();
+  }
   if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/u.test(normalized)) {
     throw new Error(`${label} must be an exact Solana address.`);
   }
@@ -132,7 +142,7 @@ function requireIdentifier(value: string, label: string): string {
 }
 
 function parseStrategy(record: ReturnType<RuntimeDatabase["listAutomationStrategies"]>[number]): AutomationStrategy {
-  return {
+  const parsed = {
     ...(record.config as Omit<AutomationStrategy, "id" | "status" | "nextWakeAt" | "lastEvaluatedAt" | "createdAt" | "updatedAt">),
     id: record.id,
     kind: record.kind,
@@ -142,6 +152,7 @@ function parseStrategy(record: ReturnType<RuntimeDatabase["listAutomationStrateg
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   } as AutomationStrategy;
+  return { ...parsed, chainKey: parsed.chainKey ?? "solana" };
 }
 
 export class AutomationManager {
@@ -152,6 +163,7 @@ export class AutomationManager {
   }
 
   createDca(input: CreateDcaAutomationInput, now = new Date()): DcaAutomationStrategy {
+    const chainKey = input.chainKey ?? "solana";
     const intervalSeconds = input.intervalSeconds;
     if (!Number.isInteger(intervalSeconds) || intervalSeconds < MIN_INTERVAL_SECONDS || intervalSeconds > MAX_INTERVAL_SECONDS) {
       throw new Error("DCA interval must be between 60 seconds and one year.");
@@ -169,9 +181,10 @@ export class AutomationManager {
       id: input.id ?? randomUUID(),
       kind: "DCA",
       sessionId: requireIdentifier(input.sessionId, "Session"),
-      walletFingerprint: walletFingerprint(requireAddress(input.walletAddress, "Wallet")),
-      inputMint: input.inputMint ? requireAddress(input.inputMint, "Input mint") : "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-      outputMint: requireAddress(input.outputMint, "Output mint"),
+      walletFingerprint: walletFingerprint(requireAddress(input.walletAddress, "Wallet", chainKey)),
+      chainKey,
+      inputMint: input.inputMint ? requireAddress(input.inputMint, "Input mint", chainKey) : "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      outputMint: requireAddress(input.outputMint, "Output mint", chainKey),
       orderAmountRaw,
       maximumTotalRaw,
       intervalSeconds,
@@ -190,6 +203,7 @@ export class AutomationManager {
   }
 
   createExit(input: CreateExitAutomationInput, now = new Date()): ExitAutomationStrategy {
+    const chainKey = input.chainKey ?? "solana";
     if (!Number.isFinite(input.entryPriceUsd) || input.entryPriceUsd <= 0) throw new Error("Entry price must be positive.");
     const stop = input.stopLossPriceUsd ?? null;
     const take = input.takeProfitPriceUsd ?? null;
@@ -203,9 +217,10 @@ export class AutomationManager {
       id: input.id ?? randomUUID(),
       kind: "EXIT",
       sessionId: requireIdentifier(input.sessionId, "Session"),
-      walletFingerprint: walletFingerprint(requireAddress(input.walletAddress, "Wallet")),
-      inputMint: requireAddress(input.inputMint, "Input mint"),
-      outputMint: requireAddress(input.outputMint ?? SOL_MINT, "Output mint"),
+      walletFingerprint: walletFingerprint(requireAddress(input.walletAddress, "Wallet", chainKey)),
+      chainKey,
+      inputMint: requireAddress(input.inputMint, "Input mint", chainKey),
+      outputMint: requireAddress(input.outputMint ?? SOL_MINT, "Output mint", chainKey),
       amountRaw: requireRawAmount(input.amountRaw, "Exit amount"),
       entryPriceUsd: input.entryPriceUsd,
       stopLossPriceUsd: stop,

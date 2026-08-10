@@ -169,6 +169,13 @@ export class KyberSwapPreflightService {
     return evidence;
   }
 
+  /** Read retained evidence without consuming it so the main-process Full
+   * Access boundary can enforce a session asset allowlist before signing. */
+  peek(id: string, now = new Date()): StoredKyberPreflight | null {
+    this.#prune(now.getTime());
+    return this.#pending.get(id) ?? null;
+  }
+
   /**
    * Trusted execution code may take a preflight only once, after a future
    * router-allowlist, signer, and approval gate are released.

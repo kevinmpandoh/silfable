@@ -45,6 +45,8 @@ const KNOWN_TOKENS: Record<string, string> = {
   "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN": "JUP",
   "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": "USDT",
   "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": "BONK",
+  "0x0000000000000000000000000000000000000000": "ETH",
+  "0x5fc5360d0400a0fd4f2af552add042d716f1d168": "USDG",
 };
 
 export function AutomationPanel({
@@ -156,6 +158,8 @@ export function AutomationPanel({
       const formatted = (num / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
       return `${formatted} USDC`;
     }
+    if (inputMint?.toLowerCase() === "0x5fc5360d0400a0fd4f2af552add042d716f1d168") return `${(num / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDG`;
+    if (inputMint?.toLowerCase() === "0x0000000000000000000000000000000000000000") return `${(num / 1_000_000_000_000_000_000).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })} ETH`;
     return `${num.toLocaleString()} raw units`;
   };
 

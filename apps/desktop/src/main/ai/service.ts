@@ -1,7 +1,10 @@
 // @ts-nocheck
 import {
   AiProviderSettingSchema,
+  BRIDGE_ROBINHOOD_CHAIN_ID,
   BRIDGE_ROBINHOOD_USDG_ADDRESS,
+  BRIDGE_SOLANA_CHAIN_ID,
+  BRIDGE_SOLANA_USDC_MINT,
   BridgeContractSchema,
   EvmBridgeContractSchema,
   type AiProviderSetting,
@@ -25,6 +28,7 @@ import { DEFAULT_TRANSACTION_SETTINGS, type TransactionSettingsService } from ".
 import { callOpenRouterChat, DEFAULT_OPENROUTER_MODEL, type ReadOnlyAiTool } from "./providers.js";
 import type { AutomationManager } from "../execution/automation-manager.js";
 import { UNISWAP_NATIVE_TOKEN_ADDRESS } from "../integrations/uniswap.js";
+import type { FullAccessEvmAssetAuthorizationService } from "../security/full-access-evm-assets.js";
 
 type AiSecretStore = {
   getSecret(name: SecretName): Promise<string | null>;
@@ -73,6 +77,7 @@ export class AiService {
   #bridgePreparation: BridgePreparationService | null;
   #evmBridgePreparation: EvmBridgePreparationService | null;
   #automationManager: AutomationManager | null;
+  #fullAccessEvmAssets: FullAccessEvmAssetAuthorizationService | null = null;
 
   constructor(input: {
     keystore: AiSecretStore;
@@ -109,6 +114,11 @@ export class AiService {
     this.#evmBridgePreparation = service;
   }
 
+  configureFullAccessEvmAssets(service: FullAccessEvmAssetAuthorizationService): void {
+    if (this.#fullAccessEvmAssets !== null) throw new Error("Full Access EVM assets are already configured");
+    this.#fullAccessEvmAssets = service;
+  }
+
   async listSettings(): Promise<AiProviderSetting[]> {
     const configured = (await this.#keystore.getSecret("openrouter-api-key")) !== null;
     return [AiProviderSettingSchema.parse({ provider: "openrouter", configured, model: this.#model() })];
@@ -126,9 +136,118 @@ export class AiService {
     return setting;
   }
 
-  async chat(input: { prompt: string; mode: "agent" | "mission"; walletAddress: string | null; sessionId?: string; sessionContext?: string; history?: Array<{ role: "user" | "assistant"; text: string }>; pumpScope?: PumpAiScope; intent?: SessionIntent; walletScope?: SessionWalletScope; evmChainKey?: EvmChainKey; transactionSettings?: TransactionSettings }) {
+  async chat(input: { prompt: string; mode: "agent" | "mission"; walletAddress: string | null; sessionId?: string; sessionContext?: string; history?: Array<{ role: "user" | "assistant"; text: string }>; pumpScope?: PumpAiScope; intent?: SessionIntent; walletScope?: SessionWalletScope; evmChainKey?: EvmChainKey; permission?: "restricted" | "full"; transactionSettings?: TransactionSettings }) {
     const apiKey = await this.#keystore.getSecret("openrouter-api-key");
     if (apiKey === null) throw new Error("OpenRouter is not configured");
+    const assetConfirmation = parseFullAccessAssetConfirmation(input.prompt);
+    if (assetConfirmation !== null && input.sessionId && input.permission === "full" && input.walletScope === "evm" && input.evmChainKey === "robinhood" && this.#fullAccessEvmAssets !== null) {
+      const asset = this.#fullAccessEvmAssets.confirm(input.sessionId, assetConfirmation);
+      return localChatResult(`Full Access asset authorized for this Robinhood session: ${asset.symbol} (${asset.address}), ${asset.decimals} decimals. The exact contract was recorded locally. Contract metadata verification is not a liquidity, issuer, or security audit.`, []);
+    }
+    const assetAddress = parseFullAccessAssetRequest(input.prompt);
+    if (assetAddress !== null && input.sessionId && input.permission === "full" && input.walletScope === "evm" && input.evmChainKey === "robinhood" && this.#fullAccessEvmAssets !== null) {
+      let review;
+      try {
+        review = await this.#fullAccessEvmAssets.requestReview(input.sessionId, assetAddress);
+      } catch (error) {
+        if (error instanceof Error && error.message === "FULL_ACCESS_BUILT_IN_ASSET") {
+          return localChatResult("ETH and USDG are release-pinned Robinhood Full Access assets. They are already available in this session and do not need an authorization review. You can request a swap directly, for example: Swap 0.5 USDG to ETH.", []);
+        }
+        throw error;
+      }
+      return localChatResult(`Full Access asset review ready. Confirm the exact contract shown on the card before adding it to this session's allowlist. No quote, approval, signing, or broadcast was created.`, [], review);
+    }
+    if (input.sessionId && input.permission === "full" && input.walletScope === "evm" && input.evmChainKey === "robinhood" && this.#fullAccessEvmAssets !== null && /\b(?:swap|tukar)\b/iu.test(input.prompt)) {
+      const requestedContracts = [...input.prompt.matchAll(/\b(0x[0-9a-fA-F]{40})\b/gu)].map((match) => match[1]!);
+      const unapproved = requestedContracts.find((address) => this.#fullAccessEvmAssets!.find(input.sessionId!, address) === null);
+      if (unapproved !== undefined) {
+        const review = await this.#fullAccessEvmAssets.requestReview(input.sessionId, unapproved);
+        return localChatResult(`This Full Access swap names a contract that is not authorized for this session. Review the exact asset card and confirm it before a quote can be prepared.`, [], review);
+      }
+      const authorizedSwap = parseDirectAuthorizedRobinhoodSwap(input.prompt, input.walletScope, input.evmChainKey, input.sessionId, this.#fullAccessEvmAssets);
+      if (authorizedSwap !== null && input.mode === "mission" && input.walletAddress !== null && this.#evmSwapQuotes !== null) {
+        const settings = input.transactionSettings ?? this.#transactionSettings.get();
+        const proposal = await this.#evmSwapQuotes.quote({ walletAddress: input.walletAddress, chainKey: "robinhood", sellToken: authorizedSwap.sellToken, buyToken: authorizedSwap.buyToken, sellAmount: authorizedSwap.sellAmount, slippageBps: Math.min(settings.defaultSlippageBps, settings.maxSlippageBps, 100) });
+        return { ...localChatResult(`Robinhood ${authorizedSwap.sellSymbol} → ${authorizedSwap.buySymbol} quote prepared for Full Access review. The main process will re-check this session's exact asset allowlist again before any local signature.`, ["robinhood_swap_quote"]), evmSwapProposal: proposal };
+      }
+    }
+    const directRobinhoodDca = parseDirectRobinhoodDca(input.prompt, input.walletScope, input.evmChainKey);
+    if (directRobinhoodDca !== null && input.sessionId && input.walletAddress && this.#automationManager !== null) {
+      const strategy = this.#automationManager.createDca({
+        sessionId: input.sessionId, walletAddress: input.walletAddress, chainKey: "robinhood",
+        inputMint: directRobinhoodDca.inputToken, outputMint: directRobinhoodDca.outputToken,
+        orderAmountRaw: directRobinhoodDca.orderAmountRaw, maximumTotalRaw: directRobinhoodDca.maximumTotalRaw,
+        intervalSeconds: directRobinhoodDca.intervalSeconds, maximumExecutions: directRobinhoodDca.maximumExecutions,
+        expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+      });
+      return { model: this.#model(), text: `Robinhood DCA ${directRobinhoodDca.inputSymbol} → ${directRobinhoodDca.outputSymbol} created: ${directRobinhoodDca.displayAmount} ${directRobinhoodDca.inputSymbol} every ${directRobinhoodDca.intervalSeconds} seconds, maximum ${directRobinhoodDca.maximumExecutions} cycles. Each due run takes a fresh quote and rechecks allowance, balance, gas, slippage, and emergency stop.`, inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, toolsUsed: ["create_automation_strategy" as const], missionPreview: null, pumpTokenIntelligence: null, pumpDiscoverySnapshot: null, pumpTradePreview: null, limitOrderPreview: null, evmSwapProposal: null, automationStrategy: strategy };
+    }
+    const directRobinhoodBridge = parseDirectRobinhoodBridge(input.prompt, input.walletScope, input.evmChainKey);
+    if (directRobinhoodBridge !== null && input.mode === "mission" && input.walletAddress !== null && this.#evmBridgePreparation !== null) {
+      const now = new Date();
+      const contract = EvmBridgeContractSchema.parse({
+        id: crypto.randomUUID(),
+        provider: "relay",
+        sourceChainId: BRIDGE_ROBINHOOD_CHAIN_ID,
+        sourceChainKey: "robinhood",
+        sourceAssetAddress: BRIDGE_ROBINHOOD_USDG_ADDRESS,
+        sourceAssetSymbol: "USDG",
+        sourceAssetDecimals: 6,
+        sourceWallet: input.walletAddress,
+        destination: {
+          kind: "solana",
+          chainId: BRIDGE_SOLANA_CHAIN_ID,
+          chainKey: "solana",
+          assetAddress: BRIDGE_SOLANA_USDC_MINT,
+          assetSymbol: "USDC",
+          assetDecimals: 6,
+          recipient: directRobinhoodBridge.recipient,
+        },
+        amountIn: directRobinhoodBridge.amountRaw,
+        minimumDestinationAmount: directRobinhoodBridge.minimumDestinationAmount,
+        maximumNetworkFeeWei: "10000000000000000",
+        maximumTotalFeeUsd: 10,
+        slippageBps: 50,
+        deadline: new Date(now.getTime() + 20 * 60_000).toISOString(),
+        timeoutSeconds: 3_600,
+        refundPolicy: "relay-origin-refund",
+        createdAt: now.toISOString(),
+      });
+      let prepared: { quote: EvmBridgeQuote; preflight: EvmBridgePreflight };
+      try {
+        prepared = await this.#evmBridgePreparation.prepare(contract);
+      } catch (cause) {
+        const detail = cause instanceof Error ? cause.message : "The Relay bridge preflight could not be completed.";
+        const userMessage = detail === "EVM source wallet token balance does not cover the bridge amount"
+          ? `Robinhood bridge was not prepared because the session wallet does not have enough USDG for ${directRobinhoodBridge.displayAmount} USDG. No approval, signature, or broadcast was created. Reduce the amount or fund the exact Robinhood wallet bound to this session, then request a fresh bridge quote.`
+          : `Robinhood bridge was blocked safely: ${detail} No approval, signature, or broadcast was created.`;
+        return localChatResult(userMessage, ["bridge_quote" as const]);
+      }
+      return {
+        ...localChatResult(
+          `Robinhood USDG → Solana USDC bridge quote is ready. ${input.permission === "full" ? "Full Access will dispatch the exact locally preflighted source steps and then wait for independent Solana settlement verification." : "Review the exact source step before signing."}`,
+          ["bridge_quote" as const],
+        ),
+        evmBridgePreparation: { ...prepared, contract },
+      };
+    }
+    if (false && isUnsupportedRobinhoodAutomationPrompt(input.prompt, input.walletScope, input.evmChainKey)) {
+      return {
+        model: this.#model(),
+        text: "Robinhood Chain DCA and TP/SL automation are not implemented yet. No swap was prepared, signed, or broadcast. This desktop release currently supports a one-time Robinhood USDG ↔ ETH swap; automated EVM execution needs its own scheduler, price monitor, exact allowance handling, and receipt reconciliation before it can be enabled safely.",
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+        toolsUsed: [],
+        missionPreview: null,
+        pumpTokenIntelligence: null,
+        pumpDiscoverySnapshot: null,
+        pumpTradePreview: null,
+        limitOrderPreview: null,
+        evmSwapProposal: null,
+      };
+    }
     const directDca = parseDirectSolanaDca(input.prompt, input.walletScope);
     if (directDca !== null && input.sessionId && input.walletAddress && this.#automationManager !== null) {
       const strategy = this.#automationManager.createDca({
@@ -158,6 +277,17 @@ export class AiService {
         evmSwapProposal: null,
         automationStrategy: strategy,
       };
+    }
+    const directRobinhoodExit = parseDirectRobinhoodExit(input.prompt, input.walletScope, input.evmChainKey);
+    if (directRobinhoodExit !== null && input.sessionId && input.walletAddress && this.#automationManager !== null) {
+      const strategy = this.#automationManager.createExit({
+        sessionId: input.sessionId, walletAddress: input.walletAddress, chainKey: "robinhood",
+        inputMint: directRobinhoodExit.inputToken, outputMint: directRobinhoodExit.outputToken,
+        amountRaw: directRobinhoodExit.amountRaw, entryPriceUsd: directRobinhoodExit.entryPriceUsd,
+        takeProfitPriceUsd: directRobinhoodExit.takeProfitPriceUsd, stopLossPriceUsd: directRobinhoodExit.stopLossPriceUsd,
+        expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+      });
+      return { model: this.#model(), text: `Robinhood TP/SL ${directRobinhoodExit.inputSymbol} → ${directRobinhoodExit.outputSymbol} created. The local monitor will use fresh USD price evidence and a fresh Uniswap preflight only if a trigger is reached.`, inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, toolsUsed: ["create_automation_strategy" as const], missionPreview: null, pumpTokenIntelligence: null, pumpDiscoverySnapshot: null, pumpTradePreview: null, limitOrderPreview: null, evmSwapProposal: null, automationStrategy: strategy };
     }
     const directSolanaSwap = parseDirectSolanaSwap(input.prompt, input.walletScope);
     if (directSolanaSwap !== null && input.mode === "mission" && input.walletAddress !== null && this.#readService !== null) {
@@ -252,10 +382,10 @@ export class AiService {
       };
     }
     const { pumpScope, intent, walletScope, sessionId, ...providerInput } = input;
-    return { model: this.#model(), ...(await callOpenRouterChat({ apiKey, model: this.#model(), ...providerInput, tools: await this.#tools(input.walletAddress, input.mode, pumpScope, intent, walletScope, input.transactionSettings ?? this.#transactionSettings.get(), sessionId) })) };
+    return { model: this.#model(), ...(await callOpenRouterChat({ apiKey, model: this.#model(), ...providerInput, tools: await this.#tools(input.walletAddress, input.mode, pumpScope, intent, walletScope, input.transactionSettings ?? this.#transactionSettings.get(), sessionId, input.permission) })) };
   }
 
-  async #tools(walletAddress: string | null, mode: "agent" | "mission", pumpScope: PumpAiScope | undefined, intent: SessionIntent | undefined, walletScope: SessionWalletScope | undefined, transactionSettings: TransactionSettings, sessionId?: string): Promise<ReadOnlyAiTool[]> {
+  async #tools(walletAddress: string | null, mode: "agent" | "mission", pumpScope: PumpAiScope | undefined, intent: SessionIntent | undefined, walletScope: SessionWalletScope | undefined, transactionSettings: TransactionSettings, sessionId?: string, permission?: "restricted" | "full"): Promise<ReadOnlyAiTool[]> {
     const tools: ReadOnlyAiTool[] = [];
     if (walletScope === "evm" && mode === "mission" && walletAddress !== null && this.#evmSwapQuotes !== null) {
       tools.push({
@@ -274,6 +404,9 @@ export class AiService {
         },
         execute: async (argumentsValue) => {
           const quote = toolEvmSwapQuote(argumentsValue, transactionSettings);
+          if (permission === "full" && sessionId && this.#fullAccessEvmAssets !== null) {
+            this.#fullAccessEvmAssets.assertPairAuthorized(sessionId, quote.sellToken, quote.buyToken);
+          }
           return this.#evmSwapQuotes!.quote({ walletAddress, chainKey: "robinhood", ...quote });
         },
       });
@@ -528,6 +661,61 @@ function toolEvmSwapQuote(value: unknown, settings: TransactionSettings): { sell
 
 type RobinhoodTokenSymbol = "ETH" | "USDG";
 
+const ROBINHOOD_NATIVE_TOKEN = "0x0000000000000000000000000000000000000000";
+const ROBINHOOD_USDG_TOKEN = "0x5fc5360d0400a0fd4f2af552add042d716f1d168";
+
+function parseDirectRobinhoodDca(prompt: string, walletScope: SessionWalletScope | undefined, chainKey: EvmChainKey | undefined): {
+  inputToken: string; outputToken: string; inputSymbol: RobinhoodTokenSymbol; outputSymbol: RobinhoodTokenSymbol;
+  orderAmountRaw: string; maximumTotalRaw: string; intervalSeconds: number; maximumExecutions: number; displayAmount: string;
+} | null {
+  if (walletScope !== "evm" || (chainKey ?? "robinhood") !== "robinhood" || !/\bdca\b/iu.test(prompt)) return null;
+  const pair = /([0-9]+(?:[.,][0-9]+)?)\s*(usdg|eth)\s+(?:ke|to)\s+(usdg|eth)\b/iu.exec(prompt);
+  const cadence = /(?:setiap|every)\s+([0-9]+)\s*(detik|seconds?|sec|s|menit|minutes?|min|m|jam|hours?|hr|h)\b/iu.exec(prompt);
+  const cycles = /(?:selama\s+)?([0-9]+)\s*(?:kali|times?|cycles?|x)\b/iu.exec(prompt);
+  if (!pair || !cadence || !cycles) return null;
+  const inputSymbol = pair[2]!.toUpperCase() as RobinhoodTokenSymbol;
+  const outputSymbol = pair[3]!.toUpperCase() as RobinhoodTokenSymbol;
+  if (inputSymbol === outputSymbol) return null;
+  const displayAmount = pair[1]!.replace(",", ".");
+  const raw = decimalToRawAmount(displayAmount, inputSymbol === "ETH" ? 18 : 6);
+  const unit = cadence[2]!.toLowerCase();
+  const intervalSeconds = Number(cadence[1]) * (/^(?:jam|hours?|hr|h)$/u.test(unit) ? 3600 : /^(?:menit|minutes?|min|m)$/u.test(unit) ? 60 : 1);
+  const maximumExecutions = Number(cycles[1]);
+  if (raw === null || intervalSeconds < 60 || intervalSeconds > 31_536_000 || !Number.isInteger(maximumExecutions) || maximumExecutions < 1 || maximumExecutions > 365) return null;
+  return { inputToken: inputSymbol === "ETH" ? ROBINHOOD_NATIVE_TOKEN : ROBINHOOD_USDG_TOKEN, outputToken: outputSymbol === "ETH" ? ROBINHOOD_NATIVE_TOKEN : ROBINHOOD_USDG_TOKEN, inputSymbol, outputSymbol, orderAmountRaw: raw, maximumTotalRaw: (BigInt(raw) * BigInt(maximumExecutions)).toString(), intervalSeconds, maximumExecutions, displayAmount };
+}
+
+function parseDirectRobinhoodExit(prompt: string, walletScope: SessionWalletScope | undefined, chainKey: EvmChainKey | undefined): {
+  inputToken: string; outputToken: string; inputSymbol: RobinhoodTokenSymbol; outputSymbol: RobinhoodTokenSymbol; amountRaw: string;
+  entryPriceUsd: number; takeProfitPriceUsd: number | null; stopLossPriceUsd: number | null;
+} | null {
+  if (walletScope !== "evm" || (chainKey ?? "robinhood") !== "robinhood" || !/\b(?:tp|take\s*profit|sl|stop\s*loss)\b/iu.test(prompt)) return null;
+  const pair = /([0-9]+(?:[.,][0-9]+)?)\s*(usdg|eth)\s+(?:ke|to)\s+(usdg|eth)\b/iu.exec(prompt);
+  const entry = /\bentry\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:usd|\$)?/iu.exec(prompt);
+  const take = /\b(?:tp|take\s*profit)\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:usd|\$)?/iu.exec(prompt);
+  const stop = /\b(?:sl|stop\s*loss)\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:usd|\$)?/iu.exec(prompt);
+  if (!pair || !entry || (!take && !stop)) return null;
+  const inputSymbol = pair[2]!.toUpperCase() as RobinhoodTokenSymbol;
+  const outputSymbol = pair[3]!.toUpperCase() as RobinhoodTokenSymbol;
+  if (inputSymbol === outputSymbol) return null;
+  const entryPriceUsd = Number(entry[1]!.replace(",", "."));
+  const takeProfitPriceUsd = take ? Number(take[1]!.replace(",", ".")) : null;
+  const stopLossPriceUsd = stop ? Number(stop[1]!.replace(",", ".")) : null;
+  const amountRaw = decimalToRawAmount(pair[1]!.replace(",", "."), inputSymbol === "ETH" ? 18 : 6);
+  if (amountRaw === null || !Number.isFinite(entryPriceUsd) || entryPriceUsd <= 0 || (takeProfitPriceUsd !== null && takeProfitPriceUsd <= entryPriceUsd) || (stopLossPriceUsd !== null && (stopLossPriceUsd <= 0 || stopLossPriceUsd >= entryPriceUsd))) return null;
+  return { inputToken: inputSymbol === "ETH" ? ROBINHOOD_NATIVE_TOKEN : ROBINHOOD_USDG_TOKEN, outputToken: outputSymbol === "ETH" ? ROBINHOOD_NATIVE_TOKEN : ROBINHOOD_USDG_TOKEN, inputSymbol, outputSymbol, amountRaw, entryPriceUsd, takeProfitPriceUsd, stopLossPriceUsd };
+}
+
+function isUnsupportedRobinhoodAutomationPrompt(
+  prompt: string,
+  walletScope: SessionWalletScope | undefined,
+  chainKey: EvmChainKey | undefined,
+): boolean {
+  return walletScope === "evm"
+    && (chainKey ?? "robinhood") === "robinhood"
+    && /\b(?:dca|tp|take\s*profit|sl|stop\s*loss|trailing\s*stop)\b/iu.test(prompt);
+}
+
 const SOLANA_NATIVE_MINT = "So11111111111111111111111111111111111111112";
 const SOLANA_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const SOLANA_JUP_MINT = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
@@ -708,12 +896,86 @@ function parseDirectRobinhoodSwap(
   };
 }
 
+function parseDirectRobinhoodBridge(
+  prompt: string,
+  walletScope: SessionWalletScope | undefined,
+  chainKey: EvmChainKey | undefined,
+): { amountRaw: string; minimumDestinationAmount: string; recipient: string; displayAmount: string } | null {
+  if (walletScope !== "evm" || (chainKey ?? "robinhood") !== "robinhood") return null;
+  if (!/\bbridge\b/iu.test(prompt) || !/\b(?:usdg)\b/iu.test(prompt) || !/\b(?:solana|sol)\b/iu.test(prompt)) return null;
+  const amount = /\b([0-9]+(?:[.,][0-9]+)?)\s*usdg\b/iu.exec(prompt)?.[1]?.replace(",", ".") ?? null;
+  const recipient = /\b([1-9A-HJ-NP-Za-km-z]{32,44})\b/u.exec(prompt)?.[1] ?? null;
+  if (amount === null || recipient === null) return null;
+  const amountRaw = decimalToRawAmount(amount, 6);
+  if (amountRaw === null) return null;
+  // Cross-chain fees can materially exceed a same-chain swap fee for small
+  // amounts. Keep the default bounded but conservative; Relay still rejects a
+  // route below it and the exact quote is always displayed before dispatch.
+  const requestedMinimum = /\b(?:minimum|min)\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:usdc)?\b/iu.exec(prompt)?.[1]?.replace(",", ".") ?? null;
+  const minimumDestinationAmount = requestedMinimum === null
+    ? ((BigInt(amountRaw) * 90n) / 100n).toString()
+    : decimalToRawAmount(requestedMinimum, 6);
+  if (minimumDestinationAmount === null || BigInt(minimumDestinationAmount) === 0n || BigInt(minimumDestinationAmount) > BigInt(amountRaw)) return null;
+  return { amountRaw, minimumDestinationAmount, recipient, displayAmount: amount };
+}
+
+function parseDirectAuthorizedRobinhoodSwap(
+  prompt: string,
+  walletScope: SessionWalletScope | undefined,
+  chainKey: EvmChainKey | undefined,
+  sessionId: string,
+  assets: FullAccessEvmAssetAuthorizationService,
+): { sellToken: string; buyToken: string; sellAmount: string; sellSymbol: string; buySymbol: string } | null {
+  if (walletScope !== "evm" || (chainKey ?? "robinhood") !== "robinhood") return null;
+  const match = /\b(?:swap|tukar)\s+([0-9]+(?:[.,][0-9]+)?)\s+(eth|usdg|0x[0-9a-fA-F]{40})\s+(?:ke|to)\s+(eth|usdg|0x[0-9a-fA-F]{40})\b/iu.exec(prompt);
+  if (match === null) return null;
+  const resolve = (value: string) => value.toLowerCase() === "eth"
+    ? assets.find(sessionId, UNISWAP_NATIVE_TOKEN_ADDRESS)
+    : value.toLowerCase() === "usdg"
+      ? assets.find(sessionId, BRIDGE_ROBINHOOD_USDG_ADDRESS)
+      : assets.find(sessionId, value);
+  const sell = resolve(match[2]!);
+  const buy = resolve(match[3]!);
+  if (sell === null || buy === null || sell.address === buy.address) return null;
+  const sellAmount = decimalToRawAmount(match[1]!.replace(",", "."), sell.decimals);
+  if (sellAmount === null) return null;
+  return { sellToken: sell.address, buyToken: buy.address, sellAmount, sellSymbol: sell.symbol, buySymbol: buy.symbol };
+}
+
 function decimalToRawAmount(value: string, decimals: number): string | null {
   if (!/^\d+(?:\.\d+)?$/u.test(value)) return null;
   const [whole, fraction = ""] = value.split(".");
   if (fraction.length > decimals) return null;
   const raw = `${whole}${fraction.padEnd(decimals, "0")}`.replace(/^0+(?=\d)/u, "");
   return /^[1-9]\d*$/u.test(raw) ? raw : null;
+}
+
+function parseFullAccessAssetRequest(prompt: string): string | null {
+  if (!/\b(?:authorize|authorise|allow|add|izinkan|tambahkan)\b/iu.test(prompt) || !/\b(?:asset|token|contract|kontrak)\b/iu.test(prompt)) return null;
+  return /\b(0x[0-9a-fA-F]{40})\b/u.exec(prompt)?.[1] ?? null;
+}
+
+function parseFullAccessAssetConfirmation(prompt: string): string | null {
+  return /^\s*AUTHORIZE\s+FULL\s+ACCESS\s+ASSET\s+([0-9a-f-]{36})\s*$/iu.exec(prompt)?.[1] ?? null;
+}
+
+function localChatResult(text: string, toolsUsed: ReadOnlyAiTool["name"][], evmAssetAuthorizationReview?: { id: string; address: string; symbol: string; decimals: number; verifiedAt: string; expiresAt: string }) {
+  return {
+    model: "local-policy",
+    text,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    costUsd: 0,
+    toolsUsed,
+    missionPreview: null,
+    pumpTokenIntelligence: null,
+    pumpDiscoverySnapshot: null,
+    pumpTradePreview: null,
+    limitOrderPreview: null,
+    evmSwapProposal: null,
+    ...(evmAssetAuthorizationReview ? { evmAssetAuthorizationReview } : {}),
+  };
 }
 
 function toolLimitOrderDraft(value: unknown, settings = DEFAULT_TRANSACTION_SETTINGS): { goal: string; inputMint: string; outputMint: string; inputAmount: string; triggerMint: string; triggerCondition: "above" | "below"; triggerPriceUsd: number; maxSlippageBps: number; expiresAt: string } {

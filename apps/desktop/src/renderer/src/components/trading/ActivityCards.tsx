@@ -17,6 +17,7 @@ export function EvmSwapProposalCard({
   executing,
   executionEnabled,
   executionMissing,
+  fullAccess,
   onPrepare,
   onExecute,
 }: {
@@ -27,6 +28,7 @@ export function EvmSwapProposalCard({
   executing: boolean;
   executionEnabled: boolean;
   executionMissing: string[];
+  fullAccess?: boolean;
   onPrepare: () => void;
   onExecute: () => void;
 }) {
@@ -151,9 +153,13 @@ export function EvmSwapProposalCard({
             ? "Swap confirmed"
             : approvalConfirmed && !preflight
               ? "Approval confirmed · swap not submitted · fresh review required"
-              : "No signing authority granted"}
+              : fullAccess
+                ? preparing || executing
+                  ? "Full Access is preparing and executing locally"
+                  : "Full Access execution is local-only"
+                : "No signing authority granted"}
         </span>
-        {!swapConfirmed && latestReceipt?.status !== "unknown" && !preflight && (
+        {!fullAccess && !swapConfirmed && latestReceipt?.status !== "unknown" && !preflight && (
           <button
             className="primaryButton"
             disabled={preparing || !proposal.quote.liquidityAvailable}
@@ -166,7 +172,7 @@ export function EvmSwapProposalCard({
                 : "Prepare trade review"}
           </button>
         )}
-        {!swapConfirmed && preflight && (
+        {!fullAccess && !swapConfirmed && preflight && (
           <button
             className="dangerButton"
             disabled={executing || !executionEnabled}
@@ -180,6 +186,61 @@ export function EvmSwapProposalCard({
           </button>
         )}
       </footer>
+    </section>
+  );
+}
+
+/** Non-executable review artifact for adding one exact ERC-20 contract to a
+ * Full Access Robinhood session. Confirmation stays in the chat so the main
+ * process can bind the typed phrase to its short-lived pending review. */
+export function FullAccessEvmAssetReviewCard({
+  review,
+  onAuthorize,
+}: {
+  review: { id: string; address: string; symbol: string; decimals: number; verifiedAt: string; expiresAt: string };
+  onAuthorize: () => Promise<void>;
+}) {
+  const confirmation = `AUTHORIZE FULL ACCESS ASSET ${review.id}`;
+  const [authorizing, setAuthorizing] = useState(false);
+  const [authorized, setAuthorized] = useState(false);
+
+  async function authorize(): Promise<void> {
+    try {
+      setAuthorizing(true);
+      await onAuthorize();
+      setAuthorized(true);
+    } catch (error) {
+      console.warn("Unable to authorize Full Access asset", error);
+    } finally {
+      setAuthorizing(false);
+    }
+  }
+
+  return (
+    <section className="missionPreview ready">
+      <header>
+        <div>
+          <span>ROBINHOOD · FULL ACCESS · ASSET REVIEW</span>
+          <strong>{review.symbol} contract authorization</strong>
+        </div>
+        <StatusPill tone="warning">Review required</StatusPill>
+      </header>
+      <dl>
+        <div><dt>Contract</dt><dd className="font-mono text-[11px]">{review.address}</dd></div>
+        <div><dt>Token metadata</dt><dd>{review.symbol} · {review.decimals} decimals</dd></div>
+        <div><dt>Verified</dt><dd>{new Date(review.verifiedAt).toLocaleTimeString()}</dd></div>
+        <div><dt>Review expiry</dt><dd>{new Date(review.expiresAt).toLocaleTimeString()}</dd></div>
+      </dl>
+      <Notice tone="warning" title="Contract verification is limited">
+        Deployed bytecode and ERC-20 metadata were verified on Robinhood Chain. This does not verify liquidity, token safety, issuer, or market risk.
+      </Notice>
+      <footer>
+        <span>{authorized ? "Token authorized for this session." : "Allow this exact token for this session only."}</span>
+        <button className="primaryButton" disabled={authorizing || authorized} onClick={() => void authorize()}>
+          {authorized ? "Authorized" : authorizing ? "Authorizing…" : "Authorize token"}
+        </button>
+      </footer>
+      <p className="px-4 pb-4 font-mono text-[10px] text-muted-foreground">Explicit local authorization · session-scoped</p>
     </section>
   );
 }

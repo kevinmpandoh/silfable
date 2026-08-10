@@ -1,4 +1,4 @@
-import { createPublicClient, http, formatEther, parseAbi, parseEther, type Hex, type Address } from "viem";
+import { createPublicClient, http, formatEther, formatUnits, parseAbi, parseEther, type Hex, type Address } from "viem";
 import { ROBINHOOD_CHAIN_CONFIG } from "../wallet/evm-signer.js";
 import { VenueExecutionGate } from "./venue-execution-gate.js";
 
@@ -109,6 +109,43 @@ export class EvmEngine {
       functionName: "balanceOf",
       args: [owner],
     });
+  }
+
+  /** Read the minimal immutable metadata used when explicitly authorizing a
+   * custom Full Access asset. This is verification of an ERC-20 interface,
+   * not a safety, liquidity, or legitimacy endorsement. */
+  async getErc20Metadata(token: Address): Promise<{ symbol: string; decimals: number }> {
+    await this.assertExpectedChain();
+    const [symbol, decimals] = await Promise.all([
+      this.#publicClient.readContract({
+        address: token,
+        abi: parseAbi(["function symbol() view returns (string)"]),
+        functionName: "symbol",
+      }),
+      this.#publicClient.readContract({
+        address: token,
+        abi: parseAbi(["function decimals() view returns (uint8)"]),
+        functionName: "decimals",
+      }),
+    ]);
+    return { symbol, decimals: Number(decimals) };
+  }
+
+  /**
+   * Reads a supported ERC-20 balance for portfolio rendering. Keep the raw
+   * amount alongside its decimal-formatted representation so the renderer
+   * never needs a contract call or precision-losing number conversion.
+   */
+  async getErc20PortfolioBalance(
+    token: Address,
+    owner: Address,
+    decimals: number,
+  ): Promise<{ raw: bigint; formatted: string }> {
+    if (!Number.isInteger(decimals) || decimals < 0 || decimals > 18) {
+      throw new Error("ERC-20 portfolio token decimals are invalid");
+    }
+    const raw = await this.getErc20Balance(token, owner);
+    return { raw, formatted: formatUnits(raw, decimals) };
   }
 
   async getBytecode(address: Address): Promise<Hex | undefined> {

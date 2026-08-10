@@ -38,13 +38,21 @@ export function parseRelayEvmTransactionSteps(input: {
   const transactions: RelayEvmTransactionStep[] = [];
   for (const [stepIndex, rawStep] of input.steps.entries()) {
     const step = asRecord(rawStep, `Relay step ${stepIndex + 1}`);
+    const stepKind = typeof step.kind === "string" ? step.kind.toLowerCase() : "";
+    if (stepKind === "signature") {
+      throw new Error("Relay route requires a signature step that is not enabled for unattended EVM bridging");
+    }
     const items = Array.isArray(step.items) ? step.items : [];
     for (const [itemIndex, rawItem] of items.entries()) {
       const item = asRecord(rawItem, `Relay step ${stepIndex + 1} item ${itemIndex + 1}`);
       if (typeof item.kind === "string" && item.kind.toLowerCase() === "signature") {
         throw new Error("Relay route requires a signature step that is not enabled for unattended EVM bridging");
       }
-      if (typeof item.kind !== "string" || item.kind.toLowerCase() !== "transaction") continue;
+      // Relay V2 currently places `kind: transaction` on the parent step
+      // while its transaction items only expose `data`. Earlier versions put
+      // the kind on each item. Accept both documented response shapes.
+      const itemKind = typeof item.kind === "string" ? item.kind.toLowerCase() : "";
+      if (itemKind !== "transaction" && stepKind !== "transaction") continue;
       const data = asRecord(item.data, `Relay transaction ${stepIndex + 1}.${itemIndex + 1}`);
       const chainId = parseChainId(data.chainId ?? step.chainId);
       if (chainId !== input.expectedChainId) {
@@ -53,7 +61,7 @@ export function parseRelayEvmTransactionSteps(input: {
       const to = parseAddress(data.to);
       const calldata = parseCalldata(data.data);
       const valueWei = parseWei(data.value ?? "0");
-      const label = [item.label, step.action, step.id, step.kind].filter((value): value is string => typeof value === "string").join(" ").toLowerCase();
+      const label = [item.label, step.action, step.description, step.id, step.kind].filter((value): value is string => typeof value === "string").join(" ").toLowerCase();
       transactions.push({
         id: `relay-${stepIndex + 1}-${itemIndex + 1}`,
         kind: /approv|allowance/u.test(label) ? "approval" : "bridge",

@@ -151,6 +151,56 @@ export function EvmBridgeWorkspace({
 
   return null;
 }
+
+/** Read-only bridge evidence card used by the chat-first workspace flow. */
+export function EvmBridgeProposalCard({
+  preparation,
+  receipts = [],
+  fullAccess,
+  dispatching,
+  onDispatch,
+}: {
+  preparation: { quote: EvmBridgeQuote; preflight: EvmBridgePreflight; contract?: EvmBridgeContract };
+  receipts?: EvmBridgeReceipt[];
+  fullAccess: boolean;
+  dispatching: boolean;
+  onDispatch: () => void;
+}) {
+  const { quote, preflight, contract } = preparation;
+  const terminal = receipts.some((receipt) => receipt.status === "destination-confirmed" || receipt.status === "source-reverted" || receipt.status === "destination-failed" || receipt.status === "refunded");
+  const action = preflight.action === "approval" ? "Exact USDG approval" : "Relay bridge deposit";
+  const format = (raw: string | undefined, symbol: string) => raw === undefined ? "Unavailable" : `${(Number(raw) / 1_000_000).toFixed(6)} ${symbol}`;
+  return (
+    <section className="bridgeProposalCard">
+      <header>
+        <div><span className="kicker">Robinhood · Relay · bridge proposal</span><h3>USDG → Solana USDC</h3></div>
+        <StatusPill tone={terminal ? "success" : "warning"}>{receipts.at(-1)?.status ?? "preflighted"}</StatusPill>
+      </header>
+      <dl className="bridgeEvidenceGrid">
+        <div><dt>Source wallet</dt><dd>{contract ? shorten(contract.sourceWallet) : "Robinhood session"}</dd></div>
+        <div><dt>Solana recipient</dt><dd>{contract ? shorten(contract.destination.recipient) : "Pinned in preflight"}</dd></div>
+        <div><dt>Source amount</dt><dd>{format(contract?.amountIn, "USDG")}</dd></div>
+        <div><dt>Expected receive</dt><dd>{format(quote.estimatedDestinationAmount, "USDC")}</dd></div>
+        <div><dt>Minimum receive</dt><dd>{format(quote.minimumDestinationAmount, "USDC")}</dd></div>
+        <div><dt>Provider impact</dt><dd>{quote.totalFeeUsd === undefined ? "Verified by Relay" : `$${Number(quote.totalFeeUsd).toFixed(4)}`}</dd></div>
+        <div><dt>Current source step</dt><dd>{action}</dd></div>
+        <div><dt>Quote expiry</dt><dd>{quote.quoteExpiresAt ? new Date(quote.quoteExpiresAt).toLocaleTimeString() : "Short-lived"}</dd></div>
+      </dl>
+      <p className="bridgeSafetyCopy">Exact source chain, token, recipient, amount, fee cap, and minimum receive are pinned before any local signature. Solana settlement is independently verified.</p>
+      {receipts.length > 0 && <div className="bridgeReceiptPanel">
+        <strong>Bridge activity</strong>
+        {receipts.map((receipt) => <span key={receipt.id ?? receipt.transactionHash}>{receipt.action ?? "bridge"}: {receipt.status ?? "pending"} · {receipt.transactionHash ? shorten(receipt.transactionHash) : "no hash"}</span>)}
+      </div>}
+      <footer>
+        {!terminal && (
+          <button className="dangerButton" disabled={dispatching} onClick={onDispatch}>
+            {dispatching ? "Dispatching local bridge steps…" : fullAccess ? "Dispatch Full Access bridge" : "Review EVM bridge"}
+          </button>
+        )}
+      </footer>
+    </section>
+  );
+}
 export function BridgeProposalCard({
   proposal,
   preflight,

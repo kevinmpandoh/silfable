@@ -57,6 +57,15 @@ export type EvmKyberExecutionRequest = {
   confirmation: "APPROVE EVM MAINNET" | "EXECUTE EVM MAINNET SWAP";
 };
 
+type RuntimeExecutionInput = {
+  preflightId: string;
+  chainKey: EvmChainKey;
+  walletAddress: Address;
+  action: "approval" | "swap";
+  engine: ExecutionEngine;
+  withSigner: <T>(operation: (signer: EvmSignerService) => Promise<T>) => Promise<T>;
+};
+
 /**
  * Executes the exact transaction retained by a short-lived Kyber preflight.
  * Approval and swap are separate one-attempt operations. An approval can never
@@ -90,7 +99,21 @@ export class EvmKyberExecutionService {
     if (input.confirmation !== expectedConfirmation) throw new Error("Exact EVM Mainnet confirmation is required");
     this.#emergencyStop.assertExecutionAllowed();
     if (!(await this.#passwords.verify(input.masterPassword))) throw new Error("Master password is incorrect");
+    return await this.#executePrepared(input);
+  }
 
+  /**
+   * Trusted desktop-only path for an enrolled local Full Access session. The
+   * IPC handler must bind it to a Robinhood session and assert the in-memory
+   * signing session first; this method deliberately never accepts a password
+   * or a renderer-controlled approval bypass flag.
+   */
+  async executeFullAccess(input: RuntimeExecutionInput): Promise<EvmExecutionReceipt> {
+    this.#emergencyStop.assertExecutionAllowed();
+    return await this.#executePrepared(input);
+  }
+
+  async #executePrepared(input: RuntimeExecutionInput): Promise<EvmExecutionReceipt> {
     const prepared = this.#preflights.consume({
       id: input.preflightId,
       chainKey: input.chainKey,

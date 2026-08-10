@@ -155,6 +155,8 @@ import {
   EvmPrepareKyberSwapResponseSchema,
   EvmExecuteKyberSwapRequestSchema,
   EvmExecuteKyberSwapResponseSchema,
+  EvmExecuteFullAccessKyberSwapRequestSchema,
+  EvmExecuteFullAccessKyberSwapResponseSchema,
   EvmReceiptsResponseSchema,
   EvmReconcileReceiptsResponseSchema,
   EvmBridgePrepareRequestSchema,
@@ -229,6 +231,7 @@ import {
   type EvmPortfolioGetRequest,
   type EvmPrepareKyberSwapRequest,
   type EvmExecuteKyberSwapRequest,
+  type EvmExecuteFullAccessKyberSwapRequest,
   type EvmBridgePrepareRequest,
   type EvmBridgeExecuteRequest,
   type EvmBridgeReconcileRequest,
@@ -277,6 +280,9 @@ const api = {
   },
   async executeEvmKyberSwap(request: EvmExecuteKyberSwapRequest) {
     return EvmExecuteKyberSwapResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmExecuteKyberSwap, EvmExecuteKyberSwapRequestSchema.parse(request)));
+  },
+  async executeFullAccessEvmKyberSwap(request: EvmExecuteFullAccessKyberSwapRequest) {
+    return EvmExecuteFullAccessKyberSwapResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmExecuteFullAccessKyberSwap, EvmExecuteFullAccessKyberSwapRequestSchema.parse(request)));
   },
   async listEvmReceipts() {
     return EvmReceiptsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmListReceipts));

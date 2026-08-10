@@ -10,6 +10,9 @@ import { AutomationManager } from "./automation-manager.js";
 const WALLET = "2r2pXUspsXamwzNWc8dQn52GK2BJJWmr63MPzDDxjTcg";
 const TOKEN = "7LSsEoJGhLeZzGvDofTdNg7M3JttxQqGWNLo6vWMpump";
 const SOL = "So11111111111111111111111111111111111111112";
+const EVM_WALLET = "0x462e05D112DE35a42a8F0EaB5e0F4A898C9D4913";
+const USDG = "0x5fc5360d0400a0fd4f2af552add042d716f1d168";
+const ETH = "0x0000000000000000000000000000000000000000";
 
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), "silfable-automation-"));
@@ -46,6 +49,26 @@ test("DCA wake creates one durable approval proposal and never fabricates execut
     const duplicate = value.manager.evaluate(new Date("2026-07-29T00:01:10.000Z"));
     assert.equal(duplicate.length, 0);
     assert.equal(value.manager.listProposals().length, 1);
+  } finally {
+    value.database.close();
+    await rm(value.directory, { recursive: true, force: true });
+  }
+});
+
+test("Robinhood DCA remains chain-bound and creates a durable due proposal", async () => {
+  const value = await fixture();
+  try {
+    const now = new Date("2026-08-10T00:00:00.000Z");
+    const strategy = value.manager.createDca({
+      id: "robinhood-dca", sessionId: "session-evm", walletAddress: EVM_WALLET, chainKey: "robinhood",
+      inputMint: USDG, outputMint: ETH, orderAmountRaw: "500000", maximumTotalRaw: "1000000",
+      intervalSeconds: 60, maximumExecutions: 2, expiresAt: "2026-08-11T00:00:00.000Z",
+    }, now);
+    assert.equal(strategy.chainKey, "robinhood");
+    const proposals = value.manager.evaluate(new Date("2026-08-10T00:01:01.000Z"));
+    assert.equal(proposals.length, 1);
+    assert.equal(proposals[0]?.inputMint, USDG);
+    assert.equal(proposals[0]?.outputMint, ETH);
   } finally {
     value.database.close();
     await rm(value.directory, { recursive: true, force: true });

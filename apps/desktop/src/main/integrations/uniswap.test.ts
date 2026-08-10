@@ -145,6 +145,6 @@ test("Uniswap adapter rejects UniswapX routes and wrong-chain provider usage", a
   );
   await assert.rejects(
     () => service.quote({ chainKey: "base", tokenIn: UNISWAP_NATIVE_TOKEN_ADDRESS, tokenOut: token, amountIn: "1000000", slippageBps: 50, swapper: wallet }),
-    /does not use the Uniswap adapter/u,
+    /Unsupported EVM chain: base/u,
   );
 });

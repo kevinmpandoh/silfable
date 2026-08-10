@@ -17,6 +17,17 @@ test("parses a bounded approval plus bridge transaction for one EVM source chain
   assert.equal(result[1]?.valueWei, 42n);
 });
 
+test("parses the current Relay V2 parent-step transaction shape", () => {
+  const result = parseRelayEvmTransactionSteps({
+    expectedChainId: 4663,
+    steps: [
+      { kind: "transaction", id: "approve", description: "Sign an approval for USDG", items: [{ data: { chainId: 4663, to: ADDRESS, data: "0x095ea7b3", value: "0" } }] },
+      { kind: "transaction", id: "deposit", description: "Depositing funds to the relayer", items: [{ data: { chainId: 4663, to: ADDRESS, data: "0x1234", value: "0" } }] },
+    ],
+  });
+  assert.deepEqual(result.map((step) => step.kind), ["approval", "bridge"]);
+});
+
 test("rejects a transaction for another EVM chain", () => {
   assert.throws(() => parseRelayEvmTransactionSteps({
     expectedChainId: 8453,

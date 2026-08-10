@@ -811,6 +811,12 @@ export function RightRail({
                     const formatted = (num / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
                     return `${formatted} USDC`;
                   }
+                  if (inputMint?.toLowerCase() === "0x5fc5360d0400a0fd4f2af552add042d716f1d168") {
+                    return `${(num / 1_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDG`;
+                  }
+                  if (inputMint?.toLowerCase() === "0x0000000000000000000000000000000000000000") {
+                    return `${(num / 1_000_000_000_000_000_000).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 8 })} ETH`;
+                  }
                   return `${num.toLocaleString()} raw units`;
                 };
 
@@ -818,6 +824,8 @@ export function RightRail({
                   "So11111111111111111111111111111111111111112": "SOL",
                   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
                   "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN": "JUP",
+                  "0x0000000000000000000000000000000000000000": "ETH",
+                  "0x5fc5360d0400a0fd4f2af552add042d716f1d168": "USDG",
                 };
 
                 const inSym = KNOWN[strat.inputMint] || shorten(strat.inputMint);

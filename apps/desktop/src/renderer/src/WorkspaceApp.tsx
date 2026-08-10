@@ -462,6 +462,8 @@ function MainWorkspace({
   } | null>(null);
   const [preparingEvmIds, setPreparingEvmIds] = useState<string[]>([]);
   const [executingEvmIds, setExecutingEvmIds] = useState<string[]>([]);
+  const [dispatchingEvmBridgeIds, setDispatchingEvmBridgeIds] = useState<string[]>([]);
+  const fullAccessEvmInFlightRef = useRef(new Set<string>());
   const [evmExecutionEnabled, setEvmExecutionEnabled] = useState(false);
   const [evmExecutionMissing, setEvmExecutionMissing] = useState<string[]>([]);
   const [executingMissionIds, setExecutingMissionIds] = useState<string[]>([]);
@@ -642,7 +644,7 @@ function MainWorkspace({
       setPreparingBridgeIds((current) => current.filter((id) => id !== contractId));
     }
   }
-   async function executeBridge(
+  async function executeBridge(
     input: NonNullable<typeof bridgeExecutionApproval>,
     masterPassword: string,
   ): Promise<void> {
@@ -660,6 +662,28 @@ function MainWorkspace({
     });
     setBridgeExecutionApproval(null);
     await refreshEncryptedSessions(input.sessionId);
+    setPortfolioRefresh((current) => current + 1);
+  }
+  async function executeFullAccessBridge(
+    sessionId: string,
+    proposal: BridgeProposal,
+    preflight: BridgePreflightEvidence,
+  ): Promise<void> {
+    await window.silfable.executeBridge({
+      schemaVersion: 1,
+      requestId: crypto.randomUUID(),
+      sessionId,
+      contractId: proposal.contract.id,
+      preflightId: preflight.id,
+      // The main process ignores this value for a Full Access session and
+      // requires its in-memory local signing session instead.
+      masterPassword: "full-access-local-session",
+      confirmation: isControlledBridgeAcceptance(proposal)
+        ? CONTROLLED_BRIDGE_ACCEPTANCE_CONFIRMATION
+        : bridgeDestination(proposal.contract.destinationChainId).confirmation,
+      acknowledgedOneAttemptBroadcast: true,
+    });
+    await refreshEncryptedSessions(sessionId);
     setPortfolioRefresh((current) => current + 1);
   }
   async function reconcileBridge(target: SessionItem, receipt: BridgeReceipt): Promise<void> {
@@ -796,17 +820,24 @@ function MainWorkspace({
     await persistSession(session);
     if (input.prompt.trim()) await sendMessage(session, input.prompt.trim());
   }
-  async function sendMessage(target: SessionItem, text: string): Promise<void> {
+  async function sendMessage(
+    target: SessionItem,
+    text: string,
+    options: { recordUserMessage?: boolean } = {},
+  ): Promise<void> {
     if (!text.trim() || thinkingIds.includes(target.id)) return;
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      text,
-      at: new Date().toISOString(),
-    };
+    const recordUserMessage = options.recordUserMessage !== false;
+    const userMessage: ChatMessage | null = recordUserMessage
+      ? {
+          id: crypto.randomUUID(),
+          role: "user",
+          text,
+          at: new Date().toISOString(),
+        }
+      : null;
     const sessionWithUser = {
       ...target,
-      messages: [...target.messages, userMessage],
+      messages: userMessage ? [...target.messages, userMessage] : target.messages,
     };
     setSessions((current) =>
       current.map((item) => {
@@ -852,6 +883,12 @@ function MainWorkspace({
         ...(response.evmSwapProposal
           ? { evmSwapProposal: response.evmSwapProposal }
           : {}),
+        ...((response as any).evmBridgePreparation
+          ? { evmBridgePreparation: (response as any).evmBridgePreparation }
+          : {}),
+        ...((response as any).evmAssetAuthorizationReview
+          ? { evmAssetAuthorizationReview: (response as any).evmAssetAuthorizationReview }
+          : {}),
         ...(response.bridgeProposal && response.bridgePreflight
           ? {
               bridgeProposal: response.bridgeProposal,
@@ -880,6 +917,30 @@ function MainWorkspace({
       if (target.permission === "full" && response.missionPreview) {
         await runSimulation({ sessionId: target.id, messageId: assistant.id, preview: response.missionPreview, sessionSnapshot: sessionWithAssistant });
       }
+      if (
+        target.permission === "full"
+        && target.walletScope === "evm"
+        && target.evmChainKey === "robinhood"
+        && response.evmSwapProposal
+      ) {
+        void runFullAccessEvmSwap({
+          sessionId: target.id,
+          messageId: assistant.id,
+          proposal: response.evmSwapProposal,
+        });
+      }
+      if (
+        target.permission === "full"
+        && target.walletScope === "evm"
+        && target.evmChainKey === "robinhood"
+        && (response as any).evmBridgePreparation
+      ) {
+        void dispatchFullAccessEvmBridge({
+          sessionId: target.id,
+          messageId: assistant.id,
+          preparation: (response as any).evmBridgePreparation,
+        });
+      }
     } catch (error) {
       const assistant: ChatMessage = {
         id: crypto.randomUUID(),
@@ -904,7 +965,7 @@ function MainWorkspace({
     sessionId: string;
     messageId: string;
     proposal: EvmSwapProposal;
-  }): Promise<void> {
+  }): Promise<EvmSwapPreflightEvidence | null> {
     setPreparingEvmIds((current) => [...new Set([...current, input.proposal.id])]);
     try {
       const chainKey = input.proposal.chainKey;
@@ -925,7 +986,7 @@ function MainWorkspace({
         expectedBuyAmount: result.preflight.expectedAmountOut,
         minimumBuyAmount: result.preflight.minimumAmountOut,
       };
- setSessions((current) =>
+      setSessions((current) =>
         current.map((session) => {
           if (session.id !== input.sessionId) return session;
           const next = {
@@ -940,6 +1001,7 @@ function MainWorkspace({
           return next;
         }),
       );
+      return preflight;
     } catch (cause) {
       const errMsg = cause instanceof Error ? cause.message : "The EVM trade review could not be prepared safely. Verify the saved RPC, 0x key, official token contracts, liquidity, allowance, and gas policy.";
       setSessions((current) =>
@@ -960,9 +1022,18 @@ function MainWorkspace({
           return next;
         }),
       );
+      return null;
     } finally {
       setPreparingEvmIds((current) => current.filter((id) => id !== input.proposal.id));
     }
+  }
+
+  async function authorizeFullAccessEvmAsset(target: SessionItem, reviewId: string): Promise<void> {
+    await sendMessage(
+      target,
+      `AUTHORIZE FULL ACCESS ASSET ${reviewId}`,
+      { recordUserMessage: false },
+    );
   }
   async function executeEvmAction(
     approval: NonNullable<typeof evmExecutionApproval>,
@@ -1030,6 +1101,145 @@ function MainWorkspace({
       );
     } finally {
     setExecutingEvmIds((current) => current.filter((id) => id !== approval.proposal.id));
+    }
+  }
+  async function executeFullAccessEvmAction(input: {
+    sessionId: string;
+    messageId: string;
+    proposal: EvmSwapProposal;
+    preflight: EvmSwapPreflightEvidence;
+  }): Promise<EvmSessionExecutionReceipt | null> {
+    setExecutingEvmIds((current) => [...new Set([...current, input.proposal.id])]);
+    try {
+      const result = await (window as any).silfable.executeFullAccessEvmKyberSwap({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        sessionId: input.sessionId,
+        chainKey: "robinhood",
+        walletAddress: input.proposal.walletAddress,
+        preflightId: input.preflight.id,
+        action: input.preflight.allowanceRequired ? "approval" : "swap",
+        acknowledgedLocalSession: true,
+      });
+      setSessions((current) => current.map((session) => {
+        if (session.id !== input.sessionId) return session;
+        const next = {
+          ...session,
+          messages: session.messages.map((message) => {
+            if (message.id !== input.messageId) return message;
+            const { evmSwapPreflight: _consumed, ...rest } = message;
+            return { ...rest, evmExecutionReceipts: [...(message.evmExecutionReceipts ?? []), result.receipt].slice(-4) };
+          }),
+        };
+        void persistSession(next);
+        return next;
+      }));
+      return result.receipt as EvmSessionExecutionReceipt;
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : "Full Access Robinhood execution was blocked safely.";
+      setSessions((current) => current.map((session) => {
+        if (session.id !== input.sessionId) return session;
+        const next = { ...session, messages: session.messages.map((message) => message.id === input.messageId
+          ? { ...message, text: `${message.text.slice(0, 11_400)}\n\nFull Access Robinhood execution was blocked safely: ${detail}`.slice(0, 12_000) }
+          : message) };
+        void persistSession(next);
+        return next;
+      }));
+      return null;
+    } finally {
+      setExecutingEvmIds((current) => current.filter((id) => id !== input.proposal.id));
+    }
+  }
+  async function runFullAccessEvmSwap(input: {
+    sessionId: string;
+    messageId: string;
+    proposal: EvmSwapProposal;
+  }): Promise<void> {
+    if (fullAccessEvmInFlightRef.current.has(input.proposal.id)) return;
+    fullAccessEvmInFlightRef.current.add(input.proposal.id);
+    try {
+      const preflight = await prepareEvmSwap(input);
+      if (!preflight) return;
+      const initialReceipt = await executeFullAccessEvmAction({ ...input, preflight });
+      if (initialReceipt?.status !== "confirmed" || !preflight.allowanceRequired) return;
+
+      // ERC-20 approval and swap are distinct transactions. Build a fresh
+      // preflight only after the exact approval is independently confirmed.
+      const swapPreflight = await prepareEvmSwap(input);
+      if (!swapPreflight || swapPreflight.allowanceRequired) return;
+      await executeFullAccessEvmAction({ ...input, preflight: swapPreflight });
+    } finally {
+      fullAccessEvmInFlightRef.current.delete(input.proposal.id);
+    }
+  }
+  async function dispatchFullAccessEvmBridge(input: {
+    sessionId: string;
+    messageId: string;
+    preparation: { quote: EvmBridgeQuote; preflight: EvmBridgePreflight; contract?: EvmBridgeContract };
+  }): Promise<void> {
+    if (dispatchingEvmBridgeIds.includes(input.messageId)) return;
+    const contract = input.preparation.contract;
+    if (!contract || !input.preparation.preflight.id || !input.preparation.preflight.action) return;
+    setDispatchingEvmBridgeIds((current) => [...new Set([...current, input.messageId])]);
+    try {
+      let preparation = input.preparation;
+      const receipts: EvmBridgeReceipt[] = [];
+      for (let step = 0; step < 2; step += 1) {
+        const result = await window.silfable.executeEvmBridge({
+          schemaVersion: 1,
+          requestId: crypto.randomUUID(),
+          sessionId: input.sessionId,
+          preflightId: preparation.preflight.id!,
+          action: preparation.preflight.action as "approval" | "deposit",
+          masterPassword: "full-access-local-session",
+          confirmation: "EXECUTE EVM BRIDGE",
+          acknowledgedIrreversible: true,
+        });
+        receipts.push(result.receipt);
+        // Relay separates an exact allowance from the bridge deposit. Never
+        // reuse the consumed preflight after approval: fetch a fresh route and
+        // simulate the deposit against the now-confirmed allowance.
+        if (preparation.preflight.action !== "approval" || result.receipt.status !== "source-confirmed") break;
+        const refreshed = await window.silfable.prepareEvmBridge({
+          schemaVersion: 1,
+          requestId: crypto.randomUUID(),
+          sessionId: input.sessionId,
+          contract,
+          acknowledgedSimulationOnly: true,
+        });
+        preparation = { ...refreshed, contract };
+      }
+      setSessions((current) => current.map((session) => {
+        if (session.id !== input.sessionId) return session;
+        const next = {
+          ...session,
+          messages: session.messages.map((message) => message.id === input.messageId
+            ? {
+                ...message,
+                evmBridgePreparation: preparation,
+                evmBridgeReceipts: [...((message as any).evmBridgeReceipts ?? []), ...receipts].slice(-4),
+                text: `${message.text}\n\n${receipts.at(-1)?.status === "source-confirmed" ? "Robinhood source transaction confirmed. Solana settlement is pending independent verification." : "Robinhood bridge source step was submitted; do not retry an unknown broadcast."}`.slice(0, 12_000),
+              }
+            : message),
+        };
+        void persistSession(next);
+        return next;
+      }));
+    } catch (cause) {
+      const detail = cleanErrorMessage(cause, "Robinhood Full Access bridge was blocked safely.");
+      setSessions((current) => current.map((session) => {
+        if (session.id !== input.sessionId) return session;
+        const next = {
+          ...session,
+          messages: session.messages.map((message) => message.id === input.messageId
+            ? { ...message, text: `${message.text}\n\nFull Access Robinhood bridge was blocked safely: ${detail}`.slice(0, 12_000) }
+            : message),
+        };
+        void persistSession(next);
+        return next;
+      }));
+    } finally {
+      setDispatchingEvmBridgeIds((current) => current.filter((id) => id !== input.messageId));
     }
   }
   async function runSimulation(input: {
@@ -1921,12 +2131,23 @@ function MainWorkspace({
             onPrepareBridge={(input) => prepareBridge(active, input)}
             preparingBridge={preparingBridgeIds.length > 0}
             reconcilingBridgeIds={reconcilingBridgeIds}
-            onRequestBridgeExecution={(proposal, preflight) => setBridgeExecutionApproval({
-              sessionId: active.id,
-              proposal,
-              preflight,
-            })}
+            onRequestBridgeExecution={(proposal, preflight) => {
+              if (active.permission === "full" && active.walletScope === "solana") {
+                void executeFullAccessBridge(active.id, proposal, preflight);
+                return;
+              }
+              setBridgeExecutionApproval({
+                sessionId: active.id,
+                proposal,
+                preflight,
+              });
+            }}
             onReconcileBridge={(receipt) => void reconcileBridge(active, receipt)}
+            dispatchingEvmBridgeIds={dispatchingEvmBridgeIds}
+            onDispatchEvmBridge={(messageId, preparation) => {
+              if (active.permission !== "full" || active.walletScope !== "evm" || active.evmChainKey !== "robinhood") return;
+              void dispatchFullAccessEvmBridge({ sessionId: active.id, messageId, preparation });
+            }}
             thinking={thinkingIds.includes(active.id)}
             animatedMessageIds={animatedMessageIds}
             onAnimationComplete={(id) =>
@@ -1950,6 +2171,7 @@ function MainWorkspace({
             executingEvmIds={executingEvmIds}
             evmExecutionEnabled={evmExecutionEnabled}
             evmExecutionMissing={evmExecutionMissing}
+            fullAccessEvm={active.permission === "full" && active.walletScope === "evm" && active.evmChainKey === "robinhood"}
             onPrepareEvmSwap={(messageId, proposal) =>
               void prepareEvmSwap({
                 sessionId: active.id,
@@ -1957,14 +2179,21 @@ function MainWorkspace({
                 proposal,
               })
             }
-            onRequestEvmExecution={(messageId, proposal, preflight) =>
+            onRequestEvmExecution={(messageId, proposal, preflight) => {
+              if (active.permission === "full" && active.walletScope === "evm" && active.evmChainKey === "robinhood") {
+                void executeFullAccessEvmAction({ sessionId: active.id, messageId, proposal, preflight });
+                return;
+              }
               setEvmExecutionApproval({
                 sessionId: active.id,
                 messageId,
                 proposal,
                 preflight,
                 action: preflight.allowanceRequired ? "approval" : "swap",
-              })
+              });
+            }}
+            onAuthorizeFullAccessEvmAsset={(reviewId) =>
+              authorizeFullAccessEvmAsset(active, reviewId)
             }
             onRequestLimitSimulation={(messageId, preview) =>
               setLimitSimulationApproval({

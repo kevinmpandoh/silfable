@@ -80,6 +80,28 @@ test("unknown EVM broadcast status is persisted and never retried", async () => 
   assert.deepEqual(saved.map((item) => item.status), ["unknown"]);
 });
 
+test("trusted Full Access execution uses the same one-attempt preflight path without a renderer password", async () => {
+  const preflights = new KyberSwapPreflightService();
+  const engine = executionEngine("success");
+  const evidence = await prepareNativeSwap(preflights, engine);
+  const saved: EvmExecutionReceipt[] = [];
+  const service = executionService(preflights, saved);
+  const signer = new EvmSignerService(new Uint8Array(32).fill(9));
+
+  const receipt = await service.executeFullAccess({
+    preflightId: evidence.id,
+    chainKey: "base",
+    walletAddress: WALLET,
+    action: "swap",
+    engine,
+    withSigner: async (operation) => await operation(signer),
+  });
+
+  assert.equal(receipt.status, "confirmed");
+  assert.equal(engine.broadcasts, 1);
+  assert.deepEqual(saved.map((item) => item.status), ["unknown", "confirmed"]);
+});
+
 test("invalid password fails before consuming the preflight or reaching signer", async () => {
   const preflights = new KyberSwapPreflightService();
   const engine = executionEngine("success");

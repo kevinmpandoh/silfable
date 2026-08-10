@@ -115,13 +115,13 @@ test("builds a Solana chain snapshot and normalized Jupiter receipt", () => {
 test("builds an EVM snapshot and filters encrypted receipts to the session wallet", () => {
   const session = baseSession({
     walletScope: "evm",
-    evmChainKey: "base",
+    evmChainKey: "robinhood",
     walletAddress: EVM_WALLET,
   });
   const portfolio: EvmPortfolioSnapshot = {
-    chainKey: "base",
-    chainId: 8453,
-    chainName: "Base",
+    chainKey: "robinhood",
+    chainId: 4663,
+    chainName: "Robinhood Chain",
     address: EVM_WALLET,
     blockNumber: "33500000",
     nativeSymbol: "ETH",
@@ -138,8 +138,8 @@ test("builds an EVM snapshot and filters encrypted receipts to the session walle
   };
   const receipt = {
     id: randomUUID(),
-    chainKey: "base",
-    chainId: 8453,
+    chainKey: "robinhood",
+    chainId: 4663,
     transactionHash: `0x${"a".repeat(64)}`,
     walletAddress: EVM_WALLET,
     kind: "swap",
@@ -166,12 +166,12 @@ test("builds an EVM snapshot and filters encrypted receipts to the session walle
     now: "2026-07-30T02:00:03.000Z",
   });
 
-  assert.equal(result.chains[0]?.chainName, "Base");
+  assert.equal(result.chains[0]?.chainName, "Robinhood Chain");
   assert.equal(result.chains[0]?.assets[0]?.symbol, "USDC");
   assert.equal(result.activity.length, 1);
   assert.equal(result.activity[0]?.venue, "evm-swap");
   assert.equal(result.activity[0]?.networkFeeRaw, "12000000000000");
-  assert.equal(result.activity[0]?.explorerUrl, `https://basescan.org/tx/${receipt.transactionHash}`);
+  assert.equal(result.activity[0]?.explorerUrl, `https://robinhoodchain.blockscout.com/tx/${receipt.transactionHash}`);
   assert.equal(result.chains[0]?.valuationStatus, "unavailable");
   assert.equal(result.chains[0]?.valuationSource, null);
   assert.equal(result.chains[0]?.priceVerifiedAt, null);
@@ -180,13 +180,13 @@ test("builds an EVM snapshot and filters encrypted receipts to the session walle
 test("values EVM native and ERC-20 balances from explicit provider evidence", () => {
   const session = baseSession({
     walletScope: "evm",
-    evmChainKey: "base",
+    evmChainKey: "robinhood",
     walletAddress: EVM_WALLET,
   });
   const portfolio: EvmPortfolioSnapshot = {
-    chainKey: "base",
-    chainId: 8453,
-    chainName: "Base",
+    chainKey: "robinhood",
+    chainId: 4663,
+    chainName: "Robinhood Chain",
     address: EVM_WALLET,
     blockNumber: "33500001",
     nativeSymbol: "ETH",
@@ -208,9 +208,9 @@ test("values EVM native and ERC-20 balances from explicit provider evidence", ()
     evmPrices: {
       source: "coingecko-onchain",
       fetchedAt,
-      nativeAddress: "0x4200000000000000000000000000000000000006",
+      nativeAddress: "0x0bd7d308f8e1639fab988df18a8011f41eacad73",
       prices: new Map([
-        ["0x4200000000000000000000000000000000000006", 2_000],
+        ["0x0bd7d308f8e1639fab988df18a8011f41eacad73", 2_000],
         [EVM_TOKEN_OUT, 1],
       ]),
     },
@@ -225,16 +225,16 @@ test("values EVM native and ERC-20 balances from explicit provider evidence", ()
   assert.equal(result.chains[0]?.assets[0]?.priceVerifiedAt, fetchedAt);
 });
 
-test("aggregates the same EVM wallet across every configured chain snapshot", () => {
+test("keeps the Robinhood wallet snapshot scoped to the single enabled chain", () => {
   const session = baseSession({
     walletScope: "evm",
-    evmChainKey: "base",
+    evmChainKey: "robinhood",
     walletAddress: EVM_WALLET,
   });
-  const base: EvmPortfolioSnapshot = {
-    chainKey: "base",
-    chainId: 8453,
-    chainName: "Base",
+  const robinhood: EvmPortfolioSnapshot = {
+    chainKey: "robinhood",
+    chainId: 4663,
+    chainName: "Robinhood Chain",
     address: EVM_WALLET,
     blockNumber: "33500002",
     nativeSymbol: "ETH",
@@ -243,24 +243,13 @@ test("aggregates the same EVM wallet across every configured chain snapshot", ()
     assets: [],
     verifiedAt: "2026-07-30T04:00:00.000Z",
   };
-  const ethereum: EvmPortfolioSnapshot = {
-    ...base,
-    chainKey: "ethereum",
-    chainId: 1,
-    chainName: "Ethereum",
-    blockNumber: "23000000",
-    nativeRawAmount: "20000000000000000",
-    nativeUiAmount: "0.02",
-  };
-
   const result = buildUnifiedPortfolio({
     session,
     evmPortfolios: [
-      { snapshot: base, prices: null },
-      { snapshot: ethereum, prices: null },
+      { snapshot: robinhood, prices: null },
     ],
   });
 
-  assert.deepEqual(result.chains.map((chain) => chain.chainKey), ["base", "ethereum"]);
+  assert.deepEqual(result.chains.map((chain) => chain.chainKey), ["robinhood"]);
   assert.equal(result.chains.every((chain) => chain.walletAddress === EVM_WALLET), true);
 });

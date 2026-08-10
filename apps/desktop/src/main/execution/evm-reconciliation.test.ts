@@ -8,8 +8,8 @@ import { EvmReceiptReconciliationService } from "./evm-reconciliation.js";
 
 const UNKNOWN: EvmExecutionReceipt = {
   id: crypto.randomUUID(),
-  chainKey: "arbitrum",
-  chainId: 42161,
+  chainKey: "robinhood",
+  chainId: 4663,
   transactionHash: `0x${"12".repeat(32)}` as Hex,
   wallet: "0x1111111111111111111111111111111111111111",
   kind: "swap",
@@ -32,8 +32,8 @@ test("EVM receipt reconciliation reads a known hash without broadcasting", async
   });
   let reads = 0;
   const reconciled = await service.reconcilePending(async ({ chainKey, chainId }) => {
-    assert.equal(chainKey, "arbitrum");
-    assert.equal(chainId, 42161);
+    assert.equal(chainKey, "robinhood");
+    assert.equal(chainId, 4663);
     return {
       async getReceiptStatus(hash) {
         reads += 1;

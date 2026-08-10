@@ -5,8 +5,8 @@ import test from "node:test";
 import type { Address, Hex } from "viem";
 
 import {
-  BRIDGE_BASE_CHAIN_ID,
-  BRIDGE_BASE_USDC_ADDRESS,
+  BRIDGE_ROBINHOOD_CHAIN_ID,
+  BRIDGE_ROBINHOOD_USDG_ADDRESS,
   BRIDGE_SOLANA_CHAIN_ID,
   BRIDGE_SOLANA_USDC_MINT,
   type EvmBridgeContract,
@@ -19,7 +19,7 @@ import { EvmSignerService } from "../wallet/evm-signer.js";
 import { EvmBridgeExecutionService, EvmBridgeReconciliationService } from "./evm-bridge-execution.js";
 
 const WALLET = "0x1111111111111111111111111111111111111111" as Address;
-const TOKEN = BRIDGE_BASE_USDC_ADDRESS as Address;
+const TOKEN = BRIDGE_ROBINHOOD_USDG_ADDRESS as Address;
 const ROUTER = "0x2222222222222222222222222222222222222222" as Address;
 const HASH = `0x${"cd".repeat(32)}` as Hex;
 const DESTINATION_HASH = `0x${"ef".repeat(32)}`;
@@ -44,7 +44,7 @@ test("executes one reviewed EVM bridge deposit and persists before confirmation"
   });
 
   assert.equal(receipt.status, "source-confirmed");
-  assert.equal(receipt.sourceChainKey, "base");
+  assert.equal(receipt.sourceChainKey, "robinhood");
   assert.equal(receipt.destinationChainKey, "solana");
   assert.equal(engine.broadcasts, 1);
   assert.deepEqual(receipts.saved.map((item) => item.status), ["source-unknown", "source-confirmed"]);
@@ -147,7 +147,7 @@ function relayService() {
   return new RelayEvmBridgeService((async () => new Response(JSON.stringify({
     steps: [{ id: "deposit", requestId: REQUEST_ID, action: "deposit", items: [{
       kind: "transaction", label: "Bridge deposit", data: {
-        chainId: BRIDGE_BASE_CHAIN_ID, to: ROUTER, data: "0x1234", value: "0",
+        chainId: BRIDGE_ROBINHOOD_CHAIN_ID, to: ROUTER, data: "0x1234", value: "0",
       },
     }] }],
     fees: { relayer: { amountUsd: "0.25" }, gas: { amountUsd: "0.01" } },
@@ -158,8 +158,8 @@ function relayService() {
 function contract(): EvmBridgeContract {
   return {
     id: "11111111-1111-4111-8111-111111111111", provider: "relay",
-    sourceChainId: BRIDGE_BASE_CHAIN_ID, sourceChainKey: "base",
-    sourceAssetAddress: BRIDGE_BASE_USDC_ADDRESS, sourceAssetSymbol: "USDC", sourceAssetDecimals: 6,
+    sourceChainId: BRIDGE_ROBINHOOD_CHAIN_ID, sourceChainKey: "robinhood",
+    sourceAssetAddress: BRIDGE_ROBINHOOD_USDG_ADDRESS, sourceAssetSymbol: "USDG", sourceAssetDecimals: 18,
     sourceWallet: WALLET,
     destination: {
       kind: "solana", chainId: BRIDGE_SOLANA_CHAIN_ID, chainKey: "solana",
@@ -176,7 +176,7 @@ function contract(): EvmBridgeContract {
 function bridgeEngine(result: "success" | "timeout") {
   return {
     broadcasts: 0,
-    async assertExpectedChain() { return BRIDGE_BASE_CHAIN_ID; },
+    async assertExpectedChain() { return BRIDGE_ROBINHOOD_CHAIN_ID; },
     async getBalance() { return { wei: 10_000_000n }; },
     async getErc20Balance(_token: Address, _owner: Address) { return 10_000_000n; },
     async getBytecode() { return "0x01" as Hex; },
@@ -207,8 +207,8 @@ function sampleReceipt(): EvmBridgeReceipt {
     id: "22222222-2222-4222-8222-222222222222", contractId: contract().id,
     quoteId: "33333333-3333-4333-8333-333333333333", preflightId: "44444444-4444-4444-8444-444444444444",
     requestId: REQUEST_ID, provider: "relay", action: "deposit",
-    sourceChainKey: "base", sourceChainId: BRIDGE_BASE_CHAIN_ID,
-    sourceAssetAddress: TOKEN, sourceAssetSymbol: "USDC",
+    sourceChainKey: "robinhood", sourceChainId: BRIDGE_ROBINHOOD_CHAIN_ID,
+    sourceAssetAddress: TOKEN, sourceAssetSymbol: "USDG",
     destinationChainId: BRIDGE_SOLANA_CHAIN_ID, destinationChainKey: "solana",
     destinationAssetAddress: BRIDGE_SOLANA_USDC_MINT, destinationAssetSymbol: "USDC",
     sourceWallet: WALLET, destinationRecipient: contract().destination.recipient,

@@ -45,13 +45,14 @@ export class EvmBridgeExecutionService {
     action: "approval" | "deposit";
     masterPassword: string;
     confirmation: "APPROVE BRIDGE TOKEN" | "EXECUTE EVM BRIDGE MAINNET";
+    fullAccess?: boolean;
     engine: Engine;
     withSigner: <T>(operation: (signer: EvmSignerService) => Promise<T>) => Promise<T>;
   }): Promise<EvmBridgeReceipt> {
     const expected = input.action === "approval" ? "APPROVE BRIDGE TOKEN" : "EXECUTE EVM BRIDGE MAINNET";
-    if (input.confirmation !== expected) throw new Error("Exact EVM bridge Mainnet confirmation is required");
+    if (!input.fullAccess && input.confirmation !== expected) throw new Error("Exact EVM bridge Mainnet confirmation is required");
     this.#emergencyStop.assertExecutionAllowed();
-    if (!(await this.#passwords.verify(input.masterPassword))) throw new Error("Master password is incorrect");
+    if (!input.fullAccess && !(await this.#passwords.verify(input.masterPassword))) throw new Error("Master password is incorrect");
     const prepared = this.#preflights.consume({ preflightId: input.preflightId, action: input.action });
     const wallet = prepared.contract.sourceWallet as Address;
     const transaction = prepared.transaction;

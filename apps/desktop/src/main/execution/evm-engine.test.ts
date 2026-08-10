@@ -16,6 +16,8 @@ async function withRpc<T>(chainId: number, run: (url: string) => Promise<T>): Pr
         ? `0x${chainId.toString(16)}`
         : rpc.method === "eth_getBalance"
           ? "0x0"
+          : rpc.method === "eth_call"
+            ? `0x${"0".repeat(58)}1312d0`
           : null;
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, result }));
@@ -48,6 +50,20 @@ test("Robinhood EVM engine blocks a mismatched RPC before reads", async () => {
     await assert.rejects(
       () => engine.getBalance("0x1111111111111111111111111111111111111111"),
       /expected 4663, received 1/u,
+    );
+  });
+});
+
+test("Robinhood EVM engine reads ERC-20 portfolio balances without renderer conversion", async () => {
+  await withRpc(4663, async (url) => {
+    const engine = new EvmEngine(url);
+    assert.deepEqual(
+      await engine.getErc20PortfolioBalance(
+        "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+        "0x1111111111111111111111111111111111111111",
+        6,
+      ),
+      { raw: 1_250_000n, formatted: "1.25" },
     );
   });
 });

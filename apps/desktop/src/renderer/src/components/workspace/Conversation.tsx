@@ -5,13 +5,13 @@ import { Button, Modal } from '../ui';
 import { shorten, cn } from '../../lib/utils';
 
 import {
-  BridgeProposalCard, EvmBridgeWorkspace
+  BridgeProposalCard, EvmBridgeProposalCard, EvmBridgeWorkspace
 } from '../bridge/EvmBridge';
 import {
   PumpTradePreviewCard, PumpExecutionCard
 } from '../trading/PumpCards';
 import {
-  PumpLaunchDraftForm, EvmSwapProposalCard, MissionPreviewCard, PumpSimulationCard, PumpLaunchDraftCard, LimitOrderPreviewCard
+  PumpLaunchDraftForm, EvmSwapProposalCard, FullAccessEvmAssetReviewCard, MissionPreviewCard, PumpSimulationCard, PumpLaunchDraftCard, LimitOrderPreviewCard
 } from '../trading/ActivityCards';
 import { Composer } from './WorkspacePanels';
 import { AnimatedMarkdownMessage, MarkdownMessage, BridgePreparationForm } from './MarkdownComponents';
@@ -36,6 +36,8 @@ export function Conversation({
   reconcilingBridgeIds,
   onRequestBridgeExecution,
   onReconcileBridge,
+  onDispatchEvmBridge,
+  dispatchingEvmBridgeIds,
   thinking,
   animatedMessageIds,
   onAnimationComplete,
@@ -55,8 +57,10 @@ export function Conversation({
   executingEvmIds,
   evmExecutionEnabled,
   evmExecutionMissing,
+  fullAccessEvm,
   onPrepareEvmSwap,
   onRequestEvmExecution,
+  onAuthorizeFullAccessEvmAsset,
   onRequestLimitSimulation,
   onRequestLimitExecution,
   onRequestLimitCancel,
@@ -97,6 +101,8 @@ export function Conversation({
   reconcilingBridgeIds: string[];
   onRequestBridgeExecution: (proposal: BridgeProposal, preflight: BridgePreflightEvidence) => void;
   onReconcileBridge: (receipt: BridgeReceipt) => void;
+  onDispatchEvmBridge: (messageId: string, preparation: { quote: EvmBridgeQuote; preflight: EvmBridgePreflight; contract?: EvmBridgeContract }) => void;
+  dispatchingEvmBridgeIds: string[];
   thinking: boolean;
   animatedMessageIds: string[];
   onAnimationComplete: (id: string) => void;
@@ -116,12 +122,14 @@ export function Conversation({
   executingEvmIds: string[];
   evmExecutionEnabled: boolean;
   evmExecutionMissing: string[];
+  fullAccessEvm?: boolean;
   onPrepareEvmSwap: (messageId: string, proposal: EvmSwapProposal) => void;
   onRequestEvmExecution: (
     messageId: string,
     proposal: EvmSwapProposal,
     preflight: EvmSwapPreflightEvidence,
   ) => void;
+  onAuthorizeFullAccessEvmAsset: (reviewId: string) => Promise<void>;
   onRequestLimitSimulation: (
     messageId: string,
     preview: LimitOrderContractPreview,
@@ -269,6 +277,7 @@ export function Conversation({
                   executing={executingEvmIds.includes(message.evmSwapProposal.id)}
                   executionEnabled={evmExecutionEnabled}
                   executionMissing={evmExecutionMissing}
+                  fullAccess={fullAccessEvm}
                   onPrepare={() =>
                     onPrepareEvmSwap(message.id, message.evmSwapProposal!)
                   }
@@ -279,6 +288,12 @@ export function Conversation({
                       message.evmSwapPreflight!,
                     )
                   }
+                />
+              )}
+              {(message as any).evmAssetAuthorizationReview && (
+                <FullAccessEvmAssetReviewCard
+                  review={(message as any).evmAssetAuthorizationReview}
+                  onAuthorize={() => onAuthorizeFullAccessEvmAsset((message as any).evmAssetAuthorizationReview.id)}
                 />
               )}
               {message.bridgeProposal && message.bridgePreflight && (
@@ -293,6 +308,15 @@ export function Conversation({
                   {...(message.bridgeReceipt
                     ? { onReconcile: () => onReconcileBridge(message.bridgeReceipt!) }
                     : {})}
+                />
+              )}
+              {(message as any).evmBridgePreparation && (
+                <EvmBridgeProposalCard
+                  preparation={(message as any).evmBridgePreparation}
+                  receipts={(message as any).evmBridgeReceipts ?? []}
+                  fullAccess={session.permission === "full"}
+                  dispatching={dispatchingEvmBridgeIds.includes(message.id)}
+                  onDispatch={() => onDispatchEvmBridge(message.id, (message as any).evmBridgePreparation)}
                 />
               )}
               {message.missionPreview && (

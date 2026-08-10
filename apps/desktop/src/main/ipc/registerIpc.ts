@@ -35,6 +35,8 @@ import {
   EmergencyStopReleaseRequestSchema,
   EvmExecuteKyberSwapRequestSchema,
   EvmExecuteKyberSwapResponseSchema,
+  EvmExecuteFullAccessKyberSwapRequestSchema,
+  EvmExecuteFullAccessKyberSwapResponseSchema,
   EvmBridgeExecuteRequestSchema,
   EvmBridgeExecuteResponseSchema,
   EvmBridgePrepareRequestSchema,
@@ -248,12 +250,13 @@ import { EvmBridgeExecutionService, EvmBridgeReconciliationService } from "../ex
 import { VenueReadinessService } from "../security/venue-readiness.js";
 import { EncryptedFullAccessGrantService } from "../security/full-access-grants.js";
 import { EncryptedFullAccessExecutionGrantService } from "../security/full-access-execution-grants.js";
+import { FullAccessEvmAssetAuthorizationService } from "../security/full-access-evm-assets.js";
 import { LocalSigningSessionService } from "../security/local-signing-session.js";
 import { AutonomousJobStore } from "../execution/autonomous-job-store.js";
 import { AutonomousExecutorService } from "../execution/autonomous-executor.js";
 
 
-export function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, emergencyStop: EmergencyStopService, wallets: WalletOnboardingService, evmWallet: EvmWalletService, evmReceipts: EncryptedEvmReceiptService, evmBridgeReceipts: EncryptedEvmBridgeReceiptService, evmSwapQuotes: EvmSwapRouterService, uniswapQuotes: UniswapQuoteService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService, pumpLaunchPreflight: PumpLaunchPreflightService, strategyManager: PositionStrategyManager, observationService: DurableBackgroundObservationService, automationManager: AutomationManager, fullAccessExecutionGrants: EncryptedFullAccessExecutionGrantService, localSigningSession: LocalSigningSessionService, autonomousJobs: AutonomousJobStore,
+export function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, emergencyStop: EmergencyStopService, wallets: WalletOnboardingService, evmWallet: EvmWalletService, evmReceipts: EncryptedEvmReceiptService, evmBridgeReceipts: EncryptedEvmBridgeReceiptService, evmSwapQuotes: EvmSwapRouterService, uniswapQuotes: UniswapQuoteService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService, pumpLaunchPreflight: PumpLaunchPreflightService, strategyManager: PositionStrategyManager, observationService: DurableBackgroundObservationService, automationManager: AutomationManager, fullAccessExecutionGrants: EncryptedFullAccessExecutionGrantService, localSigningSession: LocalSigningSessionService, autonomousJobs: AutonomousJobStore, fullAccessEvmAssets: FullAccessEvmAssetAuthorizationService,
   getMainWindow: () => Electron.BrowserWindow | null,
   createVerifiedEvmEngine: (secretStore: LocalEncryptedKeystore, chainKey: ReturnType<typeof getEvmChain>["key"], executionGate?: VenueExecutionGate, executionVenue?: VenueId) => Promise<EvmEngine>
 ): void {
@@ -989,7 +992,10 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     try {
       const solanaPortfolio = await reads.portfolio(request.address);
       const snapshot = buildUnifiedPortfolio({
-        session: { id: "session-pnl", sessionId: "session-pnl", walletAddress: request.address, messages: [] } as any,
+        // The portfolio helper validates the session envelope. This is a
+        // read-only synthetic session, so use the documented zero UUID rather
+        // than a human label that fails the persisted-session schema.
+        session: { id: "00000000-0000-0000-0000-000000000000", sessionId: "00000000-0000-0000-0000-000000000000", walletAddress: request.address, walletScope: "solana", messages: [] } as any,
         solanaPortfolio,
       });
       const summary = deriveVerifiedCostBasis(snapshot);
@@ -1161,8 +1167,17 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
       throw new Error("Session context is unavailable");
     }
     const latest = session.messages.at(-1);
-    if (latest?.role !== "user" || latest.text !== request.prompt) throw new Error("Session context is out of date");
-    const history = session.messages.slice(0, -1).slice(-20).map((message) => ({ role: message.role, text: message.text.slice(0, 4_000) }));
+    // The asset-review card is itself the explicit user gesture. Its confirm action
+    // deliberately does not create a synthetic "user" chat message, so this
+    // narrow command is allowed to proceed against the current persisted context.
+    // AiService still verifies the short-lived review ID and session binding.
+    const directAssetAuthorization = /^AUTHORIZE FULL ACCESS ASSET [0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(request.prompt.trim());
+    if (!directAssetAuthorization && (latest?.role !== "user" || latest.text !== request.prompt)) {
+      throw new Error("Session context is out of date");
+    }
+    const history = (directAssetAuthorization ? session.messages : session.messages.slice(0, -1))
+      .slice(-20)
+      .map((message) => ({ role: message.role, text: message.text.slice(0, 4_000) }));
     const sessionEvmChainKey = session.walletScope === "evm"
       ? session.evmChainKey ?? "robinhood"
       : undefined;
@@ -1228,6 +1243,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
       pumpTradePreview: result.pumpTradePreview,
       limitOrderPreview: result.limitOrderPreview,
       evmSwapProposal: result.evmSwapProposal,
+      ...(result.evmAssetAuthorizationReview ? { evmAssetAuthorizationReview: result.evmAssetAuthorizationReview } : {}),
       bridgeProposal: result.bridgeProposal,
       bridgePreflight: result.bridgePreflight,
       evmBridgePreparation: result.evmBridgePreparation,
@@ -1960,9 +1976,11 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     const request = BridgeExecuteRequestSchema.parse(raw);
     requireUnlocked();
     const sessionRecord = await sessions.get(request.sessionId);
-    if (sessionRecord === null || sessionRecord.permission !== "restricted") {
-      throw new Error("A restricted encrypted Solana session is required for Bridge execution.");
+    if (sessionRecord === null || (sessionRecord.permission !== "restricted" && sessionRecord.permission !== "full")) {
+      throw new Error("An encrypted Solana session is required for Bridge execution.");
     }
+    const fullAccess = sessionRecord.permission === "full";
+    if (fullAccess) localSigningSession.assertActive();
     const messageIndex = sessionRecord.messages.findIndex((message) =>
       message.bridgeProposal?.contract.id === request.contractId
       && message.bridgePreflight?.id === request.preflightId
@@ -1993,6 +2011,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
       request.preflightId,
       request.masterPassword,
       persistReceipt,
+      fullAccess,
     );
     await persistReceipt(receipt);
     return BridgeExecuteResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt });
@@ -2364,6 +2383,46 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     } });
   });
 
+  ipcMain.handle(IPC_CHANNELS.evmExecuteFullAccessKyberSwap, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = EvmExecuteFullAccessKyberSwapRequestSchema.parse(raw);
+    requireUnlocked();
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (
+      sessionRecord === null
+      || sessionRecord.permission !== "full"
+      || sessionRecord.walletScope !== "evm"
+      || sessionRecord.walletAddress?.toLowerCase() !== request.walletAddress.toLowerCase()
+      || sessionRecord.evmChainKey !== "robinhood"
+    ) {
+      throw new Error("Full Access EVM execution requires this enrolled Robinhood wallet session.");
+    }
+    localSigningSession.assertActive();
+    if (!(await evmWallet.hasAddress(request.walletAddress))) {
+      throw new Error("The Full Access Robinhood wallet is not registered in the encrypted local vault.");
+    }
+    const prepared = kyberPreflight.peek(request.preflightId);
+    if (prepared === null) throw new Error("The Full Access EVM preflight is unavailable or expired; prepare a fresh quote.");
+    if (prepared.evidence.walletAddress.toLowerCase() !== request.walletAddress.toLowerCase() || prepared.evidence.chainKey !== "robinhood") {
+      throw new Error("The Full Access EVM preflight is not bound to this session wallet and chain.");
+    }
+    fullAccessEvmAssets.assertPairAuthorized(request.sessionId, prepared.evidence.tokenIn, prepared.evidence.tokenOut);
+    const receipt = await evmExecutor.executeFullAccess({
+      ...request,
+      walletAddress: request.walletAddress as `0x${string}`,
+      engine: await evmEngineFor("robinhood"),
+      withSigner: async (operation) => await evmWallet.withSignerForAddress(request.walletAddress as `0x${string}`, operation),
+    });
+    return EvmExecuteFullAccessKyberSwapResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      receipt: {
+        ...(() => { const { wallet: _w, ...rest } = receipt; return rest; })(),
+        walletAddress: receipt.wallet,
+      },
+    });
+  });
+
   ipcMain.handle(IPC_CHANNELS.evmListReceipts, async (event) => {
     assertTrustedSender(event);
     requireUnlocked();
@@ -2417,11 +2476,14 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     ) {
       throw new Error("The EVM Bridge execution must use this encrypted session's locked wallet and source chain.");
     }
+    const fullAccess = sessionRecord.permission === "full";
+    if (fullAccess) localSigningSession.assertActive();
     const receipt = await evmBridgeExecutor.execute({
       preflightId: request.preflightId,
       action: request.action,
       masterPassword: request.masterPassword,
       confirmation: request.confirmation,
+      fullAccess,
       engine: await evmBridgeEngineFor(prepared.contract.sourceChainKey),
       withSigner: async (operation) => await evmWallet.withSignerForAddress(prepared.contract.sourceWallet, operation),
     });

@@ -238,6 +238,7 @@ import { EvmBridgeExecutionService, EvmBridgeReconciliationService } from "./exe
 import { VenueReadinessService } from "./security/venue-readiness.js";
 import { EncryptedFullAccessGrantService } from "./security/full-access-grants.js";
 import { EncryptedFullAccessExecutionGrantService } from "./security/full-access-execution-grants.js";
+import { FullAccessEvmAssetAuthorizationService } from "./security/full-access-evm-assets.js";
 import { LocalSigningSessionService } from "./security/local-signing-session.js";
 import { AutonomousJobStore } from "./execution/autonomous-job-store.js";
 import { AutonomousExecutorService } from "./execution/autonomous-executor.js";
@@ -493,6 +494,11 @@ function resolveEvmTokenMetadata(address: string): { symbol: string; decimals: n
   localSigningSession = new LocalSigningSessionService(keystore);
   const autonomousJobs = new AutonomousJobStore(runtimeDatabase, keystore);
   const fullAccessExecutionGrants = new EncryptedFullAccessExecutionGrantService(runtimeDatabase, keystore, localSigningSession, autonomousJobs);
+  const fullAccessEvmAssets = new FullAccessEvmAssetAuthorizationService(
+    runtimeDatabase,
+    async () => await createVerifiedEvmEngine(initializedKeystore, "robinhood"),
+  );
+  ai.configureFullAccessEvmAssets(fullAccessEvmAssets);
   const autonomousExecutor = new AutonomousExecutorService({
     strategyManager,
     pumpRpc,
@@ -517,12 +523,69 @@ function resolveEvmTokenMetadata(address: string): { symbol: string; decimals: n
   // or TP/SL proposal is only broadcast after the same fresh policy and
   // simulation path used by an interactive Full Access Solana swap.
   const fullAccessAutomationInFlight = new Set<string>();
+  // Robinhood automation owns a separate short-lived preflight store. A due
+  // job never reuses a quote or calldata prepared for an earlier execution.
+  const evmAutomationPreflight = new KyberSwapPreflightService();
+  const evmAutomationExecutor = new EvmKyberExecutionService(passwords, emergencyStop, evmAutomationPreflight, evmReceipts);
+  // This mirrors the attested Robinhood EVM readiness gate used by the
+  // interactive IPC lane. It is not an approval bypass: the dispatcher still
+  // performs a new quote, simulation, balance/gas check and signer boundary.
+  const evmAutomationGate = new VenueExecutionGate({
+    signerCustody: true, deterministicPolicy: true, freshSimulation: true,
+    receiptReconciliation: true, recoveryDrill: true, securityAudit: true,
+    controlledMainnetAcceptance: true, explicitFinalApproval: true,
+    revocationAndKillSwitch: true, spendLimits: true,
+  });
   const dispatchFullAccessAutomation = async (proposal: ReturnType<typeof automationManager.listProposals>[number]) => {
     if (fullAccessAutomationInFlight.has(proposal.id)) return;
     fullAccessAutomationInFlight.add(proposal.id);
     let assistantMessageId: string | null = null;
+    let automationStage: "quote" | "preflight" | "approval" | "swap" | "reconcile" | null = null;
     try {
       const sessionRecord = await sessions.get(proposal.sessionId);
+      if (sessionRecord?.walletScope === "evm" && sessionRecord.evmChainKey === "robinhood") {
+        if (sessionRecord.permission !== "full" || !sessionRecord.walletAddress) return;
+        if (emergencyStop.get().engaged || !localSigningSession.status().active) throw new Error("Full Access local signing session is unavailable");
+        fullAccessEvmAssets.assertPairAuthorized(sessionRecord.id, proposal.inputMint, proposal.outputMint);
+        const assistantMessage = { id: crypto.randomUUID(), role: "assistant" as const, text: `${proposal.reason.replace(/_/gu, " ")} triggered. Full Access is running a fresh Robinhood quote and preflight.`, at: new Date().toISOString() };
+        assistantMessageId = assistantMessage.id;
+        await sessions.upsert({ ...sessionRecord, messages: [...sessionRecord.messages, assistantMessage] });
+        let automationSwapProposal: any = null;
+        const run = async (): Promise<Awaited<ReturnType<typeof evmAutomationExecutor.executeFullAccess>>> => {
+          automationStage = "quote";
+          const quote = await evmSwapQuotes.quote({ chainKey: "robinhood", tokenIn: proposal.inputMint as `0x${string}`, tokenOut: proposal.outputMint as `0x${string}`, amountIn: proposal.inputAmountRaw, slippageBps: 200, swapper: sessionRecord.walletAddress as `0x${string}` });
+          const engine = await createVerifiedEvmEngine(initializedKeystore, "robinhood", evmAutomationGate);
+          const sellMeta = resolveEvmTokenMetadata(quote.tokenIn);
+          const buyMeta = resolveEvmTokenMetadata(quote.tokenOut);
+          automationSwapProposal = EvmSwapProposalSchema.parse({
+            id: crypto.randomUUID(), quoteId: quote.quoteId, chainId: quote.chainId, chainKey: "robinhood", walletAddress: sessionRecord.walletAddress,
+            slippageBps: 200, status: "quote-only", createdAt: new Date().toISOString(),
+            quote: { sellToken: quote.tokenIn, buyToken: quote.tokenOut, sellAmount: quote.amountIn, buyAmount: quote.amountOut, minBuyAmount: quote.minimumAmountOut, blockNumber: (await engine.getBlockNumber()).toString(), liquidityAvailable: true, sellTokenSymbol: sellMeta.symbol, buyTokenSymbol: buyMeta.symbol, sellTokenMultiplier: (10 ** sellMeta.decimals).toString(), buyTokenMultiplier: (10 ** buyMeta.decimals).toString(), provider: quote.provider, routerAddress: quote.routerAddress, routeNames: quote.routeNames },
+          });
+          automationStage = "preflight";
+          const preflight = await evmAutomationPreflight.prepare({ quotes: evmSwapQuotes, engine, quoteId: quote.quoteId, wallet: sessionRecord.walletAddress as `0x${string}`, slippageBps: 200 });
+          automationStage = preflight.action;
+          return await evmAutomationExecutor.executeFullAccess({ preflightId: preflight.id, chainKey: "robinhood", walletAddress: sessionRecord.walletAddress as `0x${string}`, action: preflight.action, engine, withSigner: async (operation) => await evmWallet.withSignerForAddress(sessionRecord.walletAddress as `0x${string}`, operation) });
+        };
+        let receipt = await run();
+        // Exact ERC-20 approval is a bounded first action; the swap always
+        // gets a new quote/preflight after that approval is finalized.
+        if (receipt.kind === "approval" && receipt.status === "confirmed") receipt = await run();
+        const confirmed = receipt.kind === "swap" && receipt.status === "confirmed";
+        const latest = await sessions.get(sessionRecord.id);
+        if (latest) await sessions.upsert({ ...latest, messages: latest.messages.map((message) => message.id === assistantMessage.id ? {
+          ...message,
+          text: confirmed ? `${proposal.reason.replace(/_/gu, " ")} Full Access Robinhood swap confirmed.` : `${proposal.reason.replace(/_/gu, " ")} Robinhood transaction is ${receipt.status}; this automation is paused and will not retry automatically.`,
+          evmSwapProposal: automationSwapProposal,
+          // `wallet` is an internal signer field. Session messages use the
+          // public `walletAddress` contract and are strict to prevent secret
+          // or implementation fields leaking into encrypted history.
+          evmExecutionReceipts: [(() => { const { wallet, ...safeReceipt } = receipt; return { ...safeReceipt, walletAddress: wallet }; })()],
+        } : message) });
+        if (confirmed) automationManager.approveProposal(proposal.id);
+        else automationManager.rejectProposal(proposal.id);
+        return;
+      }
       if (!sessionRecord || sessionRecord.permission !== "full" || sessionRecord.walletScope !== "solana" || !sessionRecord.walletAddress) return;
       if (emergencyStop.get().engaged || localSigningSession.status().active === false) {
         const blockedMessage = {
@@ -587,10 +650,19 @@ function resolveEvmTokenMetadata(address: string): { symbol: string; decimals: n
       if (confirmed) automationManager.approveProposal(proposal.id);
       else automationManager.rejectProposal(proposal.id);
     } catch (error) {
-      console.warn("Full Access automation blocked safely:", error instanceof Error ? error.message : error);
+      const rawError = error instanceof Error ? error.message : String(error);
+      console.warn("Full Access automation blocked safely:", rawError);
       const latest = await sessions.get(proposal.sessionId).catch(() => null);
       if (latest) {
-        const failureText = "Full Access automation paused because its preflight or execution failed safely. No automatic retry will be attempted; review the network, balance, fee reserve, and RPC before resuming.";
+        const lowerError = rawError.toLowerCase();
+        const operationalCause = lowerError.includes("allowance") ? "the exact ERC-20 allowance could not be prepared"
+          : lowerError.includes("balance") ? "the wallet balance or native gas reserve is insufficient"
+          : lowerError.includes("rpc") || lowerError.includes("fetch") || lowerError.includes("network") ? "the verified Robinhood RPC or quote provider is unavailable"
+          : lowerError.includes("router") || lowerError.includes("quote") || lowerError.includes("preflight") ? "a fresh Uniswap quote or preflight was rejected"
+          : lowerError.includes("sign") || lowerError.includes("vault") ? "the local Full Access signing session is not active"
+          : "a local policy or transaction preflight check failed";
+        const stageLabel = automationStage === null ? "session validation" : automationStage;
+        const failureText = `Full Access Robinhood automation paused during ${stageLabel} because ${operationalCause}. No transaction was signed or broadcast, and no automatic retry will be attempted. Review the strategy, wallet gas reserve, and Robinhood RPC before resuming.`;
         const messages = assistantMessageId
           ? latest.messages.map((message) => message.id === assistantMessageId ? { ...message, text: failureText } : message)
           : [...latest.messages, { id: crypto.randomUUID(), role: "assistant" as const, text: failureText, at: new Date().toISOString() }];
@@ -607,15 +679,21 @@ function resolveEvmTokenMetadata(address: string): { symbol: string; decimals: n
   });
 
   if (!emergencyStop.get().engaged) observationService.startObservationLoop(async (mints) => {
-    const pricePoints = await reads.prices(mints);
+    const solanaMints = mints.filter((mint) => !/^0x[0-9a-f]{40}$/iu.test(mint));
+    const evmMints = mints.filter((mint) => /^0x[0-9a-f]{40}$/iu.test(mint));
+    const pricePoints = solanaMints.length > 0 ? await reads.prices(solanaMints) : [];
     const map = new Map<string, number>();
     for (const [mint, pp] of pricePoints) {
       map.set(mint, pp.usdPrice);
     }
+    if (evmMints.length > 0) {
+      const evidence = await fetchEvmUsdPrices({ chainKey: "robinhood", tokenAddresses: evmMints });
+      for (const [token, price] of evidence?.prices ?? []) map.set(token.toLowerCase(), price);
+    }
     return map;
   });
 
-  registerIpc(keystore, runtimeDatabase, passwords, emergencyStop, wallets, evmWallet, evmReceipts, evmBridgeReceipts, evmSwapQuotes, uniswapQuotes, reads, ai, sessions, simulations, limitOrders, transactionSettings, pumpRiskSettings, pumpRiskLedger, pumpReceipts, pumpRpc, preparedPump, launchPreflightService, strategyManager, observationService, automationManager, fullAccessExecutionGrants, localSigningSession, autonomousJobs, () => mainWindow, createVerifiedEvmEngine);
+  registerIpc(keystore, runtimeDatabase, passwords, emergencyStop, wallets, evmWallet, evmReceipts, evmBridgeReceipts, evmSwapQuotes, uniswapQuotes, reads, ai, sessions, simulations, limitOrders, transactionSettings, pumpRiskSettings, pumpRiskLedger, pumpReceipts, pumpRpc, preparedPump, launchPreflightService, strategyManager, observationService, automationManager, fullAccessExecutionGrants, localSigningSession, autonomousJobs, fullAccessEvmAssets, () => mainWindow, createVerifiedEvmEngine);
 
   mainWindow = createMainWindow();
   tray = createTray();

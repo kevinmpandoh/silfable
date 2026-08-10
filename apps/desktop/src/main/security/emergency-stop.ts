@@ -49,7 +49,7 @@ export class EmergencyStopService {
     const status = this.get();
     if (!status.engaged) return;
     throw new Error(
-      `Emergency stop is active${status.reason === null ? "" : `: ${status.reason}`}. Release it in Settings before preparing or executing a transaction.`,
+      `Emergency stop is active${status.reason === null ? "" : `: ${status.reason}`}. Release it from Automation before preparing or executing a transaction.`,
     );
   }
 }

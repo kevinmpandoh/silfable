@@ -191,6 +191,7 @@ export class BridgeMissionService {
     preflightId: string,
     masterPassword: string,
     persistBeforeBroadcast: (receipt: BridgeReceipt) => Promise<void>,
+    fullAccess = false,
   ): Promise<BridgeReceipt> {
     this.#purgeExpired();
     if (this.#execution === null) throw new Error("Bridge execution dependencies are unavailable.");
@@ -211,7 +212,7 @@ export class BridgeMissionService {
     } else {
       this.#execution.readiness.gateFor("bridge").require("bridge");
     }
-    if (!(await this.#execution.passwords.verify(masterPassword))) {
+    if (!fullAccess && !(await this.#execution.passwords.verify(masterPassword))) {
       throw new Error("Master password is incorrect.");
     }
 
@@ -333,18 +334,11 @@ export class BridgeMissionService {
       ) {
         break;
       }
-      if (attempt < 4 && broadcastReceipt.state === "source-submitted") {
+      // A bridge source signature is never re-broadcast by this process.
+      // A timeout or transport uncertainty is a reconciliation-only state:
+      // retrying can create an unbounded cross-chain exposure.
+      if (attempt < 4 && latestReceipt.state === "source-submitted") {
         await new Promise((resolve) => setTimeout(resolve, 2_000));
-        try {
-          await this.#execution.rpc.sendTransaction(signed.encoded, {
-            encoding: "base64",
-            skipPreflight: true,
-            preflightCommitment: "confirmed",
-            maxRetries: 3,
-          });
-        } catch {
-          // Re-send during confirm loop is idempotent and best effort
-        }
       }
     }
     return latestReceipt;

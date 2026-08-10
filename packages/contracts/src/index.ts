@@ -169,6 +169,7 @@ export const IPC_CHANNELS = {
   evmSaveRpcUrl: "evm:save-rpc-url",
   evmPrepareKyberSwap: "evm:prepare-kyberswap",
   evmExecuteKyberSwap: "evm:execute-kyberswap",
+  evmExecuteFullAccessKyberSwap: "evm:execute-full-access-kyberswap",
   evmListReceipts: "evm:list-receipts",
   evmReconcileReceipts: "evm:reconcile-receipts",
   evmBridgePrepare: "evmbridge:prepare",
@@ -2220,10 +2221,26 @@ export const EvmExecuteKyberSwapResponseSchema = RequestBaseSchema.extend({
   receipt: EvmSessionExecutionReceiptSchema,
 }).strict();
 
+/** Desktop-local Full Access path. It carries no password or typed phrase:
+ * the main process binds it to an unlocked in-memory local signing session. */
+export const EvmExecuteFullAccessKyberSwapRequestSchema = RequestBaseSchema.extend({
+  sessionId: z.string().uuid(),
+  chainKey: z.literal("robinhood"),
+  walletAddress: SessionEvmAddressSchema,
+  preflightId: z.string().uuid(),
+  action: z.enum(["approval", "swap"]),
+  acknowledgedLocalSession: z.literal(true),
+}).strict();
+export const EvmExecuteFullAccessKyberSwapResponseSchema = RequestBaseSchema.extend({
+  receipt: EvmSessionExecutionReceiptSchema,
+}).strict();
+
 export type EvmPrepareKyberSwapRequest = z.infer<typeof EvmPrepareKyberSwapRequestSchema>;
 export type EvmPrepareKyberSwapResponse = z.infer<typeof EvmPrepareKyberSwapResponseSchema>;
 export type EvmExecuteKyberSwapRequest = z.infer<typeof EvmExecuteKyberSwapRequestSchema>;
 export type EvmExecuteKyberSwapResponse = z.infer<typeof EvmExecuteKyberSwapResponseSchema>;
+export type EvmExecuteFullAccessKyberSwapRequest = z.infer<typeof EvmExecuteFullAccessKyberSwapRequestSchema>;
+export type EvmExecuteFullAccessKyberSwapResponse = z.infer<typeof EvmExecuteFullAccessKyberSwapResponseSchema>;
 
 export const EvmReceiptsResponseSchema = z.object({ schemaVersion: z.literal(1), receipts: z.array(EvmSessionExecutionReceiptSchema).max(500) }).strict();
 export const EvmReconcileReceiptsResponseSchema = z.object({ schemaVersion: z.literal(1), reconciled: z.array(EvmSessionExecutionReceiptSchema).max(500) }).strict();

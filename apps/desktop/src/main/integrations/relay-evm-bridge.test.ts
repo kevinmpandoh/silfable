@@ -5,10 +5,8 @@ import test from "node:test";
 import type { Address, Hex } from "viem";
 
 import {
-  BRIDGE_ARBITRUM_CHAIN_ID,
-  BRIDGE_ARBITRUM_USDC_ADDRESS,
-  BRIDGE_BASE_CHAIN_ID,
-  BRIDGE_BASE_USDC_ADDRESS,
+  BRIDGE_ROBINHOOD_CHAIN_ID,
+  BRIDGE_ROBINHOOD_USDG_ADDRESS,
   BRIDGE_SOLANA_CHAIN_ID,
   BRIDGE_SOLANA_USDC_MINT,
   type EvmBridgeContract,
@@ -25,19 +23,19 @@ test("prepares a separately reviewed ERC-20 approval for an EVM to Solana route"
   const result = await service.prepare(contractToSolana(), engine(), NOW);
 
   assert.equal(result.quote.action, "approval");
-  assert.equal(result.preflight.transactionTarget.toLowerCase(), BRIDGE_BASE_USDC_ADDRESS.toLowerCase());
+  assert.equal(result.preflight.transactionTarget.toLowerCase(), BRIDGE_ROBINHOOD_USDG_ADDRESS.toLowerCase());
   assert.equal(result.quote.estimatedDestinationAmount, "990000");
   assert.equal(result.quote.minimumDestinationAmount, "980000");
   assert.equal(result.quote.totalFeeUsd, 0.26);
   assert.equal(result.preflight.broadcastAttempted, false);
 });
 
-test("prepares the deposit step for an EVM to EVM route when no approval is returned", async () => {
+test("prepares the deposit step for the release-controlled Robinhood to Solana route when no approval is returned", async () => {
   const service = new RelayEvmBridgeService(relayFetch([depositStep()]), "https://relay.invalid");
-  const result = await service.prepare(contractToArbitrum(), engine(), NOW);
+  const result = await service.prepare(contractToSolana(), engine(), NOW);
 
   assert.equal(result.quote.action, "deposit");
-  assert.equal(result.preflight.chainKey, "base");
+  assert.equal(result.preflight.chainKey, "robinhood");
   assert.equal(result.preflight.transactionTarget.toLowerCase(), ROUTER.toLowerCase());
   assert.equal(result.preflight.maximumNetworkFeeWei, "42000");
 });
@@ -97,10 +95,10 @@ function contractToSolana(overrides: Partial<EvmBridgeContract> = {}): EvmBridge
   return {
     id: "11111111-1111-4111-8111-111111111111",
     provider: "relay",
-    sourceChainId: BRIDGE_BASE_CHAIN_ID,
-    sourceChainKey: "base",
-    sourceAssetAddress: BRIDGE_BASE_USDC_ADDRESS,
-    sourceAssetSymbol: "USDC",
+    sourceChainId: BRIDGE_ROBINHOOD_CHAIN_ID,
+    sourceChainKey: "robinhood",
+    sourceAssetAddress: BRIDGE_ROBINHOOD_USDG_ADDRESS,
+    sourceAssetSymbol: "USDG",
     sourceAssetDecimals: 6,
     sourceWallet: WALLET,
     destination: {
@@ -125,21 +123,6 @@ function contractToSolana(overrides: Partial<EvmBridgeContract> = {}): EvmBridge
   };
 }
 
-function contractToArbitrum(): EvmBridgeContract {
-  return {
-    ...contractToSolana(),
-    destination: {
-      kind: "evm",
-      chainId: BRIDGE_ARBITRUM_CHAIN_ID,
-      chainKey: "arbitrum",
-      assetAddress: BRIDGE_ARBITRUM_USDC_ADDRESS,
-      assetSymbol: "USDC",
-      assetDecimals: 6,
-      recipient: WALLET,
-    },
-  };
-}
-
 function relayFetch(steps: unknown[], destinationAmount = "990000", fee = "0.25"): typeof fetch {
   return (async () => new Response(JSON.stringify({
     steps,
@@ -159,8 +142,8 @@ function approvalStep(overrides: { spender?: string; amount?: bigint } = {}) {
     requestId: REQUEST_ID,
     action: "allowance",
     items: [{ kind: "transaction", label: "Approve USDC", data: {
-      chainId: BRIDGE_BASE_CHAIN_ID,
-      to: BRIDGE_BASE_USDC_ADDRESS,
+      chainId: BRIDGE_ROBINHOOD_CHAIN_ID,
+      to: BRIDGE_ROBINHOOD_USDG_ADDRESS,
       data: `0x095ea7b3${spenderWord}${amountWord}`,
       value: "0",
     } }],
@@ -173,7 +156,7 @@ function depositStep() {
     requestId: REQUEST_ID,
     action: "deposit",
     items: [{ kind: "transaction", label: "Bridge deposit", data: {
-      chainId: BRIDGE_BASE_CHAIN_ID,
+      chainId: BRIDGE_ROBINHOOD_CHAIN_ID,
       to: ROUTER,
       data: "0x1234",
       value: "0",
@@ -183,7 +166,7 @@ function depositStep() {
 
 function engine() {
   return {
-    async assertExpectedChain() { return BRIDGE_BASE_CHAIN_ID; },
+    async assertExpectedChain() { return BRIDGE_ROBINHOOD_CHAIN_ID; },
     async getBalance() { return { wei: 10_000_000n }; },
     async getErc20Balance(_token: Address, _owner: Address) { return 10_000_000n; },
     async getBytecode() { return "0x01" as Hex; },
