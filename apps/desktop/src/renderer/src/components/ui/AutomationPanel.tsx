@@ -4,6 +4,7 @@ import { Play, Pause, XCircle, RefreshCw, Bot, Clock, Timer, Layers, MessageSqua
 import { Button } from "./Button";
 import { Badge } from "./Badge";
 import { Card, CardHeader, CardTitle, CardContent } from "./Card";
+import { EmergencyStopPanel } from "../workspace/WorkspacePanels";
 
 type Strategy = {
   id: string;
@@ -13,6 +14,7 @@ type Strategy = {
   inputMint: string;
   outputMint: string;
   nextWakeAt: string | null;
+  pausedRemainingMs?: number | null;
   lastEvaluatedAt: string | null;
   createdAt: string;
   orderAmountRaw?: string;
@@ -47,10 +49,12 @@ const KNOWN_TOKENS: Record<string, string> = {
 
 export function AutomationPanel({
   sessionId,
+  fullAccessSessionIds = [],
   onReloadSessions,
   onSelectSession,
 }: {
   sessionId?: string;
+  fullAccessSessionIds?: string[];
   onReloadSessions?: () => Promise<void>;
   onSelectSession?: (sessionId: string) => void;
 }) {
@@ -110,7 +114,10 @@ export function AutomationPanel({
     }
   };
 
-  const getStatusBadge = (status: Strategy["status"]) => {
+  const getStatusBadge = (status: Strategy["status"], fullAccess = false) => {
+    if (fullAccess && status === "AWAITING_APPROVAL") {
+      return <Badge variant="info">Processing</Badge>;
+    }
     switch (status) {
       case "ACTIVE":
         return <Badge variant="success">Active</Badge>;
@@ -152,17 +159,21 @@ export function AutomationPanel({
     return `${num.toLocaleString()} raw units`;
   };
 
-  const formatCountdown = (nextWakeAt: string | null, status: Strategy["status"]) => {
-    if (status !== "ACTIVE" || !nextWakeAt) return null;
-    const diffMs = Date.parse(nextWakeAt) - currentTime;
+  const formatCountdown = (nextWakeAt: string | null, status: Strategy["status"], pausedRemainingMs?: number | null) => {
+    const diffMs = status === "PAUSED" && typeof pausedRemainingMs === "number"
+      ? pausedRemainingMs
+      : status === "ACTIVE" && nextWakeAt
+        ? Date.parse(nextWakeAt) - currentTime
+        : null;
+    if (diffMs === null) return null;
     if (diffMs <= 0) return "Evaluating now...";
     const totalSeconds = Math.floor(diffMs / 1000);
     const hours = Math.floor(totalSeconds / 3600);
     const mins = Math.floor((totalSeconds % 3600) / 60);
     const secs = totalSeconds % 60;
     const pad = (n: number) => n.toString().padStart(2, "0");
-    if (hours > 0) return `${hours}h ${pad(mins)}m ${pad(secs)}s`;
-    return `${pad(mins)}:${pad(secs)}`;
+    const value = hours > 0 ? `${hours}h ${pad(mins)}m ${pad(secs)}s` : `${pad(mins)}:${pad(secs)}`;
+    return status === "PAUSED" ? `Paused · ${value}` : value;
   };
 
   const currentSessionStrategies = sessionId
@@ -214,6 +225,7 @@ export function AutomationPanel({
             )}
           </div>
 
+          <EmergencyStopPanel compact onChanged={fetchAutomationData} />
           <Button variant="outline" size="sm" onClick={fetchAutomationData} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -244,7 +256,8 @@ export function AutomationPanel({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {displayStrategies.filter(s => s.status !== "CANCELLED").map((strategy) => {
               const matchingProposal = proposals.find(p => p.strategyId === strategy.id && p.status === "AWAITING_APPROVAL");
-              const countdown = formatCountdown(strategy.nextWakeAt, strategy.status);
+              const isFullAccessStrategy = strategy.sessionId !== undefined && fullAccessSessionIds.includes(strategy.sessionId);
+              const countdown = formatCountdown(strategy.nextWakeAt, strategy.status, strategy.pausedRemainingMs);
               return (
                 <Card 
                   key={strategy.id} 
@@ -267,7 +280,7 @@ export function AutomationPanel({
                       </CardTitle>
                     </div>
                     <div className="flex items-center gap-2">
-                      {getStatusBadge(strategy.status)}
+                      {getStatusBadge(strategy.status, isFullAccessStrategy)}
                       {strategy.sessionId && onSelectSession && (
                         <Button
                           size="sm"
@@ -318,7 +331,9 @@ export function AutomationPanel({
                       </>
                     )}
                     <div className="pt-3 flex gap-2 justify-end items-center flex-wrap">
-                      {matchingProposal ? (
+                      {matchingProposal && isFullAccessStrategy ? (
+                        <span className="text-[11px] font-mono text-emerald-300">Full Access processing</span>
+                      ) : matchingProposal ? (
                         <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium" disabled={actionLoading === matchingProposal.id} onClick={() => handleStatusChange(matchingProposal.id, "APPROVE_PROPOSAL")}>
                           <Play className="h-3.5 w-3.5 mr-1" /> Approve
                         </Button>

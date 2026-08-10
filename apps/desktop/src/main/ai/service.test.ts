@@ -60,6 +60,147 @@ test("EVM wallet-scoped sessions receive only the typed EVM quote proposal from 
   assert.equal(names.includes("pump_token_analysis"), false);
 });
 
+test("complete Solana DCA instructions bind directly to the active session", { concurrency: false }, async () => {
+  const secrets = new MemorySecrets();
+  secrets.values.set("openrouter-api-key", "sk-or-test");
+  let createInput: Record<string, unknown> | null = null;
+  let providerFetches = 0;
+  globalThis.fetch = async () => {
+    providerFetches += 1;
+    return Response.json({ choices: [{ message: { content: "unexpected" } }], usage: {} });
+  };
+  const service = new AiService({
+    keystore: secrets,
+    settings: new MemorySettings(),
+    automationManager: {
+      createDca: (input: Record<string, unknown>) => {
+        createInput = input;
+        return { id: "strategy-1", ...input };
+      },
+    } as never,
+  });
+  const result = await service.chat({
+    prompt: "Buatkan DCA untuk swap 0.5 USDC ke SOL setiap 1 menit 2 kali",
+    mode: "mission",
+    walletAddress: "2r2pXUspsXamwzNWc8dQn52GK2BJJWmr63MPzDDxjTcg",
+    walletScope: "solana",
+    sessionId: "session-real-123",
+  });
+  assert.equal(providerFetches, 0);
+  assert.equal(result.toolsUsed.includes("create_automation_strategy"), true);
+  assert.ok(createInput);
+  const { expiresAt, ...boundInput } = createInput as unknown as Record<string, unknown>;
+  assert.equal(typeof expiresAt, "string");
+  assert.deepEqual(boundInput, {
+    sessionId: "session-real-123",
+    walletAddress: "2r2pXUspsXamwzNWc8dQn52GK2BJJWmr63MPzDDxjTcg",
+    inputMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    outputMint: "So11111111111111111111111111111111111111112",
+    orderAmountRaw: "500000",
+    maximumTotalRaw: "1000000",
+    intervalSeconds: 60,
+    maximumExecutions: 2,
+  });
+});
+
+test("complete Solana TP/SL instructions bind directly to the active session", { concurrency: false }, async () => {
+  const secrets = new MemorySecrets();
+  secrets.values.set("openrouter-api-key", "sk-or-test");
+  let createInput: Record<string, unknown> | null = null;
+  let providerFetches = 0;
+  globalThis.fetch = async () => {
+    providerFetches += 1;
+    return Response.json({ choices: [{ message: { content: "unexpected" } }], usage: {} });
+  };
+  const service = new AiService({
+    keystore: secrets,
+    settings: new MemorySettings(),
+    automationManager: {
+      createExit: (input: Record<string, unknown>) => {
+        createInput = input;
+        return { id: "exit-1", ...input };
+      },
+    } as never,
+  });
+  const result = await service.chat({
+    prompt: "Buat TP 1 USD dan SL 0.01 USD untuk 0.001 SOL ke USDC; entry 0.5 USD",
+    mode: "mission",
+    walletAddress: "2r2pXUspsXamwzNWc8dQn52GK2BJJWmr63MPzDDxjTcg",
+    walletScope: "solana",
+    sessionId: "session-real-123",
+  });
+  assert.equal(providerFetches, 0);
+  assert.equal(result.toolsUsed.includes("create_automation_strategy"), true);
+  assert.ok(createInput);
+  const { expiresAt, ...boundInput } = createInput as unknown as Record<string, unknown>;
+  assert.equal(typeof expiresAt, "string");
+  assert.deepEqual(boundInput, {
+    sessionId: "session-real-123",
+    walletAddress: "2r2pXUspsXamwzNWc8dQn52GK2BJJWmr63MPzDDxjTcg",
+    inputMint: "So11111111111111111111111111111111111111112",
+    outputMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    amountRaw: "1000000",
+    entryPriceUsd: 0.5,
+    takeProfitPriceUsd: 1,
+    stopLossPriceUsd: 0.01,
+  });
+});
+
+test("direct JUP swap shows an insufficient-balance policy block without calling the provider", { concurrency: false }, async () => {
+  const secrets = new MemorySecrets();
+  secrets.values.set("openrouter-api-key", "sk-or-test");
+  let providerFetches = 0;
+  globalThis.fetch = async () => {
+    providerFetches += 1;
+    throw new Error("The direct Solana swap route must not call the AI provider");
+  };
+  const wallet = "2r2pXUspsXamwzNWc8dQn52GK2BJJWmr63MPzDDxjTcg";
+  const service = new AiService({
+    keystore: secrets,
+    settings: new MemorySettings(),
+    readService: {
+      portfolio: async () => ({
+        address: wallet,
+        slot: 1,
+        solBalance: "0.01",
+        solUsdPrice: 100,
+        totalUsd: 1,
+        assets: [{
+          mint: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+          amount: "323703",
+          decimals: 6,
+          uiAmount: "0.323703",
+          usdPrice: 0.2,
+          usdValue: 0.06,
+        }],
+        verifiedAt: new Date().toISOString(),
+      }),
+      swapQuote: async () => ({
+        inputMint: "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+        outputMint: "So11111111111111111111111111111111111111112",
+        inAmount: "500000",
+        outAmount: "1000000",
+        router: "metis",
+        mode: "ultra",
+        feeBps: 2,
+        feeMint: "So11111111111111111111111111111111111111112",
+        quoteOnly: true,
+        verifiedAt: new Date().toISOString(),
+      }),
+    } as unknown as MainnetReadService,
+  });
+  const result = await service.chat({
+    prompt: "Saya ingin swap 0.5 JUP ke SOL",
+    mode: "mission",
+    walletAddress: wallet,
+    walletScope: "solana",
+  });
+  assert.equal(providerFetches, 0);
+  assert.equal(result.missionPreview?.status, "blocked");
+  assert.equal(result.missionPreview?.checks.find((check) => check.code === "balance_sufficient")?.status, "fail");
+  assert.match(result.text, /blocked by local policy/u);
+});
+
 test("Robinhood ETH and USDG aliases resolve locally from an Indonesian swap request", { concurrency: false }, async () => {
   const secrets = new MemorySecrets();
   secrets.values.set("openrouter-api-key", "sk-or-test");

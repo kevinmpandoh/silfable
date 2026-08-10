@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowDownRight } from "lucide-react";
+import { ArrowDownRight, Download } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -65,10 +65,10 @@ export function Hero() {
               </Link>
             </Button>
             <Button asChild size="lg" className="outlineButton">
-              <a href="#docs" className="bg-transparent">
-                Explore safety model
-                <ArrowDownRight className="ml-4 size-4" />
-              </a>
+              <Link href="/#download" className="bg-transparent">
+                Download
+                <Download className="ml-4 size-4" />
+              </Link>
             </Button>
           </div>
         </motion.div>

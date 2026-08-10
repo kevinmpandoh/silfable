@@ -22,16 +22,16 @@ function validateCustomRpcUrl(value: unknown): string | null {
   try {
     url = new URL(raw);
   } catch {
-    throw new Error("RPC URL tidak valid.");
+    throw new Error("The RPC URL is invalid.");
   }
-  if (url.protocol !== "https:") throw new Error("RPC URL harus menggunakan HTTPS.");
-  if (url.username || url.password || url.port) throw new Error("RPC URL tidak boleh memakai credential URL atau port khusus.");
+  if (url.protocol !== "https:") throw new Error("The RPC URL must use HTTPS.");
+  if (url.username || url.password || url.port) throw new Error("The RPC URL cannot include credentials or a custom port.");
   if (url.hostname === "mainnet-helius-rpc.com") {
-    throw new Error("Hostname Helius salah. Gunakan mainnet.helius-rpc.com, bukan mainnet-helius-rpc.com.");
+    throw new Error("Invalid Helius hostname. Use mainnet.helius-rpc.com, not mainnet-helius-rpc.com.");
   }
   const hostname = url.hostname.toLowerCase();
   if (!ALLOWED_RPC_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix))) {
-    throw new Error("Provider RPC belum didukung oleh proxy web Silfable.");
+    throw new Error("This RPC provider is not supported by the Silfable web proxy.");
   }
   return url.toString();
 }
@@ -55,12 +55,12 @@ async function readBalance(endpoint: string, address: string) {
     error?: { message?: unknown };
   };
   if (body.error) {
-    throw new Error(typeof body.error.message === "string" ? body.error.message : "RPC menolak permintaan saldo.");
+    throw new Error(typeof body.error.message === "string" ? body.error.message : "The RPC rejected the balance request.");
   }
   const lamports = body.result?.value;
   const slot = body.result?.context?.slot;
   if (typeof lamports !== "number" || !Number.isSafeInteger(lamports) || lamports < 0) {
-    throw new Error("RPC mengembalikan saldo yang tidak valid.");
+    throw new Error("The RPC returned an invalid balance.");
   }
   return { lamports, slot: typeof slot === "number" ? slot : null };
 }
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json() as { address?: unknown; customRpcUrl?: unknown };
     const auth = await requireWalletAuth(request, body.address);
     if (isAuthFailure(auth)) return auth;
-    if (typeof body.address !== "string") throw new Error("Alamat wallet diperlukan.");
+    if (typeof body.address !== "string") throw new Error("A wallet address is required.");
     const address = new PublicKey(body.address).toBase58();
     const customRpcUrl = validateCustomRpcUrl(body.customRpcUrl);
     const solResult = await readBalance(customRpcUrl ?? DEFAULT_MAINNET_RPC, address);
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
       source: customRpcUrl ? "custom" : "default",
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Saldo Mainnet tidak dapat dimuat.";
+    const message = error instanceof Error ? error.message : "Unable to load the Mainnet balance.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

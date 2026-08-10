@@ -87,7 +87,16 @@ export async function callOpenRouterChat(input: {
     ...(input.tools && input.tools.length > 0 ? { tools: input.tools.map((tool) => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.parameters } })), tool_choice: "auto" } : {}),
   });
   const firstMessage = first.choices?.[0]?.message;
-  const toolCalls = Array.isArray(firstMessage?.tool_calls) ? firstMessage.tool_calls.slice(0, 3) : [];
+  const declaredToolCalls = Array.isArray(firstMessage?.tool_calls) ? firstMessage.tool_calls.slice(0, 3) : [];
+  // Some OpenAI-compatible providers serialize a function call in text instead
+  // of `tool_calls`. Accept only the constrained XML form below and only route
+  // it through the same registered-tool validation path.
+  const inlineToolCall = declaredToolCalls.length === 0 && typeof firstMessage?.content === "string"
+    ? parseInlineToolCall(firstMessage.content)
+    : null;
+  const toolCalls = inlineToolCall === null
+    ? declaredToolCalls
+    : [{ id: crypto.randomUUID(), function: { name: inlineToolCall.name, arguments: JSON.stringify(inlineToolCall.arguments) } }];
   if (toolCalls.length === 0) {
     const text = firstMessage?.content;
     if (typeof text !== "string" || text.length === 0) throw new Error("OpenRouter returned no assistant message");
@@ -173,6 +182,21 @@ function usage(value: CompletionBody["usage"]): { inputTokens: number; outputTok
 function parseToolArguments(value: unknown): unknown {
   if (typeof value !== "string" || value.length > 4_000) throw new Error("Tool arguments are invalid");
   try { return JSON.parse(value) as unknown; } catch { throw new Error("Tool arguments are invalid"); }
+}
+
+function parseInlineToolCall(content: string): { name: string; arguments: Record<string, string> } | null {
+  const match = /<tool_call>\s*<function=([a-zA-Z0-9_]{1,80})>\s*([\s\S]*?)<\/function>\s*<\/tool_call>/u.exec(content);
+  if (match === null) return null;
+  const parameters: Record<string, string> = {};
+  const parameterPattern = /<parameter=([a-zA-Z][a-zA-Z0-9_]{0,80})>\s*([\s\S]*?)\s*<\/parameter>/gu;
+  const body = match[2] ?? "";
+  for (const parameter of body.matchAll(parameterPattern)) {
+    const key = parameter[1];
+    const value = parameter[2]?.trim();
+    if (key === undefined || value === undefined || value.length === 0 || value.length > 2_000 || parameters[key] !== undefined) return null;
+    parameters[key] = value;
+  }
+  return Object.keys(parameters).length === 0 ? null : { name: match[1]!, arguments: parameters };
 }
 
 function safeError(error: unknown): string {

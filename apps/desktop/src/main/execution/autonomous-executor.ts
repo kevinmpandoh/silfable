@@ -44,7 +44,9 @@ export class AutonomousExecutorService extends EventEmitter {
 
   async #hasActiveGrant(sessionId?: string): Promise<boolean> {
     if (!sessionId || !this.#dependencies.fullAccessGrants) {
-      return true; // Fallback to vault-unlocked state if session grant service is unconfigured
+      // A missing grant service or session is never authority to sign.  The
+      // previous fallback made a vault-unlocked process look autonomous.
+      return false;
     }
     try {
       const activeGrant = await this.#dependencies.fullAccessGrants.activeForSession(sessionId);
@@ -65,8 +67,10 @@ export class AutonomousExecutorService extends EventEmitter {
     }
 
     try {
-      const result = { proposalId: proposal.id, status: "CONSUMED" };
-      this.emit("proposal_executed", { proposalId: proposal.id, strategyId: proposal.strategyId });
+      // Do not report a fake execution while dispatchers are not bound to a
+      // versioned execution grant and immutable job digest.
+      const result = { proposalId: proposal.id, status: "REVIEW_REQUIRED" };
+      this.emit("proposal_requires_review", { proposalId: proposal.id, strategyId: proposal.strategyId });
       return result;
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -86,12 +90,11 @@ export class AutonomousExecutorService extends EventEmitter {
     }
 
     try {
-      if (this.#dependencies.strategyManager) {
-        this.#dependencies.strategyManager.closePosition(event.positionId);
-      }
-
-      const result = { positionId: event.positionId, status: "EXECUTED" };
-      this.emit("execution_success", { positionId: event.positionId, reason: event.reason, amount: event.amount });
+      // Closing the position would be an irreversible state transition without
+      // a signed transaction. Keep the trigger reviewable until a venue-specific
+      // dispatcher supplies the immutable job and receipt flow.
+      const result = { positionId: event.positionId, status: "REVIEW_REQUIRED" };
+      this.emit("execution_requires_review", { positionId: event.positionId, reason: event.reason, amount: event.amount });
       return result;
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));

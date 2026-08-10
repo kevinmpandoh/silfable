@@ -138,6 +138,7 @@ export const IPC_CHANNELS = {
   pumpVerifyExecution: "pump:verify-execution",
   missionSimulate: "mission:simulate",
   missionExecute: "mission:execute",
+  missionExecuteFullAccess: "mission:execute-full-access",
   missionVerifyExecution: "mission:verify-execution",
   transactionSettingsGet: "transaction:get-settings",
   transactionSettingsSave: "transaction:save-settings",
@@ -191,6 +192,12 @@ export const IPC_CHANNELS = {
   robinhoodReconcileReceipts: "robinhood:reconcile-receipts",
   automationList: "automation:list",
   automationSetStatus: "automation:set-status",
+  fullAccessExecutionGet: "fullaccess:get-execution-status",
+  fullAccessExecutionCreate: "fullaccess:create-execution-grant",
+  fullAccessExecutionAction: "fullaccess:execution-grant-action",
+  fullAccessExecutionJobsList: "fullaccess:list-execution-jobs",
+  fullAccessExecutionCreateSolanaSwapJob: "fullaccess:create-solana-swap-job",
+  fullAccessVerifySessionEnrollment: "fullaccess:verify-session-enrollment",
 } as const;
 
 const RequestBaseSchema = z.object({
@@ -255,6 +262,17 @@ export const SecurityConfigurePasswordRequestSchema = RequestBaseSchema.extend({
   acknowledgedPasswordLossRisk: z.literal(true),
 }).strict().refine((value) => value.password === value.confirmPassword, { message: "Passwords do not match", path: ["confirmPassword"] });
 export const SecurityUnlockRequestSchema = RequestBaseSchema.extend({ password: z.string().min(1).max(256) }).strict();
+// This verifies the local vault password only while a Full Access session is
+// being created. The password is never persisted in the session record.
+export const FullAccessSessionEnrollmentRequestSchema = RequestBaseSchema.extend({
+  walletAddress: z.string().min(20).max(128),
+  masterPassword: z.string().min(1).max(256),
+  confirmation: z.literal("ENABLE FULL ACCESS SESSION"),
+  acknowledgedRisk: z.literal(true),
+}).strict();
+export const FullAccessSessionEnrollmentResponseSchema = RequestBaseSchema.extend({
+  verified: z.literal(true),
+}).strict();
 export const SecurityChangePasswordRequestSchema = RequestBaseSchema.extend({
   currentPassword: z.string().min(1).max(256),
   newPassword: PasswordSchema,
@@ -264,6 +282,8 @@ export const SecurityChangePasswordRequestSchema = RequestBaseSchema.extend({
 export const SecurityPasswordMutationResponseSchema = RequestBaseSchema.extend({ keystore: z.literal("unlocked"), masterPassword: z.literal("configured") }).strict();
 export type SecurityConfigurePasswordRequest = z.infer<typeof SecurityConfigurePasswordRequestSchema>;
 export type SecurityUnlockRequest = z.infer<typeof SecurityUnlockRequestSchema>;
+export type FullAccessSessionEnrollmentRequest = z.infer<typeof FullAccessSessionEnrollmentRequestSchema>;
+export type FullAccessSessionEnrollmentResponse = z.infer<typeof FullAccessSessionEnrollmentResponseSchema>;
 export type SecurityChangePasswordRequest = z.infer<typeof SecurityChangePasswordRequestSchema>;
 export type SecurityPasswordMutationResponse = z.infer<typeof SecurityPasswordMutationResponseSchema>;
 
@@ -978,8 +998,14 @@ export const MissionExecuteRequestSchema = RequestBaseSchema.extend({
   acknowledgedIrreversibleMainnetExecution: z.literal(true),
 }).strict();
 export const MissionExecuteResponseSchema = RequestBaseSchema.extend({ receipt: MissionExecutionReceiptSchema }).strict();
+export const MissionFullAccessExecuteRequestSchema = RequestBaseSchema.extend({
+  sessionId: z.string().uuid(),
+  missionId: z.string().uuid(),
+  simulationId: z.string().uuid(),
+}).strict();
 export type MissionExecuteRequest = z.infer<typeof MissionExecuteRequestSchema>;
 export type MissionExecuteResponse = z.infer<typeof MissionExecuteResponseSchema>;
+export type MissionFullAccessExecuteRequest = z.infer<typeof MissionFullAccessExecuteRequestSchema>;
 export const MissionVerifyExecutionRequestSchema = RequestBaseSchema.extend({
   sessionId: z.string().uuid(),
   missionId: z.string().uuid(),
@@ -2492,6 +2518,168 @@ export const FullAccessGrantCreateRequestSchema = RequestBaseSchema.extend({
   acknowledgedNoApprovalBypass: z.literal(true),
 }).strict();
 export type FullAccessGrantCreateRequest = z.infer<typeof FullAccessGrantCreateRequestSchema>;
+
+/**
+ * Version two is intentionally separate from the legacy planning grant above.
+ * Existing grants never gain signing authority through a schema migration.
+ */
+export const FullAccessExecutionCapabilitySchema = z.enum([
+  "SOLANA_SWAP",
+  "ROBINHOOD_SWAP",
+  "SOLANA_TO_ROBINHOOD_BRIDGE",
+  "ROBINHOOD_TO_SOLANA_BRIDGE",
+  "PUMP_TOKEN_LAUNCH",
+]);
+export type FullAccessExecutionCapability = z.infer<typeof FullAccessExecutionCapabilitySchema>;
+
+export const FullAccessExecutionGrantStatusSchema = z.enum([
+  "ACTIVE",
+  "PAUSED",
+  "EXPIRED",
+  "REVOKED",
+  "EMERGENCY_STOPPED",
+]);
+export type FullAccessExecutionGrantStatus = z.infer<typeof FullAccessExecutionGrantStatusSchema>;
+
+export const FullAccessExecutionGrantRecordSchema = z.object({
+  id: z.string().uuid(),
+  version: z.literal(2),
+  sessionId: z.string().uuid(),
+  runtimeId: z.string().uuid(),
+  walletAddress: z.string().min(32).max(64),
+  walletScope: z.enum(["solana", "evm"]),
+  evmChainKey: EvmChainKeySchema.nullable(),
+  capabilities: z.array(FullAccessExecutionCapabilitySchema).min(1),
+  pinnedJobIds: z.array(z.string().uuid()).min(1),
+  allowedSolanaMints: z.array(z.string().min(32).max(44)),
+  allowedEvmTokens: z.array(z.string().regex(/^0x[0-9a-fA-F]{40}$/u)),
+  limits: FullAccessGrantLimitsSchema,
+  actionsUsed: z.number().int().nonnegative(),
+  allocationUsedUsd: z.number().finite().nonnegative(),
+  status: FullAccessExecutionGrantStatusSchema,
+  startsAt: z.string().datetime(),
+  expiresAt: z.string().datetime(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  signingAllowed: z.literal(true),
+  broadcastAllowed: z.literal(true),
+  /**
+   * A Full Access grant skips only the generic per-transaction approval
+   * prompt. It never bypasses deterministic policy, balance, quote,
+   * simulation, allowlist, or emergency-stop checks.
+   */
+  approvalBypassAllowed: z.literal(true),
+  genericApprovalBypassAllowed: z.literal(true),
+  executionAllowed: z.literal(true),
+  lifecycle: z.literal("guarded-execution-v2"),
+}).strict();
+export type FullAccessExecutionGrantRecord = z.infer<typeof FullAccessExecutionGrantRecordSchema>;
+
+export const FullAccessExecutionGrantCreateRequestSchema = RequestBaseSchema.extend({
+  sessionId: z.string().uuid(),
+  runtimeId: z.string().uuid(),
+  capabilities: z.array(FullAccessExecutionCapabilitySchema).min(1),
+  pinnedJobIds: z.array(z.string().uuid()).min(1),
+  allowedSolanaMints: z.array(z.string().min(32).max(44)),
+  allowedEvmTokens: z.array(z.string().regex(/^0x[0-9a-fA-F]{40}$/u)),
+  limits: FullAccessGrantLimitsSchema,
+  expiresAt: z.string().datetime(),
+  masterPassword: z.string().min(8).max(256),
+  confirmation: z.literal("ENABLE FULL ACCESS FOR 24 HOURS"),
+  acknowledgedRisk: z.literal(true),
+}).strict();
+export type FullAccessExecutionGrantCreateRequest = z.infer<typeof FullAccessExecutionGrantCreateRequestSchema>;
+
+export const FullAccessExecutionGrantActionRequestSchema = RequestBaseSchema.extend({
+  grantId: z.string().uuid(),
+  action: z.enum(["PAUSE", "RESUME", "REVOKE"]),
+}).strict();
+export type FullAccessExecutionGrantActionRequest = z.infer<typeof FullAccessExecutionGrantActionRequestSchema>;
+
+export const FullAccessExecutionGrantGetResponseSchema = RequestBaseSchema.extend({
+  grants: z.array(FullAccessExecutionGrantRecordSchema),
+  unlockSession: z.object({ active: z.boolean(), expiresAt: z.string().datetime().nullable(), reason: z.string().nullable() }).strict(),
+}).strict();
+export type FullAccessExecutionGrantGetResponse = z.infer<typeof FullAccessExecutionGrantGetResponseSchema>;
+
+export const FullAccessExecutionGrantMutationResponseSchema = RequestBaseSchema.extend({
+  grant: FullAccessExecutionGrantRecordSchema,
+  unlockSession: z.object({ active: z.boolean(), expiresAt: z.string().datetime().nullable(), reason: z.string().nullable() }).strict(),
+}).strict();
+export type FullAccessExecutionGrantMutationResponse = z.infer<typeof FullAccessExecutionGrantMutationResponseSchema>;
+
+export const AutonomousExecutionJobKindSchema = z.enum([
+  "SOLANA_SWAP",
+  "ROBINHOOD_SWAP",
+  "SOLANA_TO_ROBINHOOD_BRIDGE",
+  "ROBINHOOD_TO_SOLANA_BRIDGE",
+  "PUMP_TOKEN_LAUNCH",
+]);
+export type AutonomousExecutionJobKind = z.infer<typeof AutonomousExecutionJobKindSchema>;
+
+export const AutonomousExecutionJobStateSchema = z.enum([
+  "DRAFT",
+  "ARMED",
+  "RUNNING",
+  "PAUSED",
+  "COMPLETED",
+  "FAILED",
+  "UNKNOWN",
+  "REVOKED",
+]);
+export type AutonomousExecutionJobState = z.infer<typeof AutonomousExecutionJobStateSchema>;
+
+export const AutonomousExecutionJobSchema = z.object({
+  id: z.string().uuid(),
+  version: z.literal(1),
+  sessionId: z.string().uuid(),
+  walletAddress: z.string().min(32).max(64),
+  walletScope: z.enum(["solana", "evm"]),
+  chainKey: z.enum(["solana", "robinhood"]),
+  kind: AutonomousExecutionJobKindSchema,
+  capability: FullAccessExecutionCapabilitySchema,
+  contentDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  policyDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  idempotencyKey: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  state: AutonomousExecutionJobStateSchema,
+  grantId: z.string().uuid().nullable(),
+  receiptReference: z.string().max(256).nullable(),
+  reconciliationState: z.enum(["not-started", "pending", "confirmed", "failed", "unknown"]).optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+}).strict();
+export type AutonomousExecutionJob = z.infer<typeof AutonomousExecutionJobSchema>;
+
+export const AutonomousExecutionAuditEventSchema = z.object({
+  id: z.string().uuid(),
+  jobId: z.string().uuid(),
+  grantId: z.string().uuid().nullable(),
+  event: z.enum(["CREATED", "ARMED", "PREFLIGHT", "SIGNED", "BROADCAST", "RECONCILED", "PAUSED", "REVOKED", "FAILED", "UNKNOWN"]),
+  detailDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  occurredAt: z.string().datetime(),
+}).strict();
+export type AutonomousExecutionAuditEvent = z.infer<typeof AutonomousExecutionAuditEventSchema>;
+
+export const AutonomousExecutionJobListResponseSchema = RequestBaseSchema.extend({
+  jobs: z.array(AutonomousExecutionJobSchema),
+  audit: z.array(AutonomousExecutionAuditEventSchema),
+}).strict();
+export type AutonomousExecutionJobListResponse = z.infer<typeof AutonomousExecutionJobListResponseSchema>;
+
+/**
+ * Trusted main-process request: it references an already persisted mission
+ * contract rather than accepting arbitrary transaction parameters from UI.
+ */
+export const FullAccessExecutionCreateSolanaSwapJobRequestSchema = RequestBaseSchema.extend({
+  sessionId: z.string().uuid(),
+  missionId: z.string().uuid(),
+}).strict();
+export type FullAccessExecutionCreateSolanaSwapJobRequest = z.infer<typeof FullAccessExecutionCreateSolanaSwapJobRequestSchema>;
+
+export const FullAccessExecutionCreateSolanaSwapJobResponseSchema = RequestBaseSchema.extend({
+  job: AutonomousExecutionJobSchema,
+}).strict();
+export type FullAccessExecutionCreateSolanaSwapJobResponse = z.infer<typeof FullAccessExecutionCreateSolanaSwapJobResponseSchema>;
 
 export const PumpLaunchManagedMetadataPublishRequestSchema = RequestBaseSchema.extend({
   sessionId: z.string().uuid().optional(),

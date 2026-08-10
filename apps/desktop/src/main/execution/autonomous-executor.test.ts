@@ -50,7 +50,7 @@ test("autonomous executor fails closed when vault reports locked", async () => {
   assert.equal(closeCalls, 0);
 });
 
-test("autonomous executor executes trigger and closes position when vault is unlocked", async () => {
+test("autonomous executor never treats an unlocked vault as execution authority", async () => {
   let closedId = "";
   let emittedSuccess: unknown = null;
 
@@ -59,9 +59,9 @@ test("autonomous executor executes trigger and closes position when vault is unl
     strategyManager: { closePosition: (id: string) => { closedId = id; } },
   } as unknown as AutonomousExecutorDependencies);
 
-  service.once("execution_success", (event) => { emittedSuccess = event; });
+  service.once("execution_error", (event) => { emittedSuccess = event; });
 
-  const result = await service.executeTrigger({
+  await assert.rejects(() => service.executeTrigger({
     positionId: "pos-200",
     mintAddress: "7LSsEoJGhLeZzGvDofTdNg7M3JttxQqGWNLo6vWMpump",
     reason: "TAKE_PROFIT",
@@ -69,14 +69,11 @@ test("autonomous executor executes trigger and closes position when vault is unl
     targetPrice: 2.0,
     amount: "5000",
     triggeredAt: new Date().toISOString(),
-  });
-
-  assert.equal(result.status, "EXECUTED");
-  assert.equal(closedId, "pos-200");
+  }), /Autonomous execution is disabled/u);
+  assert.equal(closedId, "");
   assert.deepEqual(emittedSuccess, {
     positionId: "pos-200",
-    reason: "TAKE_PROFIT",
-    amount: "5000",
+    error: "Autonomous execution is disabled. A trigger may create a reviewable proposal only; it cannot close a position, sign, or broadcast.",
   });
 });
 
@@ -98,7 +95,7 @@ test("end-to-end full access grant validation lifecycle in autonomous executor",
     fullAccessGrants: mockGrantService as any,
   } as unknown as AutonomousExecutorDependencies);
 
-  // 1. Valid active session grant succeeds
+  // 1. A legacy planning grant must not become transaction authority.
   const activeResult = await service.executeTrigger({
     positionId: "pos-active",
     mintAddress: "So11111111111111111111111111111111111111112",
@@ -109,8 +106,8 @@ test("end-to-end full access grant validation lifecycle in autonomous executor",
     triggeredAt: new Date().toISOString(),
     sessionId: "active-session",
   });
-  assert.equal(activeResult.status, "EXECUTED");
-  assert.equal(closedPositionId, "pos-active");
+  assert.equal(activeResult.status, "REVIEW_REQUIRED");
+  assert.equal(closedPositionId, "");
 
   // 2. Revoked/Inactive session grant fails closed
   activeGrantState = false;

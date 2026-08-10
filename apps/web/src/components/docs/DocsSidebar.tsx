@@ -1,6 +1,7 @@
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 const chapters = [
+  { label: "Whitepaper", href: "#whitepaper" },
   { label: "Introduction", href: "#introduction" },
   { label: "Installation", href: "#quick-start" },
   { label: "Core concepts", href: "#core-concepts" },

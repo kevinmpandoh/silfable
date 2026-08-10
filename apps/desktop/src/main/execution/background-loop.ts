@@ -58,6 +58,10 @@ export class DurableBackgroundObservationService extends EventEmitter {
         }
       } catch (err: any) {
         if (err?.message?.includes("locked")) return;
+        // A failed RPC/price read is not a trade signal. Keep strategies active
+        // but move their next evaluation forward so the UI shows a bounded
+        // retry instead of an indefinitely stale "evaluating" state.
+        this.#automationManager?.deferActiveEvaluations(new Date());
         if (this.listenerCount("error") > 0) {
           this.emit("error", err);
         } else {

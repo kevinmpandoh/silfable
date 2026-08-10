@@ -115,6 +115,30 @@ export class RuntimeDatabase {
         updated_at TEXT NOT NULL
       ) STRICT;
 
+      CREATE TABLE IF NOT EXISTS full_access_execution_grant_records (
+        id TEXT PRIMARY KEY,
+        ciphertext TEXT NOT NULL,
+        nonce TEXT NOT NULL,
+        auth_tag TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE IF NOT EXISTS autonomous_execution_job_records (
+        id TEXT PRIMARY KEY,
+        ciphertext TEXT NOT NULL,
+        nonce TEXT NOT NULL,
+        auth_tag TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE IF NOT EXISTS autonomous_execution_audit_records (
+        id TEXT PRIMARY KEY,
+        ciphertext TEXT NOT NULL,
+        nonce TEXT NOT NULL,
+        auth_tag TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
+
       CREATE TABLE IF NOT EXISTS portfolio_history_records (
         id TEXT PRIMARY KEY,
         session_id TEXT NOT NULL,
@@ -323,6 +347,34 @@ export class RuntimeDatabase {
       INSERT INTO full_access_grant_records (id, ciphertext, nonce, auth_tag, updated_at) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET ciphertext = excluded.ciphertext, nonce = excluded.nonce, auth_tag = excluded.auth_tag, updated_at = excluded.updated_at
     `).run(record.id, record.ciphertext, record.nonce, record.tag, record.updatedAt);
+  }
+
+  listFullAccessExecutionGrantRecords(): EncryptedSessionRecord[] {
+    const rows = this.#database.prepare("SELECT id, ciphertext, nonce, auth_tag, updated_at FROM full_access_execution_grant_records ORDER BY updated_at DESC").all() as Array<{ id: string; ciphertext: string; nonce: string; auth_tag: string; updated_at: string }>;
+    return rows.map((row) => ({ id: row.id, ciphertext: row.ciphertext, nonce: row.nonce, tag: row.auth_tag, updatedAt: row.updated_at }));
+  }
+
+  upsertFullAccessExecutionGrantRecord(record: EncryptedSessionRecord): void {
+    this.#database.prepare(`
+      INSERT INTO full_access_execution_grant_records (id, ciphertext, nonce, auth_tag, updated_at) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET ciphertext = excluded.ciphertext, nonce = excluded.nonce, auth_tag = excluded.auth_tag, updated_at = excluded.updated_at
+    `).run(record.id, record.ciphertext, record.nonce, record.tag, record.updatedAt);
+  }
+
+  listAutonomousExecutionJobRecords(): EncryptedSessionRecord[] {
+    return this.#listEncryptedRecords("autonomous_execution_job_records");
+  }
+
+  upsertAutonomousExecutionJobRecord(record: EncryptedSessionRecord): void {
+    this.#upsertEncryptedRecord("autonomous_execution_job_records", record);
+  }
+
+  listAutonomousExecutionAuditRecords(): EncryptedSessionRecord[] {
+    return this.#listEncryptedRecords("autonomous_execution_audit_records");
+  }
+
+  upsertAutonomousExecutionAuditRecord(record: EncryptedSessionRecord): void {
+    this.#upsertEncryptedRecord("autonomous_execution_audit_records", record);
   }
 
   getPumpRiskLedgerRecord(): EncryptedPumpRiskLedgerRecord | null {
@@ -787,6 +839,18 @@ export class RuntimeDatabase {
       ORDER BY updated_at ASC
     `);
     return statement.all() as Array<{ id: string; ciphertext: string; nonce: string; tag: string; updatedAt: string }>;
+  }
+
+  #listEncryptedRecords(table: "autonomous_execution_job_records" | "autonomous_execution_audit_records"): EncryptedSessionRecord[] {
+    const rows = this.#database.prepare(`SELECT id, ciphertext, nonce, auth_tag, updated_at FROM ${table} ORDER BY updated_at DESC`).all() as Array<{ id: string; ciphertext: string; nonce: string; auth_tag: string; updated_at: string }>;
+    return rows.map((row) => ({ id: row.id, ciphertext: row.ciphertext, nonce: row.nonce, tag: row.auth_tag, updatedAt: row.updated_at }));
+  }
+
+  #upsertEncryptedRecord(table: "autonomous_execution_job_records" | "autonomous_execution_audit_records", record: EncryptedSessionRecord): void {
+    this.#database.prepare(`
+      INSERT INTO ${table} (id, ciphertext, nonce, auth_tag, updated_at) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET ciphertext = excluded.ciphertext, nonce = excluded.nonce, auth_tag = excluded.auth_tag, updated_at = excluded.updated_at
+    `).run(record.id, record.ciphertext, record.nonce, record.tag, record.updatedAt);
   }
 }
 

@@ -17,6 +17,15 @@ import {
   ClipboardWriteTransactionSignatureResponseSchema,
   ExternalOpenTransactionRequestSchema,
   ExternalOpenTransactionResponseSchema,
+  AutonomousExecutionJobListResponseSchema,
+  FullAccessExecutionGrantActionRequestSchema,
+  FullAccessExecutionGrantCreateRequestSchema,
+  FullAccessExecutionGrantGetResponseSchema,
+  FullAccessExecutionGrantMutationResponseSchema,
+  FullAccessExecutionCreateSolanaSwapJobRequestSchema,
+  FullAccessExecutionCreateSolanaSwapJobResponseSchema,
+  FullAccessSessionEnrollmentRequestSchema,
+  FullAccessSessionEnrollmentResponseSchema,
   EmergencyStopEngageRequestSchema,
   EmergencyStopGetResponseSchema,
   EmergencyStopMutationResponseSchema,
@@ -42,6 +51,7 @@ import {
   MissionSimulateRequestSchema,
   MissionSimulateResponseSchema,
   MissionExecuteRequestSchema,
+  MissionFullAccessExecuteRequestSchema,
   MissionExecuteResponseSchema,
   MissionVerifyExecutionRequestSchema,
   MissionVerifyExecutionResponseSchema,
@@ -165,6 +175,8 @@ import {
   type ClipboardWriteWalletAddressRequest,
   type ClipboardWriteTransactionSignatureRequest,
   type ExternalOpenTransactionRequest,
+  type FullAccessExecutionGrantActionRequest,
+  type FullAccessExecutionGrantCreateRequest,
   type EmergencyStopEngageRequest,
   type EmergencyStopReleaseRequest,
   type JupiterSaveKeyRequest,
@@ -419,6 +431,9 @@ const api = {
   async executeMission(request: MissionExecuteRequest) {
     return MissionExecuteResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.missionExecute, MissionExecuteRequestSchema.parse(request)));
   },
+  async executeFullAccessMission(request: import("@silfable/contracts").MissionFullAccessExecuteRequest) {
+    return MissionExecuteResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.missionExecuteFullAccess, MissionFullAccessExecuteRequestSchema.parse(request)));
+  },
   async verifyMissionExecution(request: MissionVerifyExecutionRequest) {
     return MissionVerifyExecutionResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.missionVerifyExecution, MissionVerifyExecutionRequestSchema.parse(request)));
   },
@@ -529,6 +544,24 @@ const api = {
   },
   async setAutomationStatus(request: AutomationSetStatusRequest) {
     return AutomationSetStatusResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.automationSetStatus, AutomationSetStatusRequestSchema.parse(request)));
+  },
+  async getFullAccessExecutionStatus(request: { schemaVersion: 1; requestId: string }) {
+    return FullAccessExecutionGrantGetResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.fullAccessExecutionGet, request));
+  },
+  async createFullAccessExecutionGrant(request: FullAccessExecutionGrantCreateRequest) {
+    return FullAccessExecutionGrantMutationResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.fullAccessExecutionCreate, FullAccessExecutionGrantCreateRequestSchema.parse(request)));
+  },
+  async actOnFullAccessExecutionGrant(request: FullAccessExecutionGrantActionRequest) {
+    return FullAccessExecutionGrantMutationResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.fullAccessExecutionAction, FullAccessExecutionGrantActionRequestSchema.parse(request)));
+  },
+  async listFullAccessExecutionJobs(request: { schemaVersion: 1; requestId: string }) {
+    return AutonomousExecutionJobListResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.fullAccessExecutionJobsList, request));
+  },
+  async createFullAccessSolanaSwapJob(request: import("@silfable/contracts").FullAccessExecutionCreateSolanaSwapJobRequest) {
+    return FullAccessExecutionCreateSolanaSwapJobResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.fullAccessExecutionCreateSolanaSwapJob, FullAccessExecutionCreateSolanaSwapJobRequestSchema.parse(request)));
+  },
+  async verifyFullAccessSessionEnrollment(request: import("@silfable/contracts").FullAccessSessionEnrollmentRequest) {
+    return FullAccessSessionEnrollmentResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.fullAccessVerifySessionEnrollment, FullAccessSessionEnrollmentRequestSchema.parse(request)));
   }
 };
 

@@ -10,13 +10,20 @@ import type { BridgePreflightEvidence, BridgeProposal, BridgeReceipt, BridgeDest
 import { BRIDGE_ARBITRUM_CHAIN_ID, BRIDGE_ARBITRUM_USDC_ADDRESS, BRIDGE_AVALANCHE_CHAIN_ID, BRIDGE_AVALANCHE_USDC_ADDRESS, BRIDGE_BASE_CHAIN_ID, BRIDGE_BASE_USDC_ADDRESS, BRIDGE_ETHEREUM_CHAIN_ID, BRIDGE_ETHEREUM_USDC_ADDRESS, BRIDGE_OPTIMISM_CHAIN_ID, BRIDGE_OPTIMISM_USDC_ADDRESS, BRIDGE_POLYGON_CHAIN_ID, BRIDGE_POLYGON_USDC_ADDRESS, BRIDGE_ROBINHOOD_CHAIN_ID, BRIDGE_ROBINHOOD_USDG_ADDRESS, BRIDGE_SOLANA_CHAIN_ID, BRIDGE_SOLANA_USDC_MINT } from '@silfable/contracts';
 import { UnifiedPortfolioRail } from './UnifiedPortfolioRail';
 
-export function EmergencyStopPanel() {
+export function EmergencyStopPanel({
+  onChanged,
+  compact = false,
+}: {
+  onChanged?: () => void | Promise<void>;
+  compact?: boolean;
+}) {
   const [status, setStatus] = useState<EmergencyStopStatus | null>(null);
   const [reason, setReason] = useState("");
   const [password, setPassword] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
     window.silfable.getEmergencyStop()
@@ -38,6 +45,7 @@ export function EmergencyStopPanel() {
       setStatus(response.status);
       setAcknowledged(false);
       setMessage("Emergency stop engaged. New execution and final revalidation requests are blocked.");
+      await onChanged?.();
     } catch (error) {
       setMessage(friendlyError(error, "Emergency stop could not be engaged."));
     } finally {
@@ -60,6 +68,7 @@ export function EmergencyStopPanel() {
       setPassword("");
       setAcknowledged(false);
       setMessage("Emergency stop released. Monitoring remains stopped until explicitly restarted.");
+      await onChanged?.();
     } catch (error) {
       setMessage(friendlyError(error, "Emergency stop could not be released."));
     } finally {
@@ -68,7 +77,7 @@ export function EmergencyStopPanel() {
   }
 
   const engaged = status?.engaged === true;
-  return (
+  const content = (
     <section className={`emergencyStopPanel ${engaged ? "engaged" : ""}`}>
       <div>
         <strong>Global emergency stop</strong>
@@ -128,6 +137,34 @@ export function EmergencyStopPanel() {
       </button>
       {message && <p className="inlineMessage">{message}</p>}
     </section>
+  );
+
+  if (!compact) return content;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setModalOpen(true)}
+        className={`inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-[10px] font-semibold uppercase tracking-[0.12em] transition ${
+          engaged
+            ? "border-red-400/50 bg-red-500/15 text-red-200 hover:bg-red-500/25"
+            : "border-red-500/35 bg-red-500/10 text-red-200 hover:border-red-400/60 hover:bg-red-500/20"
+        }`}
+      >
+        <ShieldAlert className="size-3.5" />
+        {engaged ? "Emergency stop active" : "Emergency stop"}
+      </button>
+      <Modal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={engaged ? "Emergency stop active" : "Engage emergency stop"}
+        subtitle="This control is global to the local desktop runtime."
+        maxWidth="720px"
+      >
+        {content}
+      </Modal>
+    </>
   );
 }
 export function MissionsView({
@@ -218,18 +255,28 @@ export function RightRail({
   const [automationStrategies, setAutomationStrategies] = useState<any[]>([]);
   const [automationProposals, setAutomationProposals] = useState<any[]>([]);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const automationSnapshotRef = useRef<string | null>(null);
 
   const fetchAutomation = useCallback(async () => {
     try {
       if ((window as any).silfable?.listAutomationStrategies) {
         const res = await (window as any).silfable.listAutomationStrategies();
-        setAutomationStrategies(res.strategies || []);
-        setAutomationProposals(res.proposals || []);
+        const strategies = res.strategies || [];
+        const proposals = res.proposals || [];
+        const snapshot = JSON.stringify({ strategies, proposals });
+        const changed = automationSnapshotRef.current !== null && automationSnapshotRef.current !== snapshot;
+        automationSnapshotRef.current = snapshot;
+        setAutomationStrategies(strategies);
+        setAutomationProposals(proposals);
+        // Main-process Full Access execution updates the encrypted conversation.
+        // Reload only when automation state actually changes so the confirmed
+        // receipt/card appears without polling the entire session continuously.
+        if (changed && onReloadSessions) await onReloadSessions();
       }
     } catch (err) {
       console.error("Failed to load automation in RightRail:", err);
     }
-  }, []);
+  }, [onReloadSessions]);
 
   useEffect(() => {
     fetchAutomation();
@@ -238,6 +285,12 @@ export function RightRail({
   }, [fetchAutomation]);
 
   const handleApproveProposal = async (proposalId: string) => {
+    // Full Access proposals are consumed by the local dispatcher.  Do not let a
+    // stale renderer instance invoke the legacy manual-approval IPC path.
+    if (session?.permission === "full") {
+      return;
+    }
+
     try {
       setActionLoadingId(proposalId);
       if ((window as any).silfable?.setAutomationStatus) {
@@ -262,6 +315,18 @@ export function RightRail({
   
   const pumpConfig = session?.workspace === "pump" ? session.pumpConfig : undefined;
   const activePosition = activePositions.find(p => p.mintAddress === pumpConfig?.tokenMint);
+  // The automation store is process-wide, while this rail represents exactly
+  // one selected session. Never leak an automation (or its approval state)
+  // from another wallet/session into the active rail.
+  const visibleAutomationStrategies = automationStrategies.filter((strategy) => {
+    if (!session) return false;
+    return (
+      strategy.sessionId === session.id ||
+      automationProposals.some(
+        (proposal) => proposal.strategyId === strategy.id && proposal.sessionId === session.id,
+      )
+    );
+  });
   const lastTurnInputTokens = session?.usage.input ?? 0;
   const safeContextLimit = Math.max(contextLimit, 1);
   const contextPercent = Math.min(100, Math.round((lastTurnInputTokens / safeContextLimit) * 100));
@@ -715,20 +780,28 @@ export function RightRail({
           </dl>
         </RailSection>
       )}
-      {automationStrategies.filter((s) => s.status !== "CANCELLED" && s.status !== "EXPIRED").length > 0 && (
+      {visibleAutomationStrategies.filter((s) => s.status !== "CANCELLED" && s.status !== "EXPIRED").length > 0 && (
         <RailSection title="Active Automation">
           <div className="activeAutomationsRail space-y-2 text-xs">
-            {automationStrategies
+            {visibleAutomationStrategies
               .filter((s) => s.status !== "CANCELLED" && s.status !== "EXPIRED")
               .map((strat) => {
                 const matchingProp = automationProposals.find(
                   (p) => p.strategyId === strat.id && p.status === "AWAITING_APPROVAL",
                 );
+                // Older persisted strategies did not always include sessionId.
+                // A pending proposal is nevertheless scoped to the active
+                // session, so use either identifier before exposing a manual
+                // approval control.
+                const isFullAccessStrategy = session?.permission === "full";
                 const nextWake = strat.nextWakeAt ? Date.parse(strat.nextWakeAt) - Date.now() : null;
                 const countdown =
                   nextWake && nextWake > 0
                     ? `${Math.floor(nextWake / 60000)}m ${Math.floor((nextWake % 60000) / 1000)}s`
-                    : "Evaluating now...";
+                    : "Queued for local evaluation";
+                const automationStatus = isFullAccessStrategy && strat.status === "AWAITING_APPROVAL"
+                  ? "PROCESSING"
+                  : strat.status;
 
                 const formatOrderAmount = (rawAmount?: string, inputMint?: string) => {
                   if (!rawAmount) return "-";
@@ -754,8 +827,8 @@ export function RightRail({
                   <div key={strat.id} className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1.5">
                     <div className="flex items-center justify-between font-bold text-emerald-300">
                       <span>{strat.kind} · {inSym} ➔ {outSym}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${strat.status === "ACTIVE" ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>
-                        {strat.status}
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${isFullAccessStrategy ? "bg-emerald-500/20 text-emerald-300" : strat.status === "ACTIVE" ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>
+                        {isFullAccessStrategy && (matchingProp || strat.status === "AWAITING_APPROVAL") ? "PROCESSING" : automationStatus}
                       </span>
                     </div>
                     <div className="flex justify-between text-[11px] text-slate-400">
@@ -768,7 +841,11 @@ export function RightRail({
                         <span>{countdown}</span>
                       </div>
                     )}
-                    {matchingProp && (
+                    {matchingProp && isFullAccessStrategy ? (
+                      <div className="w-full mt-2 py-1.5 px-2 rounded border border-emerald-500/30 bg-emerald-950/40 text-center font-mono text-[10px] text-emerald-300">
+                        Full Access processing
+                      </div>
+                    ) : matchingProp && (
                       <button
                         className="w-full mt-2 py-1.5 px-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-colors shadow-sm"
                         disabled={actionLoadingId === matchingProp.id}

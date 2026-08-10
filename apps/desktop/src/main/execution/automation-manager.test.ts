@@ -141,6 +141,34 @@ test("pause, resume, expiry and emergency stop are fail closed", async () => {
   }
 });
 
+test("pausing a DCA preserves its remaining countdown until resume", async () => {
+  const value = await fixture();
+  try {
+    const started = new Date("2026-07-29T00:00:00.000Z");
+    value.manager.createDca({
+      id: "dca-countdown",
+      sessionId: "session-dca",
+      walletAddress: WALLET,
+      outputMint: TOKEN,
+      orderAmountRaw: "100000",
+      maximumTotalRaw: "200000",
+      intervalSeconds: 120,
+      maximumExecutions: 2,
+      expiresAt: "2026-07-29T01:00:00.000Z",
+    }, started);
+    const pausedAt = new Date("2026-07-29T00:00:45.000Z");
+    const paused = value.manager.setStatus("dca-countdown", "PAUSE", pausedAt);
+    assert.equal(paused.pausedRemainingMs, 75_000);
+    const resumed = value.manager.setStatus("dca-countdown", "RESUME", new Date("2026-07-29T00:05:00.000Z"));
+    assert.equal(resumed.status, "ACTIVE");
+    assert.equal(resumed.nextWakeAt, "2026-07-29T00:06:15.000Z");
+    assert.equal(value.manager.evaluate(new Date("2026-07-29T00:05:30.000Z"), new Map()).length, 0);
+  } finally {
+    value.database.close();
+    await rm(value.directory, { recursive: true, force: true });
+  }
+});
+
 test("invalid DCA limits and exit conditions are rejected", async () => {
   const value = await fixture();
   try {

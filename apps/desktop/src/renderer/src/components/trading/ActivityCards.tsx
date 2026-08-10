@@ -845,7 +845,7 @@ export function PumpLaunchDraftForm({
   if (!open) {
     return (
       <button className="launchDraftToggle" onClick={() => setOpen(true)}>
-        Prepare Pump.fun token launch draft
+        Launch Token Draft
       </button>
     );
   }
@@ -1101,6 +1101,7 @@ export function MissionPreviewCard({
   simulating,
   executing,
   verifying,
+  fullAccess,
   onSimulate,
   onExecute,
   onVerify,
@@ -1111,6 +1112,7 @@ export function MissionPreviewCard({
   simulating: boolean;
   executing: boolean;
   verifying: boolean;
+  fullAccess: boolean;
   onSimulate: () => void;
   onExecute: () => void;
   onVerify: () => void;
@@ -1173,16 +1175,20 @@ export function MissionPreviewCard({
             {execution
               ? `Execution ${execution.status}`
               : simulation?.status === "passed"
-                ? "Final approval required"
+                ? fullAccess ? "Full Access execution unavailable" : "Final approval required"
                 : "Execution locked"}
           </span>
           <small>
             {execution
               ? "This receipt is persisted with the encrypted session."
-              : "Simulation never authorizes a transaction by itself."}
+              : fullAccess && simulation?.status === "passed"
+                ? "The local signing session must still be active. Create a fresh Full Access session after unlocking the vault if it was cleared by lock, sleep, restart, or emergency stop."
+                : "Simulation never authorizes a transaction by itself."}
           </small>
         </div>
-         {simulation?.status === "passed" && !execution ? (
+         {execution ? null : simulation?.status === "passed" && fullAccess ? (
+          <span className="executionPendingState">Full Access checks completed</span>
+        ) : simulation?.status === "passed" ? (
           <button
             className="executeButton"
             disabled={executing}
@@ -1392,5 +1398,6 @@ export function ExecutionResult({
       </small>
     </div>
   );
-}
+}
+
 

@@ -24,6 +24,7 @@ type CommonStrategy = {
   status: StrategyStatus;
   expiresAt: string;
   nextWakeAt: string | null;
+  pausedRemainingMs: number | null;
   lastEvaluatedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -179,6 +180,7 @@ export class AutomationManager {
       expiresAt: requireFutureExpiry(input.expiresAt, now),
       status: "ACTIVE",
       nextWakeAt: new Date(now.getTime() + intervalSeconds * 1000).toISOString(),
+      pausedRemainingMs: null,
       lastEvaluatedAt: null,
       createdAt,
       updatedAt: createdAt,
@@ -213,6 +215,7 @@ export class AutomationManager {
       expiresAt: requireFutureExpiry(input.expiresAt, now),
       status: "ACTIVE",
       nextWakeAt: createdAt,
+      pausedRemainingMs: null,
       lastEvaluatedAt: null,
       createdAt,
       updatedAt: createdAt,
@@ -235,11 +238,25 @@ export class AutomationManager {
   setStatus(id: string, action: "PAUSE" | "RESUME" | "CANCEL", now = new Date()): AutomationStrategy {
     if (!["PAUSE", "RESUME", "CANCEL"].includes(action)) throw new Error("Automation action is invalid.");
     const strategy = this.#requireStrategy(id);
+    if (action === "PAUSE" || action === "CANCEL") {
+      for (const proposal of this.listProposals().filter((item) => item.strategyId === id && item.status === "AWAITING_APPROVAL")) {
+        this.#db.setAutomationProposalStatus(proposal.id, "REJECTED");
+      }
+    }
     const status: StrategyStatus = action === "PAUSE" ? "PAUSED" : action === "CANCEL" ? "CANCELLED" : "ACTIVE";
+    const pausedRemainingMs = action === "PAUSE" && strategy.nextWakeAt !== null
+      ? Math.max(0, Date.parse(strategy.nextWakeAt) - now.getTime())
+      : action === "RESUME"
+        ? null
+        : strategy.pausedRemainingMs;
+    const resumedWakeAt = action === "RESUME"
+      ? new Date(now.getTime() + Math.max(0, strategy.pausedRemainingMs ?? 0)).toISOString()
+      : strategy.nextWakeAt;
     const next = {
       ...strategy,
       status,
-      nextWakeAt: status === "ACTIVE" ? now.toISOString() : strategy.nextWakeAt,
+      pausedRemainingMs,
+      nextWakeAt: status === "ACTIVE" ? resumedWakeAt : strategy.nextWakeAt,
       updatedAt: now.toISOString(),
     };
     this.#persist(next);
@@ -248,7 +265,22 @@ export class AutomationManager {
 
   emergencyStop(now = new Date()): void {
     for (const strategy of this.listStrategies().filter((item) => item.status === "ACTIVE" || item.status === "AWAITING_APPROVAL")) {
-      this.#persist({ ...strategy, status: "EMERGENCY_STOPPED", updatedAt: now.toISOString() });
+      for (const proposal of this.listProposals().filter((item) => item.strategyId === strategy.id && item.status === "AWAITING_APPROVAL")) {
+        this.#db.setAutomationProposalStatus(proposal.id, "REJECTED");
+      }
+      this.#persist({ ...strategy, status: "EMERGENCY_STOPPED", nextWakeAt: null, pausedRemainingMs: null, updatedAt: now.toISOString() });
+    }
+  }
+
+  deferActiveEvaluations(now = new Date(), retryDelayMs = 60_000): void {
+    for (const strategy of this.listStrategies().filter((item) => item.status === "ACTIVE")) {
+      this.#persist({
+        ...strategy,
+        nextWakeAt: new Date(now.getTime() + retryDelayMs).toISOString(),
+        pausedRemainingMs: null,
+        lastEvaluatedAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      });
     }
   }
 
@@ -310,6 +342,7 @@ export class AutomationManager {
         this.#persist({
           ...current,
           status: "AWAITING_APPROVAL",
+          pausedRemainingMs: null,
           nextWakeAt: new Date(now.getTime() + current.intervalSeconds * 1000).toISOString(),
           lastEvaluatedAt: now.toISOString(),
           updatedAt: now.toISOString(),
@@ -319,7 +352,7 @@ export class AutomationManager {
 
       const price = prices.get(current.inputMint);
       if (price === undefined || !Number.isFinite(price) || price <= 0) {
-        this.#persist({ ...current, lastEvaluatedAt: now.toISOString(), nextWakeAt: new Date(now.getTime() + 60_000).toISOString(), updatedAt: now.toISOString() });
+        this.#persist({ ...current, pausedRemainingMs: null, lastEvaluatedAt: now.toISOString(), nextWakeAt: new Date(now.getTime() + 60_000).toISOString(), updatedAt: now.toISOString() });
         continue;
       }
       const highest = Math.max(current.highestPriceUsd, price);
@@ -332,11 +365,11 @@ export class AutomationManager {
             ? "TAKE_PROFIT"
             : null;
       if (reason !== null) {
-        const proposal = this.#createProposal(current, reason, current.amountRaw, price, `${current.id}:exit`, now);
+        const proposal = this.#createProposal(current, reason, current.amountRaw, price, `${current.id}:exit:${Math.floor(now.getTime() / 60_000)}`, now);
         if (proposal) created.push(proposal);
-        this.#persist({ ...current, highestPriceUsd: highest, status: "AWAITING_APPROVAL", nextWakeAt: null, lastEvaluatedAt: now.toISOString(), updatedAt: now.toISOString() });
+        this.#persist({ ...current, highestPriceUsd: highest, status: "AWAITING_APPROVAL", nextWakeAt: null, pausedRemainingMs: null, lastEvaluatedAt: now.toISOString(), updatedAt: now.toISOString() });
       } else {
-        this.#persist({ ...current, highestPriceUsd: highest, nextWakeAt: new Date(now.getTime() + 60_000).toISOString(), lastEvaluatedAt: now.toISOString(), updatedAt: now.toISOString() });
+        this.#persist({ ...current, highestPriceUsd: highest, nextWakeAt: new Date(now.getTime() + 60_000).toISOString(), pausedRemainingMs: null, lastEvaluatedAt: now.toISOString(), updatedAt: now.toISOString() });
       }
     }
     return created;

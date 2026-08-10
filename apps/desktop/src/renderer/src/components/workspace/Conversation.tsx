@@ -209,12 +209,12 @@ export function Conversation({
             ? "Pump.fun · manual restricted"
             : session.walletScope === "solana"
               ? session.mode === "mission"
-                ? "Solana workspace · mission"
-                : "Solana workspace · agent"
+                ? `Solana workspace · ${session.permission} mission`
+                : `Solana workspace · ${session.permission} agent`
               : session.walletScope === "evm"
                 ? session.mode === "mission"
-                  ? "EVM workspace · restricted mission"
-                  : "EVM workspace · restricted agent"
+                  ? `Robinhood workspace · ${session.permission} mission`
+                  : `Robinhood workspace · ${session.permission} agent`
             : session.intent === "token-launch"
               ? "Token launch planning"
               : session.intent === "solana-swap"
@@ -227,7 +227,9 @@ export function Conversation({
               ? "Mission preparing"
               : "Agent active"}
         </div>
-        <StatusPill tone="warning">Restricted</StatusPill>
+        <StatusPill tone={session.permission === "full" ? "success" : "warning"}>
+          {session.permission === "full" ? "Full Access" : "Restricted"}
+        </StatusPill>
       </header>
       {session.walletScope === "solana" && session.walletAddress !== null && (
         <div className="conversationLaunchBar">
@@ -311,6 +313,7 @@ export function Conversation({
                         )
                       : false
                   }
+                  fullAccess={session.permission === "full"}
                   onSimulate={() =>
                     onRequestSimulation(message.id, message.missionPreview!)
                   }
@@ -508,9 +511,10 @@ export function Conversation({
             sourceWallet={session.walletAddress}
           />
         )}
-        <Notice tone="warning" title="Restricted Mainnet session">
-          Every mutating action requires a validated contract, passed
-          simulation, password recheck, and explicit approval.
+        <Notice tone={session.permission === "full" ? "info" : "warning"} title={session.permission === "full" ? "Full Access session" : "Restricted Mainnet session"}>
+          {session.permission === "full"
+            ? "Exact actions still require a pinned execution job and active local-vault grant. Until then, the normal review and approval flow remains active."
+            : "Every mutating action requires a validated contract, passed simulation, password recheck, and explicit approval."}
         </Notice>
         <Composer
           value={draft}

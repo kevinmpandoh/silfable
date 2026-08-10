@@ -28,7 +28,7 @@ export class EmergencyStopService {
     return parseStatus(this.#settings.getSetting(SETTING_KEY));
   }
 
-  engage(reason: string, now = new Date()): EmergencyStopStatus {
+  engage(reason?: string | null, now = new Date()): EmergencyStopStatus {
     const current = this.get();
     if (current.engaged) return current;
     const next = {
@@ -76,7 +76,7 @@ function parseStatus(value: unknown): EmergencyStopStatus {
   };
 }
 
-function normalizeReason(reason: string): string | null {
-  const normalized = reason.trim().replace(/\s+/gu, " ");
+function normalizeReason(reason: string | null | undefined): string | null {
+  const normalized = (reason ?? "").trim().replace(/\s+/gu, " ");
   return normalized.length === 0 ? null : normalized.slice(0, 200);
 }

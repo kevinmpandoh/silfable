@@ -75,6 +75,7 @@ import {
   formatPumpBps,
   formatPumpRawAmount
 } from "./lib/formatters";
+import { cleanErrorMessage } from "./lib/utils";
 
 import type {
   BridgePreflightEvidence,
@@ -420,6 +421,13 @@ function MainWorkspace({
     "sessions",
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Enrollment surface is retained for the upcoming session-lifecycle handoff;
+  // it is no longer exposed as a separate navigation item.
+  const [fullAccessEnrollmentOpen, setFullAccessEnrollmentOpen] = useState(false);
+  const [fullAccessPassword, setFullAccessPassword] = useState("");
+  const [fullAccessConfirmation, setFullAccessConfirmation] = useState("");
+  const [fullAccessBusy, setFullAccessBusy] = useState(false);
+  const [fullAccessError, setFullAccessError] = useState<string | null>(null);
   const [simulationApproval, setSimulationApproval] = useState<{
     sessionId: string;
     messageId: string;
@@ -522,6 +530,11 @@ function MainWorkspace({
         : [],
     ),
   );
+  const activeSolanaMissions = active?.walletScope === "solana"
+    ? active.messages.flatMap((message) => message.missionPreview?.status === "ready-for-review"
+      ? [{ messageId: message.id, preview: message.missionPreview }]
+      : [])
+    : [];
    useEffect(() => {
     if (runtime?.keystore !== "unlocked") {
       return;
@@ -811,7 +824,7 @@ function MainWorkspace({
         sessionId: target.id,
         prompt: text,
         mode: target.mode,
-        permission: "restricted",
+        permission: target.permission,
         walletAddress: target.walletAddress,
         acknowledgedExternalProcessing: true,
       });
@@ -847,23 +860,26 @@ function MainWorkspace({
           : {}),
       };
       setAnimatedMessageIds((current) => [...current, assistant.id]);
+      const sessionWithAssistant = {
+        ...sessionWithUser,
+        messages: [...sessionWithUser.messages, assistant],
+        usage: {
+          input: response.usage.inputTokens,
+          output: response.usage.outputTokens,
+          total: response.usage.totalTokens,
+          cost: response.usage.costUsd,
+        },
+      };
+      await persistSession(sessionWithAssistant);
       setSessions((current) =>
         current.map((item) => {
           if (item.id !== target.id) return item;
-          const next = {
-            ...item,
-            messages: [...item.messages, assistant],
-            usage: {
-              input: response.usage.inputTokens,
-              output: response.usage.outputTokens,
-              total: response.usage.totalTokens,
-              cost: response.usage.costUsd,
-            },
-          };
-          persistSession(next);
-          return next;
+          return sessionWithAssistant;
         }),
       );
+      if (target.permission === "full" && response.missionPreview) {
+        await runSimulation({ sessionId: target.id, messageId: assistant.id, preview: response.missionPreview, sessionSnapshot: sessionWithAssistant });
+      }
     } catch (error) {
       const assistant: ChatMessage = {
         id: crypto.randomUUID(),
@@ -1020,6 +1036,7 @@ function MainWorkspace({
     sessionId: string;
     messageId: string;
     preview: MissionContractPreview;
+    sessionSnapshot?: SessionItem;
   }): Promise<void> {
     setSimulationApproval(null);   
      setSimulatingMissionIds((current) => [
@@ -1033,7 +1050,7 @@ function MainWorkspace({
         missionId: input.preview.id,
         acknowledgedSimulationOnly: true,
       });
-      const currentSession = sessions.find(
+      const currentSession = input.sessionSnapshot ?? sessions.find(
         (session) => session.id === input.sessionId,
       );
       if (currentSession === undefined)
@@ -1052,10 +1069,54 @@ function MainWorkspace({
           session.id === input.sessionId ? next : session,
         ),
       );
+      if (currentSession.permission === "full" && response.simulation.status === "passed") {
+        await runFullAccessExecution({ ...input, simulation: response.simulation });
+      }
     } finally {
       setSimulatingMissionIds((current) =>
         current.filter((id) => id !== input.preview.id),
       );
+    }
+  }
+  async function runFullAccessExecution(input: {
+    sessionId: string;
+    messageId: string;
+    preview: MissionContractPreview;
+    simulation: MissionSimulationPreview;
+  }): Promise<void> {
+    setExecutingMissionIds((current) => [...new Set([...current, input.preview.id])]);
+    try {
+      const response = await window.silfable.executeFullAccessMission({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        sessionId: input.sessionId,
+        missionId: input.preview.id,
+        simulationId: input.simulation.id,
+      });
+      setSessions((current) => current.map((session) => {
+        if (session.id !== input.sessionId) return session;
+        const next = {
+          ...session,
+          messages: session.messages.map((message) => message.id === input.messageId ? { ...message, missionExecution: response.receipt } : message),
+        };
+        void persistSession(next);
+        return next;
+      }));
+      setPortfolioRefresh((value) => value + 1);
+    } catch (cause) {
+      setSessions((current) => current.map((session) => {
+        if (session.id !== input.sessionId) return session;
+        const next = {
+          ...session,
+          messages: session.messages.map((message) => message.id === input.messageId
+            ? { ...message, text: `${message.text}\n\nFull Access execution was blocked safely: ${cleanErrorMessage(cause instanceof Error ? cause.message : "execution unavailable")}`.slice(0, 12_000) }
+            : message),
+        };
+        void persistSession(next);
+        return next;
+      }));
+    } finally {
+      setExecutingMissionIds((current) => current.filter((id) => id !== input.preview.id));
     }
   }
   async function runPumpSimulation(input: {
@@ -1828,6 +1889,7 @@ function MainWorkspace({
         {nav === "automation" ? (
           <AutomationPanel
             sessionId={active?.id}
+            fullAccessSessionIds={sessions.filter((session) => session.permission === "full").map((session) => session.id)}
             onReloadSessions={() => refreshEncryptedSessions(active?.id)}
             onSelectSession={(sessionId) => {
               setActiveId(sessionId);
@@ -2051,6 +2113,60 @@ function MainWorkspace({
           onCancel={() => setModalOpen(false)}
           onCreate={(value) => void createSession(value)}
         />
+      )}
+      {fullAccessEnrollmentOpen && (
+        <Modal
+          isOpen={true}
+          onClose={() => !fullAccessBusy && setFullAccessEnrollmentOpen(false)}
+          title="Enroll Full Access"
+          subtitle="Desktop-only · 24-hour local-vault grant · generic approval gate bypass for one pinned Solana swap"
+        >
+          {activeSolanaMissions.length === 0 || active === null ? (
+            <Notice tone="warning" title="Exact Solana mission required">
+              Create a Solana swap mission in this Full Access session first. The exact token pair, amount, and policy are pinned before enrollment.
+            </Notice>
+          ) : (
+            <>
+              <Notice tone="warning" title="Irreversible local authority">
+                This grant skips the generic approval modal only for the pinned job. Quote, balance, fee, slippage, simulation, allowlist, and emergency-stop checks remain mandatory.
+              </Notice>
+              <div className="space-y-3 text-sm">
+                <div className="rounded-xl border border-emerald-200/20 bg-black/20 p-3">
+                  <strong>Pinned Solana swap</strong>
+                  <p className="mt-1 text-xs text-muted-foreground">{activeSolanaMissions[0]!.preview.goal}</p>
+                  <p className="mt-1 font-mono text-[11px] text-emerald-200">{activeSolanaMissions[0]!.preview.inputMint} → {activeSolanaMissions[0]!.preview.outputMint}</p>
+                </div>
+                <label className="grid gap-1"><span className="text-xs font-semibold">Master password</span><input type="password" value={fullAccessPassword} onChange={(event) => setFullAccessPassword(event.target.value)} /></label>
+                <label className="grid gap-1"><span className="text-xs font-semibold">Type ENABLE FULL ACCESS FOR 24 HOURS</span><input value={fullAccessConfirmation} onChange={(event) => setFullAccessConfirmation(event.target.value)} /></label>
+                {fullAccessError && <p className="text-sm text-rose-300">{fullAccessError}</p>}
+              </div>
+              <div className="modalFooterActions">
+                <Button variant="ghost" disabled={fullAccessBusy} onClick={() => setFullAccessEnrollmentOpen(false)}>Cancel</Button>
+                <Button
+                  loading={fullAccessBusy}
+                  disabled={fullAccessConfirmation !== "ENABLE FULL ACCESS FOR 24 HOURS" || fullAccessPassword.length === 0}
+                  onClick={async () => {
+                    try {
+                      if (active === null) return;
+                      setFullAccessBusy(true); setFullAccessError(null);
+                      const preview = activeSolanaMissions[0]!.preview;
+                      const jobResponse = await window.silfable.createFullAccessSolanaSwapJob({ schemaVersion: 1, requestId: crypto.randomUUID(), sessionId: active.id, missionId: preview.id });
+                      await window.silfable.createFullAccessExecutionGrant({
+                        schemaVersion: 1, requestId: crypto.randomUUID(), sessionId: active.id, runtimeId: crypto.randomUUID(),
+                        capabilities: ["SOLANA_SWAP"], pinnedJobIds: [jobResponse.job.id], allowedSolanaMints: [preview.inputMint, preview.outputMint], allowedEvmTokens: [],
+                        limits: { maxActionsPerWake: 1, maxActionsTotal: 1, maxSingleActionUsd: 5, maxTotalAllocationUsd: 5, maxNetworkFeeUsd: 1, maxFeePercentage: 1, maxSlippageBps: preview.maxSlippageBps },
+                        expiresAt: new Date(Date.now() + 23 * 60 * 60 * 1_000 + 59 * 60 * 1_000).toISOString(), masterPassword: fullAccessPassword,
+                        confirmation: "ENABLE FULL ACCESS FOR 24 HOURS", acknowledgedRisk: true,
+                      });
+                      setFullAccessEnrollmentOpen(false);
+                    } catch (error) { setFullAccessError(error instanceof Error ? error.message : "Full Access enrollment failed safely"); }
+                    finally { setFullAccessBusy(false); }
+                  }}
+                >Enable Full Access</Button>
+              </div>
+            </>
+          )}
+        </Modal>
       )}
        {sessionToDelete && (
         <Modal

@@ -426,13 +426,15 @@ export function SessionModal({
     walletScope?: SessionWalletScope;
     walletAddress: string | null;
     prompt: string;
-  }) => void;
+  }) => void | Promise<void>;
 }) {
   const [title, setTitle] = useState(
     prompt.slice(0, 64) || "New Mainnet session",
   );
   const [mode, setMode] = useState<SessionMode>("agent");
   const [permission, setPermission] = useState<Permission>("restricted");
+  const [fullAccessBusy, setFullAccessBusy] = useState(false);
+  const [fullAccessError, setFullAccessError] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<SessionWorkspace>("general");
   const [walletScope, setWalletScope] = useState<SessionWalletScope>("solana");
   const [pumpObjective, setPumpObjective] = useState<PumpSessionConfig["objective"]>("monitor");
@@ -474,6 +476,19 @@ export function SessionModal({
   const pumpAnalysisAmountValid = /^[1-9]\d*$/u.test(pumpAnalysisBuyLamports)
     && BigInt(pumpAnalysisBuyLamports) >= 10_000n
     && BigInt(pumpAnalysisBuyLamports) <= 10_000_000_000n;
+  const fullAccessReady = permission !== "full" || walletAddress.length > 0;
+  async function create(): Promise<void> {
+    if (!title.trim() || !fullAccessReady || fullAccessBusy) return;
+    setFullAccessBusy(true);
+    setFullAccessError(null);
+    try {
+      await onCreate({ title: title.trim(), mode, permission: workspace === "pump" ? "restricted" : permission, workspace: "general", walletScope, walletAddress: walletAddress || null, prompt });
+    } catch (cause) {
+      setFullAccessError(cleanErrorMessage(cause instanceof Error ? cause.message : "Full Access session could not be created."));
+    } finally {
+      setFullAccessBusy(false);
+    }
+  }
   return (
     <div
       className="modalBackdrop"
@@ -704,13 +719,12 @@ export function SessionModal({
               </button>
               <button
                 className={permission === "full" ? "active" : ""}
+                disabled={workspace === "pump" || !walletAddress}
                 onClick={() => setPermission("full")}
               >
                 <span className="choiceNumber">02 · Guarded MVP</span>
                 <strong>Full access</strong>
-                <small>
-                  Autonomous execution enabled using active Session Grants with guarded policy limits.
-                </small>
+                <small>Uses the vault authentication completed when the app was unlocked. Bounded local jobs can run without repeating the password; deterministic safety checks remain mandatory.</small>
               </button>
             </div>
           </section>
@@ -739,6 +753,7 @@ export function SessionModal({
                   </option>
                 ))}
               </select>
+              {permission === "full" && <strong className="fullAccessState">Mainnet · Full Access</strong>}
               <small>
                 {scopedWallets.length === 0
                   ? `No ${walletScope === "evm" ? "EVM" : "Solana"} wallet is configured. Add one in Settings → Wallets.`
@@ -751,32 +766,25 @@ export function SessionModal({
        <div className="sessionLockNote">
             <span>●</span>
             <div>
-              <strong>Mainnet · Restricted</strong>
+              <strong>{permission === "full" ? "Mainnet · Full Access" : "Mainnet · Restricted"}</strong>
               <small>
                 {workspace === "pump"
                   ? "Pump.fun analysis and proposals never authorize a transaction."
-                  : "No transaction is authorized by creating a session."}
+                  : permission === "full"
+                    ? "The unlocked local vault may execute bounded jobs while the desktop process remains running."
+                    : "No transaction is authorized by creating a session."}
               </small>
             </div>
           </div>
+          {fullAccessError && <p className="executionError">{fullAccessError}</p>}
           <div className="modalActions">
             <button onClick={onCancel}>Cancel</button>
             <button
               className="primaryButton"
-              disabled={!title.trim()}
-              onClick={() =>
-                onCreate({
-                  title: title.trim(),
-                  mode,
-                  permission: "restricted",
-                  workspace: "general",
-                  walletScope,
-                  walletAddress: walletAddress || null,
-                  prompt,
-                })
-              }
+              disabled={!title.trim() || !fullAccessReady || fullAccessBusy}
+              onClick={() => void create()}
             >
-              Create session
+              {fullAccessBusy ? "Creating session…" : "Create session"}
             </button>
           </div>
         </footer>

@@ -24,7 +24,7 @@ const statusRows = [
   ["Verified restricted", "Solana-Robinhood Bridge", "Controlled Solana USDC-to-Robinhood USDG and Robinhood USDG-to-Solana USDC bridges have completed in web and desktop. Each transfer remains route-, liquidity-, RPC-, wallet-, and receipt-dependent."],
   ["Verified restricted", "Auto DCA", "Controlled DCA cycles have detected a due schedule, obtained a fresh quote, completed only after explicit wallet approval, and been reconciled on Mainnet. The schedule never signs on the user's behalf."],
   ["Verified restricted", "TP/SL & Exits", "Controlled TP/SL conditions have triggered a bounded Mainnet exit proposal and completed only after explicit wallet approval and receipt reconciliation. Triggering a condition never grants unattended signing authority."],
-  ["Desktop-only", "Full Access / autonomous signing", "Not available in the web runtime. Any future unattended signing must use a paired desktop agent and an encrypted local vault; Silfable web never receives a private key or runs a cloud signer."],
+  ["Planned · desktop-only", "Full Access / autonomous signing", "Not production-available yet. Any future unattended signing must use a paired desktop agent and an encrypted local vault; Silfable web never receives a private key or runs a cloud signer."],
 ] as const;
 
 const principles = [
@@ -52,11 +52,10 @@ const principles = [
 
 import { PageTransition } from "@/components/ui/PageTransition";
 
-export default function WhitepaperPage() {
+export function WhitepaperContent() {
   return (
-    <PageTransition>
-      <main className="publicPage whitepaperTheme min-h-screen bg-paper text-ink">
-        <section className="border-b border-black/15 pt-36">
+      <section id="whitepaper" className="scroll-mt-20 border-t border-[var(--line)]">
+        <section className="border-b border-black/15 pt-24 sm:pt-28">
           <div className="section-shell pb-20 sm:pb-28">
             <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-electric">Whitepaper / v0.2.0</p>
             <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_0.48fr] lg:items-end">
@@ -273,6 +272,15 @@ export default function WhitepaperPage() {
             </div>
           </div>
         </section>
+      </section>
+  );
+}
+
+export default function WhitepaperPage() {
+  return (
+    <PageTransition>
+      <main className="publicPage docsTheme min-h-screen bg-paper text-ink">
+        <WhitepaperContent />
       </main>
     </PageTransition>
   );

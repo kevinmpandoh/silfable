@@ -12,6 +12,15 @@ import type {
   ClipboardWriteTransactionSignatureResponse,
   ExternalOpenTransactionRequest,
   ExternalOpenTransactionResponse,
+  AutonomousExecutionJobListResponse,
+  FullAccessExecutionGrantActionRequest,
+  FullAccessExecutionGrantCreateRequest,
+  FullAccessExecutionGrantGetResponse,
+  FullAccessExecutionGrantMutationResponse,
+  FullAccessExecutionCreateSolanaSwapJobRequest,
+  FullAccessExecutionCreateSolanaSwapJobResponse,
+  FullAccessSessionEnrollmentRequest,
+  FullAccessSessionEnrollmentResponse,
   EmergencyStopEngageRequest,
   EmergencyStopGetResponse,
   EmergencyStopMutationResponse,
@@ -57,6 +66,7 @@ import type {
   MissionSimulateRequest,
   MissionSimulateResponse,
   MissionExecuteRequest,
+  MissionFullAccessExecuteRequest,
   MissionExecuteResponse,
   MissionVerifyExecutionRequest,
   MissionVerifyExecutionResponse,
@@ -158,6 +168,7 @@ declare global {
       testR2Settings(request: R2TestSettingsRequest): Promise<R2TestSettingsResponse>;
       publishPumpLaunchMetadata(request: R2PublishLaunchMetadataRequest): Promise<R2PublishLaunchMetadataResponse>;
       simulateMission(request: MissionSimulateRequest): Promise<MissionSimulateResponse>;
+      executeFullAccessMission(request: MissionFullAccessExecuteRequest): Promise<MissionExecuteResponse>;
       simulatePumpTrade(request: PumpSimulateRequest): Promise<PumpSimulateResponse>;
       finalRevalidatePumpTrade(request: PumpFinalRevalidateRequest): Promise<PumpFinalRevalidateResponse>;
       executePumpTrade(request: PumpExecuteRequest): Promise<PumpExecuteResponse>;
@@ -202,6 +213,12 @@ declare global {
       toggleBackgroundLoop(enabled: boolean): Promise<{ success: boolean }>;
       listAutomationStrategies(): Promise<{ schemaVersion: 1; strategies: any[]; proposals: any[] }>;
       setAutomationStatus(request: { schemaVersion: 1; requestId: string; id: string; action: "PAUSE" | "RESUME" | "CANCEL" }): Promise<{ schemaVersion: 1; requestId: string; strategy: any }>;
+      getFullAccessExecutionStatus(request: { schemaVersion: 1; requestId: string }): Promise<FullAccessExecutionGrantGetResponse>;
+      createFullAccessExecutionGrant(request: FullAccessExecutionGrantCreateRequest): Promise<FullAccessExecutionGrantMutationResponse>;
+      actOnFullAccessExecutionGrant(request: FullAccessExecutionGrantActionRequest): Promise<FullAccessExecutionGrantMutationResponse>;
+      listFullAccessExecutionJobs(request: { schemaVersion: 1; requestId: string }): Promise<AutonomousExecutionJobListResponse>;
+      createFullAccessSolanaSwapJob(request: FullAccessExecutionCreateSolanaSwapJobRequest): Promise<FullAccessExecutionCreateSolanaSwapJobResponse>;
+      verifyFullAccessSessionEnrollment(request: FullAccessSessionEnrollmentRequest): Promise<FullAccessSessionEnrollmentResponse>;
     };
   }
 }

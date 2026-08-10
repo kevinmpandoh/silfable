@@ -237,6 +237,9 @@ import { EncryptedEvmBridgeReceiptService } from "./execution/evm-bridge-receipt
 import { EvmBridgeExecutionService, EvmBridgeReconciliationService } from "./execution/evm-bridge-execution.js";
 import { VenueReadinessService } from "./security/venue-readiness.js";
 import { EncryptedFullAccessGrantService } from "./security/full-access-grants.js";
+import { EncryptedFullAccessExecutionGrantService } from "./security/full-access-execution-grants.js";
+import { LocalSigningSessionService } from "./security/local-signing-session.js";
+import { AutonomousJobStore } from "./execution/autonomous-job-store.js";
 import { AutonomousExecutorService } from "./execution/autonomous-executor.js";
 import { configureSafeAuditLog } from "./telemetry/safe-audit-log.js";
 
@@ -248,6 +251,7 @@ let keystore: LocalEncryptedKeystore | null = null;
 let runtimeDatabase: RuntimeDatabase | null = null;
 let observationService: DurableBackgroundObservationService | null = null;
 let launchPreflightService: PumpLaunchPreflightService | null = null;
+let localSigningSession: LocalSigningSessionService | null = null;
 
 app.enableSandbox();
 if (process.platform === "win32") app.setAppUserModelId("ai.silfable.desktop");
@@ -486,6 +490,9 @@ function resolveEvmTokenMetadata(address: string): { symbol: string; decimals: n
   const missionProposals = new MissionProposalService(reads, observationService);
   const tokenAllowlist = new TokenAllowlistService(runtimeDatabase, reads);
   const fullAccessGrants = new EncryptedFullAccessGrantService(runtimeDatabase, keystore);
+  localSigningSession = new LocalSigningSessionService(keystore);
+  const autonomousJobs = new AutonomousJobStore(runtimeDatabase, keystore);
+  const fullAccessExecutionGrants = new EncryptedFullAccessExecutionGrantService(runtimeDatabase, keystore, localSigningSession, autonomousJobs);
   const autonomousExecutor = new AutonomousExecutorService({
     strategyManager,
     pumpRpc,
@@ -506,6 +513,99 @@ function resolveEvmTokenMetadata(address: string): { symbol: string; decimals: n
     }
   });
 
+  // Full Access automation remains local to this desktop process. A due DCA
+  // or TP/SL proposal is only broadcast after the same fresh policy and
+  // simulation path used by an interactive Full Access Solana swap.
+  const fullAccessAutomationInFlight = new Set<string>();
+  const dispatchFullAccessAutomation = async (proposal: ReturnType<typeof automationManager.listProposals>[number]) => {
+    if (fullAccessAutomationInFlight.has(proposal.id)) return;
+    fullAccessAutomationInFlight.add(proposal.id);
+    let assistantMessageId: string | null = null;
+    try {
+      const sessionRecord = await sessions.get(proposal.sessionId);
+      if (!sessionRecord || sessionRecord.permission !== "full" || sessionRecord.walletScope !== "solana" || !sessionRecord.walletAddress) return;
+      if (emergencyStop.get().engaged || localSigningSession.status().active === false) {
+        const blockedMessage = {
+          id: crypto.randomUUID(), role: "assistant" as const,
+          text: "Full Access automation paused before execution because the local signing session is not active. No transaction was signed or broadcast. Create a fresh Full Access session to resume unattended execution.",
+          at: new Date().toISOString(),
+        };
+        await sessions.upsert({ ...sessionRecord, messages: [...sessionRecord.messages, blockedMessage] });
+        automationManager.rejectProposal(proposal.id);
+        return;
+      }
+      const missionPreview = {
+        id: crypto.randomUUID(), status: "ready-for-review", goal: `${proposal.reason}: automated ${proposal.inputMint} to ${proposal.outputMint} swap`,
+        walletAddress: sessionRecord.walletAddress, inputMint: proposal.inputMint, outputMint: proposal.outputMint, inputAmount: proposal.inputAmountRaw,
+        maxSlippageBps: 200, deadlineAt: new Date(Date.now() + 10 * 60_000).toISOString(), stopConditions: [`Full Access automation ${proposal.reason}`], quote: null,
+        checks: [
+          { code: "wallet_registered", status: "pass", message: "Selected registered wallet" },
+          { code: "token_pair_valid", status: "pass", message: "Automation token pair is pinned" },
+          { code: "amount_valid", status: "pass", message: "Automation amount is pinned" },
+          { code: "slippage_within_limit", status: "pass", message: "200 bps maximum slippage" },
+          { code: "deadline_valid", status: "pass", message: "Short-lived execution deadline" },
+          { code: "balance_sufficient", status: "pass", message: "Balance is rechecked during simulation" },
+          { code: "quote_only", status: "pass", message: "Unsigned simulation is required" },
+        ], executionAllowed: false, createdAt: new Date().toISOString(),
+      };
+      const assistantMessage = { id: crypto.randomUUID(), role: "assistant" as const, text: `${proposal.reason.replace(/_/gu, " ")} triggered. Full Access is running the bounded Solana preflight.`, at: new Date().toISOString(), missionPreview };
+      assistantMessageId = assistantMessage.id;
+      let updated = { ...sessionRecord, messages: [...sessionRecord.messages, assistantMessage] };
+      await sessions.upsert(updated);
+      const simulation = await simulations.simulate(missionPreview);
+      updated = { ...updated, messages: updated.messages.map((message) => message.id === assistantMessage.id ? { ...message, missionSimulation: simulation } : message) };
+      await sessions.upsert(updated);
+      if (simulation.status !== "passed") {
+        updated = { ...updated, messages: updated.messages.map((message) => message.id === assistantMessage.id ? { ...message, text: `${proposal.reason.replace(/_/gu, " ")} paused because the deterministic simulation did not pass. No transaction was signed or broadcast.` } : message) };
+        await sessions.upsert(updated);
+        automationManager.rejectProposal(proposal.id);
+        return;
+      }
+      // Pause/cancel/emergency stop may arrive while the unsigned simulation is
+      // in flight. Re-check the durable proposal and signer boundary directly
+      // before signing so a stale in-flight task can never broadcast.
+      const liveProposal = automationManager.listProposals().find((item) => item.id === proposal.id);
+      if (liveProposal?.status !== "AWAITING_APPROVAL" || emergencyStop.get().engaged || localSigningSession.status().active === false) {
+        updated = { ...updated, messages: updated.messages.map((message) => message.id === assistantMessage.id ? {
+          ...message,
+          text: `${proposal.reason.replace(/_/gu, " ")} was cancelled before signing. No transaction was signed or broadcast.`,
+        } : message) };
+        await sessions.upsert(updated);
+        automationManager.rejectProposal(proposal.id);
+        return;
+      }
+      const receipt = await simulations.execute(missionPreview, simulation.id);
+      const confirmed = receipt.status === "confirmed";
+      updated = { ...updated, messages: updated.messages.map((message) => message.id === assistantMessage.id ? {
+        ...message,
+        text: confirmed
+          ? `${proposal.reason.replace(/_/gu, " ")} Full Access swap confirmed on Solana.`
+          : `${proposal.reason.replace(/_/gu, " ")} broadcast could not be confirmed. The automation has been paused and will not retry automatically.`,
+        missionExecution: receipt,
+      } : message) };
+      await sessions.upsert(updated);
+      if (confirmed) automationManager.approveProposal(proposal.id);
+      else automationManager.rejectProposal(proposal.id);
+    } catch (error) {
+      console.warn("Full Access automation blocked safely:", error instanceof Error ? error.message : error);
+      const latest = await sessions.get(proposal.sessionId).catch(() => null);
+      if (latest) {
+        const failureText = "Full Access automation paused because its preflight or execution failed safely. No automatic retry will be attempted; review the network, balance, fee reserve, and RPC before resuming.";
+        const messages = assistantMessageId
+          ? latest.messages.map((message) => message.id === assistantMessageId ? { ...message, text: failureText } : message)
+          : [...latest.messages, { id: crypto.randomUUID(), role: "assistant" as const, text: failureText, at: new Date().toISOString() }];
+        await sessions.upsert({ ...latest, messages }).catch(() => undefined);
+      }
+      automationManager.rejectProposal(proposal.id);
+    } finally {
+      fullAccessAutomationInFlight.delete(proposal.id);
+    }
+  };
+
+  observationService.on("automation_proposal_created", (proposal) => {
+    void dispatchFullAccessAutomation(proposal);
+  });
+
   if (!emergencyStop.get().engaged) observationService.startObservationLoop(async (mints) => {
     const pricePoints = await reads.prices(mints);
     const map = new Map<string, number>();
@@ -515,11 +615,12 @@ function resolveEvmTokenMetadata(address: string): { symbol: string; decimals: n
     return map;
   });
 
-  registerIpc(keystore, runtimeDatabase, passwords, emergencyStop, wallets, evmWallet, evmReceipts, evmBridgeReceipts, evmSwapQuotes, uniswapQuotes, reads, ai, sessions, simulations, limitOrders, transactionSettings, pumpRiskSettings, pumpRiskLedger, pumpReceipts, pumpRpc, preparedPump, launchPreflightService, strategyManager, observationService, automationManager, () => mainWindow, createVerifiedEvmEngine);
+  registerIpc(keystore, runtimeDatabase, passwords, emergencyStop, wallets, evmWallet, evmReceipts, evmBridgeReceipts, evmSwapQuotes, uniswapQuotes, reads, ai, sessions, simulations, limitOrders, transactionSettings, pumpRiskSettings, pumpRiskLedger, pumpReceipts, pumpRpc, preparedPump, launchPreflightService, strategyManager, observationService, automationManager, fullAccessExecutionGrants, localSigningSession, autonomousJobs, () => mainWindow, createVerifiedEvmEngine);
 
   mainWindow = createMainWindow();
   tray = createTray();
-  powerMonitor.on("suspend", () => { preparedPump.clear(); launchPreflightService?.clear(); keystore?.lock(); observationService?.stopObservationLoop(); });
+  powerMonitor.on("suspend", () => { preparedPump.clear(); launchPreflightService?.clear(); localSigningSession.clear("system suspended"); keystore?.lock(); observationService?.stopObservationLoop(); });
+  powerMonitor.on("lock-screen", () => { localSigningSession.clear("system locked"); keystore?.lock(); });
   powerMonitor.on("resume", () => {
     if (emergencyStop.get().engaged) return;
     observationService?.startObservationLoop(async (mints) => {
@@ -545,6 +646,8 @@ app.on("before-quit", () => {
   launchPreflightService?.clear();
   launchPreflightService = null;
   observationService?.stopObservationLoop();
+  localSigningSession?.clear("application quit");
+  localSigningSession = null;
   keystore?.lock();
   runtimeDatabase?.close();
   runtimeDatabase = null;

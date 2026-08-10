@@ -4,6 +4,7 @@ import type { NativeImage } from "electron";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 
 import {
   AiChatRequestSchema,
@@ -62,6 +63,13 @@ import {
   EvmSwapProposalSchema,
   ExternalOpenTransactionRequestSchema,
   ExternalOpenTransactionResponseSchema,
+  FullAccessExecutionGrantActionRequestSchema,
+  FullAccessExecutionGrantCreateRequestSchema,
+  FullAccessExecutionGrantGetResponseSchema,
+  FullAccessExecutionGrantMutationResponseSchema,
+  FullAccessExecutionCreateSolanaSwapJobRequestSchema,
+  FullAccessExecutionCreateSolanaSwapJobResponseSchema,
+  AutonomousExecutionJobListResponseSchema,
   IPC_CHANNELS,
   JupiterKeyMutationResponseSchema,
   JupiterSaveKeyRequestSchema,
@@ -88,6 +96,7 @@ import {
   MissionSimulateRequestSchema,
   MissionSimulateResponseSchema,
   MissionExecuteRequestSchema,
+  MissionFullAccessExecuteRequestSchema,
   MissionExecuteResponseSchema,
   MissionVerifyExecutionRequestSchema,
   MissionVerifyExecutionResponseSchema,
@@ -124,6 +133,8 @@ import {
   SecurityResetVaultRequestSchema,
   SecurityResetVaultResponseSchema,
   SecurityUnlockRequestSchema,
+  FullAccessSessionEnrollmentRequestSchema,
+  FullAccessSessionEnrollmentResponseSchema,
   SessionListResponseSchema,
   SessionUpsertRequestSchema,
   SessionUpsertResponseSchema,
@@ -236,10 +247,13 @@ import { EncryptedEvmBridgeReceiptService } from "../execution/evm-bridge-receip
 import { EvmBridgeExecutionService, EvmBridgeReconciliationService } from "../execution/evm-bridge-execution.js";
 import { VenueReadinessService } from "../security/venue-readiness.js";
 import { EncryptedFullAccessGrantService } from "../security/full-access-grants.js";
+import { EncryptedFullAccessExecutionGrantService } from "../security/full-access-execution-grants.js";
+import { LocalSigningSessionService } from "../security/local-signing-session.js";
+import { AutonomousJobStore } from "../execution/autonomous-job-store.js";
 import { AutonomousExecutorService } from "../execution/autonomous-executor.js";
 
 
-export function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, emergencyStop: EmergencyStopService, wallets: WalletOnboardingService, evmWallet: EvmWalletService, evmReceipts: EncryptedEvmReceiptService, evmBridgeReceipts: EncryptedEvmBridgeReceiptService, evmSwapQuotes: EvmSwapRouterService, uniswapQuotes: UniswapQuoteService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService, pumpLaunchPreflight: PumpLaunchPreflightService, strategyManager: PositionStrategyManager, observationService: DurableBackgroundObservationService, automationManager: AutomationManager,
+export function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, emergencyStop: EmergencyStopService, wallets: WalletOnboardingService, evmWallet: EvmWalletService, evmReceipts: EncryptedEvmReceiptService, evmBridgeReceipts: EncryptedEvmBridgeReceiptService, evmSwapQuotes: EvmSwapRouterService, uniswapQuotes: UniswapQuoteService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService, pumpLaunchPreflight: PumpLaunchPreflightService, strategyManager: PositionStrategyManager, observationService: DurableBackgroundObservationService, automationManager: AutomationManager, fullAccessExecutionGrants: EncryptedFullAccessExecutionGrantService, localSigningSession: LocalSigningSessionService, autonomousJobs: AutonomousJobStore,
   getMainWindow: () => Electron.BrowserWindow | null,
   createVerifiedEvmEngine: (secretStore: LocalEncryptedKeystore, chainKey: ReturnType<typeof getEvmChain>["key"], executionGate?: VenueExecutionGate, executionVenue?: VenueId) => Promise<EvmEngine>
 ): void {
@@ -540,7 +554,10 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     assertTrustedSender(event);
     const request = EmergencyStopEngageRequestSchema.parse(raw);
     requireUnlocked();
-    const status = await emergencyStop.engage();
+    const status = await emergencyStop.engage(request.reason);
+    await fullAccessExecutionGrants.emergencyStop();
+    automationManager.emergencyStop();
+    localSigningSession.clear("emergency stop engaged");
     observationService.stopObservationLoop();
     return EmergencyStopMutationResponseSchema.parse({
       schemaVersion: 1,
@@ -586,7 +603,107 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     const request = SecurityUnlockRequestSchema.parse(raw);
     if (!(await passwords.verify(request.password))) throw new Error("Master password is incorrect");
     secretStore.unlock();
+    // Unlock is an explicit local master-password verification. Restore the
+    // in-memory signer only when the encrypted store already contains a Full
+    // Access session; restricted sessions never gain signing authority.
+    const hasFullAccessSession = (await sessions.list()).some((session) => session.permission === "full");
+    if (hasFullAccessSession) localSigningSession.beginUntilCleared();
+    else localSigningSession.clear("vault unlocked without a Full Access session");
     return SecurityPasswordMutationResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, keystore: "unlocked", masterPassword: "configured" });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.fullAccessVerifySessionEnrollment, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = FullAccessSessionEnrollmentRequestSchema.parse(raw);
+    requireUnlocked();
+    emergencyStop.assertExecutionAllowed();
+    if (!(await passwords.verify(request.masterPassword))) throw new Error("Master password is incorrect");
+    localSigningSession.beginUntilCleared();
+    // Do not retain the password, a decrypted key, or a signing grant here.
+    // Exact jobs and their execution grant are configured separately and must
+    // still satisfy their own pinned-policy checks.
+    return FullAccessSessionEnrollmentResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      verified: true,
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.fullAccessExecutionGet, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = z.object({ schemaVersion: z.literal(1), requestId: z.string().uuid() }).strict().parse(raw);
+    requireUnlocked();
+    return FullAccessExecutionGrantGetResponseSchema.parse({
+      schemaVersion: 1,
+      requestId: request.requestId,
+      grants: await fullAccessExecutionGrants.list(),
+      unlockSession: localSigningSession.status(),
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.fullAccessExecutionCreate, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = FullAccessExecutionGrantCreateRequestSchema.parse(raw);
+    requireUnlocked();
+    emergencyStop.assertExecutionAllowed();
+    if (!(await passwords.verify(request.masterPassword))) throw new Error("Master password is incorrect");
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (sessionRecord === null || sessionRecord.walletAddress === null || sessionRecord.walletAddress === undefined || sessionRecord.walletScope === undefined) {
+      throw new Error("Full Access requires a wallet-bound desktop session");
+    }
+    const grant = await fullAccessExecutionGrants.create({
+      sessionId: request.sessionId,
+      runtimeId: request.runtimeId,
+      capabilities: request.capabilities,
+      pinnedJobIds: request.pinnedJobIds,
+      allowedSolanaMints: request.allowedSolanaMints,
+      allowedEvmTokens: request.allowedEvmTokens,
+      limits: request.limits,
+      expiresAt: request.expiresAt,
+    }, {
+      walletAddress: sessionRecord.walletAddress,
+      walletScope: sessionRecord.walletScope,
+      evmChainKey: sessionRecord.evmChainKey ?? null,
+    });
+    return FullAccessExecutionGrantMutationResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, grant, unlockSession: localSigningSession.status() });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.fullAccessExecutionAction, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = FullAccessExecutionGrantActionRequestSchema.parse(raw);
+    requireUnlocked();
+    const grant = await fullAccessExecutionGrants.action(request.grantId, request.action);
+    return FullAccessExecutionGrantMutationResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, grant, unlockSession: localSigningSession.status() });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.fullAccessExecutionJobsList, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = z.object({ schemaVersion: z.literal(1), requestId: z.string().uuid() }).strict().parse(raw);
+    requireUnlocked();
+    const jobs = await autonomousJobs.list();
+    const audit = (await Promise.all(jobs.map((job) => autonomousJobs.audit(job.id)))).flat();
+    return AutonomousExecutionJobListResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, jobs, audit });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.fullAccessExecutionCreateSolanaSwapJob, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = FullAccessExecutionCreateSolanaSwapJobRequestSchema.parse(raw);
+    requireUnlocked();
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (sessionRecord === null || sessionRecord.walletScope !== "solana" || sessionRecord.walletAddress === null) {
+      throw new Error("A wallet-bound Solana session is required to create a Full Access job");
+    }
+    const mission = sessionRecord.messages.find((message) => message.missionPreview?.id === request.missionId)?.missionPreview;
+    if (mission === undefined || mission.walletAddress !== sessionRecord.walletAddress || mission.status !== "ready-for-review") {
+      throw new Error("The exact persisted Solana mission contract is unavailable for Full Access");
+    }
+    const job = await autonomousJobs.create({
+      sessionId: sessionRecord.id, walletAddress: sessionRecord.walletAddress, walletScope: "solana", chainKey: "solana",
+      kind: "SOLANA_SWAP", capability: "SOLANA_SWAP",
+      policySnapshot: { maxSlippageBps: mission.maxSlippageBps, deadlineAt: mission.deadlineAt },
+      pinnedParameters: { inputMint: mission.inputMint, outputMint: mission.outputMint, inputAmount: mission.inputAmount, maxSlippageBps: mission.maxSlippageBps, deadlineAt: mission.deadlineAt },
+    });
+    return FullAccessExecutionCreateSolanaSwapJobResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, job });
   });
 
   ipcMain.handle(IPC_CHANNELS.securityChangePassword, async (event, raw: unknown) => {
@@ -638,13 +755,22 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     const request = SessionUpsertRequestSchema.parse(raw);
     requireUnlocked();
     await sessions.upsert(request.session);
+    if (request.session.permission === "full" && !emergencyStop.get().engaged) {
+      localSigningSession.beginUntilCleared();
+    }
     return SessionUpsertResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, saved: true });
   });
 
   ipcMain.handle("session:delete", async (event, id: string) => {
     assertTrustedSender(event);
     requireUnlocked();
+    const session = await sessions.get(id);
     await sessions.delete(id);
+    if (session?.permission === "full") {
+      // Signing authority is process-memory only; deleting a Full Access
+      // session immediately removes that authority as an extra fail-safe.
+      localSigningSession.clear("Full Access session deleted");
+    }
     return { success: true };
   });
 
@@ -1042,6 +1168,8 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
       : undefined;
     const workspaceContext = session.workspace === "pump" && session.pumpConfig
       ? `Pump.fun restricted workspace; exact token mint ${session.pumpConfig.tokenMint ?? "none"}; watchlist mints ${(session.pumpConfig.watchlistMints ?? []).join(", ") || "none"}; scope ${session.pumpConfig.scope}; objective ${session.pumpConfig.objective}; reference buy analysis amount ${session.pumpConfig.analysisBuyLamports ?? "1000000"} lamports. For exact-mint scope, use only the bound token. For watchlist scope, pump_token_analysis may read only a mint present in that encrypted watchlist. For discovery scope, call pump_recent_candidates only when the user explicitly requests a manual scan; report that coverage is incomplete and never rank a candidate whose typed rankingAllowed field is false. The runtime can manually execute an exact verified Pump active-curve or canonical PumpSwap proposal only after deterministic checks, unsigned simulation, fresh final revalidation, master-password verification, and an exact user confirmation. The AI never receives signing authority; unattended execution remains unavailable.`
+      : session.permission === "full"
+        ? "Full Access desktop session. For a Solana Jupiter swap proposal, the desktop runtime automatically performs deterministic policy checks, unsigned simulation, final revalidation, local signing, and one broadcast attempt while the local vault signing session remains active. The AI only prepares the typed proposal and must never claim a transaction succeeded before a typed receipt is returned. Bridge, EVM, and token launch retain their dedicated approval flows."
       : session.walletScope === "solana"
         ? "Solana wallet workspace. You may use verified wallet reads and Jupiter-specific swap preparation only when the user explicitly asks. The user may also prepare a Pump.fun Token Launch draft from exact user-supplied metadata. In Mission mode, the AI may invoke trusted Bridge preparation only after the user supplies the Robinhood Chain destination recipient, ordinary decimal source USDC amount, ordinary decimal minimum destination USDG amount, and total fee cap; release-controlled desktop code converts decimals to raw units, obtains the Relay quote, runs unsigned simulation, and verifies Solana program scope and fee limits. Signing remains outside the AI and requires the master password plus an exact destination-bound confirmation, one source broadcast attempt, and a cross-chain receipt reconciled through source, relay, and destination settlement. Never claim Bridge completion without a destination-confirmed typed receipt. Use global Transaction Settings for fee limits; do not ask for per-session safety limits."
       : session.walletScope === "evm"
@@ -1073,6 +1201,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
       prompt: request.prompt,
       mode: request.mode,
       walletAddress: request.walletAddress,
+      sessionId: session.id,
       ...(pumpScope ? { pumpScope } : {}),
       ...(session.intent ? { intent: session.intent } : {}),
       ...(session.walletScope ? { walletScope: session.walletScope } : {}),
@@ -1724,6 +1853,27 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     return MissionExecuteResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt });
   });
 
+  ipcMain.handle(IPC_CHANNELS.missionExecuteFullAccess, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = MissionFullAccessExecuteRequestSchema.parse(raw);
+    requireUnlocked();
+    emergencyStop.assertExecutionAllowed();
+    localSigningSession.assertActive();
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (sessionRecord === null || sessionRecord.permission !== "full" || sessionRecord.walletScope !== "solana") {
+      throw new Error("An active Full Access Solana session is required");
+    }
+    const messageIndex = sessionRecord.messages.findIndex((message) => message.missionPreview?.id === request.missionId);
+    const message = messageIndex < 0 ? undefined : sessionRecord.messages[messageIndex];
+    const mission = message?.missionPreview;
+    if (!mission || message?.missionSimulation?.id !== request.simulationId || message.missionSimulation.status !== "passed") throw new Error("A matching passed simulation is required");
+    if (message.missionExecution !== undefined) throw new Error("This mission transaction has already been submitted");
+    const receipt = await simulations.execute(mission, request.simulationId);
+    const messages = sessionRecord.messages.map((entry, index) => index === messageIndex ? { ...entry, missionExecution: receipt } : entry);
+    await sessions.upsert({ ...sessionRecord, messages });
+    return MissionExecuteResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt });
+  });
+
   ipcMain.handle(IPC_CHANNELS.missionVerifyExecution, async (event, raw: unknown) => {
     assertTrustedSender(event);
     const request = MissionVerifyExecutionRequestSchema.parse(raw);
@@ -2034,10 +2184,30 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
 
   ipcMain.handle(IPC_CHANNELS.automationList, async (event) => {
     assertTrustedSender(event);
+    const sessionRecords = await sessions.list();
+    const strategies = automationManager.listStrategies();
+    const resolvedSessionIds = new Map<string, string>();
+    for (const strategy of strategies) {
+      if (strategy.sessionId !== "session-ai") {
+        resolvedSessionIds.set(strategy.id, strategy.sessionId);
+        continue;
+      }
+      const owner = sessionRecords.find((session) =>
+        session.messages.some((message) => message.text.includes(strategy.id)),
+      );
+      if (owner) resolvedSessionIds.set(strategy.id, owner.id);
+    }
+    const proposals = automationManager.listProposals();
     return AutomationListResponseSchema.parse({
       schemaVersion: 1,
-      strategies: automationManager.listStrategies(),
-      proposals: automationManager.listProposals(),
+      strategies: strategies.map((strategy) => ({
+        ...strategy,
+        sessionId: resolvedSessionIds.get(strategy.id) ?? strategy.sessionId,
+      })),
+      proposals: proposals.map((proposal) => ({
+        ...proposal,
+        sessionId: resolvedSessionIds.get(proposal.strategyId) ?? proposal.sessionId,
+      })),
     });
   });
 
@@ -2047,6 +2217,10 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     let strategy: Record<string, unknown> = {};
     if (request.action === "APPROVE_PROPOSAL") {
       const proposal = automationManager.listProposals().find((p) => p.id === request.id);
+      const proposalSession = proposal ? await sessions.get(request.sessionId || proposal.sessionId) : null;
+      if (proposalSession?.permission === "full") {
+        throw new Error("Full Access automation is dispatched locally; manual proposal approval is unavailable");
+      }
       automationManager.approveProposal(request.id);
       if (proposal) {
         const allSessions = await sessions.list();

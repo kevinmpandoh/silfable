@@ -126,9 +126,104 @@ export class AiService {
     return setting;
   }
 
-  async chat(input: { prompt: string; mode: "agent" | "mission"; walletAddress: string | null; sessionContext?: string; history?: Array<{ role: "user" | "assistant"; text: string }>; pumpScope?: PumpAiScope; intent?: SessionIntent; walletScope?: SessionWalletScope; evmChainKey?: EvmChainKey; transactionSettings?: TransactionSettings }) {
+  async chat(input: { prompt: string; mode: "agent" | "mission"; walletAddress: string | null; sessionId?: string; sessionContext?: string; history?: Array<{ role: "user" | "assistant"; text: string }>; pumpScope?: PumpAiScope; intent?: SessionIntent; walletScope?: SessionWalletScope; evmChainKey?: EvmChainKey; transactionSettings?: TransactionSettings }) {
     const apiKey = await this.#keystore.getSecret("openrouter-api-key");
     if (apiKey === null) throw new Error("OpenRouter is not configured");
+    const directDca = parseDirectSolanaDca(input.prompt, input.walletScope);
+    if (directDca !== null && input.sessionId && input.walletAddress && this.#automationManager !== null) {
+      const strategy = this.#automationManager.createDca({
+        sessionId: input.sessionId,
+        walletAddress: input.walletAddress,
+        inputMint: directDca.inputMint,
+        outputMint: directDca.outputMint,
+        orderAmountRaw: directDca.orderAmountRaw,
+        maximumTotalRaw: directDca.maximumTotalRaw,
+        intervalSeconds: directDca.intervalSeconds,
+        maximumExecutions: directDca.maximumExecutions,
+        expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+      });
+      return {
+        model: this.#model(),
+        text: `DCA ${directDca.inputSymbol} → ${directDca.outputSymbol} created: ${directDca.displayAmount} ${directDca.inputSymbol} every ${directDca.intervalSeconds} seconds, maximum ${directDca.maximumExecutions} cycles.`,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+        toolsUsed: ["create_automation_strategy" as const],
+        missionPreview: null,
+        pumpTokenIntelligence: null,
+        pumpDiscoverySnapshot: null,
+        pumpTradePreview: null,
+        limitOrderPreview: null,
+        evmSwapProposal: null,
+        automationStrategy: strategy,
+      };
+    }
+    const directSolanaSwap = parseDirectSolanaSwap(input.prompt, input.walletScope);
+    if (directSolanaSwap !== null && input.mode === "mission" && input.walletAddress !== null && this.#readService !== null) {
+      const settings = input.transactionSettings ?? this.#transactionSettings.get();
+      const preview = await new MissionPolicyService(this.#readService, { get: () => settings }).preview({
+        goal: `Swap ${directSolanaSwap.displayAmount} ${directSolanaSwap.inputSymbol} to ${directSolanaSwap.outputSymbol}`,
+        walletAddress: input.walletAddress,
+        inputMint: directSolanaSwap.inputMint,
+        outputMint: directSolanaSwap.outputMint,
+        inputAmount: directSolanaSwap.inputAmount,
+        maxSlippageBps: settings.defaultSlippageBps,
+        deadlineAt: new Date(Date.now() + Math.max(settings.defaultDeadlineMinutes, 5) * 60_000).toISOString(),
+        stopConditions: ["Stop if policy, balance, quote, fee, or simulation check fails"],
+      });
+      return {
+        model: this.#model(),
+        text: preview.status === "ready-for-review"
+          ? `Swap ${directSolanaSwap.inputSymbol} → ${directSolanaSwap.outputSymbol} is ready for deterministic preflight.`
+          : `Swap ${directSolanaSwap.inputSymbol} → ${directSolanaSwap.outputSymbol} was blocked by local policy before signing. Review the failed check on the card; no transaction was signed or broadcast.`,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+        toolsUsed: ["mission_contract_preview" as const],
+        missionPreview: preview,
+        pumpTokenIntelligence: null,
+        pumpDiscoverySnapshot: null,
+        pumpTradePreview: null,
+        limitOrderPreview: null,
+        evmSwapProposal: null,
+      };
+    }
+    const directExit = parseDirectSolanaExit(input.prompt, input.walletScope);
+    if (directExit !== null && input.sessionId && input.walletAddress && this.#automationManager !== null) {
+      const strategy = this.#automationManager.createExit({
+        sessionId: input.sessionId,
+        walletAddress: input.walletAddress,
+        inputMint: directExit.inputMint,
+        outputMint: directExit.outputMint,
+        amountRaw: directExit.amountRaw,
+        entryPriceUsd: directExit.entryPriceUsd,
+        takeProfitPriceUsd: directExit.takeProfitPriceUsd,
+        stopLossPriceUsd: directExit.stopLossPriceUsd,
+        expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+      });
+      const conditions = [
+        directExit.takeProfitPriceUsd === null ? null : `TP $${directExit.takeProfitPriceUsd}`,
+        directExit.stopLossPriceUsd === null ? null : `SL $${directExit.stopLossPriceUsd}`,
+      ].filter((value): value is string => value !== null).join(", ");
+      return {
+        model: this.#model(),
+        text: `TP/SL ${directExit.inputSymbol} → ${directExit.outputSymbol} created for ${directExit.displayAmount} ${directExit.inputSymbol}: ${conditions}. The local desktop monitor will prepare and dispatch the bounded Full Access swap only when a trigger is reached.`,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+        toolsUsed: ["create_automation_strategy" as const],
+        missionPreview: null,
+        pumpTokenIntelligence: null,
+        pumpDiscoverySnapshot: null,
+        pumpTradePreview: null,
+        limitOrderPreview: null,
+        evmSwapProposal: null,
+        automationStrategy: strategy,
+      };
+    }
     const directEvmSwap = parseDirectRobinhoodSwap(input.prompt, input.walletScope, input.evmChainKey);
     if (directEvmSwap !== null && input.mode === "mission" && input.walletAddress !== null && this.#evmSwapQuotes !== null) {
       const settings = input.transactionSettings ?? this.#transactionSettings.get();
@@ -156,11 +251,11 @@ export class AiService {
         evmSwapProposal: proposal,
       };
     }
-    const { pumpScope, intent, walletScope, ...providerInput } = input;
-    return { model: this.#model(), ...(await callOpenRouterChat({ apiKey, model: this.#model(), ...providerInput, tools: await this.#tools(input.walletAddress, input.mode, pumpScope, intent, walletScope, input.transactionSettings ?? this.#transactionSettings.get()) })) };
+    const { pumpScope, intent, walletScope, sessionId, ...providerInput } = input;
+    return { model: this.#model(), ...(await callOpenRouterChat({ apiKey, model: this.#model(), ...providerInput, tools: await this.#tools(input.walletAddress, input.mode, pumpScope, intent, walletScope, input.transactionSettings ?? this.#transactionSettings.get(), sessionId) })) };
   }
 
-  async #tools(walletAddress: string | null, mode: "agent" | "mission", pumpScope: PumpAiScope | undefined, intent: SessionIntent | undefined, walletScope: SessionWalletScope | undefined, transactionSettings: TransactionSettings): Promise<ReadOnlyAiTool[]> {
+  async #tools(walletAddress: string | null, mode: "agent" | "mission", pumpScope: PumpAiScope | undefined, intent: SessionIntent | undefined, walletScope: SessionWalletScope | undefined, transactionSettings: TransactionSettings, sessionId?: string): Promise<ReadOnlyAiTool[]> {
     const tools: ReadOnlyAiTool[] = [];
     if (walletScope === "evm" && mode === "mission" && walletAddress !== null && this.#evmSwapQuotes !== null) {
       tools.push({
@@ -356,8 +451,9 @@ export class AiService {
           },
           required: ["kind"],
         },
-        execute: async (args: any) => {
-          const sessionId = intent?.sessionId ?? "session-ai";
+        execute: async (argumentsValue: unknown) => {
+          const args = normalizeAutomationArguments(argumentsValue);
+          if (!sessionId) throw new Error("Automation requires an active session binding.");
           if (args.kind === "DCA") {
             const inputMint = args.inputMint || "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
             const outputMint = args.outputMint || "So11111111111111111111111111111111111111112";
@@ -431,6 +527,163 @@ function toolEvmSwapQuote(value: unknown, settings: TransactionSettings): { sell
 }
 
 type RobinhoodTokenSymbol = "ETH" | "USDG";
+
+const SOLANA_NATIVE_MINT = "So11111111111111111111111111111111111111112";
+const SOLANA_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const SOLANA_JUP_MINT = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN";
+type SupportedSolanaSymbol = "SOL" | "USDC" | "JUP";
+
+function parseDirectSolanaDca(
+  prompt: string,
+  walletScope: SessionWalletScope | undefined,
+): {
+  inputMint: string;
+  outputMint: string;
+  inputSymbol: "SOL" | "USDC";
+  outputSymbol: "SOL" | "USDC";
+  orderAmountRaw: string;
+  maximumTotalRaw: string;
+  intervalSeconds: number;
+  maximumExecutions: number;
+  displayAmount: string;
+} | null {
+  if (walletScope !== "solana" || !/\bdca\b/iu.test(prompt)) return null;
+  const pair = /([0-9]+(?:[.,][0-9]+)?)\s*(sol|usdc)\s+(?:ke|to)\s+(sol|usdc)\b/iu.exec(prompt);
+  const cadence = /(?:setiap|every)\s+([0-9]+)\s*(detik|seconds?|sec|s|menit|minutes?|min|m|jam|hours?|hr|h)\b/iu.exec(prompt);
+  const cycles = /(?:selama\s+)?([0-9]+)\s*(?:kali|times?|cycles?|x)\b/iu.exec(prompt);
+  if (!pair || !cadence || !cycles) return null;
+  const inputSymbol = pair[2]!.toUpperCase() as "SOL" | "USDC";
+  const outputSymbol = pair[3]!.toUpperCase() as "SOL" | "USDC";
+  if (inputSymbol === outputSymbol) return null;
+  const displayAmount = pair[1]!.replace(",", ".");
+  const orderAmountRaw = decimalToRawAmount(displayAmount, inputSymbol === "SOL" ? 9 : 6);
+  const cadenceValue = Number(cadence[1]);
+  const cadenceUnit = cadence[2]!.toLowerCase();
+  const intervalMultiplier = /^(?:jam|hours?|hr|h)$/u.test(cadenceUnit)
+    ? 3_600
+    : /^(?:menit|minutes?|min|m)$/u.test(cadenceUnit)
+      ? 60
+      : 1;
+  const intervalSeconds = cadenceValue * intervalMultiplier;
+  const maximumExecutions = Number(cycles[1]);
+  if (orderAmountRaw === null || !Number.isInteger(intervalSeconds) || intervalSeconds < 60 || intervalSeconds > 31_536_000
+    || !Number.isInteger(maximumExecutions) || maximumExecutions < 1 || maximumExecutions > 365) return null;
+  return {
+    inputMint: inputSymbol === "SOL" ? SOLANA_NATIVE_MINT : SOLANA_USDC_MINT,
+    outputMint: outputSymbol === "SOL" ? SOLANA_NATIVE_MINT : SOLANA_USDC_MINT,
+    inputSymbol,
+    outputSymbol,
+    orderAmountRaw,
+    maximumTotalRaw: (BigInt(orderAmountRaw) * BigInt(maximumExecutions)).toString(),
+    intervalSeconds,
+    maximumExecutions,
+    displayAmount,
+  };
+}
+
+function parseDirectSolanaExit(
+  prompt: string,
+  walletScope: SessionWalletScope | undefined,
+): {
+  inputMint: string;
+  outputMint: string;
+  inputSymbol: "SOL" | "USDC";
+  outputSymbol: "SOL" | "USDC";
+  amountRaw: string;
+  displayAmount: string;
+  entryPriceUsd: number;
+  takeProfitPriceUsd: number | null;
+  stopLossPriceUsd: number | null;
+} | null {
+  if (walletScope !== "solana" || !/\b(?:tp|take\s*profit|sl|stop\s*loss)\b/iu.test(prompt)) return null;
+  const pair = /([0-9]+(?:[.,][0-9]+)?)\s*(sol|usdc)\s+(?:ke|to)\s+(sol|usdc)\b/iu.exec(prompt);
+  const entry = /\bentry\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:usd|\$)?/iu.exec(prompt);
+  const take = /\b(?:tp|take\s*profit)\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:usd|\$)?/iu.exec(prompt);
+  const stop = /\b(?:sl|stop\s*loss)\s*([0-9]+(?:[.,][0-9]+)?)\s*(?:usd|\$)?/iu.exec(prompt);
+  if (!pair || !entry || (!take && !stop)) return null;
+  const inputSymbol = pair[2]!.toUpperCase() as "SOL" | "USDC";
+  const outputSymbol = pair[3]!.toUpperCase() as "SOL" | "USDC";
+  if (inputSymbol === outputSymbol) return null;
+  const displayAmount = pair[1]!.replace(",", ".");
+  const amountRaw = decimalToRawAmount(displayAmount, inputSymbol === "SOL" ? 9 : 6);
+  const entryPriceUsd = Number(entry[1]!.replace(",", "."));
+  const takeProfitPriceUsd = take ? Number(take[1]!.replace(",", ".")) : null;
+  const stopLossPriceUsd = stop ? Number(stop[1]!.replace(",", ".")) : null;
+  if (amountRaw === null || !Number.isFinite(entryPriceUsd) || entryPriceUsd <= 0
+    || (takeProfitPriceUsd !== null && (!Number.isFinite(takeProfitPriceUsd) || takeProfitPriceUsd <= entryPriceUsd))
+    || (stopLossPriceUsd !== null && (!Number.isFinite(stopLossPriceUsd) || stopLossPriceUsd <= 0 || stopLossPriceUsd >= entryPriceUsd))) return null;
+  return {
+    inputMint: inputSymbol === "SOL" ? SOLANA_NATIVE_MINT : SOLANA_USDC_MINT,
+    outputMint: outputSymbol === "SOL" ? SOLANA_NATIVE_MINT : SOLANA_USDC_MINT,
+    inputSymbol,
+    outputSymbol,
+    amountRaw,
+    displayAmount,
+    entryPriceUsd,
+    takeProfitPriceUsd,
+    stopLossPriceUsd,
+  };
+}
+
+function parseDirectSolanaSwap(
+  prompt: string,
+  walletScope: SessionWalletScope | undefined,
+): {
+  inputMint: string;
+  outputMint: string;
+  inputSymbol: SupportedSolanaSymbol;
+  outputSymbol: SupportedSolanaSymbol;
+  inputAmount: string;
+  displayAmount: string;
+} | null {
+  if (walletScope !== "solana" || /\bdca\b/iu.test(prompt)) return null;
+  const match = /\b(?:swap|tukar)\s+([0-9]+(?:[.,][0-9]+)?)\s+(sol|usdc|jup)\s+(?:ke|to)\s+(sol|usdc|jup)\b/iu.exec(prompt);
+  if (match === null) return null;
+  const inputSymbol = match[2]!.toUpperCase() as SupportedSolanaSymbol;
+  const outputSymbol = match[3]!.toUpperCase() as SupportedSolanaSymbol;
+  if (inputSymbol === outputSymbol) return null;
+  const displayAmount = match[1]!.replace(",", ".");
+  const inputAmount = decimalToRawAmount(displayAmount, inputSymbol === "SOL" ? 9 : 6);
+  if (inputAmount === null) return null;
+  const mintFor = (symbol: SupportedSolanaSymbol) => symbol === "SOL"
+    ? SOLANA_NATIVE_MINT
+    : symbol === "USDC"
+      ? SOLANA_USDC_MINT
+      : SOLANA_JUP_MINT;
+  return {
+    inputMint: mintFor(inputSymbol),
+    outputMint: mintFor(outputSymbol),
+    inputSymbol,
+    outputSymbol,
+    inputAmount,
+    displayAmount,
+  };
+}
+
+function normalizeAutomationArguments(value: unknown): Record<string, unknown> {
+  if (typeof value !== "object" || value === null) throw new Error("Automation parameters are required");
+  const source = value as Record<string, unknown>;
+  const normalized: Record<string, unknown> = { ...source };
+  normalized.kind = source.kind ?? source.type;
+  normalized.orderAmountRaw = source.orderAmountRaw ?? source.amount;
+  normalized.maximumExecutions = source.maximumExecutions ?? source.count;
+  if (source.intervalSeconds === undefined && typeof source.interval === "string") {
+    const match = /^([1-9]\d*)\s*(s|m|h)$/iu.exec(source.interval.trim());
+    if (match) {
+      const multiplier = match[2]!.toLowerCase() === "h" ? 3_600 : match[2]!.toLowerCase() === "m" ? 60 : 1;
+      normalized.intervalSeconds = Number(match[1]) * multiplier;
+    }
+  }
+  if (normalized.maximumTotalRaw === undefined
+    && typeof normalized.orderAmountRaw === "string" && /^[1-9]\d*$/u.test(normalized.orderAmountRaw)
+    && (typeof normalized.maximumExecutions === "number" || typeof normalized.maximumExecutions === "string")) {
+    const count = Number(normalized.maximumExecutions);
+    if (Number.isInteger(count) && count > 0) normalized.maximumTotalRaw = (BigInt(normalized.orderAmountRaw) * BigInt(count)).toString();
+  }
+  if (typeof normalized.maximumExecutions === "string" && /^\d+$/u.test(normalized.maximumExecutions)) normalized.maximumExecutions = Number(normalized.maximumExecutions);
+  if (typeof normalized.intervalSeconds === "string" && /^\d+$/u.test(normalized.intervalSeconds)) normalized.intervalSeconds = Number(normalized.intervalSeconds);
+  return normalized;
+}
 
 function parseDirectRobinhoodSwap(
   prompt: string,

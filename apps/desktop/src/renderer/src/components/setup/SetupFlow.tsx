@@ -16,7 +16,6 @@ import {
 import { ChangePasswordStep, SecurityStep } from './SecurityStep';
 import { ACTIVITY_LEVELS, INTEGRATION_CATEGORIES, SETUP_STEPS, STORAGE_KEY } from '../types';
 import { Button, Modal } from '../ui';
-import { EmergencyStopPanel } from '../workspace/WorkspacePanels';
 export function SetupFlow({
   setup,
   runtime,
@@ -1294,7 +1293,7 @@ export function ReviewStep({
         execution path is available only after its independent release gate is
         satisfied. Autonomous execution and Full Access remain unavailable.
       </Notice>
-      {editing && (
+      {false && editing && (
         <details className="advanced">
           <summary>Advanced safety · Emergency stop</summary>
           <p>
