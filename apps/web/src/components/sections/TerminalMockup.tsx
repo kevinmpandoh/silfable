@@ -16,15 +16,14 @@ export function TerminalMockup() {
         >
           <div>
             <p className="mb-5 font-mono text-[10px] uppercase tracking-[0.24em] text-electric">
-              Desk Rule / Local policy engine
+              Product view / Desktop workspace
             </p>
             <h2 className="text-[clamp(3.2rem,6.2vw,6.8rem)] font-bold leading-[0.9] tracking-[-0.065em]">
-              Rules the agent <em className="text-electric">cannot</em> negotiate.
+              The whole trade,<br /><em className="text-electric">in view.</em>
             </h2>
           </div>
           <p className="max-w-xl text-base leading-8 text-white/55 lg:justify-self-end">
-            Define the operating envelope once. Every proposed trade is checked locally before signing, with a readable receipt for every pass or rejection.
-            Controlled Mainnet acceptance is recorded per lane: Jupiter swaps, Pump.fun Token Launch, Robinhood swaps, and two-way Solana-Robinhood bridges. It is not blanket approval for other routes or assets.
+            Move from conversation to a typed transaction preview without jumping between disconnected tools. Silfable keeps wallet context, route checks, limits, and final status together for supported Jupiter swaps, Pump.fun launches, Robinhood swaps, and two-way Solana–Robinhood bridges.
           </p>
         </motion.div>
 

@@ -21,9 +21,9 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Silfable - AI Trading, Within Your Limits",
+  title: "Silfable - From Market Idea to Visible Transaction",
   description:
-    "Restricted AI trading runtime for Solana Mainnet missions with local policy checks and explicit approval.",
+    "Research tokens, prepare launches, swap, bridge, and track supported Mainnet transactions across Solana and Robinhood Chain.",
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",

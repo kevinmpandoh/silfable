@@ -29,7 +29,7 @@ export function Hero() {
             transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
             className="mb-7 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--blue-2)]"
           >
-            Secure AI trading / Wallet-approved execution
+            Solana + Robinhood Chain / One trading workspace
           </motion.p>
 
           <motion.h1
@@ -37,8 +37,8 @@ export function Hero() {
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
             className="max-w-[1200px] text-6xl font-bold leading-[0.92] tracking-[-0.07em] text-paper sm:text-8xl md:text-9xl xl:text-[8.15rem]"
           >
-            TRADE WITH CLARITY.
-            <span className="auroraText block sm:pl-14 lg:pl-24">APPROVE WITH CONTROL.</span>
+            ONE IDEA.
+            <span className="auroraText block sm:pl-14 lg:pl-24">A VISIBLE ROUTE.</span>
           </motion.h1>
         </motion.div>
 
@@ -50,17 +50,17 @@ export function Hero() {
         >
           <div>
             <p className="max-w-md text-lg leading-relaxed text-[var(--paper)] sm:text-xl">
-              AI can plan the move. Your wallet still makes the decision.
+              Turn a market idea into a route you can inspect from quote to settlement.
             </p>
             <p className="mt-2 max-w-lg text-sm leading-6 text-[var(--muted)]">
-              Swap, bridge, and automation proposals stay bound to your session, policy, and explicit wallet approval before any supported Mainnet action.
+              Research tokens, prepare launches, swap, bridge, and monitor strategies across supported Mainnet lanes without losing sight of each transaction step.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
             <Button asChild size="lg" className="auroraButton hover:!text-white">
               <Link href="/connect">
-                Get started
+                Open workspace
                 <ArrowDownRight className="ml-4 size-4" />
               </Link>
             </Button>

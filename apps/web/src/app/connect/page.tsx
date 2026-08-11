@@ -113,18 +113,18 @@ function ConnectContent() {
   const features = [
     {
       icon: Wallet,
-      title: "Your wallet opens the workspace",
-      text: "A verified Solana or EVM address can open your Silfable account and its linked wallets.",
+      title: "One address opens your workspace",
+      text: "Verify a Solana or EVM address to access your Silfable account and the wallets linked to it.",
     },
     {
       icon: KeyRound,
-      title: "Your private key stays in your wallet",
-      text: "Silfable never asks for a seed phrase or private key. Your wallet signs only after you approve.",
+      title: "Sign in without sending a transaction",
+      text: "The authentication signature proves wallet ownership. It does not move funds or authorize a later trade.",
     },
     {
       icon: ShieldCheck,
-      title: "Policy checks before execution",
-      text: "Silfable prepares cross-chain trades and DCA plans within your configured limits, keeping final transaction approval in your hands.",
+      title: "Review each transaction separately",
+      text: "After sign-in, Silfable prepares supported swaps, bridges, launches, and strategy actions for a separate wallet confirmation.",
     },
   ];
 
@@ -134,13 +134,13 @@ function ConnectContent() {
         <div className="relative overflow-hidden bg-[radial-gradient(circle_at_15%_10%,rgb(32_201_151_/_0.18),transparent_26rem),var(--panel)] p-7 sm:p-12 lg:p-16">
           <div className="absolute right-0 top-0 h-32 w-32 rounded-bl-full border-b border-l border-[var(--line)]" />
           <p className="relative mb-5 font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-electric">
-            Silfable Web Workspace
+            Wallet sign-in / Silfable Web
           </p>
           <h1 className="relative max-w-xl text-5xl font-bold leading-[0.94] tracking-[-0.065em] text-[var(--paper)] sm:text-7xl">
-            Open a protected trading workspace.
+            Connect once.<br />Review every action.
           </h1>
           <p className="relative mt-7 max-w-xl text-base leading-7 text-[var(--muted)]">
-            Sign in with a Solana wallet or an EVM wallet such as MetaMask/Rabby. Linked wallets open the same Silfable account, while every transaction still requires approval from its source wallet.
+            Use a Solana wallet or an EVM wallet such as MetaMask or Rabby to open your account. The sign-in message only authenticates you; each transaction is reviewed and confirmed separately in its source wallet.
           </p>
 
           <div className="relative mt-10 grid max-w-xl gap-3 sm:grid-cols-2">
@@ -179,7 +179,7 @@ function ConnectContent() {
               After connecting
             </p>
             <p className="mt-3 text-2xl font-semibold tracking-[-0.04em]">
-              Connect, sign the authentication message, then continue to the restricted workspace.
+              Verify your wallet, enter the workspace, and choose the workflow you want to prepare.
               <ArrowRight className="ml-2 inline h-5 w-5" />
             </p>
           </div>

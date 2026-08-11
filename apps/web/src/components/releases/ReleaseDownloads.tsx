@@ -13,7 +13,7 @@ export function ReleaseDownloads() {
     <section id="downloads" className="scroll-mt-24 border-b border-[var(--line)] py-20 sm:py-28">
       <div className="grid gap-8 border-b border-[var(--line)] pb-11 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-end">
         <div><p className="font-mono text-[9px] uppercase tracking-[0.2em] text-electric">Release artifacts / 0.1.0</p><h2 className="mt-5 text-5xl font-bold tracking-[-0.06em] sm:text-6xl">Choose your platform.</h2></div>
-        <p className="text-sm leading-7 text-[var(--muted)]">Every download is labelled by its release state. A desktop build never grants autonomous transaction authority.</p>
+        <p className="text-sm leading-7 text-[var(--muted)]">Every download is labelled by release state, supported platform, and verification requirements. Installing a build does not enable unattended transactions.</p>
       </div>
       <div className="mt-10 grid border-t border-l border-[var(--line)] lg:grid-cols-3">
         {builds.map((build) => {

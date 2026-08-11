@@ -12,7 +12,7 @@ const releases = [
     summary: "Restricted Mainnet foundation",
     added: ["Linux AppImage and Debian preview builds", "Solana Mainnet wallet onboarding", "Encrypted local session and receipt storage"],
     changed: ["Jupiter swaps require deterministic checks and explicit approval", "Pump.fun is defined as Token Launch, not generic auto-trading", "Desktop EVM scope is Robinhood Chain; two-way Solana-Robinhood bridges retain explicit approval and per-transfer reconciliation"],
-    fixed: ["Fail-closed provider and policy handling", "Desktop privilege-boundary audits", "Linux package compatibility checks"],
+    fixed: ["Provider errors and incomplete route data now stop safely", "Desktop privilege-boundary audits", "Linux package compatibility checks"],
   },
 ] as const;
 

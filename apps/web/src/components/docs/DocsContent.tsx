@@ -2,9 +2,9 @@ import { AlertTriangle, ArrowRight, Check, KeyRound, Monitor, ShieldCheck, Termi
 import Image from "next/image";
 
 const concepts = [
-  { icon: TerminalSquare, title: "Agent", text: "Researches, explains, and drafts typed proposals without receiving signing authority." },
-  { icon: ArrowRight, title: "Session", text: "Locks a wallet network and preserves conversation, proposal, and receipt history." },
-  { icon: ShieldCheck, title: "Policy gate", text: "Validates identity, amount, fee, route, freshness, and venue allowlists before approval." },
+  { icon: TerminalSquare, title: "Workspace", text: "Keeps market research, wallet context, transaction previews, and final status together." },
+  { icon: ArrowRight, title: "Workflow", text: "Turns a request into venue-specific steps with the exact inputs required for that action." },
+  { icon: ShieldCheck, title: "Route check", text: "Validates identity, amount, fee, route, freshness, and venue requirements before confirmation." },
 ];
 
 export function DocsContent() {
@@ -13,13 +13,13 @@ export function DocsContent() {
       <section id="introduction" className="scroll-mt-36 border-b border-black/15 pb-16">
         <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-electric">Start here / v0.1.0</p>
         <h1 className="mt-7 max-w-4xl font-serif text-[clamp(3.1rem,7vw,7.5rem)] leading-[0.86] tracking-[-0.06em]">
-          Silfable documentation
+          Build a complete<br />transaction workflow.
         </h1>
         <p className="mt-9 max-w-2xl text-lg leading-8 text-black/55">
-          Silfable is a guarded Mainnet workspace for AI-assisted Token Launch, Solana swaps, Robinhood Chain swaps, and two-way Solana-Robinhood bridges. Reasoning, deterministic policy, signing, and receipt verification remain separate authorities.
+          Silfable connects token research, Pump.fun launches, Solana swaps, Robinhood Chain swaps, and two-way Solana–Robinhood bridges. This guide explains how each request becomes a reviewable transaction and a tracked final result.
         </p>
         <div className="mt-10 grid border-t border-l border-black/15 sm:grid-cols-3">
-          {["Mainnet only", "Policy enforced", "Receipt recorded"].map((item) => (
+          {["Supported Mainnet lanes", "Exact review", "Result tracked"].map((item) => (
             <div key={item} className="flex items-center gap-3 border-r border-b border-black/15 p-5 text-xs font-medium text-black">
               <Check className="size-4 text-electric" /> {item}
             </div>
@@ -29,13 +29,13 @@ export function DocsContent() {
 
       <section id="quick-start" className="scroll-mt-36 border-b border-black/15 py-16">
         <DocHeading number="01" title="Quick start" />
-        <p className="doc-lead">Choose the surface that owns signing, configure only the providers required by your wallet network, then start a restricted Mainnet session.</p>
+        <p className="doc-lead">Choose web or desktop, configure the providers required by your network, then open a workspace with the wallet you intend to use.</p>
         <ol className="mt-10 space-y-7">
           {[
-            ["Choose", "Use desktop for encrypted local-vault signing. Use web for the single connected browser wallet and explicit wallet approval."],
-            ["Configure", "Desktop stores wallet, Solana and Robinhood RPC settings, Jupiter or Uniswap provider credentials, inference provider, and transaction limits in Settings."],
-            ["Create", "Select a Solana or Robinhood Chain wallet. The task you enter determines the typed proposal; session creation does not authorize a transaction."],
-            ["Review", "Inspect exact assets, amount, route, simulation, fees, and freshness. Approve only a supported lane and verify its persisted receipt."],
+            ["Choose", "Use desktop for encrypted local-vault signing, or web with a connected browser wallet."],
+            ["Configure", "Add the RPC, route provider, inference provider, and transaction-limit settings needed by your selected network."],
+            ["Describe", "Select a Solana or Robinhood Chain wallet and state the outcome you want. Opening a workspace does not authorize a transaction."],
+            ["Review", "Inspect the assets, amount, route, simulation, fees, and quote freshness. Confirm the action, then follow its final status."],
           ].map(([title, text], index) => (
             <li key={title} className="grid gap-3 border-t border-black/10 pt-6 sm:grid-cols-[3rem_8rem_1fr]">
               <span className="font-mono text-sm text-electric">{String(index + 1).padStart(2, "0")}</span>
@@ -48,7 +48,7 @@ export function DocsContent() {
 
       <section id="core-concepts" className="scroll-mt-36 border-b border-black/15 py-16">
         <DocHeading number="02" title="Core concepts" />
-        <p className="doc-lead">Three objects define how work moves from a user instruction to a supported market action.</p>
+        <p className="doc-lead">Three concepts explain how a request moves from an idea to a supported market action.</p>
         <div className="mt-10 grid border-t border-l border-black/15 md:grid-cols-3">
           {concepts.map((concept) => {
             const Icon = concept.icon;
@@ -65,25 +65,25 @@ export function DocsContent() {
 
       <section id="desk-rule" className="scroll-mt-36 border-b border-black/15 py-16">
         <DocHeading number="03" title="Transaction settings" />
-        <p className="doc-lead">Global limits are evaluated before signing. The AI and the session cannot silently raise these values or bypass a blocked venue.</p>
+        <p className="doc-lead">Global limits define the amounts, fees, slippage, and venues Silfable may present for confirmation. A new request cannot silently raise them.</p>
         <div className="mt-8 mb-8 overflow-hidden rounded-xl border border-black/10 shadow-sm">
           <Image src="/setting.app.png" alt="Transaction Settings UI" width={1200} height={800} className="w-full object-cover" />
         </div>
         <div className="border-l-2 border-electric bg-blue-50 p-5 text-sm leading-7 text-blue-950">
-          Rules use deny-by-default semantics. If a proposed action cannot be proven compliant, Silfable rejects it before signing.
+          If required route data is missing, stale, or outside your configured limits, Silfable stops the action before wallet confirmation.
         </div>
       </section>
 
       <section id="mission-lifecycle" className="scroll-mt-36 border-b border-black/15 py-16">
-        <DocHeading number="04" title="Session lifecycle" />
-        <p className="doc-lead">Every session moves through explicit states. State changes are written to its receipt stream.</p>
+        <DocHeading number="04" title="Transaction lifecycle" />
+        <p className="doc-lead">Each action moves through explicit stages, allowing the interface to distinguish preparation from an onchain result.</p>
         <div className="mt-10 space-y-0 border-t border-black/15">
           {[
-            ["Draft", "The AI gathers exact parameters and creates a typed, venue-specific proposal."],
-            ["Checked", "Deterministic policy validates wallet, assets, amount, limits, route, and provider evidence."],
+            ["Prepared", "Silfable gathers the required parameters and creates a venue-specific transaction preview."],
+            ["Validated", "Route checks validate the wallet, assets, amount, limits, provider response, and quote freshness."],
             ["Simulated", "An unsigned transaction is inspected and simulated where the venue supports it."],
-            ["Approved", "Fresh revalidation passes and the user explicitly authorizes one signing attempt."],
-            ["Reconciled", "Success, failure, or ambiguous broadcast state is independently verified and persisted."],
+            ["Confirmed", "Fresh validation passes and the user authorizes one signing attempt in the active wallet surface."],
+            ["Tracked", "Success, failure, or an unresolved broadcast is checked independently and saved to the transaction record."],
           ].map(([state, description], index) => (
             <div key={state} className="grid grid-cols-[2.5rem_7rem_1fr] gap-3 border-b border-black/15 py-5 sm:grid-cols-[4rem_10rem_1fr]">
               <span className="font-mono text-sm text-black/45">0{index + 1}</span>
@@ -96,13 +96,13 @@ export function DocsContent() {
 
       <section id="security" className="scroll-mt-36 border-b border-black/15 py-16">
         <DocHeading number="05" title="Security model" />
-        <p className="doc-lead">Silfable is designed so that custody, policy, and execution evidence remain separable.</p>
+        <p className="doc-lead">Silfable keeps wallet signing, route validation, provider responses, and transaction outcomes in clearly defined parts of the system.</p>
         <div className="mt-10 grid gap-5 sm:grid-cols-2">
           {[
-            { icon: KeyRound, title: "Signing is separated", text: "Desktop keys remain in the encrypted local vault; web signing remains inside the connected browser wallet." },
-            { icon: ShieldCheck, title: "Least authority", text: "Each session receives only the markets, sizes, and actions explicitly allowed by its policy." },
-            { icon: Monitor, title: "Local enforcement", text: "Policy evaluation happens before signing, on the machine where the runtime is installed." },
-            { icon: AlertTriangle, title: "Fail closed", text: "Unavailable price data, invalid routes, or policy ambiguity halt the action instead of bypassing checks." },
+            { icon: KeyRound, title: "Wallet-specific signing", text: "Desktop keys remain in the encrypted local vault; web confirmations remain inside the connected browser wallet." },
+            { icon: ShieldCheck, title: "Bounded workflows", text: "Each workspace uses the markets, sizes, and actions allowed by the active transaction settings." },
+            { icon: Monitor, title: "Checks before confirmation", text: "Silfable evaluates route and limit requirements before asking the active wallet to sign." },
+            { icon: AlertTriangle, title: "Stops on uncertainty", text: "Unavailable price data, invalid routes, or incomplete provider evidence stop the action instead of being ignored." },
           ].map((item) => {
             const Icon = item.icon;
             return (
@@ -117,8 +117,8 @@ export function DocsContent() {
       </section>
 
       <section id="receipts" className="scroll-mt-36 border-b border-black/15 py-16">
-        <DocHeading number="06" title="Receipts" />
-        <p className="doc-lead">A receipt records what was proposed, checked, simulated, approved, broadcast, and independently reconciled. A quote or simulation is never presented as settlement.</p>
+        <DocHeading number="06" title="Transaction records" />
+        <p className="doc-lead">A transaction record captures what was prepared, validated, simulated, confirmed, broadcast, and checked afterward. A quote or simulation is never presented as settlement.</p>
         <div className="mt-9 overflow-x-auto">
           <table className="min-w-[42rem] w-full text-left text-sm">
             <thead className="border-b border-black/20 font-mono text-[9px] uppercase tracking-[0.17em] text-black/35">

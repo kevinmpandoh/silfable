@@ -4,27 +4,27 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 
 const faqs = [
   {
-    question: "Can Silfable move funds without me?",
+    question: "What can I do in Silfable today?",
     answer:
-      "No supported transaction flow moves funds silently. Restricted Mainnet actions require policy checks and explicit approval before signing or broadcast.",
+      "Supported workflows include Jupiter swaps, Pump.fun Token Launch, Robinhood Chain swaps, two-way Solana–Robinhood bridges, and reviewed DCA or TP/SL actions. Availability differs between web and desktop.",
   },
   {
-    question: "Where do my private keys live?",
+    question: "How does signing differ between web and desktop?",
     answer:
-      "Desktop keys stay in the encrypted local vault. On web, the connected browser wallet retains signing authority. Provider services and the AI do not receive a production signing key.",
+      "Web transactions are confirmed in the connected browser wallet. Desktop can sign supported transactions through its encrypted local vault. Silfable does not ask you to upload a seed phrase to the web service.",
   },
   {
-    question: "Is Silfable a trading chatbot?",
+    question: "What will I see before confirming a transaction?",
     answer:
-      "No. It is a trading workspace for agent-assisted missions. The agent can reason, draft, preview, and monitor, while production execution stays inside the policy envelope.",
+      "The review depends on the workflow, but includes the source wallet, network, exact assets, amount, expected output, route, fees, timing, and the checks required for that venue.",
   },
   {
-    question: "What happens when a rule is violated?",
+    question: "What happens when route data is incomplete or out of date?",
     answer:
-      "The proposed action is halted locally and recorded in the mission receipt. Depending on your configuration, Silfable can notify you, pause the mission, or require fresh authorization before continuing.",
+      "Silfable stops the action and explains which input needs attention. You may need to refresh the quote, correct the wallet or asset, adjust a limit, or start a new review before continuing.",
   },
   {
-    question: "Which markets and operating systems are supported?",
+    question: "Which networks and desktop platforms are supported?",
     answer:
       "Desktop and web contain guarded Jupiter swaps, restricted Pump.fun Token Launch paths, Robinhood Chain swaps, and two-way Solana-USDC/Robinhood-USDG bridge flows. Every web transaction uses explicit browser-wallet approval. Other EVM chains, Hyperliquid, autonomous signing, and unattended Full Access are outside the active production scope.",
   },
@@ -38,10 +38,10 @@ export function FaqSection() {
           <div className="lg:sticky lg:top-32 lg:self-start">
             <p className="mb-5 font-mono text-[10px] uppercase tracking-[0.24em] text-electric">Questions / Answers</p>
             <h2 className="font-serif text-[clamp(3.8rem,7vw,7.8rem)] leading-[0.84] tracking-[-0.06em]">
-              Read the <em className="text-electric">fine print.</em>
+              Know before<br /><em className="text-electric">you connect.</em>
             </h2>
             <p className="mt-8 max-w-sm text-sm leading-7 text-white/50">
-              Autonomy should be legible. These are the direct answers that matter before software touches a market.
+              Practical answers about available workflows, wallet confirmation, route reviews, and current platform coverage.
             </p>
             <a
               href="/docs"

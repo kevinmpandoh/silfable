@@ -37,11 +37,11 @@ export async function DownloadTable() {
       <div className="section-shell py-24 sm:py-28 lg:py-32">
         <div className="grid gap-8 border-b border-[var(--line)] pb-12 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-end">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-electric">Desktop runtime / {version}</p>
-            <h2 className="mt-5 max-w-4xl text-[clamp(3rem,6.3vw,6.6rem)] font-bold leading-[0.9] tracking-[-0.07em]">Download Silfable for your environment.</h2>
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-electric">Desktop app / {version}</p>
+            <h2 className="mt-5 max-w-4xl text-[clamp(3rem,6.3vw,6.6rem)] font-bold leading-[0.9] tracking-[-0.07em]">Bring the workspace to your desktop.</h2>
           </div>
           <div className="lg:pb-1">
-            <p className="text-sm leading-7 text-[var(--muted)]">Local signing, policy checks, and receipt storage stay on your machine. Available builds are always clearly marked.</p>
+            <p className="text-sm leading-7 text-[var(--muted)]">The desktop app keeps its encrypted vault, transaction checks, and activity records on your machine. Each platform is labelled with its current release state.</p>
             <a href="/releases" className="mt-5 inline-flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.16em] text-electric hover:text-emerald-200">View release notes <ArrowDownToLine className="size-3.5" /></a>
           </div>
         </div>

@@ -7,23 +7,23 @@ const safeguards = [
   {
     step: "01",
     icon: CheckCircle2,
-    eyebrow: "Policy boundary",
-    title: "Guardrails before the wallet",
-    text: "Each proposal is checked against the session, asset, amount, route, and execution policy before your wallet is ever asked to act.",
+    eyebrow: "Exact inputs",
+    title: "Know what will be sent",
+    text: "Review the wallet, asset, amount, route, fees, and expected result together before a transaction reaches confirmation.",
   },
   {
     step: "02",
     icon: Fingerprint,
-    eyebrow: "Verifiable trail",
-    title: "Evidence you can inspect",
-    text: "Quotes, simulations, approvals, and outcomes are kept as distinct states—so a draft is never presented as a completed trade.",
+    eyebrow: "Visible progress",
+    title: "Follow every stage",
+    text: "Quotes, simulations, confirmations, broadcasts, and final outcomes remain distinct, so you can see exactly how far an action has progressed.",
   },
   {
     step: "03",
     icon: WalletCards,
-    eyebrow: "Signing boundary",
-    title: "Your wallet stays in control",
-    text: "The AI can assist with planning, but signing remains with your encrypted desktop vault or connected browser wallet.",
+    eyebrow: "Two surfaces",
+    title: "Use web or desktop",
+    text: "Confirm with a connected browser wallet on web, or use the encrypted local vault in the desktop app for supported workflows.",
   },
 ];
 
@@ -36,14 +36,14 @@ export function ValueProps() {
       <div className="section-shell relative py-24 sm:py-32 lg:py-40">
         <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} transition={{ staggerChildren: 0.1 }}>
           <motion.p variants={reveal} transition={{ duration: 0.55 }} className="font-mono text-[10px] uppercase tracking-[0.24em] text-[var(--blue-2)]">
-            Built for deliberate Mainnet actions
+            From request to transaction record
           </motion.p>
           <motion.div variants={reveal} transition={{ duration: 0.7 }} className="mt-5 grid gap-6 border-b border-[var(--line)] pb-10 lg:grid-cols-[minmax(0,1fr)_25rem] lg:items-end">
             <h2 className="max-w-4xl text-[clamp(3rem,6.5vw,6.75rem)] font-bold leading-[0.93] tracking-[-0.065em]">
-              AI plans the route.<br /><span className="auroraText">You hold the authority.</span>
+              See the route.<br /><span className="auroraText">Understand the outcome.</span>
             </h2>
             <p className="max-w-md text-base leading-7 text-[var(--muted)] lg:pb-1">
-              Silfable is designed as a trading workspace with clear boundaries—not a black-box agent that acts beyond your review.
+              Silfable brings market research, transaction preparation, wallet confirmation, and settlement tracking into one readable workflow.
             </p>
           </motion.div>
         </motion.div>

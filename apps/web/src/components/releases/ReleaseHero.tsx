@@ -19,7 +19,7 @@ export function ReleaseHero() {
           </div>
           <div className="border-t border-white/15 pt-7 lg:mb-2">
             <p className="text-lg leading-8 text-white/60">
-              A Linux preview of the restricted Mainnet foundation. Download availability does not mean every venue has production clearance.
+              The first desktop preview brings supported Solana and Robinhood Chain workflows to Linux. Platform availability is separate from each venue&apos;s production status.
             </p>
             <div className="mt-7 flex flex-wrap gap-x-6 gap-y-3 font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">
               <span className="flex items-center gap-2"><CheckCircle2 className="size-3.5 text-emerald-400" /> AppImage</span>

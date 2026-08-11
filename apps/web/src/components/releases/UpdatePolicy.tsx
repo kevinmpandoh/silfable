@@ -8,7 +8,7 @@ export function UpdatePolicy() {
   return (
     <section className="border-t border-black/15 py-20 sm:py-28">
       <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-electric">Distribution policy</p>
-      <h2 className="mt-5 max-w-3xl font-serif text-5xl leading-[0.95] tracking-[-0.05em] sm:text-6xl">Choose how close you run to the edge.</h2>
+      <h2 className="mt-5 max-w-3xl font-serif text-5xl leading-[0.95] tracking-[-0.05em] sm:text-6xl">Choose the release channel that fits your setup.</h2>
       <div className="mt-12 grid border-t border-l border-black/15 md:grid-cols-3">
         {channels.map((channel) => (
           <div key={channel.name} className="border-r border-b border-black/15 p-7">
@@ -21,7 +21,7 @@ export function UpdatePolicy() {
         ))}
       </div>
       <div className="mt-8 border-l-2 border-electric bg-blue-50 p-5 text-sm leading-7 text-blue-950">
-        Silfable never auto-starts a mission after an update. Review the release notes, reopen the runtime, and authorize each mission explicitly.
+        Silfable does not resume a strategy automatically after an update. Review the release notes, reopen the app, and confirm which workflows should continue.
       </div>
     </section>
   );

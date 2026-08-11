@@ -1,36 +1,36 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Bot, Crosshair, LockKeyhole, Maximize2 } from "lucide-react";
+import { ArrowLeftRight, Radar, Rocket, Route } from "lucide-react";
 
 const features = [
   {
-    eyebrow: "01 / The worker",
-    title: "Agent",
-    description: "An AI assistant that researches, asks for missing values, and drafts typed proposals. It does not receive signing authority.",
-    detail: "Drafts proposals",
-    icon: Bot,
+    eyebrow: "01 / Market context",
+    title: "Discover",
+    description: "Research tokens and market conditions, surface missing details, and turn an open-ended request into concrete inputs.",
+    detail: "Research first",
+    icon: Radar,
   },
   {
-    eyebrow: "02 / The objective",
-    title: "Mission",
-    description: "A wallet-scoped objective with an explicit outcome. Supported Mainnet actions remain bound to deterministic venue policy.",
-    detail: "Wallet scoped",
-    icon: Crosshair,
+    eyebrow: "02 / Token creation",
+    title: "Launch",
+    description: "Prepare Pump.fun token metadata, economics, and creator details for an exact final review before publishing on Mainnet.",
+    detail: "Exact metadata",
+    icon: Rocket,
   },
   {
-    eyebrow: "03 / Default posture",
-    title: "Restricted",
-    description: "Every mission starts inside a hard safety envelope: approved markets, maximum size, allowed actions, and stop conditions.",
-    detail: "Deny by default",
-    icon: LockKeyhole,
+    eyebrow: "03 / Market execution",
+    title: "Swap",
+    description: "Prepare Jupiter swaps on Solana or supported Robinhood Chain swaps with fresh pricing, route details, and transaction limits.",
+    detail: "Fresh route data",
+    icon: ArrowLeftRight,
   },
   {
-    eyebrow: "04 / Your decision",
-    title: "Full",
-    description: "Reserved for future policy contracts. Today, production Mainnet flows stay restricted and require explicit approval.",
-    detail: "Not live yet",
-    icon: Maximize2,
+    eyebrow: "04 / Cross-chain flow",
+    title: "Bridge",
+    description: "Move between Solana USDC and Robinhood USDG through supported two-way routes, with source and destination progress tracked separately.",
+    detail: "Track both sides",
+    icon: Route,
   },
 ];
 
@@ -46,10 +46,10 @@ export function FeatureGrid() {
           className="mb-14 grid gap-7 lg:mb-20 lg:grid-cols-[1fr_0.7fr] lg:items-end"
         >
           <h2 className="max-w-4xl text-[clamp(3rem,6vw,6.5rem)] font-bold leading-[0.9] tracking-[-0.06em]">
-            Intelligence is not transaction <em className="text-electric">authority.</em>
+            Four workflows.<br />One <em className="text-electric">workspace.</em>
           </h2>
           <p className="max-w-lg text-sm leading-7 text-white/50 lg:justify-self-end">
-            Silfable separates who is acting, what they are trying to achieve, and exactly how much authority they receive.
+            Start with the outcome you want. Silfable organizes the research, route details, confirmation, and transaction status around it.
           </p>
         </motion.div>
 

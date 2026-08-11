@@ -6,7 +6,7 @@ import { ReleaseHistory } from "@/components/releases/ReleaseHistory";
 import { UpdatePolicy } from "@/components/releases/UpdatePolicy";
 
 export const metadata: Metadata = {
-  title: "Releases — Silfable",
+  title: "Desktop Releases - Silfable",
   description: "Download current Silfable desktop builds and review release notes, checksums, compatibility, and update channels.",
 };
 

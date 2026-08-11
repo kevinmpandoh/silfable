@@ -6,7 +6,7 @@ import { WhitepaperContent } from "@/app/whitepaper/page";
 
 export const metadata: Metadata = {
   title: "Documentation - Silfable",
-  description: "Install Silfable, configure wallets and providers, run restricted Mainnet sessions, and inspect execution receipts.",
+  description: "Install Silfable, configure wallets and providers, prepare supported Mainnet transactions, and track their final status.",
 };
 
 import { PageTransition } from "@/components/ui/PageTransition";

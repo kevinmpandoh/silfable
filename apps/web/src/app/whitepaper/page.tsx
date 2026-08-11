@@ -14,7 +14,7 @@ import {
 export const metadata: Metadata = {
   title: "Whitepaper - Silfable",
   description:
-    "Silfable whitepaper covering restricted Mainnet architecture, venue-specific release gates, web and desktop authority, Token Launch, Solana Swap, EVM Swap, and Bridge.",
+    "Silfable whitepaper covering its transaction workflow, venue-specific release status, web and desktop signing, Token Launch, Solana Swap, Robinhood Chain Swap, and Bridge.",
 };
 
 const statusRows = [
@@ -30,23 +30,23 @@ const statusRows = [
 const principles = [
   {
     icon: ShieldCheck,
-    title: "Separated Transaction Authority",
-    text: "Desktop keys remain in the local encrypted vault. On web, Phantom or Solflare retains signing authority and the server never creates a production signer.",
+    title: "Wallet-Specific Signing",
+    text: "Desktop keys remain in the local encrypted vault. On web, Phantom or Solflare confirms transactions and the server never creates a production signer.",
   },
   {
     icon: LockKeyhole,
-    title: "Restricted Execution",
-    text: "The connected browser wallet must explicitly approve every production web transaction. Full Access is desktop-only; the web runtime never stores a private key or signs in the cloud.",
+    title: "Reviewed Web Transactions",
+    text: "The connected browser wallet must confirm every production web transaction. Full Access is desktop-only; the web service never stores a private key or signs in the cloud.",
   },
   {
     icon: CheckCircle2,
     title: "Persistent Strategies",
-    text: "DCA and TP/SL strategies persist with bounded amounts, schedules, pause and revoke controls. The active web or desktop runtime can prepare a fresh proposal, while transaction signing always remains with the user.",
+    text: "DCA and TP/SL strategies retain their amounts, schedules, pause controls, and revoke controls. The active web or desktop app can prepare a fresh transaction for review, while signing remains with the selected wallet surface.",
   },
   {
     icon: TriangleAlert,
-    title: "Deterministic Safety Gate",
-    text: "Fee, slippage, allowlist, balance, and freshness checks must pass before a restricted transaction can reach final user approval.",
+    title: "Deterministic Route Checks",
+    text: "Fee, slippage, allowlist, balance, and freshness requirements must pass before a supported transaction can reach wallet confirmation.",
   },
 ] as const;
 
@@ -60,10 +60,10 @@ export function WhitepaperContent() {
             <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-electric">Whitepaper / v0.2.0</p>
             <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_0.48fr] lg:items-end">
               <h1 className="max-w-5xl font-serif text-6xl font-normal leading-[0.9] tracking-normal sm:text-7xl lg:text-8xl">
-                Guarded AI-assisted execution across explicit Mainnet lanes.
+                From trading intent to a tracked Mainnet result.
               </h1>
               <p className="max-w-lg text-base leading-8 text-black/55 lg:justify-self-end">
-                An early-stage, open-source project separating AI reasoning, venue policy, signing authority, and settlement evidence across Solana and a Robinhood Chain-focused EVM workflow.
+                An early-stage, open-source workspace for researching markets, preparing venue-specific transactions, confirming them through the active wallet, and tracking settlement across Solana and Robinhood Chain.
               </p>
             </div>
           </div>
@@ -75,7 +75,7 @@ export function WhitepaperContent() {
             <div className="space-y-6 text-sm leading-7 text-black/70">
               <p className="font-medium text-black">Silfable is an early-stage open-source project.</p>
               <p>
-                This document distinguishes implemented code from production clearance. Guarded transaction paths exist, but each venue remains subject to its own signed-build, controlled Mainnet acceptance, recovery, and security gates. A preview artifact or passing simulation is not blanket production approval.
+                This document distinguishes implemented code from production readiness. Supported transaction paths exist, but each venue remains subject to signed-build, controlled Mainnet acceptance, recovery, and security requirements. A preview build or passing simulation does not make every route production-ready.
               </p>
               <p>Silfable is not currently:</p>
               <ul className="list-disc pl-5 space-y-2">
@@ -85,7 +85,7 @@ export function WhitepaperContent() {
                 <li>A guarantee of financial returns.</li>
               </ul>
               <p className="text-rose-600 font-medium bg-rose-50 p-4 border border-rose-200 mt-6">
-                Cryptocurrency trading involves substantial risk of loss. The AI agents within Silfable act as deterministic co-pilots and researchers. They do not possess inherent legal authority, nor do they bypass strict, hard-coded drawdown and fee limits.
+                Cryptocurrency trading involves substantial risk of loss. Silfable can research markets and prepare transactions, but its output may be incomplete or wrong. Configured drawdown, fee, route, and wallet-confirmation requirements still apply.
               </p>
             </div>
           </div>
@@ -99,16 +99,16 @@ export function WhitepaperContent() {
                 The decentralized finance (DeFi) ecosystem is becoming increasingly agentic. AI agents are beginning to search for information, analyze tokens, draft limit orders, and perform economic tasks for humans and businesses.
               </p>
               <p>
-                However, the infrastructure required for this economy remains inherently contradictory: giving AI the freedom to trade usually means handing over permanent custody of private keys to an unpredictable black box.
+                The difficult part is connecting flexible market research to predictable transaction handling without turning a model response into an unchecked wallet instruction.
               </p>
               <p>
-                Silfable is built around four core ideas:
+                Silfable is built around five core ideas:
               </p>
               <ul className="list-decimal pl-5 space-y-4 text-black">
-                <li><strong>Intent-based research, deterministic execution:</strong> The AI may analyze markets and draft actions, but supported transactions must pass strict, hard-coded deterministic policy checks before execution.</li>
-                <li><strong>Separated transaction authority:</strong> Desktop keys remain in the local encrypted vault; web signing remains in the connected browser wallet.</li>
-                <li><strong>Transparent Execution Receipts:</strong> Every quote, simulation, confirmation, rejection, and failure should be readable and independently reconciled. Desktop receipts remain encrypted locally.</li>
-                <li><strong>Restricted execution:</strong> Every supported web transaction requires explicit browser-wallet approval. Full Access is desktop-only; web never stores a private key or signs in the cloud.</li>
+                <li><strong>Intent-based research, deterministic transactions:</strong> AI may analyze markets and prepare actions, but supported transactions must pass venue-specific checks before execution.</li>
+                <li><strong>Wallet-specific signing:</strong> Desktop keys remain in the local encrypted vault; web signing remains in the connected browser wallet.</li>
+                <li><strong>Readable transaction records:</strong> Quotes, simulations, confirmations, rejections, and final outcomes remain distinguishable. Desktop records are stored locally.</li>
+                <li><strong>Reviewed web execution:</strong> Every supported web transaction requires browser-wallet confirmation. Full Access is desktop-only; web never stores a private key or signs in the cloud.</li>
                 <li><strong>Wallet-scoped authentication:</strong> Web access requires an expiring, one-time wallet challenge signature. It authenticates the workspace but never authorizes a transaction.</li>
               </ul>
             </div>
@@ -147,18 +147,18 @@ export function WhitepaperContent() {
             <div className="grid gap-8 sm:grid-cols-3">
               <div>
                 <BrainCircuit className="size-6 text-electric mb-4" strokeWidth={1.5} />
-                <h3 className="font-serif text-2xl mb-2">Unconstrained Risk</h3>
-                <p className="text-sm leading-6 text-black/60">When AI agents are given raw private keys to execute trades, they are prone to hallucinations. They may bypass slippage guards or execute a mathematically disastrous trade due to a misunderstood prompt.</p>
+                <h3 className="font-serif text-2xl mb-2">Ambiguous Requests</h3>
+                <p className="text-sm leading-6 text-black/60">Natural-language requests often omit the exact asset, network, amount, deadline, slippage, or destination needed to build a safe transaction.</p>
               </div>
               <div>
                 <LockKeyhole className="size-6 text-electric mb-4" strokeWidth={1.5} />
-                <h3 className="font-serif text-2xl mb-2">Fragmented Custody</h3>
-                <p className="text-sm leading-6 text-black/60">Providing an AI agent with access to a primary wallet violates fundamental security practices. Users must manually juggle burner wallets and seed phrases to interact safely.</p>
+                <h3 className="font-serif text-2xl mb-2">Fragmented Workflows</h3>
+                <p className="text-sm leading-6 text-black/60">Research, quoting, token metadata, wallet confirmation, and transaction tracking often live in separate tools with no shared context.</p>
               </div>
               <div>
                 <ServerCrash className="size-6 text-electric mb-4" strokeWidth={1.5} />
-                <h3 className="font-serif text-2xl mb-2">The Always-On Dilemma</h3>
-                <p className="text-sm leading-6 text-black/60">Browser-based AI agents sleep when the user closes their laptop. True algorithmic trading requires persistent, secure server-side execution without exposing plaintext keys to cloud providers.</p>
+                <h3 className="font-serif text-2xl mb-2">Long-Running Strategies</h3>
+                <p className="text-sm leading-6 text-black/60">DCA and TP/SL conditions need durable schedules and state, while the resulting transaction must still use the signing model of the active web or desktop surface.</p>
               </div>
             </div>
           </div>
@@ -166,7 +166,7 @@ export function WhitepaperContent() {
 
         <section className="border-b border-black/15 bg-black/[0.02]">
           <div className="section-shell grid gap-10 py-16 lg:grid-cols-[18rem_1fr] lg:py-20">
-            <SectionLabel number="04" title="Silfable's Vision" />
+            <SectionLabel number="04" title="Product Direction" />
             <div className="space-y-6 text-sm leading-7 text-black/70">
               <p className="text-lg text-black font-medium leading-relaxed">
                 Silfable aims to become an open environment where humans and software agents can express an intended outcome, research the market, and securely execute that outcome without compromising custody.
@@ -176,7 +176,7 @@ export function WhitepaperContent() {
                 <p>&gt; &ldquo;Draft the immutable metadata and bounded fee plan for a Pump.fun Token Launch.&rdquo;</p>
                 <p>&gt; &ldquo;Prepare a USDC-to-SOL swap proposal with slippage capped at 1%.&rdquo;</p>
               </div>
-              <p>Silfable coordinates the human requester, AI provider, deterministic venue policy, local or browser-wallet signer, network-specific protocol, and independently verified receipt without treating AI output as transaction authority.</p>
+              <p>Silfable coordinates the user request, AI provider, venue checks, local or browser-wallet signer, network-specific protocol, and final transaction record as one visible workflow.</p>
             </div>
           </div>
         </section>
@@ -207,14 +207,14 @@ export function WhitepaperContent() {
                 <Database className="size-6 text-electric shrink-0" strokeWidth={1.5} />
                 <div>
                   <h3 className="font-serif text-xl mb-1">Encrypted Cloud State Layer</h3>
-                  <p className="text-sm leading-6 text-black/60">A cloud database for bounded user preferences, chat state, and proposal metadata. Production transaction keys are not part of the web cloud authority.</p>
+                  <p className="text-sm leading-6 text-black/60">A cloud database for user preferences, chat state, and proposal metadata within defined limits. Production transaction keys are never stored by the web service.</p>
                 </div>
               </div>
               <div className="flex gap-4">
                 <ServerCrash className="size-6 text-electric shrink-0" strokeWidth={1.5} />
                 <div>
                   <h3 className="font-serif text-xl mb-1">High-Throughput Task Queue</h3>
-                  <p className="text-sm leading-6 text-black/60">A task queue foundation for bounded monitoring and proposal intents. Execution jobs are frozen.</p>
+                  <p className="text-sm leading-6 text-black/60">A task queue foundation for scheduled monitoring and transaction preparation. Cloud execution jobs remain disabled.</p>
                 </div>
               </div>
             </div>
