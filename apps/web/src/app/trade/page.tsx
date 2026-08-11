@@ -4,12 +4,9 @@
 "use client";
 
 import React, { useCallback, useState, useEffect, useRef } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { Keypair, VersionedTransaction } from "@solana/web3.js";
-import { Trash2 } from "lucide-react";
-import Link from "next/link";
 import {
   getAllSessions,
   saveSession,
@@ -34,6 +31,7 @@ import { WebNewSessionModal, type LinkedWebWallet } from "@/components/trade/Web
 import { WebMissionsView } from "@/components/trade/WebMissionsView";
 import { WebAutomationView } from "@/components/trade/WebAutomationView";
 import { TokenLaunchPanel, type PublishedTokenLaunchDraft } from "@/components/trade/TokenLaunchPanel";
+import { TradeHomeState, TradeMessageFeed, TradeSessionLoading, TradeSessionRail, TradeWorkspaceLayout } from "@/components/trade/workspace";
 import { getWebEvmChain } from "@/lib/evm-chains";
 import { switchToRobinhoodChain } from "@/lib/evm-browser-wallet";
 
@@ -48,13 +46,6 @@ function base64ToBytes(value: string): Uint8Array {
 
 function shortWallet(address?: string): string {
   return address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "unbound";
-}
-
-function formatMessageTime(timestamp: number): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(timestamp));
 }
 
 function bytesToBase64(value: Uint8Array): string {
@@ -208,6 +199,10 @@ function setupStorageKey(walletAddress: string): string {
   return `silfable_web_setup_v1:${walletAddress}`;
 }
 
+function setupDraftStorageKey(walletAddress: string): string {
+  return `silfable_web_setup_draft_v1:${walletAddress}`;
+}
+
 function setupSecretStorageKey(walletAddress: string): string {
   return `silfable_web_setup_secrets_v1:${walletAddress}`;
 }
@@ -246,6 +241,7 @@ export default function TradePage() {
   const [deletingSessions, setDeletingSessions] = useState(false);
   const [pendingSessionPrompt, setPendingSessionPrompt] = useState<string | null>(null);
   const [messages, setMessages] = useState<WebMessage[]>([]);
+  const [sessionMessagesLoading, setSessionMessagesLoading] = useState(false);
   const messagesRef = useRef<WebMessage[]>([]);
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
   const preparedEvmBridgeQuotesRef = useRef(new Map<string, PreparedEvmBridgeQuote>());
@@ -258,6 +254,22 @@ export default function TradePage() {
   const [linkedWallets, setLinkedWallets] = useState<LinkedWebWallet[]>([]);
   const [activeEvmAddress, setActiveEvmAddress] = useState<string | null>(null);
   const [activeEvmChainId, setActiveEvmChainId] = useState<number | null>(null);
+
+  function writeSessionQuery(sessionId: string, mode: "push" | "replace" = "push") {
+    const url = new URL(window.location.href);
+    if (sessionId) url.searchParams.set("session", sessionId);
+    else url.searchParams.delete("session");
+    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+    if (mode === "replace") window.history.replaceState(null, "", nextUrl);
+    else window.history.pushState(null, "", nextUrl);
+  }
+
+  function selectSession(sessionId: string, mode: "push" | "replace" = "push") {
+    setSessionMessagesLoading(Boolean(sessionId));
+    setActiveSessionId(sessionId);
+    setWorkspaceView("chat");
+    writeSessionQuery(sessionId, mode);
+  }
   const tokenLaunchMintSignersRef = useRef(new Map<string, Keypair>());
 
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
@@ -358,8 +370,7 @@ export default function TradePage() {
       createdAt: Date.now(),
     };
     const saved = await saveMessage(accountWalletAddress, message);
-    setActiveSessionId(sessionId);
-    setWorkspaceView("chat");
+    selectSession(sessionId);
     setMessages((current) => [...current.filter((item) => item.sessionId === sessionId), saved ?? message]);
   }
 
@@ -623,10 +634,14 @@ export default function TradePage() {
           setAuthenticatedWallet(session.walletAddress);
           return;
         }
-        router.replace("/connect?next=/trade");
+        const tradeReturnUrl = `/trade${window.location.search}`;
+        router.replace(`/connect?next=${encodeURIComponent(tradeReturnUrl)}`);
       })
       .catch(() => {
-        if (!cancelled) router.replace("/connect?next=/trade");
+        if (!cancelled) {
+          const tradeReturnUrl = `/trade${window.location.search}`;
+          router.replace(`/connect?next=${encodeURIComponent(tradeReturnUrl)}`);
+        }
       }).finally(() => {
         if (!cancelled) setAuthChecked(true);
       });
@@ -634,6 +649,30 @@ export default function TradePage() {
       cancelled = true;
     };
   }, [router]);
+
+  useEffect(() => {
+    function restoreSessionFromUrl() {
+      const requestedSessionId = new URLSearchParams(window.location.search).get("session")?.trim() ?? "";
+      if (!requestedSessionId) {
+        setSessionMessagesLoading(false);
+        setActiveSessionId("");
+        setWorkspaceView("chat");
+        return;
+      }
+      if (sessions.some((session) => session.id === requestedSessionId)) {
+        setSessionMessagesLoading(true);
+        setActiveSessionId(requestedSessionId);
+        setWorkspaceView("chat");
+        return;
+      }
+      setSessionMessagesLoading(false);
+      setActiveSessionId("");
+      writeSessionQuery("", "replace");
+    }
+
+    window.addEventListener("popstate", restoreSessionFromUrl);
+    return () => window.removeEventListener("popstate", restoreSessionFromUrl);
+  }, [sessions]);
 
   const runtimeUsage = messages.reduce(
     (total, message) => {
@@ -670,14 +709,19 @@ export default function TradePage() {
         setSetupStep(1);
         setSessions([]);
         setMessages([]);
+        setSessionMessagesLoading(false);
         setActiveSessionId("");
         setLoading(false);
 
         // Load Settings
         const savedSetup = localStorage.getItem(setupStorageKey(accountWalletAddress));
+        const savedDraft = localStorage.getItem(setupDraftStorageKey(accountWalletAddress));
         const sessionSecrets = sessionStorage.getItem(setupSecretStorageKey(accountWalletAddress));
+        const storedSettings = savedSetup ?? savedDraft;
+        if (storedSettings) {
+          setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(storedSettings), ...(sessionSecrets ? JSON.parse(sessionSecrets) : {}) });
+        }
         if (savedSetup) {
-          setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(savedSetup), ...(sessionSecrets ? JSON.parse(sessionSecrets) : {}) });
           setSetupCompleted(true);
         }
 
@@ -701,18 +745,26 @@ export default function TradePage() {
             if (cancelled) return;
             setSessions([]);
             setActiveSessionId("");
+            setSessionMessagesLoading(false);
             setMessages([]);
+            writeSessionQuery("", "replace");
             return;
           }
         }
         if (storedSessions.length === 0) {
           setSessions([]);
           setActiveSessionId("");
+          setSessionMessagesLoading(false);
           setMessages([]);
+          writeSessionQuery("", "replace");
         } else {
           setSessions(storedSessions);
           setMessages([]);
-          setActiveSessionId(storedSessions[0].id);
+          const requestedSessionId = new URLSearchParams(window.location.search).get("session")?.trim() ?? "";
+          const requestedSession = storedSessions.find((session) => session.id === requestedSessionId);
+          setSessionMessagesLoading(Boolean(requestedSession));
+          setActiveSessionId(requestedSession?.id ?? "");
+          if (requestedSessionId && !requestedSession) writeSessionQuery("", "replace");
         }
       } catch (err) {
         console.error("Workspace initialization error:", err);
@@ -736,25 +788,35 @@ export default function TradePage() {
     messagesRef.current = [];
 
     async function loadActiveMessages() {
-      if (!accountWalletAddress || !activeSessionId) return;
+      if (!accountWalletAddress || !activeSessionId) {
+        if (!cancelled) setSessionMessagesLoading(false);
+        return;
+      }
+      setSessionMessagesLoading(true);
       const targetId = activeSessionId;
-      const msgs = await getSessionMessages(accountWalletAddress, targetId);
-      if (!cancelled) {
-        const persisted = msgs.filter((message) => message.sessionId === targetId);
-        const localUpdates = messagesRef.current.filter((message) => message.sessionId === targetId && message.createdAt >= loadStartedAt);
-        const merged = [...persisted];
-        for (const local of localUpdates) {
-          const alreadyPresent = merged.some((message) => message.id === local.id || (
-            message.role === local.role
-            && message.content === local.content
-            && message.proposal?.id === local.proposal?.id
-            && Math.abs(message.createdAt - local.createdAt) < 10_000
-          ));
-          if (!alreadyPresent) merged.push(local);
+      try {
+        const msgs = await getSessionMessages(accountWalletAddress, targetId);
+        if (!cancelled) {
+          const persisted = msgs.filter((message) => message.sessionId === targetId);
+          const localUpdates = messagesRef.current.filter((message) => message.sessionId === targetId && message.createdAt >= loadStartedAt);
+          const merged = [...persisted];
+          for (const local of localUpdates) {
+            const alreadyPresent = merged.some((message) => message.id === local.id || (
+              message.role === local.role
+              && message.content === local.content
+              && message.proposal?.id === local.proposal?.id
+              && Math.abs(message.createdAt - local.createdAt) < 10_000
+            ));
+            if (!alreadyPresent) merged.push(local);
+          }
+          merged.sort((left, right) => left.createdAt - right.createdAt);
+          messagesRef.current = merged;
+          setMessages(merged);
         }
-        merged.sort((left, right) => left.createdAt - right.createdAt);
-        messagesRef.current = merged;
-        setMessages(merged);
+      } catch (error) {
+        console.error("Session message loading error:", error);
+      } finally {
+        if (!cancelled) setSessionMessagesLoading(false);
       }
     }
     void loadActiveMessages();
@@ -967,6 +1029,7 @@ async function assertEvmBridgeFunds(input: {
         await deleteAllSessions(accountWalletAddress);
         setSessions([]);
         setActiveSessionId("");
+        writeSessionQuery("", "replace");
         setMessages([]);
         setInput("");
       } else {
@@ -976,7 +1039,7 @@ async function assertEvmBridgeFunds(input: {
         if (activeSessionId === target.id) {
           const nextSession = updated[0];
           setMessages([]);
-          setActiveSessionId(nextSession?.id ?? "");
+          selectSession(nextSession?.id ?? "", "replace");
         }
       }
       setDeleteTarget(null);
@@ -991,17 +1054,24 @@ async function assertEvmBridgeFunds(input: {
   function persistSettings() {
     if (!accountWalletAddress) return;
     try {
-      localStorage.setItem(setupStorageKey(accountWalletAddress), JSON.stringify(settings));
+      localStorage.setItem(setupDraftStorageKey(accountWalletAddress), JSON.stringify(settings));
       sessionStorage.setItem(setupSecretStorageKey(accountWalletAddress), JSON.stringify({ openRouterApiKey: settings.openRouterApiKey, jupiterApiKey: settings.jupiterApiKey, uniswapApiKey: settings.uniswapApiKey }));
-      setSetupCompleted(true);
     } catch {
       alert("Failed to save settings.");
     }
   }
 
   function handleSaveSettings() {
-    persistSettings();
-    setEditingSetup(false);
+    if (!accountWalletAddress) return;
+    try {
+      localStorage.setItem(setupStorageKey(accountWalletAddress), JSON.stringify(settings));
+      localStorage.removeItem(setupDraftStorageKey(accountWalletAddress));
+      sessionStorage.setItem(setupSecretStorageKey(accountWalletAddress), JSON.stringify({ openRouterApiKey: settings.openRouterApiKey, jupiterApiKey: settings.jupiterApiKey, uniswapApiKey: settings.uniswapApiKey }));
+      setSetupCompleted(true);
+      setEditingSetup(false);
+    } catch {
+      alert("Failed to save settings.");
+    }
   }
 
   function openSettings() {
@@ -1727,8 +1797,7 @@ async function assertEvmBridgeFunds(input: {
           if (saved) {
             setSessions((prev) => [saved, ...prev.filter((s) => s.id !== saved.id)]);
             setMessages([]);
-            setActiveSessionId(saved.id);
-            setWorkspaceView("chat");
+            selectSession(saved.id);
           }
         }}
       />
@@ -1757,85 +1826,22 @@ async function assertEvmBridgeFunds(input: {
       )}
 
       {/* 3-Column Desktop Workspace Shell */}
-      <main className="workspace">
+      <TradeWorkspaceLayout>
         {/* LEFT RAIL: DESKTOP WORKSPACE SESSIONS & FILTERS */}
-        <aside className="leftRail">
-          <Link href="/" className="railBrand" title="Return to Landing Page">
-            <div className="railBrandLogo">
-              <Image src="/logo.png" alt="Silfable Logo" width={26} height={26} className="h-6 w-6 object-contain" />
-            </div>
-            <span className="railBrandTitle">SILFABLE</span>
-          </Link>
-
-          <button onClick={() => openNewSession()} className="newSession">
-            + NEW SESSION
-          </button>
-
-          {/* Session Filters */}
-          <div className="sessionFilters">
-            {(["all", "agent", "mission"] as const).map((filter) => (
-              <button
-                key={filter}
-                onClick={() => setSessionFilter(filter)}
-                className={sessionFilter === filter ? "active" : ""}
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
-
-          {/* Session List */}
-          <div className="sessionList">
-            <div className="sessionListHeader">
-              <p>SESSIONS</p>
-              <button
-                type="button"
-                onClick={() => void handleDeleteAllSessions()}
-                disabled={sessions.length === 0}
-                title="Delete all sessions and messages"
-              >
-                <Trash2 className="size-3" />
-                Clear all
-              </button>
-            </div>
-            {sessions
-              .filter((s) => sessionFilter === "all" || s.filter === sessionFilter || (sessionFilter === "mission" && s.filter === "pump"))
-              .map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => {
-                    setActiveSessionId(s.id);
-                    setWorkspaceView("chat");
-                  }}
-                  className={activeSessionId === s.id ? "active" : ""}
-                >
-                  <div>
-                    <strong>{s.title}</strong>
-                    <small>{s.workspace === "evm" ? `${getWebEvmChain(s.chainKey ?? "")?.name ?? "EVM"} · ${shortWallet(s.sessionWalletAddress)}` : s.workspace === "bridge" ? `Bridge → ${getWebEvmChain(s.chainKey ?? "")?.name ?? "EVM"}` : `Solana · ${new Date(s.updatedAt).toLocaleTimeString()}`}</small>
-                  </div>
-                  <span
-                    onClick={(e) => handleDeleteSession(s.id, e)}
-                    className="ml-auto p-1 text-slate-500 hover:text-rose-400"
-                    role="button"
-                    aria-label={`Delete ${s.title}`}
-                  >
-                    <Trash2 className="size-3" />
-                  </span>
-                </button>
-              ))}
-          </div>
-
-          <nav className="bottomNav">
-            <button className={workspaceView === "missions" ? "active" : ""} onClick={() => setWorkspaceView("missions")}>Missions</button>
-            <button className={workspaceView === "automation" ? "active" : ""} onClick={() => setWorkspaceView("automation")}>Automation</button>
-            <button onClick={openSettings}>Settings</button>
-            <button onClick={() => void handleSignOut()}>Sign out</button>
-          </nav>
-
-          <div className="runtimeBadge">
-            <span /> MAINNET GUARDED - READY
-          </div>
-        </aside>
+        <TradeSessionRail
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          sessionFilter={sessionFilter}
+          workspaceView={workspaceView}
+          onFilterChange={setSessionFilter}
+          onNewSession={() => openNewSession()}
+          onSelectSession={selectSession}
+          onDeleteSession={handleDeleteSession}
+          onDeleteAll={() => void handleDeleteAllSessions()}
+          onViewChange={setWorkspaceView}
+          onOpenSettings={openSettings}
+          onSignOut={() => void handleSignOut()}
+        />
 
         {/* CENTER STAGE: CONVERSATION CHAT FEED & COMPOSER */}
         <section className="centerStage">
@@ -1846,8 +1852,7 @@ async function assertEvmBridgeFunds(input: {
               uniswapApiKey={settings.uniswapApiKey}
               workspace={activeSession?.workspace === "evm" ? "evm" : "solana"}
               onOpenSession={(sessionId) => {
-                setActiveSessionId(sessionId);
-                setWorkspaceView("chat");
+                selectSession(sessionId);
               }}
             />
           ) : workspaceView === "missions" ? (
@@ -1855,78 +1860,15 @@ async function assertEvmBridgeFunds(input: {
               sessions={sessions.filter((session) => session.filter === "mission" || session.filter === "pump")}
               onCreateMission={() => openNewSession("", "mission")}
               onOpenSession={(sessionId) => {
-                setActiveSessionId(sessionId);
-                setWorkspaceView("chat");
+                selectSession(sessionId);
               }}
             />
-          ) : sessions.length === 0 ? (
-            <div className="homeState flex h-full flex-col items-center justify-center px-6 text-center">
-              <span className="brandMark large mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[color-mix(in_srgb,var(--electric)_52%,transparent)] bg-[color-mix(in_srgb,var(--electric)_12%,transparent)]">
-                <Image src="/logo.png" alt="Silfable Logo" width={32} height={32} className="h-8 w-8 object-contain" />
-              </span>
-              <p className="mb-4 font-mono text-[9px] uppercase tracking-[0.22em] text-[var(--blue-2)]">
-                Robinhood Chain first · Solana connected
-              </p>
-              <h1 className="mb-5 font-serif text-4xl font-bold leading-tight tracking-tight text-white md:text-5xl">
-                What should we do on Robinhood Chain?
-              </h1>
-              <p className="mb-8 max-w-lg text-sm leading-6 text-[var(--muted)]">
-                Start with an ETH↔USDG swap, a two-way bridge, or another supported workflow. Robinhood is selected by default; Solana remains available.
-              </p>
-              <div className="composer mx-auto max-w-[680px] w-full mb-6 relative">
-                <textarea
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      openNewSession(input);
-                    }
-                  }}
-                  placeholder="Plan a Robinhood swap, bridge, or portfolio task..."
-                  rows={1}
-                />
-                <span>NEW SESSION</span>
-                <button disabled={!input.trim()} onClick={() => openNewSession(input)}>↑</button>
-              </div>
-              <div className="suggestions flex flex-wrap justify-center gap-3">
-                <button onClick={() => openNewSession("Review my configured wallet balances and recent finalized activity.")}>WALLET ACTIVITY</button>
-                <button onClick={() => openNewSession("Prepare a Robinhood Chain ETH to USDG swap with explicit limits.")}>ROBINHOOD SWAP</button>
-                <button onClick={() => openNewSession("Prepare a Robinhood USDG to Solana USDC bridge for review.")}>BRIDGE TO SOLANA</button>
-              </div>
-            </div>
+          ) : !activeSessionId ? (
+            <TradeHomeState input={input} newSession onInputChange={setInput} onSubmit={(prompt) => openNewSession(prompt ?? input)} />
+          ) : sessionMessagesLoading ? (
+            <TradeSessionLoading />
           ) : messages.length === 0 ? (
-            <div className="homeState flex flex-col justify-center items-center h-full px-6 text-center">
-              <span className="brandMark large mb-4 block w-14 h-14 border border-[color-mix(in_srgb,var(--electric)_52%,transparent)] rounded-2xl bg-[color-mix(in_srgb,var(--electric)_12%,transparent)] flex items-center justify-center">
-                <Image src="/logo.png" alt="Silfable Logo" width={32} height={32} className="h-8 w-8 object-contain" />
-              </span>
-              <p className="tagline text-[9px] tracking-[0.22em] uppercase text-[var(--blue-2)] font-mono mb-4">Robinhood Chain first · Solana connected</p>
-              <h1 className="text-4xl md:text-5xl font-serif font-bold text-white mb-10 tracking-tight leading-tight">What should we do on <br/>Robinhood Chain?</h1>
-              
-              <div className="composer mx-auto max-w-[680px] w-full mb-6 relative">
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                  placeholder="Plan a Robinhood swap, bridge, or portfolio task..."
-                  rows={1}
-                />
-                
-                <button disabled={!input.trim() || loading} onClick={() => handleSendMessage()}>↑</button>
-              </div>
-
-              <div className="suggestions flex flex-wrap justify-center gap-3">
-                <button onClick={() => handleSendMessage("Explain exactly what you can and cannot do in this application.")}>AI CAPABILITIES</button>
-                <button onClick={() => handleSendMessage("Review my configured wallet balances and recent finalized activity.")}>WALLET ACTIVITY</button>
-                <button onClick={() => handleSendMessage("Draft a conservative SOL accumulation mission with explicit limits.")}>PLAN A MISSION</button>
-                <button onClick={() => handleSendMessage("Explain the current Mainnet execution restrictions.")}>RUNTIME SAFETY</button>
-              </div>
-            </div>
+            <TradeHomeState input={input} loading={loading} onInputChange={setInput} onSubmit={(prompt) => handleSendMessage(prompt)} />
           ) : (
             <div className="conversation">
               <header>
@@ -1934,28 +1876,12 @@ async function assertEvmBridgeFunds(input: {
                 <span>RESTRICTED POSTURE</span>
               </header>
 
-              {/* Messages Feed */}
-              <div className="messages" ref={messagesViewportRef}>
-
-                {messages
-                  .filter((msg) => msg.sessionId === activeSessionId && !isLegacyEvmBridgeProgressMessage(msg))
-                  .map((msg) => (
-                  <article key={msg.id} className={msg.role}>
-                    {msg.role === "assistant" && (
-                      <div className="avatar shrink-0" aria-hidden="true">
-                        <Image src="/logo.png" alt="" width={20} height={20} className="avatarLogo" />
-                      </div>
-                    )}
-                    <div>
-                      <small className="text-[8px] tracking-[0.1em] text-[var(--muted)] uppercase mb-1.5 block">
-                        {msg.role === "user" ? "You" : "Silfable"} <span aria-hidden="true">·</span> <time dateTime={new Date(msg.createdAt).toISOString()}>{formatMessageTime(msg.createdAt)}</time>
-                      </small>
-                      <div className="markdownMessage">
-                        {renderMessageContent(msg.content)}
-                      </div>
-
-                      {/* Desktop-Migrated Proposal Cards */}
-                      {msg.proposal && msg.proposal.type === "token_launch" ? (
+              <TradeMessageFeed
+                messages={messages}
+                activeSessionId={activeSessionId}
+                loading={loading}
+                viewportRef={messagesViewportRef}
+                renderProposal={(msg) => msg.proposal && msg.proposal.type === "token_launch" ? (
                         <TokenLaunchPreviewCard
                           proposal={msg.proposal}
                           busy={tokenLaunchBusyId === msg.proposal.id}
@@ -1991,16 +1917,7 @@ async function assertEvmBridgeFunds(input: {
                           maxSlippageBps={settings.maxSlippageBps}
                         />
                       ) : null}
-                    </div>
-                  </article>
-                ))}
-
-                {loading && (
-                  <div className="typingIndicator">
-                    <span /><span /><span />
-                  </div>
-                )}
-              </div>
+              />
 
               {/* Quick Suggestions Chips & Composer */}
               <div className="conversationComposer">
@@ -2210,7 +2127,7 @@ async function assertEvmBridgeFunds(input: {
             )}
           </section>
         </aside>
-      </main>
+      </TradeWorkspaceLayout>
     </div>
   );
 }

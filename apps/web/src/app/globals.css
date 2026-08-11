@@ -209,16 +209,6 @@ body:not(:has(.tradeDesktopShell)) {
   object-fit: contain;
 }
 
-.versionBadge {
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  color: var(--blue-2);
-  font: 9px var(--mono);
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-}
-
 .modeSwitcher {
   display: flex;
   align-items: center;
@@ -1354,7 +1344,7 @@ body:not(:has(.tradeDesktopShell)) {
 }
 
 .setupProgressItem.complete span {
-  color: #00df86;
+  color: var(--atlas-aqua, #67e8d4);
 }
 
 .editingBar {
@@ -1539,7 +1529,7 @@ body:not(:has(.tradeDesktopShell)) {
 }
 
 .reviewDot.ok {
-  background: #00df86;
+  background: var(--atlas-aqua, #67e8d4);
 }
 
 .reviewDot.warn {
@@ -1575,8 +1565,8 @@ body:not(:has(.tradeDesktopShell)) {
 }
 
 .setupStatus.ok {
-  border-color: rgb(0 223 134 / 0.45);
-  color: #00df86;
+  border-color: rgb(103 232 212 / 0.45);
+  color: var(--atlas-aqua, #67e8d4);
 }
 
 .setupStatus.warn {

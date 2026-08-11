@@ -18,7 +18,7 @@ interface WebSetupWizardProps {
   onReturnToWorkspace: () => void;
 }
 
-const steps = ["Network", "Agent", "Provider", "Review"];
+const steps = ["Networks & Routes", "Safety Limits", "AI Provider", "Review"];
 const reviewStep = steps.length;
 type OpenRouterModel = { id: string; name: string; contextLength: number | null };
 
@@ -39,6 +39,12 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
   const [verifyResult, setVerifyResult] = useState<Record<string, { ok: boolean; message: string } | undefined>>({});
   const [openRouterModels, setOpenRouterModels] = useState<OpenRouterModel[]>([]);
   const [openRouterVerified, setOpenRouterVerified] = useState(false);
+  const [savedStatus, setSavedStatus] = useState(() => ({
+    rpc: Boolean(settings.customRpcUrl.trim()),
+    evmRpc: Boolean(settings.evmRpcUrl.trim()),
+    jupiter: Boolean(settings.jupiterApiKey.trim()),
+    uniswap: Boolean(settings.uniswapApiKey.trim()),
+  }));
 
   const activeStep = Math.min(Math.max(setupStep, 1), reviewStep);
   const isReview = activeStep === reviewStep;
@@ -59,6 +65,7 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
     const url = settings.customRpcUrl.trim();
     if (!url) {
       saveInline();
+      setSavedStatus((previous) => ({ ...previous, rpc: false }));
       setVerifyResult((previous) => ({ ...previous, rpc: { ok: true, message: "Saved. Using the default public RPC." } }));
       return;
     }
@@ -70,6 +77,7 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
       const blockhash = await connection.getLatestBlockhash("confirmed");
       if (!blockhash.blockhash) throw new Error("RPC returned an empty blockhash.");
       saveInline();
+      setSavedStatus((previous) => ({ ...previous, rpc: true }));
       setVerifyResult((previous) => ({ ...previous, rpc: { ok: true, message: "RPC verified and saved." } }));
     } catch (error) {
       setVerifyResult((previous) => ({ ...previous, rpc: { ok: false, message: errorMessage(error, "Could not query this RPC endpoint.") } }));
@@ -82,6 +90,7 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
     const rawUrl = settings.evmRpcUrl.trim();
     if (!rawUrl) {
       saveInline();
+      setSavedStatus((previous) => ({ ...previous, evmRpc: false }));
       setVerifyResult((previous) => ({ ...previous, evmRpc: { ok: true, message: "Saved. Using the default Robinhood RPC." } }));
       return;
     }
@@ -116,6 +125,7 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
         throw new Error(`RPC cannot read Robinhood blocks: ${message}`);
       }
       saveInline();
+      setSavedStatus((previous) => ({ ...previous, evmRpc: true }));
       setVerifyResult((previous) => ({ ...previous, evmRpc: { ok: true, message: "Robinhood RPC verified for chain ID and latest-block reads, then saved." } }));
     } catch (error) {
       setVerifyResult((previous) => ({ ...previous, evmRpc: { ok: false, message: errorMessage(error, "Could not query this RPC endpoint.") } }));
@@ -126,6 +136,7 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
 
   function saveJupiter() {
     saveInline();
+    setSavedStatus((previous) => ({ ...previous, jupiter: Boolean(settings.jupiterApiKey.trim()) }));
     setVerifyResult((previous) => ({
       ...previous,
       jupiter: { ok: true, message: settings.jupiterApiKey.trim() ? "Jupiter key saved." : "Saved. Public Jupiter access will be used." },
@@ -134,6 +145,7 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
 
   function saveUniswap() {
     saveInline();
+    setSavedStatus((previous) => ({ ...previous, uniswap: Boolean(settings.uniswapApiKey.trim()) }));
     setVerifyResult((previous) => ({
       ...previous,
       uniswap: settings.uniswapApiKey.trim()
@@ -193,7 +205,7 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
             <span className="brandMark"><Image src="/logo.png" alt="Silfable Logo" width={20} height={20} className="logoImg" /></span>
             <strong>SILFABLE</strong>
           </Link>
-          <span className="versionBadge">{editingSetup ? "WEB SETTINGS" : "WEB SETUP"}</span>
+          <span className="setupModeBadge">{editingSetup ? "WEB SETTINGS" : "WEB SETUP"}</span>
         </div>
         <div className="headerActions">
           <div className="networkBadge"><span className="statusDot" /><span>MAINNET · {shortAddress(publicAddress)}</span></div>
@@ -205,38 +217,39 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
         <nav className="setupProgress" aria-label="Setup progress">
           {steps.map((label, index) => {
             const step = index + 1;
-            return <button type="button" key={label} className={`setupProgressItem ${activeStep === step ? "active" : ""} ${activeStep > step ? "complete" : ""}`} disabled aria-current={activeStep === step ? "step" : undefined}><span>{activeStep > step ? "OK" : String(step).padStart(2, "0")}</span>{label}</button>;
+            return <button type="button" key={label} className={`setupProgressItem ${activeStep === step ? "active" : ""} ${activeStep > step ? "complete" : ""}`} disabled aria-current={activeStep === step ? "step" : undefined}><span className="setupRouteNode">{activeStep > step ? "✓" : String(step).padStart(2, "0")}</span><span className="setupRouteLabel">{label}</span></button>;
           })}
         </nav>
 
         {editingSetup && !isReview && <div className="editingBar"><span>EDITING · {steps[activeStep - 1]?.toUpperCase()}</span><button type="button" onClick={() => setSetupStep(reviewStep)}>Return to Review</button></div>}
 
-        <section className="setupCard">
-          <header>
+        <section className="setupCard setupRouteCanvas">
+          <header className="setupChapterHeader">
             <div className="setupIcon">{isReview ? "OK" : String(activeStep).padStart(2, "0")}</div>
-            <div>
-              <h1>{isReview ? (editingSetup ? "EDIT WEB SETTINGS" : "REVIEW WEB WORKSPACE") : `${steps[activeStep - 1]?.toUpperCase()} CONFIGURATION`}</h1>
+            <div className="setupChapterCopy">
+              <span className="setupChapterKicker">Route chapter / {String(activeStep).padStart(2, "0")}</span>
+              <h1>{isReview ? (editingSetup ? "EDIT WEB SETTINGS" : "REVIEW WEB WORKSPACE") : steps[activeStep - 1]?.toUpperCase()}</h1>
               <p>{isReview ? "Review the settings used by this browser wallet." : "Web uses the connected browser wallet only. Every Mainnet transaction is approved in that wallet."}</p>
             </div>
           </header>
 
           <div className="setupBody">
-            {activeStep === 1 && <div className="setupStepContent">
-              <IntegrationCard title="Solana RPC" badge="OPTIONAL" ok={Boolean(settings.customRpcUrl)}>
+            {activeStep === 1 && <div className="setupStepContent setupNetworkAtlas">
+              <IntegrationCard title="Solana RPC" eyebrow="Connected network" tone="aqua" badge={savedStatus.rpc ? "CUSTOM" : "DEFAULT"} ok={savedStatus.rpc}>
                 <p>Use a custom HTTPS RPC only when the default endpoint is slow or rate limited.</p>
-                <div className="field"><span>Custom RPC endpoint URL</span><div className="inlineInputAction"><input type="url" value={settings.customRpcUrl} onChange={(event) => updateSettings({ customRpcUrl: event.target.value })} placeholder="https://mainnet.helius-rpc.com/?api-key=..." /><button type="button" onClick={verifyAndSaveRpc} disabled={verifying === "rpc"}>{verifying === "rpc" ? "VERIFYING..." : "VERIFY & SAVE"}</button></div><Result value={verifyResult.rpc} /><small>Leave blank to use the default public RPC.</small></div>
+                <div className="field"><span>Custom RPC endpoint URL</span><div className="inlineInputAction"><input type="url" value={settings.customRpcUrl} onChange={(event) => updateSettings({ customRpcUrl: event.target.value })} placeholder="https://mainnet.helius-rpc.com/?api-key=..." /><button type="button" className="setupVerifyButton" onClick={verifyAndSaveRpc} disabled={verifying === "rpc"}>{verifying === "rpc" ? "VERIFYING..." : "VERIFY"}</button></div><Result value={verifyResult.rpc} /><small>Leave blank to use the default public RPC.</small></div>
               </IntegrationCard>
-              <IntegrationCard title="Robinhood EVM RPC" badge={settings.evmRpcUrl ? "CUSTOM" : "DEFAULT"} ok={Boolean(settings.evmRpcUrl)}>
+              <IntegrationCard title="Robinhood EVM RPC" eyebrow="Primary network" tone="lilac" badge={savedStatus.evmRpc ? "CUSTOM" : "DEFAULT"} ok={savedStatus.evmRpc}>
                 <p>Optional HTTPS RPC for Robinhood Chain portfolio reads. Signing still happens only in MetaMask, Rabby, or another connected EVM wallet.</p>
-                <div className="field"><span>Custom EVM RPC endpoint URL</span><div className="inlineInputAction"><input type="url" value={settings.evmRpcUrl} onChange={(event) => updateSettings({ evmRpcUrl: event.target.value })} placeholder="https://your-robinhood-rpc.example" /><button type="button" onClick={verifyAndSaveEvmRpc} disabled={verifying === "evm-rpc"}>{verifying === "evm-rpc" ? "VERIFYING..." : "VERIFY & SAVE"}</button></div><Result value={verifyResult.evmRpc} /><small>Endpoint must report chain ID 4663. Also set this same endpoint in MetaMask/Rabby for an existing Robinhood network; wallet extensions keep their own RPC configuration.</small></div>
+                <div className="field"><span>Custom EVM RPC endpoint URL</span><div className="inlineInputAction"><input type="url" value={settings.evmRpcUrl} onChange={(event) => updateSettings({ evmRpcUrl: event.target.value })} placeholder="https://your-robinhood-rpc.example" /><button type="button" className="setupVerifyButton" onClick={verifyAndSaveEvmRpc} disabled={verifying === "evm-rpc"}>{verifying === "evm-rpc" ? "VERIFYING..." : "VERIFY"}</button></div><Result value={verifyResult.evmRpc} /><small>Endpoint must report chain ID 4663. Also set this same endpoint in MetaMask/Rabby for an existing Robinhood network; wallet extensions keep their own RPC configuration.</small></div>
               </IntegrationCard>
-              <IntegrationCard title="Jupiter routing" badge={settings.jupiterApiKey ? "CONFIGURED" : "DEFAULT"} ok={Boolean(settings.jupiterApiKey)}>
+              <IntegrationCard title="Jupiter routing" eyebrow="Connected route" tone="aqua" badge={savedStatus.jupiter ? "CONFIGURED" : "DEFAULT"} ok={savedStatus.jupiter}>
                 <p>Used for Solana swap quotes and transaction preparation. A key is optional.</p>
-                <div className="field"><span>Jupiter API key</span><div className="inlineInputAction"><input type="password" value={settings.jupiterApiKey} onChange={(event) => updateSettings({ jupiterApiKey: event.target.value })} placeholder={settings.jupiterApiKey ? "Replace saved key" : "Optional Jupiter API key"} autoComplete="off" /><button type="button" onClick={saveJupiter}>SAVE</button></div><Result value={verifyResult.jupiter} /><small>The key is stored only in this browser.</small></div>
+                <div className="field"><span>Jupiter API key</span><div className="inlineInputAction"><input type="password" value={settings.jupiterApiKey} onChange={(event) => updateSettings({ jupiterApiKey: event.target.value })} placeholder={settings.jupiterApiKey ? "Replace saved key" : "Optional Jupiter API key"} autoComplete="off" /><button type="button" className="setupVerifyButton" onClick={saveJupiter}>VERIFY</button></div><Result value={verifyResult.jupiter} /><small>The key is stored only in this browser.</small></div>
               </IntegrationCard>
-              <IntegrationCard title="Uniswap Trading API" badge={settings.uniswapApiKey ? "CONFIGURED" : "REQUIRED FOR EVM SWAPS"} ok={Boolean(settings.uniswapApiKey)}>
+              <IntegrationCard title="Uniswap Trading API" eyebrow="Primary route" tone="coral" badge={savedStatus.uniswap ? "CONFIGURED" : "REQUIRED FOR EVM SWAPS"} ok={savedStatus.uniswap}>
                 <p>Required for USDG ↔ ETH Robinhood Chain quotes. This key stays in this browser session and is sent only to the quote endpoint.</p>
-                <div className="field"><span>Uniswap API key</span><div className="inlineInputAction"><input type="password" value={settings.uniswapApiKey} onChange={(event) => updateSettings({ uniswapApiKey: event.target.value })} placeholder={settings.uniswapApiKey ? "Replace saved key" : "Official Uniswap Trading API key"} autoComplete="off" /><button type="button" onClick={saveUniswap}>SAVE</button></div><Result value={verifyResult.uniswap} /><small>Create the key in your Uniswap developer account; web will never place it in a server environment file.</small></div>
+                <div className="field"><span>Uniswap API key</span><div className="inlineInputAction"><input type="password" value={settings.uniswapApiKey} onChange={(event) => updateSettings({ uniswapApiKey: event.target.value })} placeholder={settings.uniswapApiKey ? "Replace saved key" : "Official Uniswap Trading API key"} autoComplete="off" /><button type="button" className="setupVerifyButton" onClick={saveUniswap}>VERIFY</button></div><Result value={verifyResult.uniswap} /><small>Create the key in your Uniswap developer account; web will never place it in a server environment file.</small></div>
               </IntegrationCard>
             </div>}
 
@@ -270,10 +283,11 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
                       />
                       <button
                         type="button"
+                        className="setupVerifyButton"
                         onClick={() => void loadOpenRouterModels()}
                         disabled={verifying === "openrouter-models"}
                       >
-                        {verifying === "openrouter-models" ? "VERIFYING..." : "VERIFY KEY"}
+                        {verifying === "openrouter-models" ? "VERIFYING..." : "VERIFY"}
                       </button>
                     </div>
                     <Result value={verifyResult.openrouter} />
@@ -313,7 +327,6 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
               <ReviewRow title="Network" detail={`RPC ${settings.customRpcUrl ? "custom" : "default"} · Jupiter ${settings.jupiterApiKey ? "configured" : "public access"}`} status={settings.customRpcUrl || settings.jupiterApiKey ? "CONFIGURED" : "DEFAULTS"} ok onEdit={() => setSetupStep(1)} />
               <ReviewRow title="Agent" detail={`${settings.outputLimit} max output · temperature ${settings.temperature} · slippage ${settings.maxSlippageBps} bps`} status="SAVED" ok onEdit={() => setSetupStep(2)} />
               <ReviewRow title="Inference provider" detail={settings.openRouterApiKey ? settings.aiModel : "OpenRouter is not configured"} status={settings.openRouterApiKey ? "CONFIGURED" : "REQUIRED FOR AI"} ok={Boolean(settings.openRouterApiKey)} onEdit={() => setSetupStep(3)} />
-              <div className="notice warning"><span>!</span><div><strong>Mainnet safety status</strong><p>Jupiter swaps and Solana-to-EVM bridges require a final approval in the connected wallet. Web never creates or imports a wallet.</p></div></div>
             </div>}
 
             <footer className="setupActionsRow">
@@ -327,8 +340,8 @@ export function WebSetupWizard(props: WebSetupWizardProps) {
   );
 }
 
-function IntegrationCard(props: { title: string; badge: string; ok?: boolean; children: ReactNode }) {
-  return <section className="integrationCard"><div className="integrationCardHeader"><h2>{props.title}</h2><span className={`setupStatus ${props.ok ? "ok" : ""}`}>{props.badge}</span></div>{props.children}</section>;
+function IntegrationCard(props: { title: string; eyebrow?: string; tone?: "lilac" | "coral" | "aqua"; badge: string; ok?: boolean; children: ReactNode }) {
+  return <section className={`integrationCard setupTone-${props.tone ?? "lilac"}`}><div className="integrationCardHeader"><div>{props.eyebrow && <span className="integrationEyebrow">{props.eyebrow}</span>}<h2>{props.title}</h2></div><span className={`setupStatus ${props.ok ? "ok" : ""}`}>{props.badge}</span></div>{props.children}</section>;
 }
 
 function NumberField(props: { label: string; value: string; step?: string; onChange: (value: string) => void }) {
@@ -337,7 +350,7 @@ function NumberField(props: { label: string; value: string; step?: string; onCha
 
 function Result(props: { value: { ok: boolean; message: string } | undefined }) {
   if (!props.value) return null;
-  return <div style={{ marginTop: "6px", fontSize: "12px", fontWeight: "600", color: props.value.ok ? "#4ade80" : "#f87171" }}>{props.value.message}</div>;
+  return <div className={`setupResult ${props.value.ok ? "ok" : "error"}`}>{props.value.message}</div>;
 }
 
 function ReviewRow(props: { title: string; detail: string; status: string; ok: boolean; onEdit?: () => void }) {

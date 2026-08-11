@@ -31,7 +31,7 @@ export function SolanaProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ConnectionProvider endpoint={endpoint} config={{ commitment: "confirmed" }}>
-      <WalletProvider wallets={wallets} onError={onError} autoConnect>
+      <WalletProvider wallets={wallets} onError={onError}>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
