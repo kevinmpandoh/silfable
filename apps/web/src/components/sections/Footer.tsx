@@ -1,73 +1,18 @@
-import Link from "next/link";
 import Image from "next/image";
-import { Download } from "lucide-react";
+import Link from "next/link";
 
-import { Button } from "@/components/ui/button";
-import { XLogo } from "@/components/ui/x-logo";
-
-const footerLinks = [
-  { label: "Home", href: "/" },
-  { label: "Docs", href: "/docs" },
-  { label: "Whitepaper", href: "/whitepaper" },
-  { label: "Releases", href: "/releases" },
-  { label: "Privacy", href: "#privacy" },
-];
+import { StatusMarker, WingMark } from "@/components/atlas/AtlasPrimitives";
 
 export function Footer() {
   return (
-    <footer id="support" className="border-t border-[var(--line)] bg-[radial-gradient(circle_at_78%_18%,rgb(89_222_192_/_0.18),transparent_28%),radial-gradient(circle_at_18%_74%,rgb(32_201_151_/_0.18),transparent_30%),#06121a] text-white">
-      <div className="section-shell flex min-h-[78vh] flex-col justify-between py-20 sm:py-24 lg:min-h-screen lg:py-28">
-        <div className="flex items-center justify-between border-b border-white/30 pb-5">
-          <p className="font-mono text-[10px] uppercase tracking-[0.23em] text-white/70">Start with a market idea</p>
-          <span className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.18em] text-white/65">
-            <span className="size-1.5 rounded-full bg-white" /> Workspace available
-          </span>
-        </div>
-
-        <div className="py-20 lg:py-28">
-          <h2 className="text-[clamp(4rem,11vw,11rem)] font-bold leading-[0.78] tracking-[-0.075em]">
-            <span className="block">FIND THE ROUTE.</span>
-            <span className="auroraText block pl-[7vw]">REVIEW THE TRADE.</span>
-            <span className="block text-right">Track the result.</span>
-          </h2>
-
-          <div className="mt-16 flex flex-col gap-3 sm:flex-row sm:justify-end lg:mt-24">
-            <Button asChild size="lg" className="auroraButton text-white">
-              <Link href="/#download">
-                Download Silfable <Download className="ml-4 size-4" />
-              </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline" className="border-white/55">
-              <a href="https://x.com/silfable" target="_blank" rel="noreferrer">
-                Follow @silfable <XLogo className="ml-4 size-3.5" />
-              </a>
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid gap-8 border-t border-white/30 pt-7 md:grid-cols-[1fr_auto_1fr] md:items-center">
-          <Link href="/" className="flex items-center gap-3 font-serif text-2xl tracking-[-0.04em]" aria-label="Silfable home">
-            <Image src="/logo.png" alt="Silfable Logo" width={28} height={28} className="h-7 w-7 rounded-md" />
-            Silfable
-          </Link>
-
-          <nav aria-label="Footer navigation" className="flex flex-wrap gap-x-6 gap-y-3 md:justify-center">
-            {footerLinks.map((link) => (
-              <Link
-                key={link.label}
-                href={link.href}
-                className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/65 transition-colors hover:text-white"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </nav>
-
-          <p className="font-mono text-[8px] uppercase tracking-[0.16em] text-white/55 md:text-right">
-            Copyright 2026 Silfable Labs. Markets involve risk.
-          </p>
-        </div>
+    <footer className="atlasFooter">
+      <div className="section-shell atlasFooterMap">
+        <div className="atlasFooterBrand"><WingMark /><h2>Follow the route.<br />Know the result.</h2><div className="mt-8"><StatusMarker>Mainnet routes active</StatusMarker></div></div>
+        <div className="atlasFooterGroup"><h3>Atlas</h3><Link href="/#networks">Networks</Link><Link href="/connect">Web workspace</Link><Link href="/#download">Desktop</Link></div>
+        <div className="atlasFooterGroup"><h3>Reference</h3><Link href="/docs">Documentation</Link><Link href="/whitepaper">Whitepaper</Link><Link href="/releases">Release ledger</Link></div>
+        <div className="atlasFooterGroup"><h3>Robinhood-first routes</h3><span>Uniswap routing</span><span>Cross-chain bridge</span><span>Solana swaps</span><span>Token launch</span></div>
       </div>
+      <div className="section-shell atlasFooterBottom"><Link href="/" className="flex items-center gap-3 text-[var(--atlas-bone)]"><Image src="/logo.png" alt="" width={24} height={24} /> Silfable</Link><span>© 2026 Silfable Labs · Markets involve risk · Verify every transaction</span></div>
     </footer>
   );
 }

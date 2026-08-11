@@ -1865,13 +1865,13 @@ async function assertEvmBridgeFunds(input: {
                 <Image src="/logo.png" alt="Silfable Logo" width={32} height={32} className="h-8 w-8 object-contain" />
               </span>
               <p className="mb-4 font-mono text-[9px] uppercase tracking-[0.22em] text-[var(--blue-2)]">
-                Understand. Constrain. Verify.
+                Robinhood Chain first · Solana connected
               </p>
               <h1 className="mb-5 font-serif text-4xl font-bold leading-tight tracking-tight text-white md:text-5xl">
-                What should Silfable help you do?
+                What should we do on Robinhood Chain?
               </h1>
               <p className="mb-8 max-w-lg text-sm leading-6 text-[var(--muted)]">
-                Start with a prompt. Silfable will create a restricted session for this connected wallet.
+                Start with an ETH↔USDG swap, a two-way bridge, or another supported workflow. Robinhood is selected by default; Solana remains available.
               </p>
               <div className="composer mx-auto max-w-[680px] w-full mb-6 relative">
                 <textarea
@@ -1883,7 +1883,7 @@ async function assertEvmBridgeFunds(input: {
                       openNewSession(input);
                     }
                   }}
-                  placeholder="Plan a Mainnet task or ask about your portfolio..."
+                  placeholder="Plan a Robinhood swap, bridge, or portfolio task..."
                   rows={1}
                 />
                 <span>NEW SESSION</span>
@@ -1891,8 +1891,8 @@ async function assertEvmBridgeFunds(input: {
               </div>
               <div className="suggestions flex flex-wrap justify-center gap-3">
                 <button onClick={() => openNewSession("Review my configured wallet balances and recent finalized activity.")}>WALLET ACTIVITY</button>
-                <button onClick={() => openNewSession("Plan a conservative Solana swap with explicit limits.")}>PLAN A SWAP</button>
-                <button onClick={() => openNewSession("Review this Pump.fun mint and prepare a restricted analysis preview.")}>PUMP.FUN ANALYSIS</button>
+                <button onClick={() => openNewSession("Prepare a Robinhood Chain ETH to USDG swap with explicit limits.")}>ROBINHOOD SWAP</button>
+                <button onClick={() => openNewSession("Prepare a Robinhood USDG to Solana USDC bridge for review.")}>BRIDGE TO SOLANA</button>
               </div>
             </div>
           ) : messages.length === 0 ? (
@@ -1900,8 +1900,8 @@ async function assertEvmBridgeFunds(input: {
               <span className="brandMark large mb-4 block w-14 h-14 border border-[color-mix(in_srgb,var(--electric)_52%,transparent)] rounded-2xl bg-[color-mix(in_srgb,var(--electric)_12%,transparent)] flex items-center justify-center">
                 <Image src="/logo.png" alt="Silfable Logo" width={32} height={32} className="h-8 w-8 object-contain" />
               </span>
-              <p className="tagline text-[9px] tracking-[0.22em] uppercase text-[var(--blue-2)] font-mono mb-4">Understand. Constrain. Verify.</p>
-              <h1 className="text-4xl md:text-5xl font-serif font-bold text-white mb-10 tracking-tight leading-tight">What should Silfable help you <br/>do?</h1>
+              <p className="tagline text-[9px] tracking-[0.22em] uppercase text-[var(--blue-2)] font-mono mb-4">Robinhood Chain first · Solana connected</p>
+              <h1 className="text-4xl md:text-5xl font-serif font-bold text-white mb-10 tracking-tight leading-tight">What should we do on <br/>Robinhood Chain?</h1>
               
               <div className="composer mx-auto max-w-[680px] w-full mb-6 relative">
                 <textarea
@@ -1913,7 +1913,7 @@ async function assertEvmBridgeFunds(input: {
                       handleSendMessage();
                     }
                   }}
-                  placeholder="Plan a Mainnet task or ask about your portfolio..."
+                  placeholder="Plan a Robinhood swap, bridge, or portfolio task..."
                   rows={1}
                 />
                 

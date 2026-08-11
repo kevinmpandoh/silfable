@@ -6,7 +6,7 @@ import { WhitepaperContent } from "@/app/whitepaper/page";
 
 export const metadata: Metadata = {
   title: "Documentation - Silfable",
-  description: "Install Silfable, configure wallets and providers, prepare supported Mainnet transactions, and track their final status.",
+  description: "Configure Silfable for Robinhood Chain swaps, two-way Solana connectivity, wallet confirmation, and final transaction tracking.",
 };
 
 import { PageTransition } from "@/components/ui/PageTransition";
@@ -16,7 +16,7 @@ export default function DocsPage() {
     <PageTransition>
       <main className="publicPage docsTheme min-h-screen bg-paper text-ink">
         <WhitepaperContent />
-        <div className="section-shell pt-20">
+        <div className="section-shell atlasDocsShell pt-20">
           <div className="lg:hidden"><DocsSidebar /></div>
           <div className="grid gap-16 py-16 lg:grid-cols-[250px_minmax(0,1fr)] lg:py-24">
             <div className="hidden lg:block h-full"><DocsSidebar /></div>

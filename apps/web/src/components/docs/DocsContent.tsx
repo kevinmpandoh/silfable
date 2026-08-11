@@ -11,17 +11,17 @@ export function DocsContent() {
   return (
     <article className="min-w-0">
       <section id="introduction" className="scroll-mt-36 border-b border-black/15 pb-16">
-        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-electric">Start here / v0.1.0</p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--atlas-coral)]">Start here / v0.1.0</p>
         <h1 className="mt-7 max-w-4xl font-serif text-[clamp(3.1rem,7vw,7.5rem)] leading-[0.86] tracking-[-0.06em]">
-          Build a complete<br />transaction workflow.
+          Build on Robinhood.<br />Stay connected to Solana.
         </h1>
         <p className="mt-9 max-w-2xl text-lg leading-8 text-black/55">
-          Silfable connects token research, Pump.fun launches, Solana swaps, Robinhood Chain swaps, and two-way Solana–Robinhood bridges. This guide explains how each request becomes a reviewable transaction and a tracked final result.
+          Silfable is a Robinhood Chain-first trading workspace for supported ETH↔USDG swaps and two-way Robinhood USDG↔Solana USDC bridges. Solana remains available for Jupiter swaps, Pump.fun launches, and connected settlement workflows.
         </p>
         <div className="mt-10 grid border-t border-l border-black/15 sm:grid-cols-3">
-          {["Supported Mainnet lanes", "Exact review", "Result tracked"].map((item) => (
+          {["Robinhood Chain · 4663", "Solana connected", "Result tracked"].map((item) => (
             <div key={item} className="flex items-center gap-3 border-r border-b border-black/15 p-5 text-xs font-medium text-black">
-              <Check className="size-4 text-electric" /> {item}
+              <Check className="size-4 text-[var(--atlas-coral)]" /> {item}
             </div>
           ))}
         </div>
@@ -33,12 +33,12 @@ export function DocsContent() {
         <ol className="mt-10 space-y-7">
           {[
             ["Choose", "Use desktop for encrypted local-vault signing, or web with a connected browser wallet."],
-            ["Configure", "Add the RPC, route provider, inference provider, and transaction-limit settings needed by your selected network."],
-            ["Describe", "Select a Solana or Robinhood Chain wallet and state the outcome you want. Opening a workspace does not authorize a transaction."],
+            ["Configure", "Verify Robinhood Chain ID 4663 and its RPC first, then add the providers and transaction limits required by your workflow."],
+            ["Describe", "Select a Robinhood wallet for the primary workspace, or choose Solana for a connected workflow. Opening a workspace does not authorize a transaction."],
             ["Review", "Inspect the assets, amount, route, simulation, fees, and quote freshness. Confirm the action, then follow its final status."],
           ].map(([title, text], index) => (
             <li key={title} className="grid gap-3 border-t border-black/10 pt-6 sm:grid-cols-[3rem_8rem_1fr]">
-              <span className="font-mono text-sm text-electric">{String(index + 1).padStart(2, "0")}</span>
+              <span className="font-mono text-sm text-[var(--atlas-coral)]">{String(index + 1).padStart(2, "0")}</span>
               <strong className="font-serif text-xl font-normal">{title}</strong>
               <span className="text-sm leading-7 text-black/70">{text}</span>
             </li>
@@ -54,7 +54,7 @@ export function DocsContent() {
             const Icon = concept.icon;
             return (
               <div key={concept.title} className="border-r border-b border-black/15 p-6">
-                <Icon className="size-5 text-electric" strokeWidth={1.5} />
+                <Icon className="size-5 text-[var(--atlas-lilac)]" strokeWidth={1.5} />
                 <h3 className="mt-12 font-serif text-3xl tracking-[-0.04em]">{concept.title}</h3>
                 <p className="mt-4 text-sm leading-7 text-black/50">{concept.text}</p>
               </div>
@@ -69,7 +69,7 @@ export function DocsContent() {
         <div className="mt-8 mb-8 overflow-hidden rounded-xl border border-black/10 shadow-sm">
           <Image src="/setting.app.png" alt="Transaction Settings UI" width={1200} height={800} className="w-full object-cover" />
         </div>
-        <div className="border-l-2 border-electric bg-blue-50 p-5 text-sm leading-7 text-blue-950">
+        <div className="border-l-2 border-[var(--atlas-coral)] bg-[rgb(255_107_92_/_0.1)] p-5 text-sm leading-7 text-[var(--atlas-bone)]">
           If required route data is missing, stale, or outside your configured limits, Silfable stops the action before wallet confirmation.
         </div>
       </section>
@@ -107,7 +107,7 @@ export function DocsContent() {
             const Icon = item.icon;
             return (
               <div key={item.title} className="border border-black/15 p-6">
-                <Icon className="size-5 text-electric" strokeWidth={1.5} />
+                <Icon className="size-5 text-[var(--atlas-lilac)]" strokeWidth={1.5} />
                 <h3 className="mt-8 font-serif text-2xl tracking-[-0.03em]">{item.title}</h3>
                 <p className="mt-3 text-sm leading-7 text-black/50">{item.text}</p>
               </div>
@@ -175,7 +175,7 @@ export function DocsContent() {
 function DocHeading({ number, title }: { number: string; title: string }) {
   return (
     <div className="flex items-baseline gap-5">
-      <span className="font-mono text-sm tracking-[0.18em] text-electric">{number}</span>
+      <span className="font-mono text-sm tracking-[0.18em] text-[var(--atlas-coral)]">{number}</span>
       <h2 className="font-serif text-4xl tracking-[-0.045em] sm:text-5xl">{title}</h2>
     </div>
   );

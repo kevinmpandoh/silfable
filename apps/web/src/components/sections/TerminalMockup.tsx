@@ -1,48 +1,32 @@
-"use client";
+import { AtlasKicker, AtlasPanel, RouteNode, StatusMarker } from "@/components/atlas/AtlasPrimitives";
 
-import { motion } from "framer-motion";
-import Image from "next/image";
+const lifecycle = [
+  { number: "01", label: "Intent", detail: "Define the Robinhood Chain asset, amount, wallet, and target.", tone: "lilac" as const },
+  { number: "02", label: "Route check", detail: "Compare fresh venue data with allowance, fees, limits, and expected output.", tone: "aqua" as const },
+  { number: "03", label: "Wallet review", detail: "Nothing moves until the exact transaction is confirmed in your wallet.", tone: "coral" as const },
+  { number: "04", label: "Settlement", detail: "Keep broadcast, receipt, and final status in the same activity record.", tone: "citron" as const },
+];
 
 export function TerminalMockup() {
   return (
-    <section className="overflow-hidden bg-[var(--ink)] text-[var(--paper)]">
-      <div className="section-shell py-24 sm:py-32 lg:py-44">
-        <motion.div
-          initial={{ opacity: 0, y: 28 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.25 }}
-          transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
-          className="mb-14 grid gap-8 lg:mb-20 lg:grid-cols-[0.8fr_1fr] lg:items-end"
-        >
-          <div>
-            <p className="mb-5 font-mono text-[10px] uppercase tracking-[0.24em] text-electric">
-              Product view / Desktop workspace
-            </p>
-            <h2 className="text-[clamp(3.2rem,6.2vw,6.8rem)] font-bold leading-[0.9] tracking-[-0.065em]">
-              The whole trade,<br /><em className="text-electric">in view.</em>
-            </h2>
+    <section className="atlasSection">
+      <div className="section-shell">
+        <div className="atlasSectionHeader">
+          <div><AtlasKicker tone="citron">Live workspace lifecycle</AtlasKicker><h2>The whole trade,<br />kept in view.</h2></div>
+          <p>Move from conversation to a typed transaction preview without jumping between disconnected tools. Wallet context, route checks, limits, and final status stay together.</p>
+        </div>
+        <div className="tradeLifecycle">
+          <AtlasPanel className="lifecycleSummary" tone="lilac">
+            <StatusMarker tone="citron">Recorded from the app</StatusMarker>
+            <div className="lifecycleSummaryCopy"><AtlasKicker tone="lilac">One continuous record</AtlasKicker><h3>Context stays attached to the route.</h3><p>The interface changes shape as the trade advances, while the wallet, network, checks, and result remain readable together.</p></div>
+            <div className="lifecycleNodes"><RouteNode label="Robinhood Chain" detail="Primary execution" tone="lilac" active /><RouteNode label="Solana" detail="Connected route" tone="aqua" active /></div>
+          </AtlasPanel>
+          <div className="lifecycleTrack">
+            {lifecycle.map((step) => <AtlasPanel key={step.number} className={`lifecycleStep atlasTone-${step.tone}`} tone={step.tone}>
+              <span className="lifecycleNumber">{step.number}</span><div><AtlasKicker tone={step.tone}>{step.label}</AtlasKicker><p>{step.detail}</p></div><StatusMarker tone={step.tone}>{step.number === "04" ? "Final" : "In view"}</StatusMarker>
+            </AtlasPanel>)}
           </div>
-          <p className="max-w-xl text-base leading-8 text-white/55 lg:justify-self-end">
-            Move from conversation to a typed transaction preview without jumping between disconnected tools. Silfable keeps wallet context, route checks, limits, and final status together for supported Jupiter swaps, Pump.fun launches, Robinhood swaps, and two-way Solana–Robinhood bridges.
-          </p>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.985, y: 36 }}
-          whileInView={{ opacity: 1, scale: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.15 }}
-          transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
-          className="overflow-hidden rounded-[1.25rem] border border-emerald-300/20 bg-[var(--panel)] shadow-[0_26px_90px_rgb(0_0_0_/_0.35)] sm:rounded-[1.75rem]"
-        >
-          <Image
-            src="/hero-app.png"
-            alt="Silfable Desktop Application Interface"
-            width={1920}
-            height={1080}
-            className="w-full object-cover"
-            priority
-          />
-        </motion.div>
+        </div>
       </div>
     </section>
   );

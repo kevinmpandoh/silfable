@@ -21,23 +21,6 @@
   --mono: var(--font-mono), "IBM Plex Mono", ui-monospace, monospace;
 }
 
-:root[data-theme="light"] {
-  --ink: #effaf6;
-  --paper: #102923;
-  --electric: #087f63;
-  --bg: #effaf6;
-  --panel: #ffffff;
-  --panel-2: #e2f3ec;
-  --surface: rgb(255 255 255 / .84);
-  --line: rgb(8 127 99 / .16);
-  --muted: #627c74;
-  --blue: #159a78;
-  --blue-2: #087f63;
-  --green: #078965;
-  --amber: #ac6500;
-  --red: #ce4058;
-}
-
 * {
   box-sizing: border-box;
 }
@@ -270,41 +253,7 @@ body:not(:has(.tradeDesktopShell)) {
   border: 1px solid rgb(53 190 226 / .48);
 }
 
-/* Emerald Aurora public-product layer. Workspace-specific rules below retain all behavior. */
-.publicNav { border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 82%, transparent); color: var(--paper); backdrop-filter: blur(18px); }
-.brandWordmark { color: var(--paper); }
-.auroraButton, .primaryButton { border: 1px solid rgb(167 255 231 / .36); border-radius: 14px; background: var(--aurora); box-shadow: 0 10px 28px rgb(32 201 151 / .18); transition: transform .2s ease, box-shadow .2s ease, filter .2s ease; }
-.auroraButton:hover, .primaryButton:hover { background: var(--aurora-hover); box-shadow: 0 14px 34px rgb(39 137 232 / .2); transform: translateY(-1px); }
-.outlineButton, .themeToggle { border: 1px solid var(--line); border-radius: 14px; color: var(--paper); background: color-mix(in srgb, var(--panel) 72%, transparent); transition: border-color .2s ease, background .2s ease, color .2s ease; }
-.outlineButton:hover, .themeToggle:hover { border-color: color-mix(in srgb, var(--electric) 58%, transparent); background: color-mix(in srgb, var(--electric) 12%, var(--panel)); }
-.themeToggle { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 0 11px; font-family: var(--font-mono), monospace; font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
-.themeToggleCompact { width: 36px; padding: 0; }
-:root[data-theme="dark"] .heroAurora { background: radial-gradient(circle at 76% 24%, rgb(89 222 192 / .20), transparent 27%), radial-gradient(circle at 24% 82%, rgb(32 201 151 / .17), transparent 28%), linear-gradient(135deg, #06121a 0%, #071b20 54%, #071b19 100%); }
-:root[data-theme="light"] .heroAurora { background: radial-gradient(circle at 76% 24%, rgb(89 222 192 / .15), transparent 27%), radial-gradient(circle at 24% 82%, rgb(32 201 151 / .15), transparent 28%), #effaf6; }
-.heroGrid { opacity: .38; background-image: linear-gradient(rgb(119 238 204 / .07) 1px, transparent 1px), linear-gradient(90deg, rgb(119 238 204 / .07) 1px, transparent 1px); background-size: 52px 52px; mask-image: linear-gradient(to bottom, black, transparent 82%); }
-.heroOrb { width: 32rem; height: 32rem; border-radius: 999px; filter: blur(28px); opacity: .36; }
-.heroOrbOne { top: 15%; right: -8rem; background: #4bdcc3; }
-.heroOrbTwo { bottom: -17rem; left: 18%; background: #20c997; }
-.emeraldMockup { filter: hue-rotate(68deg) saturate(.78); }
-.auroraText { background: var(--aurora); background-clip: text; -webkit-background-clip: text; color: transparent; }
 :focus-visible { outline: 2px solid var(--blue-2); outline-offset: 3px; }
-
-:root[data-theme="light"] body { color: var(--paper); background: radial-gradient(circle at 12% 5%, rgb(60 215 166 / .16), transparent 25%), var(--bg); }
-:root[data-theme="light"] .publicNav { background: rgb(239 250 246 / .82); }
-:root[data-theme="light"] .publicNav [class*="text-white"] { color: var(--paper); }
-:root[data-theme="light"] .publicNav .outlineButton { color: var(--paper); }
-@media (prefers-reduced-motion: reduce) { .auroraButton, .primaryButton { transition: none; } .auroraButton:hover, .primaryButton:hover { transform: none; } }
-
-.tradeThemeControl { display: none; }
-.railThemeControl { display: flex; padding: 12px 14px; border-bottom: 1px solid var(--line); }
-.railThemeControl .themeToggle { width: 100%; min-height: 38px; }
-:root[data-theme="light"] main > section { background: transparent !important; border-color: var(--line) !important; color: var(--paper) !important; }
-:root[data-theme="light"] .section-shell .text-white, :root[data-theme="light"] .section-shell .text-paper { color: var(--paper) !important; }
-:root[data-theme="light"] .section-shell [class*="text-white/"] { color: color-mix(in srgb, var(--paper) 68%, transparent) !important; }
-:root[data-theme="light"] .workspace { background: radial-gradient(circle at 10% 3%, rgb(32 201 151 / .16), transparent 30%), var(--bg) !important; color: var(--paper); }
-:root[data-theme="light"] .workspace .leftRail, :root[data-theme="light"] .workspace .rightRail { background: linear-gradient(180deg, #ffffff, #edf8f4) !important; border-color: var(--line) !important; }
-:root[data-theme="light"] .workspace .centerStage, :root[data-theme="light"] .workspace .conversation { background: transparent !important; }
-:root[data-theme="light"] .workspace [class*="text-[#eef2ff]"], :root[data-theme="light"] .workspace [class*="text-white"] { color: var(--paper) !important; }
 
 .headerActions {
   display: flex;
@@ -1875,7 +1824,7 @@ body:not(:has(.tradeDesktopShell)) {
   border-color: var(--blue);
 }
 
-/* Settings: keep the setup flow in the same emerald aurora system as the workspace. */
+/* Settings compatibility layer retained beneath the Living Atlas skin. */
 .setupCard h1,
 .integrationCard h2,
 .walletRegistryHeader strong,
@@ -2358,8 +2307,7 @@ body:not(:has(.tradeDesktopShell)) {
   background: linear-gradient(110deg, #6474f3, #22c4df);
 }
 
-/* Emerald Aurora visual layer. Applied last so legacy utility styling remains functional
-   while surfaces inherit the new theme in public and trading views. */
+/* Legacy visual compatibility layer. Living Atlas overrides this from dedicated files. */
 .publicPage {
   min-height: 100vh;
   color: var(--paper);
@@ -2399,10 +2347,10 @@ body:not(:has(.tradeDesktopShell)) {
 :root[data-theme="dark"] .publicPage:is(.docsTheme, .whitepaperTheme, .releasesTheme) [class*="divide-black"] { --tw-divide-opacity: 1; border-color: var(--line) !important; }
 :root[data-theme="dark"] .whitepaperTheme [class*="bg-black/"] { background-color: color-mix(in srgb, var(--panel) 60%, transparent) !important; }
 :root[data-theme="dark"] .whitepaperTheme [class*="bg-rose-"] { color: #ffabb5 !important; background: rgb(206 64 88 / .13) !important; border-color: rgb(255 104 120 / .38) !important; }
-:root[data-theme="dark"] .docsTheme [class*="bg-blue-"] { color: var(--paper) !important; background: rgb(32 201 151 / .10) !important; border-color: rgb(32 201 151 / .45) !important; }
+:root[data-theme="dark"] .docsTheme [class*="bg-blue-"] { color: var(--paper) !important; background: rgb(255 107 92 / .10) !important; border-color: rgb(255 107 92 / .45) !important; }
 :root[data-theme="dark"] .releasesTheme :is(.bg-card, [class*="bg-white"], [class*="bg-blue-"]) { color: var(--paper) !important; background-color: color-mix(in srgb, var(--panel) 94%, transparent) !important; border-color: var(--line) !important; }
 
-/* Emerald Aurora workspace layer: presentation-only replacements for the older blue UI. */
+/* Legacy workspace compatibility layer. */
 .tradeDesktopShell, .tradeHeader, .workspace, .leftRail, .rightRail { background-color: var(--ink) !important; }
 .tradeHeader, .leftRail, .rightRail { border-color: var(--line) !important; }
 .brandMark { border-color: color-mix(in srgb, var(--electric) 52%, var(--line)) !important; background: linear-gradient(145deg, rgb(32 201 151 / .24), transparent) !important; }

@@ -1,0 +1,108 @@
+/* Silfable Living Atlas — web trading workspace skin. Behavior remains unchanged. */
+.tradeDesktopShell { background: var(--atlas-night) !important; color: var(--atlas-bone); }
+.tradeHeader {
+  height: 66px;
+  border-color: var(--atlas-line) !important;
+  background: rgb(14 11 22 / .96) !important;
+}
+.tradeHeader::after { position: absolute; left: 26%; right: 26%; bottom: -1px; height: 1px; content: ""; background: linear-gradient(90deg, transparent, var(--atlas-coral), transparent); }
+.brandLink { color: var(--atlas-bone); font-family: var(--font-display), serif; font-size: 19px; }
+.brandMark { border-color: var(--atlas-line-strong) !important; border-radius: 50% !important; background: var(--atlas-plum) !important; box-shadow: none !important; }
+.versionBadge { border-radius: 999px; color: var(--atlas-aqua); }
+.networkBadge { border-color: rgb(199 243 107 / .28); border-radius: 999px; color: var(--atlas-citron); background: rgb(199 243 107 / .05); }
+
+.workspace { background: var(--atlas-night) !important; }
+.leftRail, .rightRail { border-color: var(--atlas-line) !important; background: var(--atlas-plum) !important; }
+.leftRail { border-radius: 0 46px 0 0; }
+.rightRail { border-radius: 46px 0 0 0; }
+.centerStage, .conversation { background: transparent !important; }
+.workspaceHeader { border-color: var(--atlas-line) !important; background: rgb(14 11 22 / .84) !important; }
+
+.newSession, .workspace .primaryButton, .workspace .composer button:not(:disabled), .createBtn {
+  border: 1px solid var(--atlas-coral) !important;
+  border-radius: 999px !important;
+  color: var(--atlas-night) !important;
+  background: var(--atlas-coral) !important;
+  box-shadow: none !important;
+}
+.newSession:hover, .workspace .primaryButton:hover:not(:disabled), .workspace .composer button:not(:disabled):hover { background: #ff8376 !important; }
+
+.sessionItem, .missionPreview, .railSection, .messageCard, .proposalCard, .setupCard, .integrationCard, .walletRegistry, .reviewRow {
+  border-color: var(--atlas-line) !important;
+  background: rgb(14 11 22 / .36) !important;
+  box-shadow: none !important;
+}
+.sessionItem { border-radius: 12px 28px 12px 12px !important; }
+.sessionItem.active, .missionPreview, .proposalCard.confirmed {
+  border-color: rgb(255 107 92 / .55) !important;
+  background: rgb(255 107 92 / .055) !important;
+  box-shadow: inset 3px 0 0 var(--atlas-coral) !important;
+}
+.messageCard { border-radius: 28px 12px 28px 12px !important; }
+.proposalCard { position: relative; border-radius: 18px 56px 18px 18px !important; overflow: hidden; }
+.proposalCard::before { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; content: ""; background: var(--atlas-lilac); }
+
+.homeState .brandMark { width: 76px !important; height: 76px !important; border-color: rgb(167 139 250 / .48) !important; }
+.homeState h1 { max-width: 850px; color: var(--atlas-bone); font-family: var(--font-display), serif; font-size: clamp(3.3rem, 5vw, 6.4rem); font-weight: 430; line-height: .88; letter-spacing: -.05em; }
+.homeState .kicker { color: var(--atlas-aqua); }
+.composer { border-color: var(--atlas-line-strong) !important; border-radius: 32px 14px 32px 14px !important; background: var(--atlas-plum) !important; box-shadow: none !important; }
+.composer:focus-within { border-color: var(--atlas-coral) !important; box-shadow: 0 0 0 3px rgb(255 107 92 / .09) !important; }
+
+.railSection { border-radius: 14px 38px 14px 14px !important; }
+.rightRail :is(.portfolioValue, .balanceValue) { color: var(--atlas-citron) !important; font-family: var(--font-display), serif; }
+.workspace [class*="text-cyan"], .workspace [class*="text-blue"] { color: var(--atlas-aqua) !important; }
+.workspace [class*="text-emerald"], .workspace [class*="text-green"] { color: var(--atlas-citron) !important; }
+.workspace [class*="border-cyan"], .workspace [class*="border-blue"] { border-color: rgb(103 232 212 / .32) !important; }
+.workspace [class*="border-emerald"] { border-color: rgb(199 243 107 / .3) !important; }
+.workspace [class*="bg-gradient"], .workspace [class*="bg-blue"], .workspace [class*="bg-cyan"] { background-image: none !important; background-color: rgb(103 232 212 / .08) !important; }
+
+.modeSwitcher { border-color: var(--atlas-line); background: var(--atlas-plum); }
+.modeButton.active { border-color: rgb(167 139 250 / .42); color: var(--atlas-bone); background: rgb(167 139 250 / .15); }
+.iconBtn, .choiceGrid button, .sessionConfigSection input, .field input, .field textarea, .field select {
+  border-color: var(--atlas-line) !important;
+  color: var(--atlas-bone) !important;
+  background: var(--atlas-night) !important;
+}
+.choiceGrid button { border-radius: 12px 32px 12px 12px; }
+.choiceGrid button.active { border-color: var(--atlas-coral) !important; background: rgb(255 107 92 / .08) !important; }
+.choiceGrid button.active::before { background: var(--atlas-coral); }
+.choiceGrid button.pumpChoice.active { border-color: var(--atlas-lilac) !important; background: rgb(167 139 250 / .1) !important; }
+
+.sessionModal, .deleteSessionDialog {
+  border-color: var(--atlas-line-strong) !important;
+  border-radius: 24px 74px 24px 24px !important;
+  color: var(--atlas-bone) !important;
+  background: var(--atlas-plum) !important;
+  box-shadow: 0 32px 100px rgb(0 0 0 / .48) !important;
+}
+.sessionModalHeader, .sessionModalFooter, .deleteSessionDialog > header { border-color: var(--atlas-line) !important; background: transparent !important; }
+.sessionModalHeader h2, .deleteSessionDialog h2 { color: var(--atlas-bone); font-family: var(--font-display), serif; font-size: 32px; }
+.modalClose { border-color: var(--atlas-line); color: var(--atlas-muted); }
+.modalClose:hover { border-color: var(--atlas-coral); color: var(--atlas-coral); }
+
+.setupProgressItem.active { border-color: var(--atlas-coral); }
+.setupProgressItem.active span, .editingBar button, .reviewEdit, .inlineInputAction button { color: var(--atlas-aqua); }
+.setupTab.active { border-color: rgb(167 139 250 / .45); background: rgb(167 139 250 / .1); }
+.setupFeedback { border-color: rgb(103 232 212 / .35); background: rgb(103 232 212 / .07); }
+
+.wallet-adapter-modal-overlay { background: rgb(14 11 22 / .84) !important; }
+.wallet-adapter-modal-wrapper { border-color: var(--atlas-line-strong) !important; border-radius: 24px 74px 24px 24px !important; background: var(--atlas-plum) !important; box-shadow: 0 32px 90px rgb(0 0 0 / .55) !important; font-family: var(--font-sans), sans-serif !important; }
+.wallet-adapter-modal-title { color: var(--atlas-bone) !important; font-family: var(--font-display), serif !important; font-size: 28px !important; }
+.wallet-adapter-modal-list .wallet-adapter-button { border-color: var(--atlas-line) !important; border-radius: 12px 32px 12px 12px !important; color: var(--atlas-bone) !important; background: var(--atlas-night) !important; }
+.wallet-adapter-modal-list .wallet-adapter-button:hover { border-color: var(--atlas-coral) !important; background: rgb(255 107 92 / .07) !important; }
+.walletBtnOverride { border-radius: 999px !important; color: var(--atlas-night) !important; background: var(--atlas-coral) !important; }
+
+.gateScreenLayout { background: var(--atlas-night) !important; }
+.authLoadingGate { border-color: var(--atlas-line); border-radius: 32px 100px 32px 32px; background: var(--atlas-plum); box-shadow: none; }
+.authLoaderOrbit { border-color: rgb(167 139 250 / .28); }
+.authLoaderOrbit::before { border-top-color: var(--atlas-coral); border-right-color: var(--atlas-aqua); }
+.authLoaderOrbit span { background: var(--atlas-coral); box-shadow: none; }
+.authLoadingProgress span { background: linear-gradient(90deg, var(--atlas-coral), var(--atlas-citron)); }
+
+@media (max-width: 960px) {
+  .leftRail, .rightRail { border-radius: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .authLoaderOrbit, .authLoadingProgress span { animation: none !important; }
+}

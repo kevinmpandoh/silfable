@@ -43,7 +43,7 @@ export function CodeBlock({ code, label }: CodeBlockProps) {
           className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.15em] text-slate-500 transition-colors hover:text-blue-300"
           aria-label={`Copy ${label}`}
         >
-          {copied ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
+          {copied ? <Check className="size-3.5 text-[var(--atlas-coral)]" /> : <Copy className="size-3.5" />}
           {copied ? "Copied" : "Copy"}
         </button>
       </div>

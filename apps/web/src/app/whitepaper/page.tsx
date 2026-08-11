@@ -14,14 +14,14 @@ import {
 export const metadata: Metadata = {
   title: "Whitepaper - Silfable",
   description:
-    "Silfable whitepaper covering its transaction workflow, venue-specific release status, web and desktop signing, Token Launch, Solana Swap, Robinhood Chain Swap, and Bridge.",
+    "Silfable whitepaper covering its Robinhood Chain-first transaction workflow, ETH-USDG swaps, two-way Solana connectivity, web and desktop signing, and venue-specific release status.",
 };
 
 const statusRows = [
-  ["Verified restricted", "Jupiter Solana Swap", "Controlled SOL-to-USDC and USDC-to-SOL Mainnet swaps have completed. Every new swap still requires a fresh quote, deterministic checks, explicit wallet approval, one-attempt broadcast, and receipt reconciliation."],
-  ["Verified restricted", "Pump.fun Token Launch", "Controlled Mainnet token launches have completed through metadata publication, create_v2 preflight, exact final review, wallet approval, broadcast, and receipt verification."],
   ["Verified restricted", "Robinhood Chain Swap", "Controlled ETH-to-USDG and USDG-to-ETH swaps have completed. The active desktop EVM scope is Robinhood Chain only, using a verified Robinhood RPC and a pinned Uniswap-compatible route."],
   ["Verified restricted", "Solana-Robinhood Bridge", "Controlled Solana USDC-to-Robinhood USDG and Robinhood USDG-to-Solana USDC bridges have completed in web and desktop. Each transfer remains route-, liquidity-, RPC-, wallet-, and receipt-dependent."],
+  ["Verified restricted", "Jupiter Solana Swap", "Controlled SOL-to-USDC and USDC-to-SOL Mainnet swaps have completed. Every new swap still requires a fresh quote, deterministic checks, explicit wallet approval, one-attempt broadcast, and receipt reconciliation."],
+  ["Verified restricted", "Pump.fun Token Launch", "Controlled Mainnet token launches have completed through metadata publication, create_v2 preflight, exact final review, wallet approval, broadcast, and receipt verification."],
   ["Verified restricted", "Auto DCA", "Controlled DCA cycles have detected a due schedule, obtained a fresh quote, completed only after explicit wallet approval, and been reconciled on Mainnet. The schedule never signs on the user's behalf."],
   ["Verified restricted", "TP/SL & Exits", "Controlled TP/SL conditions have triggered a bounded Mainnet exit proposal and completed only after explicit wallet approval and receipt reconciliation. Triggering a condition never grants unattended signing authority."],
   ["Planned · desktop-only", "Full Access / autonomous signing", "Not production-available yet. Any future unattended signing must use a paired desktop agent and an encrypted local vault; Silfable web never receives a private key or runs a cloud signer."],
@@ -57,13 +57,13 @@ export function WhitepaperContent() {
       <section id="whitepaper" className="scroll-mt-20 border-t border-[var(--line)]">
         <section className="border-b border-black/15 pt-24 sm:pt-28">
           <div className="section-shell pb-20 sm:pb-28">
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-electric">Whitepaper / v0.2.0</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--atlas-coral)]">Whitepaper / v0.2.0</p>
             <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_0.48fr] lg:items-end">
               <h1 className="max-w-5xl font-serif text-6xl font-normal leading-[0.9] tracking-normal sm:text-7xl lg:text-8xl">
-                From trading intent to a tracked Mainnet result.
+                A Robinhood Chain-first path from intent to settlement.
               </h1>
               <p className="max-w-lg text-base leading-8 text-black/55 lg:justify-self-end">
-                An early-stage, open-source workspace for researching markets, preparing venue-specific transactions, confirming them through the active wallet, and tracking settlement across Solana and Robinhood Chain.
+                An early-stage, open-source workspace centered on Robinhood Chain swaps and two-way Solana connectivity, with venue-specific preparation, wallet confirmation, and settlement tracking.
               </p>
             </div>
           </div>
@@ -130,7 +130,7 @@ export function WhitepaperContent() {
                 <tbody className="divide-y divide-black/10">
                   {statusRows.map(([status, capability, scope]) => (
                     <tr key={capability}>
-                      <td className="py-5 font-mono text-[10px] uppercase tracking-[0.12em] text-electric">{status}</td>
+                      <td className="py-5 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--atlas-coral)]">{status}</td>
                       <td className="py-5 font-medium">{capability}</td>
                       <td className="py-5 leading-7 text-black/55">{scope}</td>
                     </tr>
@@ -146,17 +146,17 @@ export function WhitepaperContent() {
             <SectionLabel number="03" title="The Problem" />
             <div className="grid gap-8 sm:grid-cols-3">
               <div>
-                <BrainCircuit className="size-6 text-electric mb-4" strokeWidth={1.5} />
+                <BrainCircuit className="size-6 text-[var(--atlas-lilac)] mb-4" strokeWidth={1.5} />
                 <h3 className="font-serif text-2xl mb-2">Ambiguous Requests</h3>
                 <p className="text-sm leading-6 text-black/60">Natural-language requests often omit the exact asset, network, amount, deadline, slippage, or destination needed to build a safe transaction.</p>
               </div>
               <div>
-                <LockKeyhole className="size-6 text-electric mb-4" strokeWidth={1.5} />
+                <LockKeyhole className="size-6 text-[var(--atlas-lilac)] mb-4" strokeWidth={1.5} />
                 <h3 className="font-serif text-2xl mb-2">Fragmented Workflows</h3>
                 <p className="text-sm leading-6 text-black/60">Research, quoting, token metadata, wallet confirmation, and transaction tracking often live in separate tools with no shared context.</p>
               </div>
               <div>
-                <ServerCrash className="size-6 text-electric mb-4" strokeWidth={1.5} />
+                <ServerCrash className="size-6 text-[var(--atlas-lilac)] mb-4" strokeWidth={1.5} />
                 <h3 className="font-serif text-2xl mb-2">Long-Running Strategies</h3>
                 <p className="text-sm leading-6 text-black/60">DCA and TP/SL conditions need durable schedules and state, while the resulting transaction must still use the signing model of the active web or desktop surface.</p>
               </div>
@@ -172,7 +172,7 @@ export function WhitepaperContent() {
                 Silfable aims to become an open environment where humans and software agents can express an intended outcome, research the market, and securely execute that outcome without compromising custody.
               </p>
               <p>A request may be expressed as:</p>
-              <div className="bg-white border border-black/10 p-5 font-mono text-[11px] text-electric space-y-2">
+              <div className="bg-white border border-black/10 p-5 font-mono text-[11px] text-[var(--atlas-coral)] space-y-2">
                 <p>&gt; &ldquo;Draft the immutable metadata and bounded fee plan for a Pump.fun Token Launch.&rdquo;</p>
                 <p>&gt; &ldquo;Prepare a USDC-to-SOL swap proposal with slippage capped at 1%.&rdquo;</p>
               </div>
@@ -189,7 +189,7 @@ export function WhitepaperContent() {
                 const Icon = principle.icon;
                 return (
                   <article key={principle.title} className="border border-black/15 p-6">
-                    <Icon className="size-5 text-electric" strokeWidth={1.5} />
+                    <Icon className="size-5 text-[var(--atlas-lilac)]" strokeWidth={1.5} />
                     <h2 className="mt-8 font-serif text-3xl font-normal tracking-normal">{principle.title}</h2>
                     <p className="mt-4 text-sm leading-7 text-black/55">{principle.text}</p>
                   </article>
@@ -204,14 +204,14 @@ export function WhitepaperContent() {
             <SectionLabel number="06" title="System Architecture" />
             <div className="grid gap-8">
               <div className="flex gap-4">
-                <Database className="size-6 text-electric shrink-0" strokeWidth={1.5} />
+                <Database className="size-6 text-[var(--atlas-lilac)] shrink-0" strokeWidth={1.5} />
                 <div>
                   <h3 className="font-serif text-xl mb-1">Encrypted Cloud State Layer</h3>
                   <p className="text-sm leading-6 text-black/60">A cloud database for user preferences, chat state, and proposal metadata within defined limits. Production transaction keys are never stored by the web service.</p>
                 </div>
               </div>
               <div className="flex gap-4">
-                <ServerCrash className="size-6 text-electric shrink-0" strokeWidth={1.5} />
+                <ServerCrash className="size-6 text-[var(--atlas-lilac)] shrink-0" strokeWidth={1.5} />
                 <div>
                   <h3 className="font-serif text-xl mb-1">High-Throughput Task Queue</h3>
                   <p className="text-sm leading-6 text-black/60">A task queue foundation for scheduled monitoring and transaction preparation. Cloud execution jobs remain disabled.</p>
@@ -226,13 +226,13 @@ export function WhitepaperContent() {
             <SectionLabel number="07" title="Venue Model" />
             <div>
               <p className="max-w-3xl text-lg leading-8 text-black/60">
-                Pump.fun is the Token Launch lane, not a generic AI auto-trading venue. Existing Solana assets swap through Jupiter; the active EVM product scope is Robinhood Chain through a pinned Uniswap-compatible route; bridge support is explicitly limited to Solana USDC and Robinhood USDG in either direction.
+                Robinhood Chain is the active primary EVM environment through a pinned Uniswap-compatible route for ETH↔USDG. Two-way bridge support is explicitly limited to Robinhood USDG and Solana USDC. Solana remains available for Jupiter swaps and Pump.fun Token Launch.
               </p>
               <div className="mt-10 grid gap-4 md:grid-cols-3">
                 {[
                   ["Token Launch", "AI may help draft public metadata, but the user confirms exact immutable content, creator wallet, fee caps, and the final launch approval."],
-                  ["Swap", "Jupiter Solana swaps and Robinhood Chain swaps use separate typed contracts, provider evidence, policy, signer boundaries, and receipt recovery."],
-                  ["Bridge", "Solana USDC to Robinhood USDG and the reverse direction have completed controlled web and desktop flows. No universal any-chain bridge claim is made."],
+                  ["Swap", "Robinhood Chain ETH↔USDG swaps use a pinned Uniswap-compatible route. Connected Jupiter swaps retain separate typed contracts, provider evidence, policy, signer boundaries, and transaction recovery."],
+                  ["Bridge", "Robinhood USDG to Solana USDC and the reverse direction have completed controlled web and desktop flows. No universal any-chain bridge claim is made."],
                   ["Auto DCA & Exits", "The active web or desktop runtime can monitor conditions, fetch a fresh quote, and open a bounded action for review. Each resulting transaction still requires explicit wallet approval."],
                 ].map(([title, text]) => (
                   <div key={title} className="border-t border-black/20 pt-5">
@@ -252,7 +252,7 @@ export function WhitepaperContent() {
               <div className="border border-black/15 p-6 bg-white">
                 <h2 className="font-serif text-3xl font-normal tracking-normal">Desktop</h2>
                 <p className="mt-4 text-sm leading-7 text-black/55">
-                  The reference surface for encrypted local-vault signing, guarded Jupiter Swap, Pump.fun Token Launch, Robinhood Chain swaps, and two-way Solana-Robinhood bridges. Other EVM chains are outside the active desktop product scope.
+                  The reference surface for Robinhood Chain swaps, two-way Robinhood–Solana bridges, encrypted local-vault signing, and connected Jupiter Swap and Pump.fun Token Launch workflows. Other EVM chains are outside the active desktop product scope.
                 </p>
               </div>
               <div className="border border-black/15 p-6 bg-white">
@@ -265,7 +265,7 @@ export function WhitepaperContent() {
             <div className="lg:col-start-2 mt-4">
               <Link
                 href="/trade"
-                className="inline-flex items-center gap-3 bg-electric px-6 py-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-white"
+                className="atlasCoralButton inline-flex items-center gap-3 px-6 py-4 text-[10px] font-semibold uppercase tracking-[0.16em]"
               >
                 Open Trade Workspace <ArrowUpRight className="size-4" />
               </Link>
@@ -289,7 +289,7 @@ export default function WhitepaperPage() {
 function SectionLabel({ number, title }: { number: string; title: string }) {
   return (
     <div>
-      <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-electric">[{number}]</p>
+      <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--atlas-coral)]">[{number}]</p>
       <h2 className="mt-3 font-serif text-3xl font-normal tracking-normal">{title}</h2>
     </div>
   );

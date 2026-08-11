@@ -11,7 +11,7 @@ const buttonVariants = cva(
       variant: {
         default: "border-paper bg-paper text-ink hover:bg-transparent hover:text-paper",
         outline: "border-white/40 bg-transparent text-paper hover:border-paper hover:bg-paper hover:text-ink",
-        blue: "border-electric bg-electric text-white hover:bg-transparent hover:text-electric",
+        blue: "border-[var(--atlas-coral)] bg-[var(--atlas-coral)] text-[var(--atlas-night)] hover:border-[#ff8376] hover:bg-[#ff8376] hover:text-[var(--atlas-night)]",
       },
       size: {
         default: "h-12 px-6",

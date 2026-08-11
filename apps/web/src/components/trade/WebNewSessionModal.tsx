@@ -45,7 +45,7 @@ export function WebNewSessionModal({
   const { connected: solanaConnected, publicKey: solanaPublicKey, signMessage: signSolanaMessage } = useWallet();
   const { setVisible: setSolanaWalletVisible } = useWalletModal();
   const [mode, setMode] = useState<"agent" | "mission">(defaultMode);
-  const [workspace, setWorkspace] = useState<"solana" | "evm">("solana");
+  const [workspace, setWorkspace] = useState<"solana" | "evm">("evm");
   const [linking, setLinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const evmWallets = useMemo(() => linkedWallets.filter((wallet) => wallet.namespace === "evm"), [linkedWallets]);
@@ -187,11 +187,11 @@ export function WebNewSessionModal({
           <section className="sessionConfigSection">
             <div className="sectionLegend"><span>02</span><strong>Workspace</strong><small>Choose the source execution environment.</small></div>
             <div className="choiceGrid sessionWorkspaceChoices">
-              {(["solana", "evm"] as const).map((value, index) => (
+              {(["evm", "solana"] as const).map((value, index) => (
                 <button type="button" key={value} className={workspace === value ? "active" : ""} onClick={() => setWorkspace(value)}>
                   <span className="choiceNumber">0{index + 1}</span>
-                  <strong>{value === "solana" ? "Solana" : "Robinhood Chain"}</strong>
-                  <small>{value === "solana" ? "Swap and bridge from Solana" : "EVM swap and bridge from Robinhood"}</small>
+                  <strong>{value === "evm" ? "Robinhood Chain" : "Solana"}</strong>
+                  <small>{value === "evm" ? "Primary · ETH/USDG swap and two-way bridge" : "Connected · Jupiter, Pump.fun, and bridge"}</small>
                 </button>
               ))}
             </div>
