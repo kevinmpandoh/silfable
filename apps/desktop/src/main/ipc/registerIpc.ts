@@ -2278,7 +2278,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
           const assistantMessage = {
             id: crypto.randomUUID(),
             role: "assistant" as const,
-            text: `Proposal DCA disetujui. Kartu pratinjau swap mission (USDC ➔ SOL) telah disiapkan di bawah ini. Silakan jalankan simulasi (*Simulate*) dan konfirmasi transaksi dengan Master Password Anda.`,
+            text: "The DCA proposal was approved. A mission swap preview card (USDC ➔ SOL) is ready below. Run the simulation (*Simulate*) and confirm the transaction with your master password.",
             at: new Date().toISOString(),
             missionPreview,
           };

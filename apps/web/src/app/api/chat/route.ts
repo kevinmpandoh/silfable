@@ -183,21 +183,21 @@ export async function POST(req: NextRequest) {
     const evmSwapIntent = resolveRobinhoodSwapIntent(lastUserMessage);
     if (evmSwapIntent.requested) {
       if (selectedWorkspace !== "evm" || chainKey !== "robinhood") {
-        return NextResponse.json({ role: "assistant", content: "Buka session Robinhood EVM yang terikat ke wallet EVM Anda terlebih dahulu. Tidak ada quote atau transaksi yang disiapkan." });
+        return NextResponse.json({ role: "assistant", content: "Open a Robinhood EVM session bound to your EVM wallet first. No quote or transaction was prepared." });
       }
       if (!evmSwapIntent.amount || !evmSwapIntent.sellToken || !evmSwapIntent.buyToken) {
-        return NextResponse.json({ role: "assistant", content: "Tulis pasangan dan jumlahnya, misalnya: swap 0.5 USDG ke ETH. USDG dan ETH sudah dipetakan otomatis untuk Robinhood Chain." });
+        return NextResponse.json({ role: "assistant", content: "Provide the pair and amount, for example: swap 0.5 USDG to ETH. USDG and ETH are mapped automatically for Robinhood Chain." });
       }
       if (evmSwapIntent.sellToken === evmSwapIntent.buyToken || Number(evmSwapIntent.amount) <= 0) {
-        return NextResponse.json({ role: "assistant", content: "Token asal dan tujuan harus berbeda, dengan jumlah positif." });
+        return NextResponse.json({ role: "assistant", content: "The source and destination tokens must differ, with a positive amount." });
       }
       if (typeof sessionWalletAddress !== "string" || !/^0x[0-9a-f]{40}$/iu.test(sessionWalletAddress)) {
-        return NextResponse.json({ role: "assistant", content: "Session Robinhood belum terikat ke wallet EVM yang valid." });
+        return NextResponse.json({ role: "assistant", content: "The Robinhood session is not bound to a valid EVM wallet." });
       }
       return NextResponse.json({
         role: "assistant",
-        content: `Proposal swap ${evmSwapIntent.amount} ${evmSwapIntent.sellToken} ke ${evmSwapIntent.buyToken} di Robinhood Chain telah disiapkan. Klik Prepare quote untuk meminta harga Uniswap; belum ada signature atau broadcast.`,
-        proposal: { id: `evm_swap_${Date.now()}`, type: "evm_swap", mint: "", solAmount: "0", estimatedTokens: "Quote pending", sellToken: evmSwapIntent.sellToken, buyToken: evmSwapIntent.buyToken, sellAmount: evmSwapIntent.amount, status: "preview_only", mode: "restricted_browser_wallet", venue: "Uniswap Trading API", explanation: "Token dan jaringan dipin ke Robinhood Chain. Quote dan transaksi hanya disiapkan setelah key Uniswap yang diverifikasi tersedia.", checks: [{ code: "wallet_bound", status: "pass", message: `Wallet EVM sesi: ${sessionWalletAddress}` }, { code: "chain_pinned", status: "pass", message: "Chain dipin ke Robinhood Chain (4663)." }, { code: "wallet_approval", status: "pass", message: "Wallet browser akan meminta persetujuan eksplisit sebelum broadcast." }] },
+        content: `A ${evmSwapIntent.amount} ${evmSwapIntent.sellToken} → ${evmSwapIntent.buyToken} swap proposal on Robinhood Chain is ready. Select Prepare quote to request Uniswap pricing; no signature or broadcast has occurred.`,
+        proposal: { id: `evm_swap_${Date.now()}`, type: "evm_swap", mint: "", solAmount: "0", estimatedTokens: "Quote pending", sellToken: evmSwapIntent.sellToken, buyToken: evmSwapIntent.buyToken, sellAmount: evmSwapIntent.amount, status: "preview_only", mode: "restricted_browser_wallet", venue: "Uniswap Trading API", explanation: "The token pair and network are pinned to Robinhood Chain. A quote and transaction can be prepared only after a verified Uniswap key is available.", checks: [{ code: "wallet_bound", status: "pass", message: `Session EVM wallet: ${sessionWalletAddress}` }, { code: "chain_pinned", status: "pass", message: "Chain is pinned to Robinhood Chain (4663)." }, { code: "wallet_approval", status: "pass", message: "Your browser wallet will request explicit approval before broadcast." }] },
       });
     }
 
@@ -206,36 +206,36 @@ export async function POST(req: NextRequest) {
       if (selectedWorkspace !== "evm" || chainKey !== "robinhood") {
         return NextResponse.json({
           role: "assistant",
-          content: "Buka session Robinhood Chain yang terikat ke wallet EVM sumber terlebih dahulu. Tidak ada quote atau transaksi yang disiapkan.",
+          content: "Open a Robinhood Chain session bound to the source EVM wallet first. No quote or transaction was prepared.",
         });
       }
       if (!evmBridgeIntent.amountUsdg) {
         return NextResponse.json({
           role: "assistant",
-          content: "Tuliskan jumlah USDG yang ingin di-bridge dari Robinhood Chain. Contoh: Bridge 1 USDG ke Solana.",
+          content: "Provide the USDG amount to bridge from Robinhood Chain. Example: Bridge 1 USDG to Solana.",
         });
       }
       if (!evmBridgeIntent.destinationRecipient) {
         return NextResponse.json({
           role: "assistant",
-          content: "Jumlah sudah terbaca. Sekarang tuliskan alamat wallet Solana tujuan lengkap; jumlah USDG dari pesan sebelumnya akan tetap digunakan.",
+          content: "The amount was found. Now provide the full destination Solana wallet address; the USDG amount from your previous message will be retained.",
         });
       }
       const amount = Number(evmBridgeIntent.amountUsdg);
       if (!Number.isFinite(amount) || amount < 0.01 || amount > 1_000) {
-        return NextResponse.json({ role: "assistant", content: "Jumlah bridge harus antara 0.01 dan 1,000 USDG. Tidak ada transaksi yang disiapkan." });
+        return NextResponse.json({ role: "assistant", content: "The bridge amount must be between 0.01 and 1,000 USDG. No transaction was prepared." });
       }
       try {
         new PublicKey(evmBridgeIntent.destinationRecipient);
       } catch {
-        return NextResponse.json({ role: "assistant", content: "Alamat tujuan Solana tidak valid. Tidak ada quote atau transaksi yang disiapkan." });
+        return NextResponse.json({ role: "assistant", content: "The destination Solana address is invalid. No quote or transaction was prepared." });
       }
       if (typeof sessionWalletAddress !== "string" || !/^0x[0-9a-f]{40}$/iu.test(sessionWalletAddress)) {
-        return NextResponse.json({ role: "assistant", content: "Session Robinhood belum terikat ke wallet EVM sumber yang valid." });
+        return NextResponse.json({ role: "assistant", content: "The Robinhood session is not bound to a valid source EVM wallet." });
       }
       return NextResponse.json({
         role: "assistant",
-        content: `Proposal bridge ${evmBridgeIntent.amountUsdg} USDG dari Robinhood Chain ke USDC Solana sudah disiapkan. Klik Prepare quote untuk memperoleh rute Relay; belum ada approval, signature, atau broadcast.`,
+        content: `A bridge proposal for ${evmBridgeIntent.amountUsdg} USDG from Robinhood Chain to Solana USDC is ready. Select Prepare quote to obtain a Relay route; no approval, signature, or broadcast has occurred.`,
         proposal: {
           id: `evm_bridge_${Date.now()}`,
           type: "evm_bridge",
@@ -265,27 +265,27 @@ export async function POST(req: NextRequest) {
       if (selectedWorkspace !== "solana") {
         return NextResponse.json({
           role: "assistant",
-          content: "Gunakan format: Bridge 1 USDG dari Robinhood ke Solana <alamat Solana>. Tidak ada transaksi yang disiapkan dari permintaan yang belum lengkap.",
+          content: "Use this format: Bridge 1 USDG from Robinhood to Solana <Solana address>. No transaction was prepared from the incomplete request.",
         });
       }
       const { amountUsdc, destinationRecipient } = bridgeIntent;
       if (!amountUsdc) {
         return NextResponse.json({
           role: "assistant",
-          content: "Tuliskan jumlah USDC yang ingin di-bridge. Jumlah maksimum tidak dipilih otomatis karena saldo dan biaya harus ditinjau terlebih dahulu. Contoh: 0.5 USDC.",
+          content: "Provide the USDC amount to bridge. A maximum amount is not selected automatically because balance and fees must be reviewed first. Example: 0.5 USDC.",
         });
       }
       if (!destinationRecipient) {
         return NextResponse.json({
           role: "assistant",
-          content: "Jumlah sudah terbaca. Sekarang tuliskan alamat tujuan EVM Robinhood lengkap dalam format 0x...; saya akan mempertahankan jumlah dari pesan sebelumnya.",
+          content: "The amount was found. Now provide the full Robinhood EVM destination address in 0x... format; the amount from your previous message will be retained.",
         });
       }
       if (amountUsdc < 0.01 || amountUsdc > 1_000) {
-        return NextResponse.json({ role: "assistant", content: "Jumlah bridge web harus antara 0.01 dan 1,000 USDC. Tidak ada transaksi yang disiapkan." });
+        return NextResponse.json({ role: "assistant", content: "The web bridge amount must be between 0.01 and 1,000 USDC. No transaction was prepared." });
       }
       if (typeof sessionWalletAddress !== "string" || !sessionWalletAddress) {
-        return NextResponse.json({ role: "assistant", content: "Bridge belum dapat disiapkan karena session tidak terikat ke wallet Solana sumber." });
+        return NextResponse.json({ role: "assistant", content: "The bridge cannot be prepared because the session is not bound to the source Solana wallet." });
       }
       let balancePreflight;
       try {
@@ -293,11 +293,11 @@ export async function POST(req: NextRequest) {
         balancePreflight = await assertSolanaBridgeBalance(new Connection(SOLANA_RPC, "confirmed"), sessionWalletAddress, requiredUsdc);
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : "Source wallet balance could not be verified.";
-        return NextResponse.json({ role: "assistant", content: `Bridge belum disiapkan. ${message} Tidak ada quote, signature, atau popup wallet yang dibuat.` });
+        return NextResponse.json({ role: "assistant", content: `The bridge was not prepared. ${message} No quote, signature, or wallet popup was created.` });
       }
       return NextResponse.json({
         role: "assistant",
-        content: `Proposal bridge ${amountUsdc} USDC dari Solana ke USDG Robinhood sudah disiapkan untuk review. Belum ada quote executable, signature, atau broadcast.`,
+        content: `A bridge proposal for ${amountUsdc} USDC from Solana to Robinhood USDG is ready for review. No executable quote, signature, or broadcast has occurred.`,
         proposal: {
           id: `bridge_${Date.now()}`,
           type: "solana_bridge",
@@ -327,8 +327,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         role: "assistant",
         content: selectedWorkspace === "solana"
-          ? "Token Launch tersedia di session Solana ini. Klik **TOKEN LAUNCH** di bawah percakapan, isi metadata dan batas biaya, lalu ikuti tahapan unsigned preflight → final Mainnet checks → approval Phantom/Solflare. Tidak ada transaksi yang dibuat hanya dari pesan chat ini."
-          : "Token Launch Pump.fun harus dibuat dari session Solana yang terikat ke wallet Phantom/Solflare. Buka atau buat session Solana terlebih dahulu; tidak ada transaksi yang disiapkan dari session EVM ini.",
+          ? "Token Launch is available in this Solana session. Select **TOKEN LAUNCH** beneath the conversation, enter metadata and fee limits, then follow unsigned preflight → final Mainnet checks → Phantom/Solflare approval. No transaction is created from this chat message alone."
+          : "Pump.fun Token Launch must be created from a Solana session bound to a Phantom/Solflare wallet. Open or create a Solana session first; no transaction can be prepared from this EVM session.",
       });
     }
 
@@ -338,7 +338,7 @@ export async function POST(req: NextRequest) {
       }
       const openRouterApiKey = settings?.openRouterApiKey?.trim();
       if (!openRouterApiKey) {
-        return NextResponse.json({ role: "assistant", content: "AI tool untuk membuat automation belum dikonfigurasi. Buka **Settings → Provider**, verifikasi OpenRouter API key, pilih model yang mendukung tool calling, lalu simpan." });
+        return NextResponse.json({ role: "assistant", content: "The AI tool for creating automation is not configured. Open **Settings → Provider**, verify your OpenRouter API key, choose a tool-calling model, then save." });
       }
       try {
         if (selectedWorkspace === "evm") {
@@ -360,7 +360,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ role: "assistant", content: result.content, usage: result.usage, automationCreated: result.created });
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : "Automation AI tool failed.";
-        return NextResponse.json({ role: "assistant", content: `Automation belum dibuat: ${message}` });
+        return NextResponse.json({ role: "assistant", content: `Automation was not created: ${message}` });
       }
     }
 
@@ -374,9 +374,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         role: "assistant",
         content:
-          `Saya sudah menyiapkan proposal swap Mainnet restricted untuk ${solAmount} SOL ke USDC.\n\n` +
-          `Quote Jupiter tersedia dengan estimasi output ${Number(outputAmount) / 1_000_000} USDC, slippage maksimum ${maxSlippageBps} bps, dan price impact sekitar ${priceImpactPct}%. ` +
-          "Belum ada transaksi yang ditandatangani atau dibroadcast. Jika detailnya sesuai, klik tombol approval wallet untuk membuat transaksi swap dan menandatanganinya dari Phantom/Solflare.",
+          `A restricted Mainnet swap proposal for ${solAmount} SOL → USDC is ready.\n\n` +
+          `A Jupiter quote is available with estimated output ${Number(outputAmount) / 1_000_000} USDC, maximum slippage ${maxSlippageBps} bps, and approximately ${priceImpactPct}% price impact. ` +
+          "No transaction has been signed or broadcast. If the details are correct, select the wallet approval button to create and sign the swap transaction in Phantom/Solflare.",
         proposal: {
           id: `swap_${Date.now()}`,
           type: "jupiter_swap",
@@ -393,7 +393,7 @@ export async function POST(req: NextRequest) {
           mode: "restricted_browser_wallet",
           venue: "Jupiter Swap API",
           explanation:
-            "Restricted web mode: AI hanya membuat quote dan transaksi unsigned. Wallet browser Anda tetap menjadi final signer.",
+            "Restricted web mode: the AI only creates quotes and unsigned transactions. Your browser wallet remains the final signer.",
           checks: [
             { code: "mainnet_only", status: "pass", message: "Only Solana Mainnet is enabled." },
             { code: "quote_only", status: "pass", message: "Jupiter returned route evidence before any signature." },
@@ -407,14 +407,14 @@ export async function POST(req: NextRequest) {
     const pumpAnalysisIntent = resolvePumpAnalysisIntent(lastUserMessage);
     if (pumpAnalysisIntent.requested) {
       if (selectedWorkspace !== "solana") {
-        return NextResponse.json({ role: "assistant", content: "Analisis Pump.fun hanya tersedia di session Solana. Buka atau buat session Solana yang terikat terlebih dahulu." });
+        return NextResponse.json({ role: "assistant", content: "Pump.fun analysis is available only in a Solana session. Open or create a bound Solana session first." });
       }
       if (!pumpAnalysisIntent.mint) {
-        return NextResponse.json({ role: "assistant", content: "Kirim alamat mint Solana lengkap yang ingin dianalisis. Contoh: Analisa token Pump.fun <mint>." });
+        return NextResponse.json({ role: "assistant", content: "Provide the full Solana mint address to analyze. Example: Analyze Pump.fun token <mint>." });
       }
       const openRouterApiKey = settings?.openRouterApiKey?.trim();
       if (!openRouterApiKey) {
-        return NextResponse.json({ role: "assistant", content: "AI Pump analysis belum dapat dijalankan. Buka **Settings → Provider**, verifikasi OpenRouter API key, pilih model yang mendukung tool calling, lalu simpan." });
+        return NextResponse.json({ role: "assistant", content: "AI Pump analysis cannot run yet. Open **Settings → Provider**, verify your OpenRouter API key, choose a tool-calling model, then save." });
       }
       try {
         const model = settings?.aiModel?.trim() || "openai/gpt-4o-mini";
@@ -448,7 +448,7 @@ export async function POST(req: NextRequest) {
         });
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : "Pump analysis failed.";
-        return NextResponse.json({ role: "assistant", content: `Analisis Pump.fun gagal aman: ${message} Tidak ada transaksi yang dibuat atau disiarkan.` });
+        return NextResponse.json({ role: "assistant", content: `Pump.fun analysis failed safely: ${message} No transaction was created or broadcast.` });
       }
     }
 
@@ -458,8 +458,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         role: "assistant",
         content:
-          `Saya menemukan mint Pump.fun ${pumpMint.slice(0, 6)}...${pumpMint.slice(-6)} dan membuat preview restricted untuk ${solAmount} SOL.\n\n` +
-          "Untuk web saat ini Pump.fun masih tahap analisis/preview. Signing dan broadcast Pump.fun belum diaktifkan sampai guard, fee ceiling, dan final revalidation sama kuatnya dengan desktop.",
+          `I found Pump.fun mint ${pumpMint.slice(0, 6)}...${pumpMint.slice(-6)} and created a restricted preview for ${solAmount} SOL.\n\n` +
+          "Pump.fun on web is currently limited to analysis and preview. Pump.fun signing and broadcast remain disabled until guards, fee ceilings, and final revalidation match the desktop implementation.",
         proposal: {
           id: `pump_${Date.now()}`,
           type: "pump_fun_buy",
@@ -470,7 +470,7 @@ export async function POST(req: NextRequest) {
           mode: "restricted_preview_only",
           venue: "Pump.fun",
           explanation:
-            "Pump.fun web trading belum live. Gunakan proposal ini untuk review, bukan eksekusi.",
+            "Pump.fun web trading is not live. Use this proposal for review, not execution.",
         },
       });
     }
@@ -480,8 +480,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         role: "assistant",
         content:
-          `Saya telah meninjau instruksi Limit Order untuk ${solAmount} SOL dan membuat proposal preview restricted.\n\n` +
-          "Untuk web saat ini Limit Order Jupiter v2 berada dalam tahap preview-only. Eksekusi deposit dan rekonsiliasi headless membutuhkan keystore terenkripsi lokal (tersedia pada Silfable Desktop).",
+          `I reviewed the Limit Order instruction for ${solAmount} SOL and created a restricted preview proposal.\n\n` +
+          "On web, Jupiter v2 Limit Order is currently preview-only. Deposit execution and headless reconciliation require an encrypted local keystore, available in Silfable Desktop.",
         proposal: {
           id: `limit_${Date.now()}`,
           type: "limit_order",
@@ -523,12 +523,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       role: "assistant",
-      content: "AI belum dikonfigurasi. Buka **Settings → Provider**, masukkan OpenRouter API key Anda, pilih model dari katalog OpenRouter, lalu tekan **Save**.",
+      content: "AI is not configured. Open **Settings → Provider**, enter your OpenRouter API key, choose a model from the OpenRouter catalog, then select **Save**.",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
-      { role: "assistant", content: `AI trading request gagal aman. Tidak ada aksi Mainnet dilakukan. Detail: ${message}` },
+      { role: "assistant", content: `AI trading request failed safely. No Mainnet action was taken. Details: ${message}` },
       { status: 200 },
     );
   }

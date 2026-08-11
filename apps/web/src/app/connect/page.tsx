@@ -46,7 +46,7 @@ function ConnectContent() {
       return;
     }
     if (!signMessage) {
-      setAuthError("Wallet ini tidak mendukung message signing. Gunakan Phantom atau Solflare.");
+      setAuthError("This wallet does not support message signing. Use Phantom or Solflare.");
       return;
     }
     setAuthState("signing-solana");
@@ -60,7 +60,7 @@ function ConnectContent() {
       });
       const challenge = await challengeResponse.json();
       if (!challengeResponse.ok || typeof challenge.message !== "string") {
-        throw new Error(challenge.error || "Challenge autentikasi tidak tersedia.");
+        throw new Error(challenge.error || "Authentication challenge is unavailable.");
       }
       const signatureBytes = await signMessage(new TextEncoder().encode(challenge.message));
       const verifyResponse = await fetch("/api/auth/wallet/verify", {
@@ -74,7 +74,7 @@ function ConnectContent() {
       });
       const verified = await verifyResponse.json();
       if (!verifyResponse.ok || verified.authenticated !== true) {
-        throw new Error(verified.error || "Signature wallet tidak dapat diverifikasi.");
+        throw new Error(verified.error || "Wallet signature could not be verified.");
       }
       router.replace(next);
     } catch (error) {
@@ -94,7 +94,7 @@ function ConnectContent() {
         body: JSON.stringify({ walletAddress: account.address, namespace: "evm", chainId: account.chainId }),
       });
       const challenge = await challengeResponse.json();
-      if (!challengeResponse.ok || typeof challenge.message !== "string") throw new Error(challenge.error || "Challenge autentikasi EVM tidak tersedia.");
+      if (!challengeResponse.ok || typeof challenge.message !== "string") throw new Error(challenge.error || "EVM authentication challenge is unavailable.");
       const signature = await signEvmAuthenticationMessage(account.address, challenge.message);
       const verifyResponse = await fetch("/api/auth/wallet/verify", {
         method: "POST",
@@ -102,7 +102,7 @@ function ConnectContent() {
         body: JSON.stringify({ challengeId: challenge.challengeId, walletAddress: account.address, signature }),
       });
       const verified = await verifyResponse.json();
-      if (!verifyResponse.ok || verified.authenticated !== true) throw new Error(verified.error || "Signature EVM tidak dapat diverifikasi.");
+      if (!verifyResponse.ok || verified.authenticated !== true) throw new Error(verified.error || "EVM signature could not be verified.");
       router.replace(next);
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Autentikasi EVM gagal.");

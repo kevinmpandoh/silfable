@@ -118,11 +118,11 @@ export async function runSolanaAutomationAiTool(input: {
     ? message.tool_calls.find((candidate): candidate is ToolCall => Boolean(candidate && typeof candidate === "object" && (candidate as ToolCall).function?.name === "create_automation_strategy" && typeof (candidate as ToolCall).function?.arguments === "string"))
     : undefined;
   if (!call) {
-    const content = typeof message?.content === "string" && message.content.trim() ? message.content.slice(0, 12_000) : "Tuliskan detail strategi yang ingin dibuat, lalu saya akan menyiapkannya.";
+    const content = typeof message?.content === "string" && message.content.trim() ? message.content.slice(0, 12_000) : "Provide the strategy details you want to create, and I will prepare it.";
     return { content, usage: readUsage(payload.usage, input.model), created: false };
   }
   const args = parseObject(call.function.arguments);
-  if (!args) return { content: "Parameter automation dari AI tidak valid. Tidak ada strategi yang dibuat; tuliskan detail strategi sekali lagi.", usage: readUsage(payload.usage, input.model), created: false };
+  if (!args) return { content: "The AI automation parameters are invalid. No strategy was created; provide the strategy details again.", usage: readUsage(payload.usage, input.model), created: false };
   const userText = lastUserText(input.messages);
   const pair = inferKnownPair(userText);
   // An explicit SOL/USDC pair in the user's message is authoritative. Some providers emit
@@ -145,11 +145,11 @@ export async function runSolanaAutomationAiTool(input: {
   const created = await createOwnedSolanaAutomation({ userId: input.userId, request });
   if (!created.ok) {
     const detail = created.issues.map((issue) => issue.message).filter(Boolean).join(" ");
-    return { content: `Strategi belum dibuat karena detailnya belum valid: ${detail}`, usage: readUsage(payload.usage, input.model), created: false };
+    return { content: `The strategy was not created because its details are invalid: ${detail}`, usage: readUsage(payload.usage, input.model), created: false };
   }
   const strategy = created.strategy;
   const summary = created.input.kind === "DCA"
-    ? `DCA ${strategy.inputSymbol} → ${strategy.outputSymbol} sudah dibuat: ${created.input.common.amount} ${strategy.inputSymbol} setiap ${created.input.intervalSeconds} detik, maksimal ${created.input.maximumExecutions} cycle. Saya akan membuat proposal saat jadwal tiba; wallet browser tetap wajib menyetujui swap.`
-    : `Strategi TP/SL ${strategy.inputSymbol} → ${strategy.outputSymbol} sudah dibuat untuk ${created.input.common.amount} ${strategy.inputSymbol}. TP: ${created.input.takeProfitPriceUsd ?? "—"} USD; SL: ${created.input.stopLossPriceUsd ?? "—"} USD. Saat trigger terdeteksi, saya hanya membuat proposal swap untuk review.`;
+    ? `DCA ${strategy.inputSymbol} → ${strategy.outputSymbol} was created: ${created.input.common.amount} ${strategy.inputSymbol} every ${created.input.intervalSeconds} seconds, for a maximum of ${created.input.maximumExecutions} cycles. A proposal will be created when the schedule is due; your browser wallet must still approve the swap.`
+    : `TP/SL ${strategy.inputSymbol} → ${strategy.outputSymbol} was created for ${created.input.common.amount} ${strategy.inputSymbol}. TP: ${created.input.takeProfitPriceUsd ?? "—"} USD; SL: ${created.input.stopLossPriceUsd ?? "—"} USD. When a trigger is detected, only a swap proposal is created for review.`;
   return { content: summary, usage: readUsage(payload.usage, input.model), created: true };
 }

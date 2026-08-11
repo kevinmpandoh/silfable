@@ -394,12 +394,12 @@ export default function TradePage() {
 
   async function handlePrepareEvmBridge(proposal: WebProposal, messageId: string) {
     if (!activeSession || activeSession.workspace !== "evm" || activeSession.chainKey !== "robinhood") {
-      alert("Robinhood → Solana bridge hanya dapat disiapkan dari session Robinhood yang terikat.");
+      alert("Robinhood → Solana bridge can only be prepared from a bound Robinhood session.");
       return;
     }
     const sessionWallet = activeSession.sessionWalletAddress;
     if (!sessionWallet || !evmWalletMatchesSession) {
-      alert("Hubungkan wallet EVM yang sama dengan session ini dan pindahkan ke Robinhood Chain terlebih dahulu.");
+      alert("Connect the EVM wallet bound to this session and switch it to Robinhood Chain first.");
       return;
     }
     if (!proposal.amountUsdg || !proposal.destinationRecipient) return;
@@ -920,7 +920,7 @@ async function assertEvmBridgeFunds(input: {
       });
       const result = await response.json() as { sol?: number; assets?: any[]; totalUsd?: number; slot?: number; source?: string; error?: string };
       if (!response.ok || typeof result.sol !== "number") {
-        throw new Error(typeof result.error === "string" ? result.error : "Saldo Mainnet tidak dapat dimuat.");
+        throw new Error(typeof result.error === "string" ? result.error : "Mainnet balance could not be loaded.");
       }
       if (requestId !== portfolioRequestRef.current) return;
       setWalletBalance(result.sol);
@@ -933,7 +933,7 @@ async function assertEvmBridgeFunds(input: {
       setWalletBalance(null);
       setPortfolioAssets([]);
       setPortfolioTotalUsd(null);
-      setPortfolioStatus(error instanceof Error ? error.message : "Saldo Mainnet tidak dapat dimuat.");
+      setPortfolioStatus(error instanceof Error ? error.message : "Mainnet balance could not be loaded.");
     }
   }, [activeSessionId, sessions, activeEvmAddress, publicKey, settings.evmRpcUrl, settings.customRpcUrl]);
 
@@ -1123,7 +1123,7 @@ async function assertEvmBridgeFunds(input: {
       id: `launch_${Date.now()}`,
       sessionId: activeSession.id,
       role: "assistant",
-      content: `Token Launch draft ${draft.name} (${draft.symbol}) telah dibuat. Metadata sudah dipublikasikan ke IPFS; belum ada transaksi, signature, atau broadcast.`,
+      content: `Token Launch draft ${draft.name} (${draft.symbol}) was created. Metadata has been published to IPFS; no transaction, signature, or broadcast was created.`,
       createdAt: Date.now(),
       proposal: {
         id: `token_launch_${crypto.randomUUID()}`,
@@ -1314,7 +1314,7 @@ async function assertEvmBridgeFunds(input: {
       return;
     }
     if (activeSession?.workspace !== "solana") {
-      alert("Jupiter Solana swap hanya dapat dijalankan dari session Solana yang terikat.");
+      alert("Jupiter Solana swap can only run from a bound Solana session.");
       return;
     }
     const activeWalletAddress = walletAddress;
@@ -1439,12 +1439,12 @@ async function assertEvmBridgeFunds(input: {
 
   async function handlePrepareEvmSwap(proposal: WebProposal, msgId: string) {
     if (!activeSession || activeSession.workspace !== "evm" || activeSession.chainKey !== "robinhood") {
-      alert("Robinhood EVM swap hanya dapat disiapkan dari session Robinhood yang terikat.");
+      alert("Robinhood EVM swap can only be prepared from a bound Robinhood session.");
       return;
     }
     const sessionWallet = activeSession.sessionWalletAddress;
     if (!sessionWallet || !evmWalletMatchesSession) {
-      alert("Hubungkan wallet EVM yang sama dengan session ini dan pindahkan ke Robinhood Chain terlebih dahulu.");
+      alert("Connect the EVM wallet bound to this session and switch it to Robinhood Chain first.");
       return;
     }
     if (!proposal.sellToken || !proposal.buyToken || !proposal.sellAmount) return;
@@ -1553,7 +1553,7 @@ async function assertEvmBridgeFunds(input: {
       const message = wasCancelled
         ? "Wallet approval cancelled. No transaction was signed or broadcast."
         : rawMessage.includes("RPC endpoint returned too many errors") || rawMessage.includes("eth_getBlockByNumber")
-        ? "RPC Robinhood di wallet extension sedang gagal atau rate-limited. Tidak ada transaksi yang disiarkan. Buka MetaMask/Rabby → Settings → Networks → Robinhood Chain, lalu ganti RPC URL dengan endpoint custom yang sudah Anda verifikasi di Settings → Network Silfable. Setelah itu reload halaman dan buat quote baru."
+        ? "The Robinhood RPC in your wallet extension is failing or rate-limited. No transaction was broadcast. Open MetaMask/Rabby → Settings → Networks → Robinhood Chain, replace the RPC URL with the verified custom endpoint from Silfable Settings → Network, then reload and request a fresh quote."
         : rawMessage;
       if (submittedEvmHash) {
         setMessages((previous) => previous.map((entry) => (entry.id === msgId && entry.proposal ? { ...entry, proposal: { ...entry.proposal, status: "unknown" as const } } : entry)));

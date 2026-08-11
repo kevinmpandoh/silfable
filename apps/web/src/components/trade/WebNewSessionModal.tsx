@@ -63,7 +63,7 @@ export function WebNewSessionModal({
       const account = await requestEvmAccount();
       if (effectiveEvmAddress) {
         if (account.address.toLowerCase() !== effectiveEvmAddress.toLowerCase()) {
-          throw new Error(`Akun ini sudah terikat ke ${shortAddress(effectiveEvmAddress)}. Ganti account MetaMask/Rabby ke wallet tersebut.`);
+          throw new Error(`This account is already bound to ${shortAddress(effectiveEvmAddress)}. Switch MetaMask/Rabby to that wallet.`);
         }
         return;
       }
@@ -73,7 +73,7 @@ export function WebNewSessionModal({
         body: JSON.stringify(account),
       });
       const challenge = await challengeResponse.json();
-      if (!challengeResponse.ok || typeof challenge.message !== "string") throw new Error(challenge.error || "EVM verification challenge tidak tersedia.");
+      if (!challengeResponse.ok || typeof challenge.message !== "string") throw new Error(challenge.error || "EVM verification challenge is unavailable.");
       const signature = await signEvmAuthenticationMessage(account.address, challenge.message);
       const verifyResponse = await fetch("/api/wallets/evm/verify", {
         method: "POST",
@@ -81,10 +81,10 @@ export function WebNewSessionModal({
         body: JSON.stringify({ challengeId: challenge.challengeId, address: account.address, signature, label: "Browser EVM wallet" }),
       });
       const result = await verifyResponse.json();
-      if (!verifyResponse.ok || !result.wallet) throw new Error(result.error || "EVM wallet tidak dapat ditautkan.");
+      if (!verifyResponse.ok || !result.wallet) throw new Error(result.error || "EVM wallet could not be linked.");
       onWalletLinked(result.wallet as LinkedWebWallet);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "EVM wallet tidak dapat ditautkan.");
+      setError(cause instanceof Error ? cause.message : "EVM wallet could not be linked.");
     } finally {
       setLinking(false);
     }
@@ -96,7 +96,7 @@ export function WebNewSessionModal({
       return;
     }
     if (!signSolanaMessage) {
-      setError("Wallet Solana ini tidak mendukung message signing.");
+      setError("This Solana wallet does not support message signing.");
       return;
     }
     setLinking(true);
@@ -104,19 +104,19 @@ export function WebNewSessionModal({
     try {
       const address = solanaPublicKey.toBase58();
       if (effectiveSolanaAddress) {
-        if (address !== effectiveSolanaAddress) throw new Error(`Akun ini sudah terikat ke ${shortAddress(effectiveSolanaAddress)}. Ganti wallet Solana aktif ke wallet tersebut.`);
+        if (address !== effectiveSolanaAddress) throw new Error(`This account is already bound to ${shortAddress(effectiveSolanaAddress)}. Switch to that active Solana wallet.`);
         return;
       }
       const challengeResponse = await fetch("/api/wallets/solana/challenge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address }) });
       const challenge = await challengeResponse.json();
-      if (!challengeResponse.ok || typeof challenge.message !== "string") throw new Error(challenge.error || "Solana verification challenge tidak tersedia.");
+      if (!challengeResponse.ok || typeof challenge.message !== "string") throw new Error(challenge.error || "Solana verification challenge is unavailable.");
       const signature = bs58.encode(await signSolanaMessage(new TextEncoder().encode(challenge.message)));
       const verifyResponse = await fetch("/api/wallets/solana/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challengeId: challenge.challengeId, address, signature, label: "Browser Solana wallet" }) });
       const result = await verifyResponse.json();
-      if (!verifyResponse.ok || !result.wallet) throw new Error(result.error || "Wallet Solana tidak dapat ditautkan.");
+      if (!verifyResponse.ok || !result.wallet) throw new Error(result.error || "Solana wallet could not be linked.");
       onWalletLinked(result.wallet as LinkedWebWallet);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Wallet Solana tidak dapat ditautkan.");
+      setError(cause instanceof Error ? cause.message : "Solana wallet could not be linked.");
     } finally {
       setLinking(false);
     }
@@ -135,7 +135,7 @@ export function WebNewSessionModal({
         return;
       }
       if (solanaPublicKey.toBase58() !== sessionWalletAddress) {
-        setError(`Ganti account Solana aktif ke ${shortAddress(sessionWalletAddress)} sebelum membuat session.`);
+        setError(`Switch the active Solana account to ${shortAddress(sessionWalletAddress)} before creating a session.`);
         return;
       }
     } else {
@@ -143,7 +143,7 @@ export function WebNewSessionModal({
         await switchToRobinhoodChain(customEvmRpcUrl);
         const account = await requestEvmAccount();
         if (account.address.toLowerCase() !== sessionWalletAddress.toLowerCase()) {
-          setError(`Ganti account EVM aktif ke ${shortAddress(sessionWalletAddress)} sebelum membuat session.`);
+          setError(`Switch the active EVM account to ${shortAddress(sessionWalletAddress)} before creating a session.`);
           return;
         }
       } catch (cause) {

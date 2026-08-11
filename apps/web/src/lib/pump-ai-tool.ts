@@ -91,7 +91,7 @@ export function formatDeterministicPumpSummary(value: PumpTokenIntelligence): st
   const blocked = eligibility?.checks.filter((check) => !check.passed).length ?? 0;
   const venue = value.venue.replace(/-/gu, " ");
   const concentration = value.top10ConcentrationPercent === null ? "unavailable" : `${value.top10ConcentrationPercent.toFixed(2)}%`;
-  return `Analisis finalized untuk mint ${value.mint.slice(0, 6)}…${value.mint.slice(-6)} selesai. Venue terverifikasi: ${venue}. Konsentrasi holder top-10 non-venue: ${concentration}. Status research: ${eligibility?.status ?? "blocked"}${blocked ? ` dengan ${blocked} pemeriksaan belum lolos` : ""}. Lihat kartu evidence untuk detail authority, reserve, price impact, dan peringatan. Analisis ini tidak memberi izin transaksi.`;
+  return `Finalized analysis for mint ${value.mint.slice(0, 6)}…${value.mint.slice(-6)} is complete. Verified venue: ${venue}. Top-10 non-venue holder concentration: ${concentration}. Research status: ${eligibility?.status ?? "blocked"}${blocked ? ` with ${blocked} checks not passed` : ""}. Review the evidence card for authority, reserve, price impact, and warnings. This analysis does not authorize a transaction.`;
 }
 
 type PumpToolCall = { id: string; type: "function"; function: { name: "pump_token_analysis"; arguments: string } };
