@@ -46,11 +46,11 @@ export function JupiterSwapPreviewCard({
     <div className="missionPreview border border-blue-500/25 bg-slate-950/70 rounded-xl p-4">
       <header className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
         <div>
-          <span className="text-[11px] font-mono tracking-wider text-blue-300 block uppercase">
+          <span className="text-[11px] font-mono tracking-wider text-indigo-400 block uppercase">
             JUPITER MAINNET SWAP PROPOSAL
           </span>
           <strong className="text-sm text-white font-mono flex items-center gap-2">
-            {inputSymbol} <ArrowRight className="size-3.5 text-blue-300" /> {outputSymbol}
+            {inputSymbol} <ArrowRight className="size-3.5 text-indigo-400" /> {outputSymbol}
           </strong>
         </div>
         <span className={`statusPill border ${isConfirmed ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300" : status === "unknown" ? "border-amber-400/30 bg-amber-400/10 text-amber-300" : "border-amber-500/30 bg-amber-500/10 text-amber-300"}`}>
