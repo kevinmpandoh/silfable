@@ -1,18 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
+import { resolveRobinhoodToken } from "@/lib/robinhood-token";
 
 const API_URL = "https://trade-api.gateway.uniswap.org/v1/quote";
 const CHAIN_ID = 4_663;
-const NATIVE_ETH = "0x0000000000000000000000000000000000000000";
-const USDG = "0x5fc5360d0400a0fd4f2af552add042d716f1d168";
 const ADDRESS = /^0x[0-9a-f]{40}$/iu;
 const RAW = /^[1-9]\d*$/u;
-
-function tokenAddress(symbol: unknown): string | null {
-  if (symbol === "ETH") return NATIVE_ETH;
-  if (symbol === "USDG") return USDG;
-  return null;
-}
 
 function decimalToRaw(amount: unknown, decimals: number): string | null {
   if (typeof amount !== "string" || !/^\d+(?:\.\d+)?$/u.test(amount)) return null;
@@ -33,10 +26,12 @@ export async function POST(request: NextRequest) {
     if (isAuthFailure(auth)) return auth;
     if (typeof input.walletAddress !== "string" || !ADDRESS.test(input.walletAddress)) return NextResponse.json({ error: "A valid bound EVM wallet is required." }, { status: 400 });
     if (typeof input.apiKey !== "string" || input.apiKey.trim().length < 8) return NextResponse.json({ error: "Configure and verify a Uniswap Trading API key in Settings before preparing a Robinhood swap." }, { status: 400 });
-    const tokenIn = tokenAddress(input.sellToken);
-    const tokenOut = tokenAddress(input.buyToken);
-    if (!tokenIn || !tokenOut || tokenIn === tokenOut) return NextResponse.json({ error: "Only USDG ↔ ETH Robinhood swaps are supported." }, { status: 400 });
-    const amountIn = decimalToRaw(input.amount, input.sellToken === "ETH" ? 18 : 6);
+    const [sellToken, buyToken] = await Promise.all([resolveRobinhoodToken(input.sellToken), resolveRobinhoodToken(input.buyToken)]);
+    if (!sellToken || !buyToken) return NextResponse.json({ error: "Provide a valid Robinhood ERC-20 contract address. ETH and USDG are recognized automatically." }, { status: 400 });
+    const tokenIn = sellToken.address;
+    const tokenOut = buyToken.address;
+    if (tokenIn === tokenOut) return NextResponse.json({ error: "The input and output token must differ." }, { status: 400 });
+    const amountIn = decimalToRaw(input.amount, sellToken.decimals);
     if (!amountIn) return NextResponse.json({ error: "Swap amount must be a positive value with supported token precision." }, { status: 400 });
     const slippageBps = Math.max(1, Math.min(500, Number(input.slippageBps) || 100));
     const response = await fetch(API_URL, {
@@ -58,7 +53,7 @@ export async function POST(request: NextRequest) {
     if (!quoteOutput) return NextResponse.json({ error: "Uniswap did not return an output amount." }, { status: 502 });
     const outputAmount = String(quoteOutput.amount);
     const minimumOutputAmount = RAW.test(String(quoteOutput.minimumAmount ?? "")) ? String(quoteOutput.minimumAmount) : ((BigInt(outputAmount) * BigInt(10_000 - slippageBps)) / BigInt(10_000)).toString();
-    return NextResponse.json({ quote, amountIn, outputAmount, minimumOutputAmount, tokenIn, tokenOut, expiresAt: Date.now() + 300_000 });
+    return NextResponse.json({ quote, amountIn, outputAmount, minimumOutputAmount, tokenIn, tokenOut, sellToken, buyToken, expiresAt: Date.now() + 300_000 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to prepare the Uniswap quote.";
     console.error("[EVM Uniswap quote]", error);

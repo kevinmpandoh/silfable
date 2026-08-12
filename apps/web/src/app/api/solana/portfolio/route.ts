@@ -6,6 +6,8 @@ const DEFAULT_MAINNET_RPC =
   process.env.SOLANA_RPC_URL
   || process.env.NEXT_PUBLIC_SOLANA_RPC_URL
   || "https://api.mainnet-beta.solana.com";
+const WRAPPED_SOL_MINT = "So11111111111111111111111111111111111111112";
+const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 const ALLOWED_RPC_HOST_SUFFIXES = [
   ".helius-rpc.com",
@@ -65,6 +67,22 @@ async function readBalance(endpoint: string, address: string) {
   return { lamports, slot: typeof slot === "number" ? slot : null };
 }
 
+async function quoteAssetValueUsd(mint: string, rawAmount: string): Promise<number> {
+  if (!/^\d+$/u.test(rawAmount) || BigInt(rawAmount) === BigInt(0)) return 0;
+  if (mint === USDC_MINT) return Number(BigInt(rawAmount)) / 1_000_000;
+  const url = new URL("https://lite-api.jup.ag/swap/v1/quote");
+  url.searchParams.set("inputMint", mint);
+  url.searchParams.set("outputMint", USDC_MINT);
+  url.searchParams.set("amount", rawAmount);
+  url.searchParams.set("slippageBps", "100");
+  url.searchParams.set("restrictIntermediateTokens", "true");
+  const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(12_000) });
+  const quote = await response.json().catch(() => null) as { outAmount?: unknown } | null;
+  return response.ok && typeof quote?.outAmount === "string" && /^\d+$/u.test(quote.outAmount)
+    ? Number(BigInt(quote.outAmount)) / 1_000_000
+    : 0;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as { address?: unknown; customRpcUrl?: unknown };
@@ -94,8 +112,8 @@ export async function POST(request: NextRequest) {
 
     const tokensBody = tokensResponse ? await tokensResponse.json().catch(() => null) : null;
     
-    const assets = [];
-    assets.push({ mint: "SOL", symbol: "SOL", amount: solResult.lamports / 1e9, valueUsd: 0 });
+    const assets: Array<{ mint: string; symbol: string; amount: number; rawAmount: string; valueUsd: number }> = [];
+    assets.push({ mint: WRAPPED_SOL_MINT, symbol: "SOL", amount: solResult.lamports / 1e9, rawAmount: String(solResult.lamports), valueUsd: 0 });
 
     if (tokensBody?.result?.value) {
       for (const item of tokensBody.result.value) {
@@ -104,44 +122,30 @@ export async function POST(request: NextRequest) {
         const amount = info.tokenAmount?.uiAmount;
         if (amount > 0) {
           // Identify USDC for better display
-          const isUsdc = info.mint === "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+          const isUsdc = info.mint === USDC_MINT;
           assets.push({
             mint: info.mint,
             symbol: isUsdc ? "USDC" : "SPL",
             amount,
+            rawAmount: String(info.tokenAmount?.amount ?? "0"),
             valueUsd: 0
           });
         }
       }
     }
 
+    const values = await Promise.all(assets.map((asset) => quoteAssetValueUsd(asset.mint, asset.rawAmount).catch(() => 0)));
     let totalUsd = 0;
-    try {
-      const ids = assets.map(a => a.mint).join(",");
-      if (ids) {
-        const priceResponse = await fetch(`https://api.jup.ag/price/v2?ids=${ids}`);
-        if (priceResponse.ok) {
-          const priceRes = await priceResponse.json();
-          if (priceRes?.data) {
-            for (const asset of assets) {
-              const priceData = priceRes.data[asset.mint];
-              if (priceData?.price) {
-                asset.valueUsd = asset.amount * Number(priceData.price);
-                totalUsd += asset.valueUsd;
-              }
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to fetch Jupiter prices", e);
-    }
+    assets.forEach((asset, index) => {
+      asset.valueUsd = values[index] ?? 0;
+      totalUsd += asset.valueUsd;
+    });
 
     return NextResponse.json({
       address,
       lamports: solResult.lamports,
       sol: solResult.lamports / 1_000_000_000,
-      assets,
+      assets: assets.map((asset) => ({ mint: asset.mint, symbol: asset.symbol, amount: asset.amount, valueUsd: asset.valueUsd })),
       totalUsd,
       slot: solResult.slot,
       source: customRpcUrl ? "custom" : "default",

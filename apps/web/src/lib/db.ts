@@ -54,8 +54,12 @@ export interface WebProposal {
   feeReserveSol?: string;
   sourceTxHash?: string;
   destinationTxHash?: string;
-  sellToken?: "USDG" | "ETH";
-  buyToken?: "USDG" | "ETH";
+  sellToken?: string;
+  buyToken?: string;
+  sellTokenAddress?: string;
+  buyTokenAddress?: string;
+  sellTokenDecimals?: number;
+  buyTokenDecimals?: number;
   sellAmount?: string;
   buyAmount?: string;
   minimumBuyAmount?: string;

@@ -4,6 +4,7 @@ import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
 import { resolveSolanaBridgeIntent } from "@/lib/bridge-intent";
 import { assertSolanaBridgeBalance } from "@/lib/solana-bridge-preflight";
 import { resolveRobinhoodSwapIntent } from "@/lib/evm-swap-intent";
+import { resolveRobinhoodToken } from "@/lib/robinhood-token";
 import { resolveEvmToSolanaBridgeIntent } from "@/lib/evm-bridge-intent";
 import { resolvePumpAnalysisIntent } from "@/lib/pump-analysis-utils";
 import { runPumpAnalysisAiTool } from "@/lib/pump-ai-tool";
@@ -99,7 +100,7 @@ async function callOpenRouter(input: {
     );
   const capabilityBoundary =
     `You are Silfable Web's ${input.workspace.toUpperCase()} AI trading assistant. ` +
-    "You help users analyze wallets, research tokens/markets, configure monitor-and-propose Solana DCA/take-profit/stop-loss automations, prepare guarded Pump.fun Token Launch drafts in Solana sessions, prepare Jupiter swap quotes, and plan cross-chain bridges between Solana USDC and Robinhood USDG in the direction supported by the active workspace. In a Robinhood EVM session, ETH and USDG are recognized assets; do not ask the user to provide their token addresses. " +
+    "You help users analyze wallets, research tokens/markets, configure monitor-and-propose Solana DCA/take-profit/stop-loss automations, prepare guarded Pump.fun Token Launch drafts in Solana sessions, prepare Jupiter swap quotes, and plan cross-chain bridges between Solana USDC and Robinhood USDG in the direction supported by the active workspace. In a Robinhood EVM session, ETH and USDG are recognized automatically. For every other EVM token, require the user to provide its Robinhood Chain contract address; never infer or invent one from a name or symbol. " +
     "Safety Guardrails: Transactions are prepared by application code and ALWAYS require explicit browser wallet approval. Web cannot auto-trade, cloud sign, or perform silent execution. Never invent fake quotes, token mints, or balances. USDG and ETH Robinhood swap intents are handled by deterministic application code before this model is called. " +
     "Communication Style: Respond naturally, directly, and concisely in the user's language. Do NOT print mechanical boilerplate, repetitive disclaimer templates, or rigid 'What I can / cannot do' lists unless the user explicitly asks for system boundaries.";
   const system =
@@ -180,13 +181,20 @@ export async function POST(req: NextRequest) {
 
     const selectedWorkspace = workspace === "evm" ? "evm" : "solana";
 
-    const evmSwapIntent = resolveRobinhoodSwapIntent(lastUserMessage);
+    const addressOnlyReply = /^\s*(0x[0-9a-f]{40})\s*$/iu.exec(lastUserMessage);
+    const previousSwapRequest = addressOnlyReply
+      ? [...(messages ?? []).slice(0, -1)].reverse().find((message) => message.role === "user" && /\b(?:swap|tukar|convert|jual|beli)\b/iu.test(message.content ?? ""))?.content
+      : null;
+    const contextualSwapMessage = previousSwapRequest && addressOnlyReply
+      ? previousSwapRequest.replace(/((?:ke|to|->|→)\s*)[A-Za-z][A-Za-z0-9_-]{1,31}\b/iu, `$1${addressOnlyReply[1]}`)
+      : lastUserMessage;
+    const evmSwapIntent = resolveRobinhoodSwapIntent(contextualSwapMessage);
     if (evmSwapIntent.requested) {
       if (selectedWorkspace !== "evm" || chainKey !== "robinhood") {
         return NextResponse.json({ role: "assistant", content: "Open a Robinhood EVM session bound to your EVM wallet first. No quote or transaction was prepared." });
       }
-      if (!evmSwapIntent.amount || !evmSwapIntent.sellToken || !evmSwapIntent.buyToken) {
-        return NextResponse.json({ role: "assistant", content: "Provide the pair and amount, for example: swap 0.5 USDG to ETH. USDG and ETH are mapped automatically for Robinhood Chain." });
+      if (!evmSwapIntent.amount || !evmSwapIntent.sellToken || !evmSwapIntent.buyToken || evmSwapIntent.needsContractAddress) {
+        return NextResponse.json({ role: "assistant", content: "Please provide the amount and contract address for every token other than ETH or USDG. Example: `swap 0.5 ETH to 0x...`. Silfable will validate the address and token metadata on Robinhood Chain before requesting a quote." });
       }
       if (evmSwapIntent.sellToken === evmSwapIntent.buyToken || Number(evmSwapIntent.amount) <= 0) {
         return NextResponse.json({ role: "assistant", content: "The source and destination tokens must differ, with a positive amount." });
@@ -194,10 +202,14 @@ export async function POST(req: NextRequest) {
       if (typeof sessionWalletAddress !== "string" || !/^0x[0-9a-f]{40}$/iu.test(sessionWalletAddress)) {
         return NextResponse.json({ role: "assistant", content: "The Robinhood session is not bound to a valid EVM wallet." });
       }
+      const [sellToken, buyToken] = await Promise.all([resolveRobinhoodToken(evmSwapIntent.sellToken), resolveRobinhoodToken(evmSwapIntent.buyToken)]);
+      if (!sellToken || !buyToken) {
+        return NextResponse.json({ role: "assistant", content: "I could not validate one of those contract addresses as an ERC-20 token on Robinhood Chain. Check the address and send the swap request again." });
+      }
       return NextResponse.json({
         role: "assistant",
-        content: `A ${evmSwapIntent.amount} ${evmSwapIntent.sellToken} → ${evmSwapIntent.buyToken} swap proposal on Robinhood Chain is ready. Select Prepare quote to request Uniswap pricing; no signature or broadcast has occurred.`,
-        proposal: { id: `evm_swap_${Date.now()}`, type: "evm_swap", mint: "", solAmount: "0", estimatedTokens: "Quote pending", sellToken: evmSwapIntent.sellToken, buyToken: evmSwapIntent.buyToken, sellAmount: evmSwapIntent.amount, status: "preview_only", mode: "restricted_browser_wallet", venue: "Uniswap Trading API", explanation: "The token pair and network are pinned to Robinhood Chain. A quote and transaction can be prepared only after a verified Uniswap key is available.", checks: [{ code: "wallet_bound", status: "pass", message: `Session EVM wallet: ${sessionWalletAddress}` }, { code: "chain_pinned", status: "pass", message: "Chain is pinned to Robinhood Chain (4663)." }, { code: "wallet_approval", status: "pass", message: "Your browser wallet will request explicit approval before broadcast." }] },
+        content: `A ${evmSwapIntent.amount} ${sellToken.symbol} → ${buyToken.symbol} swap proposal is ready. Silfable is loading a live Robinhood Chain route; no signature or broadcast has occurred.`,
+        proposal: { id: `evm_swap_${Date.now()}`, type: "evm_swap", mint: "", solAmount: "0", estimatedTokens: "Quote pending", sellToken: sellToken.symbol, buyToken: buyToken.symbol, sellTokenAddress: sellToken.address, buyTokenAddress: buyToken.address, sellTokenDecimals: sellToken.decimals, buyTokenDecimals: buyToken.decimals, sellAmount: evmSwapIntent.amount, status: "preview_only", mode: "restricted_browser_wallet", venue: "Uniswap Trading API", explanation: "The contract addresses and token metadata were validated on Robinhood Chain. Wallet confirmation remains required.", checks: [{ code: "wallet_bound", status: "pass", message: `Session EVM wallet: ${sessionWalletAddress}` }, { code: "token_contracts", status: "pass", message: "Token contracts and decimals were read from Robinhood Chain." }, { code: "chain_pinned", status: "pass", message: "Chain is pinned to Robinhood Chain (4663)." }, { code: "wallet_approval", status: "pass", message: "Your browser wallet will request explicit approval before broadcast." }] },
       });
     }
 
