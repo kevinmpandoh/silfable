@@ -29,7 +29,7 @@ export function TopHeader({ session }: { session: SessionRecord }) {
                     : "Agent mode · advisory only"}
       </div>
       <div>
-        <span>{session.title}</span>
+        <span>Live route · {session.title}</span>
       </div>
     </header>
   );

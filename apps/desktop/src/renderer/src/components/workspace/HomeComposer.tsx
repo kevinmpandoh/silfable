@@ -72,13 +72,13 @@ export function HomeComposer({
   return (
     <div className="homeState">
       <BrandMark large />
-      <p className="tagline">Understand. Constrain. Verify.</p>
-      <h1>What should Silfable help you do?</h1>
+      <p className="tagline">Robinhood Chain first · Solana connected</p>
+      <h1>Where should your next route lead?</h1>
       <Composer
         value={draft}
         setValue={setDraft}
         onSubmit={onSubmit}
-        placeholder="Plan a Mainnet task or ask about your portfolio…"
+        placeholder="Plan a Robinhood swap, bridge, or portfolio task…"
       />
       <div className="suggestions">
         <Button variant="outline" size="sm" icon={<Activity className="size-3.5" />}
