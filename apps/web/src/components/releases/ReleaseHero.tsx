@@ -2,12 +2,13 @@ import { ArrowDownToLine, CheckCircle2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AtlasReveal } from "@/components/motion/AtlasMotion";
 
 export function ReleaseHero() {
   return (
     <section className="atlasReleaseHero border-b border-[var(--line)] text-paper">
       <div className="section-shell pb-16 pt-32 sm:pb-20 sm:pt-40 lg:pb-24">
-        <div className="grid gap-14 lg:grid-cols-[1fr_0.65fr] lg:items-end">
+        <AtlasReveal className="grid gap-14 lg:grid-cols-[1fr_0.65fr] lg:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-3">
               <Badge>Linux preview</Badge>
@@ -30,7 +31,7 @@ export function ReleaseHero() {
               <a href="#downloads">Download for Linux <ArrowDownToLine className="ml-4 size-4" /></a>
             </Button>
           </div>
-        </div>
+        </AtlasReveal>
       </div>
     </section>
   );

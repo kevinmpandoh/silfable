@@ -30,6 +30,27 @@ export const metadata: Metadata = {
   title: "Silfable - Robinhood Chain Trading Workspace",
   description:
     "Prepare Robinhood Chain swaps, bridge between Robinhood and Solana, and track every supported Mainnet transaction from route to settlement.",
+  openGraph: {
+    type: "website",
+    title: "Silfable - Robinhood Chain Trading Workspace",
+    description:
+      "Prepare Robinhood Chain swaps, bridge between Robinhood and Solana, and track every supported Mainnet transaction from route to settlement.",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Silfable Robinhood Chain-first trading workspace",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Silfable - Robinhood Chain Trading Workspace",
+    description:
+      "Prepare Robinhood Chain swaps, bridge between Robinhood and Solana, and track every supported Mainnet transaction from route to settlement.",
+    images: ["/og-image.png"],
+  },
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",

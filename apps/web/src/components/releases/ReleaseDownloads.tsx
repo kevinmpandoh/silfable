@@ -1,6 +1,7 @@
 import { Apple, ArrowDownToLine, Clock3, FileKey2, Laptop } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { AtlasReveal } from "@/components/motion/AtlasMotion";
 
 const builds = [
   { platform: "macOS", detail: "Apple Silicon & Intel", file: "Signed package in preparation", requirement: "Will be published after platform signing and compatibility validation.", href: null },
@@ -11,11 +12,11 @@ const builds = [
 export function ReleaseDownloads() {
   return (
     <section id="downloads" className="scroll-mt-24 border-b border-[var(--line)] py-20 sm:py-28">
-      <div className="grid gap-8 border-b border-[var(--line)] pb-11 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-end">
+      <AtlasReveal className="grid gap-8 border-b border-[var(--line)] pb-11 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-end">
         <div><p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--atlas-coral)]">Release artifacts / 0.1.0</p><h2 className="mt-5 text-5xl font-bold tracking-[-0.06em] sm:text-6xl">Choose your platform.</h2></div>
         <p className="text-sm leading-7 text-[var(--muted)]">Every download is labelled by release state, supported platform, and verification requirements. Installing a build does not enable unattended transactions.</p>
-      </div>
-      <div className="releaseSpecimens mt-10 grid gap-4 lg:grid-cols-[.8fr_.8fr_1.4fr]">
+      </AtlasReveal>
+      <AtlasReveal className="releaseSpecimens mt-10 grid gap-4 lg:grid-cols-[.8fr_.8fr_1.4fr]" delay={0.08}>
         {builds.map((build) => {
           const Icon = build.platform === "macOS" ? Apple : Laptop;
           const available = Boolean(build.href);
@@ -29,8 +30,8 @@ export function ReleaseDownloads() {
             <div className="mt-auto border-t border-[var(--line)] pt-6"><p className="font-mono text-[9px] uppercase tracking-[0.15em] text-[var(--blue-2)]">Build details</p><p className="mt-3 text-sm leading-6 text-[var(--muted)]">{build.requirement}</p></div>
           </article>;
         })}
-      </div>
-      <p className="mt-6 flex items-center gap-3 font-mono text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]"><FileKey2 className="size-4 text-[var(--atlas-coral)]" /> Verify each downloaded artifact against SHA256SUMS.txt.</p>
+      </AtlasReveal>
+      <AtlasReveal delay={0.16}><p className="mt-6 flex items-center gap-3 font-mono text-[9px] uppercase tracking-[0.15em] text-[var(--muted)]"><FileKey2 className="size-4 text-[var(--atlas-coral)]" /> Verify each downloaded artifact against SHA256SUMS.txt.</p></AtlasReveal>
     </section>
   );
 }

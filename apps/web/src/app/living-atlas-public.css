@@ -278,8 +278,9 @@ body::before {
 .releaseSpecimen { border-radius: 16px 54px 16px 16px; background: var(--atlas-plum); }
 .releaseSpecimen.isAvailable { border-color: rgb(167 139 250 / .42) !important; background: rgb(167 139 250 / .055); }
 .releaseLedger::before { background: linear-gradient(var(--atlas-coral), var(--atlas-lilac), transparent) !important; }
-.releaseLedger > article > span { border-color: var(--atlas-night); background: var(--atlas-coral); }
+.releaseLedger article > span { border-color: var(--atlas-night); background: var(--atlas-coral); }
 .releaseLedger [data-slot="card"] { border-radius: 18px 60px 18px 18px; background: var(--atlas-plum) !important; }
+.releaseVersionMeta { min-width: 0; }
 
 @keyframes atlasRouteDraw { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 

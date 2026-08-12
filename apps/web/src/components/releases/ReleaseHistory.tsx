@@ -3,6 +3,7 @@ import { ArrowDownToLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { AtlasReveal } from "@/components/motion/AtlasMotion";
 
 const releases = [
   {
@@ -19,19 +20,20 @@ const releases = [
 export function ReleaseHistory() {
   return (
     <section className="py-20 sm:py-28">
-      <div className="mb-14 grid gap-7 border-b border-black/20 pb-10 lg:grid-cols-[1fr_0.6fr] lg:items-end">
+      <AtlasReveal className="mb-14 grid gap-7 border-b border-black/20 pb-10 lg:grid-cols-[1fr_0.6fr] lg:items-end">
         <div>
           <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--atlas-coral)]">Changelog timeline</p>
           <h2 className="mt-5 font-serif text-5xl tracking-[-0.05em] sm:text-7xl">Version history</h2>
         </div>
         <p className="max-w-md text-sm leading-7 text-black/50 lg:justify-self-end">The current preview milestone, with Linux available first and more desktop platforms planned.</p>
-      </div>
+      </AtlasReveal>
 
-      <div className="releaseLedger relative space-y-10 before:absolute before:bottom-0 before:left-[7px] before:top-0 before:w-px before:bg-black/20 sm:before:left-[10.5rem]">
-        {releases.map((release) => (
-          <article key={release.version} className="relative grid gap-5 pl-10 sm:grid-cols-[9rem_1fr] sm:gap-12 sm:pl-0">
-            <span className="absolute left-0 top-8 size-[15px] rounded-full border-4 border-paper bg-[var(--atlas-coral)] sm:left-[10.05rem]" />
-            <div className="pt-7">
+      <div className="releaseLedger relative space-y-10 before:absolute before:bottom-0 before:left-[7px] before:top-0 before:w-px before:bg-black/20 sm:before:left-[12rem]">
+        {releases.map((release, index) => (
+          <AtlasReveal key={release.version} delay={index * 0.08}>
+          <article className="relative grid gap-5 pl-10 sm:grid-cols-[10.5rem_1fr] sm:gap-14 sm:pl-0">
+            <span className="absolute left-0 top-8 size-[15px] rounded-full border-4 border-paper bg-[var(--atlas-coral)] sm:left-[11.55rem]" />
+            <div className="releaseVersionMeta pt-7 sm:pl-6">
               <p className="font-mono text-2xl tracking-[-0.05em] text-[var(--atlas-coral)]">v{release.version}</p>
               <p className="mt-3 font-mono text-[8px] uppercase tracking-[0.15em] text-black/30">{release.date}</p>
             </div>
@@ -59,6 +61,7 @@ export function ReleaseHistory() {
               </CardContent>
             </Card>
           </article>
+          </AtlasReveal>
         ))}
       </div>
     </section>

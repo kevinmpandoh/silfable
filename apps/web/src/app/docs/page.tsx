@@ -10,20 +10,21 @@ export const metadata: Metadata = {
 };
 
 import { PageTransition } from "@/components/ui/PageTransition";
+import { AtlasReveal } from "@/components/motion/AtlasMotion";
 
 export default function DocsPage() {
   return (
     <PageTransition>
       <main className="publicPage docsTheme min-h-screen bg-paper text-ink">
-        <WhitepaperContent />
+        <AtlasReveal><WhitepaperContent /></AtlasReveal>
         <div className="section-shell atlasDocsShell pt-20">
-          <div className="lg:hidden"><DocsSidebar /></div>
-          <div className="grid gap-16 py-16 lg:grid-cols-[250px_minmax(0,1fr)] lg:py-24">
+          <AtlasReveal className="lg:hidden"><DocsSidebar /></AtlasReveal>
+          <AtlasReveal className="grid gap-16 py-16 lg:grid-cols-[250px_minmax(0,1fr)] lg:py-24" delay={0.08}>
             <div className="hidden lg:block h-full"><DocsSidebar /></div>
             <div className="prose prose-invert min-w-0 max-w-none prose-headings:font-serif prose-headings:text-ink prose-p:text-black/55 prose-strong:text-ink prose-li:text-black/55 prose-code:font-mono">
               <DocsContent />
             </div>
-          </div>
+          </AtlasReveal>
         </div>
       </main>
     </PageTransition>
