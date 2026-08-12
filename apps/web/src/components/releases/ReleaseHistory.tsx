@@ -21,7 +21,7 @@ export function ReleaseHistory() {
     <section className="py-20 sm:py-28">
       <div className="mb-14 grid gap-7 border-b border-black/20 pb-10 lg:grid-cols-[1fr_0.6fr] lg:items-end">
         <div>
-          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--atlas-coral)]">Release timeline</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--atlas-coral)]">Changelog timeline</p>
           <h2 className="mt-5 font-serif text-5xl tracking-[-0.05em] sm:text-7xl">Version history</h2>
         </div>
         <p className="max-w-md text-sm leading-7 text-black/50 lg:justify-self-end">The current preview milestone, with Linux available first and more desktop platforms planned.</p>

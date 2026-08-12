@@ -36,7 +36,7 @@ export async function DownloadTable() {
             </article>;
           })}
         </div>
-        <a href="/releases" className="mt-8 inline-flex items-center gap-3 font-mono text-[10px] uppercase tracking-[.14em] text-[#b53c32]">Release ledger <ArrowDownToLine className="size-4" /></a>
+        <a href="/releases" className="mt-8 inline-flex items-center gap-3 font-mono text-[10px] uppercase tracking-[.14em] text-[#b53c32]">View changelog <ArrowDownToLine className="size-4" /></a>
       </div>
     </section>
   );
