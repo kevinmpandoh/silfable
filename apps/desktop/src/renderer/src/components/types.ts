@@ -46,9 +46,16 @@ export const EVM_BRIDGE_ASSETS: Record<EvmBridgeChainKey, {
 export const EVM_PORTFOLIO_CHAINS: ReadonlyArray<{
   key: EvmChainKey;
   label: string;
-  token?: { address: `0x${string}`; symbol: "USDC" | "USDG"; decimals: 6 };
+  tokens: ReadonlyArray<{ address: `0x${string}`; symbol: string; decimals: number }>;
 }> = [
-  { key: "robinhood", label: "Robinhood", token: { address: BRIDGE_ROBINHOOD_USDG_ADDRESS, symbol: "USDG", decimals: 6 } },
+  {
+    key: "robinhood",
+    label: "Robinhood",
+    tokens: [
+      { address: BRIDGE_ROBINHOOD_USDG_ADDRESS, symbol: "USDG", decimals: 6 },
+      { address: "0x0bd7d308f8e1639fab988df18a8011f41eacad73", symbol: "WETH", decimals: 18 },
+    ],
+  },
 ];
 
 export function bridgeDestination(chainId: BridgeProposal["contract"]["destinationChainId"]) {

@@ -9,6 +9,17 @@ type SolanaPortfolioView = { wallet: WalletSummary; snapshot: PortfolioSnapshot 
 type EvmPortfolioView = { wallet: WalletSummary; snapshot: EvmPortfolioSnapshot };
 type PortfolioLoadState = "idle" | "loading" | "ready" | "partial" | "error";
 type PortfolioFamilyFilter = "all" | "solana" | "evm";
+type EvmPortfolioToken = { address: `0x${string}`; symbol: string; decimals: number };
+
+const EVM_NATIVE_ALIASES = new Set([
+  "0x0000000000000000000000000000000000000000",
+  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+]);
+
+function decimalsFromMultiplier(multiplier: string): number | null {
+  if (!/^10*$/u.test(multiplier)) return null;
+  return multiplier.length - 1;
+}
 
 async function settleTaskPool<T>(tasks: ReadonlyArray<() => Promise<T>>, concurrency: number): Promise<Array<PromiseSettledResult<T>>> {
   const results = new Array<PromiseSettledResult<T>>(tasks.length);
@@ -108,6 +119,29 @@ export function UnifiedPortfolioRail({
       : [];
     return evmWallets;
   }, [session?.id, sessionScope, sessionWallet, evmWallets]);
+  const sessionEvmTokens = useMemo<EvmPortfolioToken[]>(() => {
+    if (session?.walletScope !== "evm") return [];
+    const tokens = new Map<string, EvmPortfolioToken>();
+    for (const message of session.messages) {
+      const quote = message.evmSwapProposal?.quote;
+      if (!quote) continue;
+      const candidates = [
+        { address: quote.sellToken, symbol: quote.sellTokenSymbol, multiplier: quote.sellTokenMultiplier },
+        { address: quote.buyToken, symbol: quote.buyTokenSymbol, multiplier: quote.buyTokenMultiplier },
+      ];
+      for (const candidate of candidates) {
+        const address = candidate.address.toLowerCase();
+        const decimals = decimalsFromMultiplier(candidate.multiplier);
+        if (EVM_NATIVE_ALIASES.has(address) || decimals === null || decimals > 18) continue;
+        tokens.set(address, {
+          address: address as `0x${string}`,
+          symbol: candidate.symbol,
+          decimals,
+        });
+      }
+    }
+    return [...tokens.values()];
+  }, [session]);
 
   useEffect(() => {
     setWalletFilter("all");
@@ -158,7 +192,10 @@ export function UnifiedPortfolioRail({
         requestId: crypto.randomUUID(),
         chainKey: chain.key,
         address: wallet.address,
-        tokens: chain.token ? [chain.token] : [],
+        tokens: [...new Map(
+          [...chain.tokens, ...(chain.key === session?.evmChainKey ? sessionEvmTokens : [])]
+            .map((token) => [token.address.toLowerCase(), token]),
+        ).values()],
       })).snapshot,
     }));
     void settleTaskPool(tasks, 3).then((results) => {
@@ -172,7 +209,7 @@ export function UnifiedPortfolioRail({
       setEvmState(fulfilled.length === 0 ? "error" : fulfilled.length === results.length ? "ready" : "partial");
     });
     return () => { active = false; };
-  }, [runtime?.keystore, evmTargets, refreshToken, retry]);
+  }, [runtime?.keystore, evmTargets, refreshToken, retry, session?.evmChainKey, sessionEvmTokens]);
 
   useEffect(() => {
     let active = true;
