@@ -154,13 +154,13 @@ body::before {
 .routeMapTrack::before { position: absolute; top: 8px; bottom: 8px; left: 6px; width: 1px; content: ""; background: linear-gradient(var(--atlas-aqua), var(--atlas-coral), var(--atlas-lilac)); transform-origin: top; animation: atlasRouteDraw 1.4s ease-out both; }
 .routeMapBranch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 35px; }
 .routeMapBranch span { border: 1px solid var(--atlas-line); border-radius: 999px; padding: 10px; color: var(--atlas-muted); font: 9px/1 var(--font-mono), monospace; text-align: center; text-transform: uppercase; }
-.atlasProofStrip { border-top: 1px solid var(--atlas-line); background: var(--atlas-plum); }
+.atlasProofStrip { position: relative; z-index: 2; border-top: 1px solid var(--atlas-line-strong); background: rgb(33 22 44 / .98); }
 .atlasProofGrid { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; }
 .atlasProofItem { min-height: 92px; display: flex; flex-direction: column; justify-content: center; gap: 8px; border-right: 1px solid var(--atlas-line); padding: 18px 28px; }
 .atlasProofItem:first-child { padding-left: 0; }
 .atlasProofItem:last-child { border-right: 0; }
-.atlasProofItem strong { font: 600 12px/1.3 var(--font-mono), monospace; text-transform: uppercase; }
-.atlasProofItem span { color: var(--atlas-muted); font-size: 12px; }
+.atlasProofItem strong { color: var(--atlas-bone); font: 700 12px/1.3 var(--font-mono), monospace; text-transform: uppercase; }
+.atlasProofItem > span:last-child { color: #c9bfd0; font-size: 12px; }
 
 .atlasSection { position: relative; border-bottom: 1px solid var(--atlas-line); padding-block: clamp(88px, 10vw, 156px); }
 .atlasSectionHeader { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 410px); align-items: end; gap: 50px; margin-bottom: 72px; }

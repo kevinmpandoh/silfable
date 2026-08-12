@@ -67,12 +67,7 @@ export function SetupFlow({
         )}
       </header>
       <SetupStepper current={index} />
-      {editing && setup.step !== 6 && (
-        <div className="editingBar">
-          <span>Editing · {editingLabel}</span>
-          <button onClick={() => edit(6)}>← Return to review</button>
-        </div>
-      )}
+
       {setup.step === 1 &&
         (runtime?.masterPassword === "configured" ? (
           <ChangePasswordStep

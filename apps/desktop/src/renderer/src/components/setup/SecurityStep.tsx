@@ -208,16 +208,12 @@ export function ChangePasswordStep({ onContinue }: { onContinue: () => void }) {
   }
   return (
     <SetupCard
-      icon="⌾"
+
       eyebrow="Route chapter / 01"
       className="desktopStepCanvas"
       title="Change master password"
       subtitle="Update the password required when Silfable opens."
     >
-      <Notice tone="info" title="Existing secrets remain intact">
-        Changing this access password does not replace or export wallet and API
-        secrets.
-      </Notice>
       <Field label="Current password">
         <input
           type="password"

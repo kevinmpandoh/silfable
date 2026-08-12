@@ -90,7 +90,7 @@ export function Hero() {
 
       </div>
 
-      <div className="atlasProofStrip">
+      <div className="atlasProofStrip ">
         <div className="section-shell atlasProofGrid">
           <div className="atlasProofItem"><AtlasKicker tone="coral">Living Atlas / 01</AtlasKicker><span>Every supported workflow stays visible.</span></div>
           <div className="atlasProofItem"><NetworkBadge tone="lilac">Robinhood Chain</NetworkBadge><span>Primary ecosystem · ID 4663</span></div>

@@ -19,7 +19,6 @@ export function SetupCard({
   return (
     <section className={`setupCard ${className ?? ""}`.trim()}>
       <header>
-        <span className="setupIcon">{icon}</span>
         <div>
           {eyebrow && <span className="setupChapterKicker">{eyebrow}</span>}
           <h1>{title}</h1>
