@@ -391,10 +391,6 @@ export function WalletStep({
       title="Set up Mainnet wallets"
       subtitle="Select the wallets a future session may reference. Adding a wallet never authorizes a transaction."
     >
-      <Notice tone="warning" title="Execution stays locked">
-        Mainnet is the only active network. Restricted approval and
-        deterministic policy checks remain mandatory.
-      </Notice>
       <div className="chainTabs">
         <button
           className={walletTab === "solana" ? "active" : ""}

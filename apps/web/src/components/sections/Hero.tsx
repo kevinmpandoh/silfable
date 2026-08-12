@@ -3,16 +3,12 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowDownRight, Download } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef } from "react";
 
 import { AtlasKicker, NetworkBadge } from "@/components/atlas/AtlasPrimitives";
 import { Button } from "@/components/ui/button";
 
 export function Hero() {
   const reduceMotion = useReducedMotion();
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  
 
   return (
     <section id="top" className="atlasHero">
@@ -21,7 +17,7 @@ export function Hero() {
           
           className="atlasHeroBackgroundVideo"
           loop
-          autoPlay
+          autoPlay={!reduceMotion}
           muted
           playsInline
           preload="metadata"
@@ -48,10 +44,23 @@ export function Hero() {
 
       <div className="atlasProofStrip ">
         <div className="section-shell atlasProofGrid">
-          <div className="atlasProofItem"><AtlasKicker tone="coral">Living Atlas / 01</AtlasKicker><span>Every supported workflow stays visible.</span></div>
-          <div className="atlasProofItem"><NetworkBadge tone="lilac">Robinhood Chain</NetworkBadge><span>Primary ecosystem · ID 4663</span></div>
-          <div className="atlasProofItem"><NetworkBadge tone="aqua">Connected to Solana</NetworkBadge><span>Swap + launch + bridge</span></div>
-          <div className="atlasProofItem"><strong>Web + desktop</strong><span>Two signing surfaces</span></div>
+          {[
+            <><AtlasKicker tone="coral">Living Atlas / 01</AtlasKicker><span>Every supported workflow stays visible.</span></>,
+            <><NetworkBadge tone="lilac">Robinhood Chain</NetworkBadge><span>Primary ecosystem · ID 4663</span></>,
+            <><NetworkBadge tone="aqua">Connected to Solana</NetworkBadge><span>Swap + launch + bridge</span></>,
+            <><strong>Web + desktop</strong><span>Two signing surfaces</span></>,
+          ].map((content, index) => (
+            <motion.div
+              className="atlasProofItem"
+              key={index}
+              initial={reduceMotion ? false : { opacity: 0, y: 14 }}
+              whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: .5, delay: index * .08 }}
+            >
+              {content}
+            </motion.div>
+          ))}
         </div>
       </div>
     </section>

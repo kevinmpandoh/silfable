@@ -1,6 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 
 import { AtlasKicker, StatusMarker } from "@/components/atlas/AtlasPrimitives";
+import { AtlasReveal } from "@/components/motion/AtlasMotion";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 const faqs = [
@@ -15,8 +16,8 @@ export function FaqSection() {
   return (
     <section className="atlasSection faqAtlas">
       <div className="section-shell faqLayout">
-        <div className="faqIntro"><AtlasKicker tone="aqua">Field notes / FAQ</AtlasKicker><h2>Know before<br />you connect.</h2><p className="mt-8 max-w-sm leading-7 text-[var(--atlas-muted)]">Practical answers about workflows, wallet confirmation, route reviews, and current platform coverage.</p><a href="/docs" className="mt-8 inline-flex items-center gap-2 text-sm text-[var(--atlas-citron)]">Explore documentation <ArrowUpRight className="size-4" /></a></div>
-        <div><div className="mb-7"><StatusMarker tone="citron">Five field notes</StatusMarker></div><Accordion type="single" collapsible className="faqNotes">{faqs.map(([question, answer], index) => <AccordionItem key={question} value={`note-${index}`}><AccordionTrigger className="gap-7 py-7 text-left text-xl"><span className="font-mono text-[9px] text-[var(--atlas-coral)]">N{String(index + 1).padStart(2, "0")}</span>{question}</AccordionTrigger><AccordionContent className="max-w-2xl pl-10 text-base leading-8 text-[var(--atlas-muted)]">{answer}</AccordionContent></AccordionItem>)}</Accordion></div>
+        <AtlasReveal className="faqIntro"><AtlasKicker tone="aqua">Field notes / FAQ</AtlasKicker><h2>Know before<br />you connect.</h2><p className="mt-8 max-w-sm leading-7 text-[var(--atlas-muted)]">Practical answers about workflows, wallet confirmation, route reviews, and current platform coverage.</p><a href="/docs" className="mt-8 inline-flex items-center gap-2 text-sm text-[var(--atlas-citron)]">Explore documentation <ArrowUpRight className="size-4" /></a></AtlasReveal>
+        <AtlasReveal delay={0.08}><div className="mb-7"><StatusMarker tone="citron">Five field notes</StatusMarker></div><Accordion type="single" collapsible className="faqNotes">{faqs.map(([question, answer], index) => <AccordionItem key={question} value={`note-${index}`} className="text-left"><AccordionTrigger className="faqQuestionTrigger py-7 text-xl"><span className="font-mono text-[9px] text-[var(--atlas-coral)]">N{String(index + 1).padStart(2, "0")}</span><span className="faqQuestionText">{question}</span></AccordionTrigger><AccordionContent className="faqAnswer max-w-2xl text-base leading-8 text-[var(--atlas-muted)]">{answer}</AccordionContent></AccordionItem>)}</Accordion></AtlasReveal>
       </div>
     </section>
   );

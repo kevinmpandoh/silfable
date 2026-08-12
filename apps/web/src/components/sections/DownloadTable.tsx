@@ -1,6 +1,7 @@
 import { Apple, ArrowDownToLine, Clock3, Laptop } from "lucide-react";
 
 import { AtlasKicker, StatusMarker } from "@/components/atlas/AtlasPrimitives";
+import { AtlasReveal } from "@/components/motion/AtlasMotion";
 import { Button } from "@/components/ui/button";
 
 type PlatformRelease = { platform: string; detail: string; requirement: string; primaryLabel: string; href?: string };
@@ -22,11 +23,11 @@ export async function DownloadTable() {
   return (
     <section id="download" className="atlasSection downloadAtlas">
       <div className="section-shell">
-        <div className="atlasSectionHeader">
+        <AtlasReveal className="atlasSectionHeader">
           <div><AtlasKicker tone="coral">Desktop app / {version}</AtlasKicker><h2>Bring the atlas<br />to your machine.</h2></div>
           <p>Desktop keeps its encrypted vault, transaction checks, and activity records locally. Every platform is labelled with its current release state.</p>
-        </div>
-        <div className="downloadGrid">
+        </AtlasReveal>
+        <AtlasReveal className="downloadGrid" delay={0.08}>
           {releases.map(release => {
             const Icon = release.platform === "macOS" ? Apple : Laptop;
             return <article key={release.platform} className={`downloadCard ${release.href ? "isAvailable" : ""}`}>
@@ -35,8 +36,8 @@ export async function DownloadTable() {
               <div className="downloadActions">{release.href ? <Button asChild className="atlasPrimaryButton w-full"><a href={release.href} download>{release.primaryLabel}<ArrowDownToLine className="ml-3 size-4" /></a></Button> : <Button disabled className="w-full rounded-full">{release.primaryLabel}<Clock3 className="ml-3 size-4" /></Button>}</div>
             </article>;
           })}
-        </div>
-        <a href="/releases" className="mt-8 inline-flex items-center gap-3 font-mono text-[10px] uppercase tracking-[.14em] text-[#b53c32]">View changelog <ArrowDownToLine className="size-4" /></a>
+        </AtlasReveal>
+        <AtlasReveal delay={0.16}><a href="/releases" className="mt-8 inline-flex items-center gap-3 font-mono text-[10px] uppercase tracking-[.14em] text-[#b53c32]">View changelog <ArrowDownToLine className="size-4" /></a></AtlasReveal>
       </div>
     </section>
   );

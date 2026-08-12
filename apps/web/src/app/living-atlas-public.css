@@ -230,6 +230,9 @@ body::before {
 .faqIntro h2 { margin: 18px 0 0; font-size: clamp(4rem, 7vw, 7.8rem); font-weight: 430; line-height: .84; }
 .faqNotes { border-top: 1px solid var(--atlas-line); }
 .faqNotes [data-slot="accordion-item"] { border-color: var(--atlas-line); }
+.faqNotes .faqQuestionTrigger { display: grid; grid-template-columns: 48px minmax(0, 1fr) 18px; gap: 18px; width: 100%; justify-content: initial; text-align: left; }
+.faqQuestionText { min-width: 0; justify-self: stretch; text-align: left; }
+.faqNotes .faqAnswer { padding-left: 66px; text-align: left; }
 .faqNotes [data-slot="accordion-trigger"]:hover { color: var(--atlas-coral); }
 
 .atlasFooter { border-top: 0; background: var(--atlas-night); }
