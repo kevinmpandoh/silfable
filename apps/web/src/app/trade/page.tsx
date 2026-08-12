@@ -593,33 +593,27 @@ export default function TradePage() {
   );
   const activeMessageCount = messages.reduce((count, message) => count + (message.sessionId === activeSessionId ? 1 : 0), 0);
   const expectedEvmChain = activeSession?.chainKey ? getWebEvmChain(activeSession.chainKey) : null;
-  const evmWalletMatchesSession = activeSession?.workspace !== "evm"
-    || (activeEvmAddress?.toLowerCase() === activeSession.sessionWalletAddress?.toLowerCase()
-      && activeEvmChainId === expectedEvmChain?.chainId);
+  const evmWalletMismatch = activeSession?.workspace === "evm" && (
+    (activeEvmAddress !== null && activeEvmAddress.toLowerCase() !== activeSession.sessionWalletAddress?.toLowerCase())
+    || (activeEvmChainId !== null && activeEvmChainId !== expectedEvmChain?.chainId)
+  );
 
   useEffect(() => {
     const provider = window.ethereum;
     if (!provider) return;
-    const refresh = async () => {
-      try {
-        const [accounts, chainIdHex] = await Promise.all([
-          provider.request({ method: "eth_accounts" }),
-          provider.request({ method: "eth_chainId" }),
-        ]);
-        setActiveEvmAddress(Array.isArray(accounts) && typeof accounts[0] === "string" ? accounts[0] : null);
-        setActiveEvmChainId(typeof chainIdHex === "string" ? Number.parseInt(chainIdHex, 16) : null);
-      } catch {
-        setActiveEvmAddress(null);
-        setActiveEvmChainId(null);
-      }
+    const onAccountsChanged = (...args: unknown[]) => {
+      const accounts = args[0];
+      setActiveEvmAddress(Array.isArray(accounts) && typeof accounts[0] === "string" ? accounts[0] : null);
     };
-    const onChange = () => void refresh();
-    void refresh();
-    provider.on?.("accountsChanged", onChange);
-    provider.on?.("chainChanged", onChange);
+    const onChainChanged = (...args: unknown[]) => {
+      const chainIdHex = args[0];
+      setActiveEvmChainId(typeof chainIdHex === "string" ? Number.parseInt(chainIdHex, 16) : null);
+    };
+    provider.on?.("accountsChanged", onAccountsChanged);
+    provider.on?.("chainChanged", onChainChanged);
     return () => {
-      provider.removeListener?.("accountsChanged", onChange);
-      provider.removeListener?.("chainChanged", onChange);
+      provider.removeListener?.("accountsChanged", onAccountsChanged);
+      provider.removeListener?.("chainChanged", onChainChanged);
     };
   }, []);
 
@@ -837,6 +831,7 @@ export default function TradePage() {
 
 const DEFAULT_ROBINHOOD_RPC = "https://rpc.mainnet.chain.robinhood.com";
 const ROBINHOOD_USDG_ADDRESS = "0x5fc5360d0400a0fd4f2af552add042d716f1d168";
+const ROBINHOOD_WETH_ADDRESS = "0x0bd7d308f8e1639fab988df18a8011f41eacad73";
 
 async function queryEvmRpc(rpcUrl: string, method: string, params: unknown[]) {
   const controller = new AbortController();
@@ -969,11 +964,18 @@ async function assertEvmBridgeFunds(input: {
             }).catch(() => null)
           : Promise.resolve(null);
 
-        const [nativeHex, usdgHex, blockHex, ethPriceUsd] = await Promise.all([
+        const tokenBalancesRequest = fetch(`/api/evm/portfolio?walletAddress=${encodeURIComponent(address)}`, { cache: "no-store" })
+          .then(async (response) => {
+            const result = await response.json() as { tokens?: Array<{ address: string; symbol: string; decimals: number; rawBalance: string; exchangeRate: number | null }> };
+            return response.ok && Array.isArray(result.tokens) ? result.tokens : [];
+          }).catch(() => []);
+
+        const [nativeHex, usdgHex, blockHex, ethPriceUsd, indexedTokens] = await Promise.all([
           portfolioRpc("eth_getBalance", [address, "latest"]),
           portfolioRpc("eth_call", [{ to: ROBINHOOD_USDG_ADDRESS, data: balanceOfData }, "latest"]).catch(() => "0x0"),
           portfolioRpc("eth_blockNumber", []).catch(() => null),
           ethPriceRequest,
+          tokenBalancesRequest,
         ]);
 
         const ethAmount = typeof nativeHex === "string" ? Number(BigInt(nativeHex)) / 1e18 : 0;
@@ -983,11 +985,26 @@ async function assertEvmBridgeFunds(input: {
         if (requestId !== portfolioRequestRef.current) return;
 
         setWalletBalance(ethAmount);
-        setPortfolioAssets([
+        const proposalTokenAddresses = new Set(messagesRef.current.flatMap((message) => {
+          const proposal = message.proposal;
+          return [proposal?.sellTokenAddress, proposal?.buyTokenAddress].filter((value): value is string => typeof value === "string").map((value) => value.toLowerCase());
+        }));
+        const erc20Assets = indexedTokens
+          .filter((token) => token.address !== ROBINHOOD_USDG_ADDRESS && (token.exchangeRate !== null || token.address === ROBINHOOD_WETH_ADDRESS || proposalTokenAddresses.has(token.address)))
+          .map((token) => {
+            const amount = Number(BigInt(token.rawBalance)) / (10 ** token.decimals);
+            const price = token.address === ROBINHOOD_WETH_ADDRESS && ethPriceUsd ? ethPriceUsd : token.exchangeRate;
+            return { symbol: token.symbol, amount, valueUsd: price && Number.isFinite(price) ? amount * price : 0 };
+          })
+          .filter((asset) => Number.isFinite(asset.amount) && asset.amount > 0)
+          .sort((a, b) => b.valueUsd - a.valueUsd);
+        const assets = [
           { symbol: "ETH", amount: ethAmount, valueUsd: ethValueUsd },
           ...(usdgAmount > 0 ? [{ symbol: "USDG", amount: usdgAmount, valueUsd: usdgAmount }] : []),
-        ]);
-        const totalUsd = ethValueUsd + usdgAmount;
+          ...erc20Assets,
+        ];
+        setPortfolioAssets(assets);
+        const totalUsd = assets.reduce((total, asset) => total + asset.valueUsd, 0);
         setPortfolioTotalUsd(totalUsd > 0 ? totalUsd : null);
         const block = typeof blockHex === "string" ? Number.parseInt(blockHex, 16) : null;
         const rpcLabel = settings.evmRpcUrl.trim() ? "Custom Robinhood RPC" : "Robinhood RPC";
@@ -1539,31 +1556,33 @@ async function assertEvmBridgeFunds(input: {
       return;
     }
     const sessionWallet = activeSession.sessionWalletAddress;
-    if (!sessionWallet || !evmWalletMatchesSession) {
-      alert("Connect the EVM wallet bound to this session and switch it to Robinhood Chain first.");
-      return;
-    }
+    if (!sessionWallet) return;
     if (!proposal.sellToken || !proposal.buyToken || !proposal.sellAmount) return;
     setBridgeBusy(true);
     let submittedEvmHash: string | null = null;
     try {
       if (proposal.quoteResponse && proposal.buyAmount) {
-        if (!evmWalletMatchesSession) {
-          alert("Connect the EVM wallet bound to this session and switch it to Robinhood Chain first.");
-          return;
-        }
         await switchToRobinhoodChain(settings.evmRpcUrl);
         const walletProvider = window.ethereum;
         if (!walletProvider) throw new Error("EVM wallet extension is not available.");
-        const [latestBlock, gasPrice] = await Promise.all([
+        const [accounts, chainIdHex, latestBlock, gasPrice] = await Promise.all([
+          walletProvider.request({ method: "eth_accounts" }),
+          walletProvider.request({ method: "eth_chainId" }),
           walletProvider.request({ method: "eth_getBlockByNumber", params: ["latest", false] }),
           walletProvider.request({ method: "eth_gasPrice" }),
         ]);
+        const currentAddress = Array.isArray(accounts) && typeof accounts[0] === "string" ? accounts[0] : null;
+        const currentChainId = typeof chainIdHex === "string" ? Number.parseInt(chainIdHex, 16) : null;
+        setActiveEvmAddress(currentAddress);
+        setActiveEvmChainId(currentChainId);
+        if (currentAddress?.toLowerCase() !== sessionWallet.toLowerCase() || currentChainId !== expectedEvmChain?.chainId) {
+          throw new Error(`Switch the browser wallet to ${shortWallet(sessionWallet)} on Robinhood Chain before reviewing this transaction.`);
+        }
         if (!latestBlock || typeof gasPrice !== "string" || !/^0x[0-9a-f]+$/iu.test(gasPrice)) {
           throw new Error("Wallet RPC could not retrieve Robinhood block and gas data.");
         }
         setMessages((previous) => previous.map((message) => (message.id === msgId && message.proposal ? { ...message, proposal: { ...message.proposal, status: "signing" as const } } : message)));
-        const buildResponse = await fetch("/api/evm/uniswap/build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ walletAddress: sessionWallet, apiKey: settings.uniswapApiKey, quote: proposal.quoteResponse, tokenIn: proposal.sellTokenAddress, tokenOut: proposal.buyTokenAddress, amountIn: proposal.inputAmount }) });
+        const buildResponse = await fetch("/api/evm/uniswap/build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ walletAddress: sessionWallet, apiKey: settings.uniswapApiKey, quote: proposal.quoteResponse, routing: proposal.quoteRouting, tokenIn: proposal.sellTokenAddress, tokenOut: proposal.buyTokenAddress, amountIn: proposal.inputAmount }) });
         const built = await buildResponse.json();
         if (!buildResponse.ok) throw new Error(built.error || "Uniswap could not build the wallet transaction.");
         const provider = window.ethereum;
@@ -1629,7 +1648,7 @@ async function assertEvmBridgeFunds(input: {
       }
       const response = await fetch("/api/evm/uniswap/quote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ walletAddress: sessionWallet, apiKey: settings.uniswapApiKey, sellToken: proposal.sellTokenAddress ?? proposal.sellToken, buyToken: proposal.buyTokenAddress ?? proposal.buyToken, amount: proposal.sellAmount, slippageBps: settings.maxSlippageBps }) });
       const rawResponse = await response.text();
-      let quote: { quote?: unknown; outputAmount?: unknown; error?: unknown; amountIn?: unknown; minimumOutputAmount?: unknown; expiresAt?: unknown; sellToken?: { address: string; symbol: string; decimals: number }; buyToken?: { address: string; symbol: string; decimals: number } };
+      let quote: { quote?: unknown; routing?: "CLASSIC" | "WRAP" | "UNWRAP"; outputAmount?: unknown; error?: unknown; amountIn?: unknown; minimumOutputAmount?: unknown; estimatedNetworkFeeUsd?: unknown; slippageBps?: unknown; expiresAt?: unknown; sellToken?: { address: string; symbol: string; decimals: number }; buyToken?: { address: string; symbol: string; decimals: number } };
       try {
         quote = JSON.parse(rawResponse) as typeof quote;
       } catch {
@@ -1638,7 +1657,7 @@ async function assertEvmBridgeFunds(input: {
       if (!response.ok || !quote.quote || typeof quote.outputAmount !== "string") throw new Error(typeof quote.error === "string" ? quote.error : "Uniswap did not return a valid Robinhood quote.");
       setMessages((previous) => previous.map((message) => {
         if ((message.id === msgId || message.proposal?.id === proposal.id) && message.proposal) {
-          const updated = { ...message, proposal: { ...message.proposal, quoteResponse: quote.quote, inputAmount: quote.amountIn, buyAmount: quote.outputAmount, minimumBuyAmount: quote.minimumOutputAmount, quoteExpiresAt: quote.expiresAt, sellToken: quote.sellToken?.symbol ?? message.proposal.sellToken, buyToken: quote.buyToken?.symbol ?? message.proposal.buyToken, sellTokenAddress: quote.sellToken?.address ?? message.proposal.sellTokenAddress, buyTokenAddress: quote.buyToken?.address ?? message.proposal.buyTokenAddress, sellTokenDecimals: quote.sellToken?.decimals ?? message.proposal.sellTokenDecimals, buyTokenDecimals: quote.buyToken?.decimals ?? message.proposal.buyTokenDecimals, status: "ready_for_user_signature" as const } };
+          const updated = { ...message, proposal: { ...message.proposal, quoteResponse: quote.quote, quoteRouting: quote.routing, inputAmount: quote.amountIn, buyAmount: quote.outputAmount, minimumBuyAmount: quote.minimumOutputAmount, estimatedNetworkFeeUsd: typeof quote.estimatedNetworkFeeUsd === "string" ? quote.estimatedNetworkFeeUsd : undefined, slippageBps: typeof quote.slippageBps === "number" || typeof quote.slippageBps === "string" ? String(quote.slippageBps) : undefined, quoteExpiresAt: quote.expiresAt, sellToken: quote.sellToken?.symbol ?? message.proposal.sellToken, buyToken: quote.buyToken?.symbol ?? message.proposal.buyToken, sellTokenAddress: quote.sellToken?.address ?? message.proposal.sellTokenAddress, buyTokenAddress: quote.buyToken?.address ?? message.proposal.buyTokenAddress, sellTokenDecimals: quote.sellToken?.decimals ?? message.proposal.sellTokenDecimals, buyTokenDecimals: quote.buyToken?.decimals ?? message.proposal.buyTokenDecimals, status: "ready_for_user_signature" as const } };
           void saveMessage(walletAddress, updated);
           return updated;
         }
@@ -1980,12 +1999,10 @@ async function assertEvmBridgeFunds(input: {
                     boundDestination={activeSession.chainKey as SolanaBridgeRequest["destination"]}
                   />
                 )}
-                {activeSession?.workspace === "evm" && (
-                  <div className={`evmReleaseNotice ${evmWalletMatchesSession ? "" : "evmWalletMismatch"}`}>
+                {activeSession?.workspace === "evm" && evmWalletMismatch && (
+                  <div className="evmReleaseNotice evmWalletMismatch">
                     <strong>{getWebEvmChain(activeSession.chainKey ?? "")?.name ?? "EVM"} · {shortWallet(activeSession.sessionWalletAddress)}</strong>
-                    <span>{evmWalletMatchesSession
-                      ? "Wallet ownership is verified and the browser account/chain match this session. USDG ↔ ETH quote preparation is available through Uniswap after its API key is configured; wallet broadcast remains gated pending transaction-pipeline validation."
-                      : `Execution locked: switch the browser wallet to ${shortWallet(activeSession.sessionWalletAddress)} on ${expectedEvmChain?.name ?? "the bound chain"}.`}</span>
+                    <span>Execution locked: switch the browser wallet to {shortWallet(activeSession.sessionWalletAddress)} on {expectedEvmChain?.name ?? "the bound chain"}.</span>
                   </div>
                 )}
                 <div className="suggestions">

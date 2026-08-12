@@ -400,6 +400,8 @@ export async function POST(req: NextRequest) {
           inputAmount: String(inputAmount),
           outputAmount,
           minimumOutputAmount: String(quote.otherAmountThreshold ?? "0"),
+          priceImpactPct,
+          slippageBps: maxSlippageBps,
           estimatedTokens: `${Number(outputAmount) / 1_000_000} USDC`,
           status: "ready_for_user_signature",
           mode: "restricted_browser_wallet",

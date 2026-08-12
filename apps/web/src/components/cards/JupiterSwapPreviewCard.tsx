@@ -18,6 +18,7 @@ export function JupiterSwapPreviewCard({ proposal, status, maxSlippageBps = "100
   const outputSymbol = proposal.outputSymbol ?? "USDC";
   const inputDisplay = proposal.inputAmount ? formatRaw(proposal.inputAmount, proposal.inputDecimals ?? 9) : proposal.solAmount;
   const outputDisplay = formatRaw(proposal.outputAmount, proposal.outputDecimals ?? 6);
+  const minimumDisplay = formatRaw(proposal.minimumOutputAmount, proposal.outputDecimals ?? 6);
   const confirmed = status === "confirmed" || status === "signed";
   const pending = status === "signing" || status === "submitted";
   const disabled = ["signed", "signing", "submitted", "confirmed", "reverted", "unknown"].includes(status) || !proposal.quoteResponse;
@@ -31,7 +32,11 @@ export function JupiterSwapPreviewCard({ proposal, status, maxSlippageBps = "100
     details={[
       { label: "Input", value: `${inputDisplay} ${inputSymbol}` },
       { label: "Expected output", value: `${outputDisplay} ${outputSymbol}` },
-      { label: "Maximum slippage", value: `${maxSlippageBps} bps` },
+      { label: "Minimum output", value: `${minimumDisplay} ${outputSymbol}` },
+      { label: "Price impact", value: `${proposal.priceImpactPct ?? "0"}%` },
+      { label: "Network fee", value: "Calculated at wallet review" },
+      { label: "Maximum slippage", value: `${proposal.slippageBps ?? maxSlippageBps} bps` },
+      { label: "Silfable fee", value: "None" },
       { label: "Route", value: `${proposal.venue ?? "Jupiter"} · Solana` },
     ]}
     checks={(proposal.checks ?? []).map(({ code, message }) => ({ code, message }))}

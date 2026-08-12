@@ -47,13 +47,24 @@ export async function POST(request: NextRequest) {
     const quote = asRecord(result?.quote);
     const quoteInput = asRecord(quote?.input);
     const quoteOutput = asRecord(quote?.output);
-    if (result?.routing !== "CLASSIC" || result?.permitData != null || quoteInput?.amount !== amountIn || String(quoteInput?.token).toLowerCase() !== tokenIn || String(quoteOutput?.token).toLowerCase() !== tokenOut || !RAW.test(String(quoteOutput?.amount ?? ""))) {
+    const routing = typeof result?.routing === "string" ? result.routing : "";
+    const canonicalWrap = routing === "WRAP" && sellToken.native && tokenOut === "0x0bd7d308f8e1639fab988df18a8011f41eacad73";
+    const canonicalUnwrap = routing === "UNWRAP" && buyToken.native && tokenIn === "0x0bd7d308f8e1639fab988df18a8011f41eacad73";
+    if (!(routing === "CLASSIC" || canonicalWrap || canonicalUnwrap) || result?.permitData != null || quoteInput?.amount !== amountIn || String(quoteInput?.token).toLowerCase() !== tokenIn || String(quoteOutput?.token).toLowerCase() !== tokenOut || !RAW.test(String(quoteOutput?.amount ?? ""))) {
       return NextResponse.json({ error: "Uniswap returned a route that does not meet Silfable's Robinhood safety policy." }, { status: 502 });
     }
     if (!quoteOutput) return NextResponse.json({ error: "Uniswap did not return an output amount." }, { status: 502 });
     const outputAmount = String(quoteOutput.amount);
-    const minimumOutputAmount = RAW.test(String(quoteOutput.minimumAmount ?? "")) ? String(quoteOutput.minimumAmount) : ((BigInt(outputAmount) * BigInt(10_000 - slippageBps)) / BigInt(10_000)).toString();
-    return NextResponse.json({ quote, amountIn, outputAmount, minimumOutputAmount, tokenIn, tokenOut, sellToken, buyToken, expiresAt: Date.now() + 300_000 });
+    const gasEstimateUsd = quote?.classicGasUseEstimateUSD;
+    const estimatedNetworkFeeUsd = typeof gasEstimateUsd === "string" && /^\d+(?:\.\d+)?$/u.test(gasEstimateUsd)
+      ? gasEstimateUsd
+      : null;
+    const minimumOutputAmount = canonicalWrap || canonicalUnwrap
+      ? outputAmount
+      : RAW.test(String(quoteOutput.minimumAmount ?? ""))
+        ? String(quoteOutput.minimumAmount)
+        : ((BigInt(outputAmount) * BigInt(10_000 - slippageBps)) / BigInt(10_000)).toString();
+    return NextResponse.json({ quote, routing, amountIn, outputAmount, minimumOutputAmount, estimatedNetworkFeeUsd, slippageBps, tokenIn, tokenOut, sellToken, buyToken, expiresAt: Date.now() + 300_000 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to prepare the Uniswap quote.";
     console.error("[EVM Uniswap quote]", error);

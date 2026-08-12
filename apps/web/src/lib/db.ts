@@ -34,6 +34,10 @@ export interface WebProposal {
   outputDecimals?: number;
   venue?: string;
   quoteResponse?: unknown;
+  quoteRouting?: "CLASSIC" | "WRAP" | "UNWRAP";
+  priceImpactPct?: string;
+  slippageBps?: string;
+  estimatedNetworkFeeUsd?: string;
   destination?: "robinhood" | "solana";
   destinationRecipient?: string;
   amountUsdc?: string;
