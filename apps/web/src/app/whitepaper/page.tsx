@@ -63,7 +63,7 @@ export function WhitepaperContent() {
                 A Robinhood Chain-first path from intent to settlement.
               </h1>
               <p className="max-w-lg text-base leading-8 text-black/55 lg:justify-self-end">
-                An early-stage, open-source workspace centered on Robinhood Chain swaps and two-way Solana connectivity, with venue-specific preparation, wallet confirmation, and settlement tracking.
+                An early-stage workspace centered on Robinhood Chain swaps and two-way Solana connectivity, with venue-specific preparation, wallet confirmation, and settlement tracking.
               </p>
             </div>
           </div>
