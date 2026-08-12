@@ -87,6 +87,8 @@ export function SecurityStep({
   return (
     <SetupCard
       icon="⌾"
+      eyebrow="Route chapter / 01"
+      className="desktopStepCanvas"
       title={
         migration ? "Secure your existing setup" : "Protect your local vault"
       }
@@ -207,6 +209,8 @@ export function ChangePasswordStep({ onContinue }: { onContinue: () => void }) {
   return (
     <SetupCard
       icon="⌾"
+      eyebrow="Route chapter / 01"
+      className="desktopStepCanvas"
       title="Change master password"
       subtitle="Update the password required when Silfable opens."
     >

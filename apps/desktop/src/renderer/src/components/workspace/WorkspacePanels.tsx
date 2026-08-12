@@ -178,6 +178,22 @@ export function MissionsView({
   }>;
   onOpen: (sessionId: string) => void;
 }) {
+  const [filter, setFilter] = useState<"all" | "ready" | "blocked" | "expired">("all");
+  const effectiveStatus = (preview: MissionContractPreview): "ready" | "blocked" | "expired" => Date.parse(preview.deadlineAt) <= Date.now() ? "expired" : preview.status === "blocked" ? "blocked" : "ready";
+  const readyCount = items.filter((item) => effectiveStatus(item.preview) === "ready").length;
+  const blockedCount = items.filter((item) => effectiveStatus(item.preview) === "blocked").length;
+  const expiredCount = items.length - readyCount - blockedCount;
+  const visibleItems = items
+    .filter((item) => filter === "all" || effectiveStatus(item.preview) === filter)
+    .sort((left, right) => Date.parse(right.preview.createdAt) - Date.parse(left.preview.createdAt));
+  const short = (value: string) => value.length > 16 ? `${value.slice(0, 7)}…${value.slice(-6)}` : value;
+  const deadlineLabel = (value: string) => {
+    const deadline = Date.parse(value);
+    if (!Number.isFinite(deadline)) return "Unknown";
+    if (deadline <= Date.now()) return "Expired";
+    const minutes = Math.max(1, Math.round((deadline - Date.now()) / 60_000));
+    return minutes < 60 ? `${minutes}m remaining` : minutes < 1_440 ? `${Math.round(minutes / 60)}h remaining` : `${Math.round(minutes / 1_440)}d remaining`;
+  };
   if (items.length === 0)
     return (
       <UtilityView
@@ -188,26 +204,39 @@ export function MissionsView({
     );
   return (
     <div className="missionsView">
-      <div>
-        <p className="kicker">Missions</p>
-        <h1>Contract previews</h1>
-        <p>
-          Open an eligible session to simulate and explicitly approve a
-          restricted Mainnet swap.
-        </p>
+      <header className="missionsHeader">
+        <div><p className="kicker">Mission atlas</p><h1>Review routes before execution.</h1><p>Inspect quote evidence, policy limits, and blocked checks. Opening a mission never executes it; simulation and approval remain separate.</p></div>
+        <dl className="missionSummary"><div><dt>Total</dt><dd>{items.length}</dd></div><div><dt>Ready</dt><dd>{readyCount}</dd></div><div><dt>Blocked</dt><dd>{blockedCount}</dd></div><div><dt>Expired</dt><dd>{expiredCount}</dd></div></dl>
+      </header>
+      <div className="missionToolbar" aria-label="Filter mission previews">
+        {(["all", "ready", "blocked", "expired"] as const).map((value) => <button key={value} type="button" className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "all" ? `All · ${items.length}` : value === "ready" ? `Ready · ${readyCount}` : value === "blocked" ? `Blocked · ${blockedCount}` : `Expired · ${expiredCount}`}</button>)}
       </div>
-      <div className="missionGrid">
-        {items.map((item) => (
-          <button key={item.preview.id} onClick={() => onOpen(item.sessionId)}>
-            <span>{item.preview.status}</span>
-            <strong>{item.preview.goal}</strong>
-            <small>
-              {item.sessionTitle} ·{" "}
-              {new Date(item.preview.createdAt).toLocaleString()}
-            </small>
-            <em>Open session</em>
-          </button>
-        ))}
+      <div className="missionLedger">
+        {visibleItems.map((item, index) => {
+          const preview = item.preview;
+          const status = effectiveStatus(preview);
+          const failedCheck = preview.checks.find((check) => check.status === "fail");
+          const passedChecks = preview.checks.filter((check) => check.status === "pass").length;
+          return <button key={preview.id} className={`missionLedgerRow ${status === "blocked" ? "isBlocked" : status === "expired" ? "isExpired" : "isReady"}`} onClick={() => onOpen(item.sessionId)}>
+            <span className="missionIndex">{String(index + 1).padStart(2, "0")}</span>
+            <div className="missionRoute">
+              <span>{status === "blocked" ? "Blocked route" : status === "expired" ? "Expired route" : "Ready for review"}</span>
+              <strong>{short(preview.inputMint)} <ChevronRight aria-hidden="true" /> {short(preview.outputMint)}</strong>
+              <small>{preview.goal.replace(/\b[1-9A-HJ-NP-Za-km-z]{24,44}\b/gu, (value) => short(value))}</small>
+            </div>
+            <dl className="missionFacts">
+              <div><dt>Raw input</dt><dd>{preview.inputAmount}</dd></div>
+              <div><dt>Slippage</dt><dd>{preview.maxSlippageBps} bps</dd></div>
+              <div><dt>Deadline</dt><dd>{deadlineLabel(preview.deadlineAt)}</dd></div>
+              <div><dt>Checks</dt><dd>{passedChecks}/{preview.checks.length} pass</dd></div>
+            </dl>
+            <div className="missionEvidence">
+              <span>{preview.quote ? `${preview.quote.router} · quote ${short(preview.quote.outAmount)}` : "Quote unavailable"}</span>
+              <small>{failedCheck?.message ?? `${preview.stopConditions.length} stop condition${preview.stopConditions.length === 1 ? "" : "s"} · ${item.sessionTitle}`}</small>
+            </div>
+            <span className="missionOpen">Open <ChevronRight aria-hidden="true" /></span>
+          </button>;
+        })}
       </div>
     </div>
   );

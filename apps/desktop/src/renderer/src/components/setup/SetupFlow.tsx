@@ -48,7 +48,13 @@ export function SetupFlow({
   const editingLabel = SETUP_STEPS[setup.step - 1] ?? "Setup";
   return (
     <main className="setupPage">
-      <Brand compact />
+      <header className="setupTopbar">
+        <div className="setupTopbarBrand">
+          <Brand compact />
+          <span className="setupModeBadge">{editing ? "Desktop settings" : "Desktop setup"}</span>
+        </div>
+        {editing && onExit && <button className="setupBackLink" onClick={onExit}>Back to sessions</button>}
+      </header>
       <SetupStepper current={index} />
       {editing && setup.step !== 6 && (
         <div className="editingBar">
@@ -309,6 +315,8 @@ export function WalletStep({
   return (
     <SetupCard
       icon="◇"
+      eyebrow="Route chapter / 02"
+      className="desktopStepCanvas"
       title="Set up Mainnet wallets"
       subtitle="Select the wallets a future session may reference. Adding a wallet never authorizes a transaction."
     >
@@ -553,6 +561,8 @@ export function IntegrationStep({
   return (
     <SetupCard
       icon="⌁"
+      eyebrow="Route chapter / 03"
+      className="desktopStepCanvas"
       title="Connect integrations"
       subtitle="Enable only the external services your sessions need."
     >
@@ -845,6 +855,8 @@ export function TuningStep({
   return (
     <SetupCard
       icon="⌘"
+      eyebrow="Route chapter / 04"
+      className="desktopStepCanvas"
       title="Tune the AI agent"
       subtitle="These defaults are snapshotted when a new session starts."
     >
@@ -1134,6 +1146,8 @@ export function ProviderStep({
   return (
     <SetupCard
       icon="◈"
+      eyebrow="Route chapter / 05"
+      className="desktopStepCanvas"
       title="Choose the inference provider"
       subtitle="OpenRouter supplies the model; Silfable keeps authority and tool enforcement local."
     >
@@ -1264,6 +1278,8 @@ export function ReviewStep({
   return (
     <SetupCard
       icon="✓"
+      eyebrow="Route chapter / 06"
+      className={editing ? "desktopSettingsCanvas" : "desktopReviewCanvas"}
       title={editing ? "Edit infrastructure" : "Review your setup"}
       subtitle={
         editing

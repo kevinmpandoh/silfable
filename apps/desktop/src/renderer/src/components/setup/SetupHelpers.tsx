@@ -5,18 +5,23 @@ export function SetupCard({
   icon,
   title,
   subtitle,
+  eyebrow,
+  className,
   children,
 }: {
   icon: string;
   title: string;
   subtitle: string;
+  eyebrow?: string;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="setupCard">
+    <section className={`setupCard ${className ?? ""}`.trim()}>
       <header>
         <span className="setupIcon">{icon}</span>
         <div>
+          {eyebrow && <span className="setupChapterKicker">{eyebrow}</span>}
           <h1>{title}</h1>
           <p>{subtitle}</p>
         </div>

@@ -45,11 +45,10 @@ export function BootstrapScreen({
   return (
     <main className="onboardingPage">
       <Brand compact={false} />
-      <section className="bootCard">
-        <div className="sectionRule">
-          <span />
-        </div>
-        <div className="screenHeading">
+      <span className="setupModeBadge">Desktop bootstrap</span>
+      <section className="bootCard gatewayCanvas">
+        <header className="gatewayChapter">
+          <span className="gatewayNode">01</span>
           <div>
             <p className="kicker">System check</p>
             <h1>Prepare the local runtime.</h1>
@@ -58,53 +57,61 @@ export function BootstrapScreen({
               explicitly configure.
             </p>
           </div>
-          <span className="stepCount">BOOTSTRAP</span>
-        </div>
-        <div className="probeList">
-          {probes.map((probe, index) => (
-            <div className="probeRow" key={probe.label}>
-              <span className="probeIndex">0{index + 1}</span>
-              <span className="probeIcon">{probe.ok ? "✓" : "·"}</span>
-              <div>
-                <strong>{probe.label}</strong>
-                <small>{probe.detail}</small>
-              </div>
-              <StatusPill
-                tone={
-                  probe.ok
-                    ? "success"
-                    : runtime && index === 2
-                      ? "warning"
-                      : "neutral"
-                }
-              >
-                {probe.ok
-                  ? "READY"
-                  : runtime && index === 2
-                    ? "DEGRADED"
-                    : "CHECKING"}
-              </StatusPill>
+          <span className="gatewayChapterLabel">Route entry / bootstrap</span>
+        </header>
+        <div className="gatewayContent">
+          <div className="gatewayContentHeader">
+            <div>
+              <span className="stepCount">LOCAL READINESS</span>
+              <h2>Four checks before entry.</h2>
             </div>
-          ))}
+            <StatusPill tone={ready ? "success" : "neutral"}>
+              {ready ? "ALL READY" : "CHECKING"}
+            </StatusPill>
+          </div>
+          <div className="probeList">
+            {probes.map((probe, index) => (
+              <div className="probeRow" key={probe.label}>
+                <span className="probeIndex">0{index + 1}</span>
+                <span className="probeIcon">{probe.ok ? "✓" : "·"}</span>
+                <div>
+                  <strong>{probe.label}</strong>
+                  <small>{probe.detail}</small>
+                </div>
+                <StatusPill
+                  tone={
+                    probe.ok
+                      ? "success"
+                      : runtime && index === 2
+                        ? "warning"
+                        : "neutral"
+                  }
+                >
+                  {probe.ok
+                    ? "READY"
+                    : runtime && index === 2
+                      ? "DEGRADED"
+                      : "CHECKING"}
+                </StatusPill>
+              </div>
+            ))}
+          </div>
+          {error && (
+            <Notice tone="danger" title="Runtime check failed">
+              {error}
+            </Notice>
+          )}
+          <div className="bootActions">
+            <span>No signing or execution starts here.</span>
+            <button
+              className="primaryButton"
+              disabled={!ready}
+              onClick={onContinue}
+            >
+              Continue <span>→</span>
+            </button>
+          </div>
         </div>
-        {error && (
-          <Notice tone="danger" title="Runtime check failed">
-            {error}
-          </Notice>
-        )}
-        <div className="bootActions">
-          <button
-            className="primaryButton"
-            disabled={!ready}
-            onClick={onContinue}
-          >
-            Continue <span>→</span>
-          </button>
-        </div>
-        <p className="safeNote">
-          No wallet signing, mission scheduling, or Mainnet execution starts
-          during setup.
-        </p>
       </section>
       <CornerFooter />
     </main>

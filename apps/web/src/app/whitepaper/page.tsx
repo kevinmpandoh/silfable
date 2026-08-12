@@ -73,20 +73,12 @@ export function WhitepaperContent() {
           <div className="section-shell grid gap-10 py-16 lg:grid-cols-[18rem_1fr] lg:py-20">
             <SectionLabel number="00" title="Important Notice" />
             <div className="space-y-6 text-sm leading-7 text-black/70">
-              <p className="font-medium text-black">Silfable is an early-stage open-source project.</p>
+              <p className="font-medium text-black">Silfable is an autonomous trading interface designed to help users research markets, evaluate opportunities, and execute on-chain actions with greater efficiency.</p>
               <p>
-                This document distinguishes implemented code from production readiness. Supported transaction paths exist, but each venue remains subject to signed-build, controlled Mainnet acceptance, recovery, and security requirements. A preview build or passing simulation does not make every route production-ready.
+                AI-generated analysis and decisions may be incomplete, delayed, or inaccurate. All transactions remain subject to the safeguards, limits, and wallet permissions configured by the user.
               </p>
-              <p>Silfable is not currently:</p>
-              <ul className="list-disc pl-5 space-y-2">
-                <li>A standalone blockchain.</li>
-                <li>A custodian of real-world assets.</li>
-                <li>A fully unconstrained AI trading platform.</li>
-                <li>A guarantee of financial returns.</li>
-              </ul>
-              <p className="text-rose-600 font-medium bg-rose-50 p-4 border border-rose-200 mt-6">
-                Cryptocurrency trading involves substantial risk of loss. Silfable can research markets and prepare transactions, but its output may be incomplete or wrong. Configured drawdown, fee, route, and wallet-confirmation requirements still apply.
-              </p>
+              <p>Digital assets are highly volatile and involve significant financial risk. Users remain responsible for reviewing their settings, understanding the risks involved, and deciding how Silfable is used.</p>
+               
             </div>
           </div>
         </section>

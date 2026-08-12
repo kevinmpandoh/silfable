@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { Brand, Field, CornerFooter } from "./SetupHelpers";
+import { Brand, Field, CornerFooter, StatusPill } from "./SetupHelpers";
 import { STORAGE_KEY } from "../types";
 
 export function UnlockScreen({ onUnlocked }: { onUnlocked: () => Promise<void> }) {
@@ -57,54 +57,65 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => Promise<void> }
   return (
     <main className="onboardingPage">
       <Brand compact={false} />
-      <section className="bootCard unlockCard">
-        <div className="sectionRule">
-          <span />
-        </div>
-        <div className="screenHeading">
+      <span className="setupModeBadge">Secure access</span>
+      <section className="bootCard unlockCard gatewayCanvas">
+        <header className="gatewayChapter">
+          <span className="gatewayNode">02</span>
           <div>
             <p className="kicker">Vault locked</p>
             <h1>Welcome back.</h1>
             <p>Enter the master password configured on this device.</p>
           </div>
-          <span className="stepCount">MAINNET</span>
-        </div>
-        <Field label="Master password">
-          <div className="inputWithAction">
-            <input
-              autoFocus
-              type={show ? "text" : "password"}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && password) void unlock();
-              }}
-              autoComplete="current-password"
-            />
-            <button type="button" onClick={() => setShow(!show)} aria-label={show ? "Hide password" : "Show password"}>
-              {show ? <EyeOff size={16} /> : <Eye size={16} />}
+          <span className="gatewayChapterLabel">Route entry / secure access</span>
+        </header>
+        <div className="gatewayContent unlockGatewayContent">
+          <div className="gatewayContentHeader">
+            <div>
+              <span className="stepCount">ENCRYPTED LOCALLY</span>
+              <h2>Open your workspace.</h2>
+            </div>
+            <StatusPill tone="neutral">LOCKED</StatusPill>
+          </div>
+          <div className="unlockFormPanel">
+            <Field label="Master password">
+              <div className="inputWithAction">
+                <input
+                  autoFocus
+                  type={show ? "text" : "password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && password) void unlock();
+                  }}
+                  autoComplete="current-password"
+                />
+                <button type="button" onClick={() => setShow(!show)} aria-label={show ? "Hide password" : "Show password"}>
+                  {show ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </Field>
+            {message && <p className="fieldError">{message}</p>}
+            <div className="unlockBoundary">
+              <span>01</span><p>Unlocking exposes encrypted local settings only to this desktop session.</p>
+              <span>02</span><p>Transactions still require their own simulation and explicit approval.</p>
+            </div>
+          </div>
+          <div className="bootActions">
+            <button
+              className="forgotVaultButton"
+              onClick={() => setResetOpen(true)}
+            >
+              Set up a new vault
+            </button>
+            <button
+              className="primaryButton"
+              disabled={!password || busy}
+              onClick={() => void unlock()}
+            >
+              {busy ? "Unlocking…" : "Unlock workspace"} <span>→</span>
             </button>
           </div>
-        </Field>
-        {message && <p className="fieldError">{message}</p>}
-        <div className="bootActions">
-          <button
-            className="primaryButton"
-            disabled={!password || busy}
-            onClick={() => void unlock()}
-          >
-            {busy ? "Unlocking…" : "Unlock workspace"} <span>→</span>
-          </button>
         </div>
-        <button
-          className="forgotVaultButton"
-          onClick={() => setResetOpen(true)}
-        >
-          I forgot my password — set up a new vault
-        </button>
-        <p className="safeNote">
-          Wallet and API secrets remain unavailable until this check succeeds.
-        </p>
       </section>
       {resetOpen && (
         <div className="modalBackdrop" role="presentation">
