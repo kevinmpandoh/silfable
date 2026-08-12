@@ -2,7 +2,6 @@ import React from "react";
 import logoUrl from "../../../../assets/logo.png";
 
 export function SetupCard({
-  icon,
   title,
   subtitle,
   eyebrow,

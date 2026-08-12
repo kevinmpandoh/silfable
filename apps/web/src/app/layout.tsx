@@ -26,15 +26,23 @@ const mono = Azeret_Mono({
   display: "swap",
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
 export const metadata: Metadata = {
-  title: "Silfable - Robinhood Chain Trading Workspace",
+  metadataBase: new URL(siteUrl),
+  title: "Silfable — Robinhood Chain Trading Workspace",
   description:
-    "Prepare Robinhood Chain swaps, bridge between Robinhood and Solana, and track every supported Mainnet transaction from route to settlement.",
+    "Prepare reviewed Robinhood Chain swaps, connect with Solana workflows, and track each transaction from route to settlement.",
+  alternates: {
+    canonical: "/",
+  },
   openGraph: {
     type: "website",
-    title: "Silfable - Robinhood Chain Trading Workspace",
+    url: "/",
+    siteName: "Silfable",
+    title: "Silfable — Robinhood Chain Trading Workspace",
     description:
-      "Prepare Robinhood Chain swaps, bridge between Robinhood and Solana, and track every supported Mainnet transaction from route to settlement.",
+      "Prepare reviewed Robinhood Chain swaps, connect with Solana workflows, and track each transaction from route to settlement.",
     images: [
       {
         url: "/og-image.png",
@@ -46,9 +54,11 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Silfable - Robinhood Chain Trading Workspace",
+    site: "@silfable",
+    creator: "@silfable",
+    title: "Silfable — Robinhood Chain Trading Workspace",
     description:
-      "Prepare Robinhood Chain swaps, bridge between Robinhood and Solana, and track every supported Mainnet transaction from route to settlement.",
+      "Prepare reviewed Robinhood Chain swaps, connect with Solana workflows, and track each transaction from route to settlement.",
     images: ["/og-image.png"],
   },
   icons: {
