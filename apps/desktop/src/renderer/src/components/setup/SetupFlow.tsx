@@ -1,6 +1,6 @@
 // @ts-nocheck
-import React, { useState, useEffect, useRef } from 'react';
-import { shorten } from '../../lib/utils';
+import React, { useState, useEffect, useRef } from "react";
+import { shorten } from "../../lib/utils";
 import {
   SetupCard,
   SetupActions,
@@ -11,11 +11,16 @@ import {
   Brand,
   BrandMark,
   CornerFooter,
-  RailSection
-} from './SetupHelpers';
-import { ChangePasswordStep, SecurityStep } from './SecurityStep';
-import { ACTIVITY_LEVELS, INTEGRATION_CATEGORIES, SETUP_STEPS, STORAGE_KEY } from '../types';
-import { Button, Modal } from '../ui';
+  RailSection,
+} from "./SetupHelpers";
+import { ChangePasswordStep, SecurityStep } from "./SecurityStep";
+import {
+  ACTIVITY_LEVELS,
+  INTEGRATION_CATEGORIES,
+  SETUP_STEPS,
+  STORAGE_KEY,
+} from "../types";
+import { Button, Modal } from "../ui";
 export function SetupFlow({
   setup,
   runtime,
@@ -51,9 +56,15 @@ export function SetupFlow({
       <header className="setupTopbar">
         <div className="setupTopbarBrand">
           <Brand compact />
-          <span className="setupModeBadge">{editing ? "Desktop settings" : "Desktop setup"}</span>
+          <span className="setupModeBadge">
+            {editing ? "Desktop settings" : "Desktop setup"}
+          </span>
         </div>
-        {editing && onExit && <button className="setupBackLink" onClick={onExit}>Back to sessions</button>}
+        {editing && onExit && (
+          <button className="setupBackLink" onClick={onExit}>
+            Back to sessions
+          </button>
+        )}
       </header>
       <SetupStepper current={index} />
       {editing && setup.step !== 6 && (
@@ -165,10 +176,14 @@ export function WalletStep({
   const [evmMnemonic, setEvmMnemonic] = useState("");
   const [evmPrivateKey, setEvmPrivateKey] = useState("");
   const [evmAddress, setEvmAddress] = useState<string | null>(null);
-  const [evmWallets, setEvmWallets] = useState<Array<{ address: string; primary: boolean }>>([]);
+  const [evmWallets, setEvmWallets] = useState<
+    Array<{ address: string; primary: boolean }>
+  >([]);
   const [evmRecovery, setEvmRecovery] = useState<string | null>(null);
   const [evmMessage, setEvmMessage] = useState<string | null>(null);
-  const [evmMode, setEvmMode] = useState<"generate" | "mnemonic" | "private">("generate");
+  const [evmMode, setEvmMode] = useState<"generate" | "mnemonic" | "private">(
+    "generate",
+  );
   const [walletTab, setWalletTab] = useState<"solana" | "evm">("solana");
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const configured = runtime?.wallet === "configured";
@@ -202,10 +217,13 @@ export function WalletStep({
   }, [configured]);
 
   useEffect(() => {
-    window.silfable.getEvmWallets().then((result: any) => {
-      setEvmAddress(result.address);
-      setEvmWallets(result.wallets);
-    }).catch(() => undefined);
+    window.silfable
+      .getEvmWallets()
+      .then((result: any) => {
+        setEvmAddress(result.address);
+        setEvmWallets(result.wallets);
+      })
+      .catch(() => undefined);
   }, []);
 
   async function refreshEvmWallets(): Promise<void> {
@@ -258,49 +276,109 @@ export function WalletStep({
   }
 
   async function createEvmWallet(): Promise<void> {
-    setBusy(true); setEvmMessage(null); setEvmRecovery(null);
+    setBusy(true);
+    setEvmMessage(null);
+    setEvmRecovery(null);
     try {
-      const result = await window.silfable.createRobinhoodWallet({ schemaVersion: 1, requestId: crypto.randomUUID(), acknowledgedHotWalletRisk: true });
-      await refreshEvmWallets(); setEvmRecovery(result.recoveryMnemonic); setEvmMessage("Robinhood Chain EVM wallet created and encrypted locally.");
-    } catch { setEvmMessage("EVM wallet could not be created. Check the vault and wallet limit."); }
-    finally { setBusy(false); }
+      const result = await window.silfable.createRobinhoodWallet({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        acknowledgedHotWalletRisk: true,
+      });
+      await refreshEvmWallets();
+      setEvmRecovery(result.recoveryMnemonic);
+      setEvmMessage(
+        "Robinhood Chain EVM wallet created and encrypted locally.",
+      );
+    } catch {
+      setEvmMessage(
+        "EVM wallet could not be created. Check the vault and wallet limit.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function importEvmWallet(): Promise<void> {
-    setBusy(true); setEvmMessage(null); setEvmRecovery(null);
+    setBusy(true);
+    setEvmMessage(null);
+    setEvmRecovery(null);
     try {
-      await window.silfable.importRobinhoodWalletMnemonic({ schemaVersion: 1, requestId: crypto.randomUUID(), mnemonic: evmMnemonic, acknowledgedHotWalletRisk: true });
-      setEvmMnemonic(""); await refreshEvmWallets(); setEvmMessage("Robinhood Chain EVM wallet imported and encrypted locally.");
-    } catch { setEvmMessage("EVM recovery phrase could not be imported."); }
-    finally { setBusy(false); }
+      await window.silfable.importRobinhoodWalletMnemonic({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        mnemonic: evmMnemonic,
+        acknowledgedHotWalletRisk: true,
+      });
+      setEvmMnemonic("");
+      await refreshEvmWallets();
+      setEvmMessage(
+        "Robinhood Chain EVM wallet imported and encrypted locally.",
+      );
+    } catch {
+      setEvmMessage("EVM recovery phrase could not be imported.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function importEvmPrivateKey(): Promise<void> {
-    setBusy(true); setEvmMessage(null); setEvmRecovery(null);
+    setBusy(true);
+    setEvmMessage(null);
+    setEvmRecovery(null);
     try {
-      await window.silfable.importRobinhoodWalletPrivateKey({ schemaVersion: 1, requestId: crypto.randomUUID(), privateKey: evmPrivateKey, acknowledgedHotWalletRisk: true });
-      setEvmPrivateKey(""); await refreshEvmWallets(); setEvmMessage("EVM private key imported and encrypted locally.");
-    } catch { setEvmMessage("EVM private key could not be imported. Use a 32-byte hexadecimal key."); }
-    finally { setBusy(false); }
+      await window.silfable.importRobinhoodWalletPrivateKey({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        privateKey: evmPrivateKey,
+        acknowledgedHotWalletRisk: true,
+      });
+      setEvmPrivateKey("");
+      await refreshEvmWallets();
+      setEvmMessage("EVM private key imported and encrypted locally.");
+    } catch {
+      setEvmMessage(
+        "EVM private key could not be imported. Use a 32-byte hexadecimal key.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function clearAllWallets(family: "solana" | "evm"): Promise<void> {
     const label = family === "solana" ? "Solana" : "EVM";
-    if (!window.confirm(`Remove every ${label} wallet from this encrypted vault? Sessions will remain, but they will no longer have a registered wallet.`)) return;
+    if (
+      !window.confirm(
+        `Remove every ${label} wallet from this encrypted vault? Sessions will remain, but they will no longer have a registered wallet.`,
+      )
+    )
+      return;
     setBusy(true);
     try {
       if (family === "solana") {
-        const result = await window.silfable.clearWallets({ schemaVersion: 1, requestId: crypto.randomUUID(), confirmation: "CLEAR ALL SOLANA WALLETS" });
+        const result = await window.silfable.clearWallets({
+          schemaVersion: 1,
+          requestId: crypto.randomUUID(),
+          confirmation: "CLEAR ALL SOLANA WALLETS",
+        });
         setWallets([]);
         setRecovery(null);
-        setMessage(`${result.removed} Solana wallet(s) removed from this device.`);
+        setMessage(
+          `${result.removed} Solana wallet(s) removed from this device.`,
+        );
         setRuntime(await window.silfable.getRuntimeStatus());
       } else {
-        const result = await window.silfable.clearEvmWallets({ schemaVersion: 1, requestId: crypto.randomUUID(), confirmation: "CLEAR ALL EVM WALLETS" });
+        const result = await window.silfable.clearEvmWallets({
+          schemaVersion: 1,
+          requestId: crypto.randomUUID(),
+          confirmation: "CLEAR ALL EVM WALLETS",
+        });
         setEvmAddress(null);
         setEvmWallets([]);
         setEvmRecovery(null);
-        setEvmMessage(`${result.removed} EVM wallet(s) removed from this device.`);
+        setEvmMessage(
+          `${result.removed} EVM wallet(s) removed from this device.`,
+        );
       }
     } catch {
       const fallback = `${label} wallets could not be removed. Unlock the vault and try again.`;
@@ -323,135 +401,349 @@ export function WalletStep({
         deterministic policy checks remain mandatory.
       </Notice>
       <div className="chainTabs">
-        <button className={walletTab === "solana" ? "active" : ""} onClick={() => setWalletTab("solana")}>◎ Solana</button>
-        <button className={walletTab === "evm" ? "active" : ""} onClick={() => setWalletTab("evm")}>◆ EVM · Robinhood Chain</button>
+        <button
+          className={walletTab === "solana" ? "active" : ""}
+          onClick={() => setWalletTab("solana")}
+        >
+          ◎ Solana
+        </button>
+        <button
+          className={walletTab === "evm" ? "active" : ""}
+          onClick={() => setWalletTab("evm")}
+        >
+          ◆ EVM · Robinhood Chain
+        </button>
       </div>
-      {walletTab === "solana" && <>
-      {configured && (
-        <div className="configuredReceipt">
-          <span>✓</span>
-          <div>
-            <strong>
-              {wallets.length || 1} Solana wallet
-              {wallets.length === 1 ? "" : "s"} configured
-            </strong>
-            <small>
-              You can generate or import another wallet below. The first wallet remains primary.
-            </small>
-          </div>
-        </div>
-      )}
-     {wallets.length > 0 && (
-        <div>
-          <div className="walletList">
-          {wallets.map((wallet, index) => (
-              <div key={wallet.address}>
-                <span>0{index + 1}</span>
-                <strong>{shorten(wallet.address)}</strong>
-                {wallet.primary && (
-                  <StatusPill tone="success">Primary</StatusPill>
-                )}
-                <Button variant="ghost" size="sm" onClick={() => handleCopy(wallet.address)}>
-                  {copiedAddress === wallet.address ? "Copied" : "Copy"}
-                </Button>
+      {walletTab === "solana" && (
+        <>
+          {configured && (
+            <div className="configuredReceipt">
+              <span>✓</span>
+              <div>
+                <strong>
+                  {wallets.length || 1} Solana wallet
+                  {wallets.length === 1 ? "" : "s"} configured
+                </strong>
+                <small>
+                  You can generate or import another wallet below. The first
+                  wallet remains primary.
+                </small>
               </div>
-          ))}
+            </div>
+          )}
+          {wallets.length > 0 && (
+            <div>
+              <div className="walletList">
+                {wallets.map((wallet, index) => (
+                  <div key={wallet.address}>
+                    <span>0{index + 1}</span>
+                    <strong>{shorten(wallet.address)}</strong>
+                    {wallet.primary && (
+                      <StatusPill tone="success">Primary</StatusPill>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleCopy(wallet.address)}
+                    >
+                      {copiedAddress === wallet.address ? "Copied" : "Copy"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <button
+                className="secondaryButton dangerButton"
+                disabled={busy}
+                onClick={() => void clearAllWallets("solana")}
+              >
+                Clear all Solana wallets
+              </button>
+            </div>
+          )}
+          <div className="segmented">
+            <button
+              className={mode === "generate" ? "active" : ""}
+              onClick={() => setMode("generate")}
+            >
+              Generate new
+            </button>
+            <button
+              className={mode === "mnemonic" ? "active" : ""}
+              onClick={() => setMode("mnemonic")}
+            >
+              Import phrase
+            </button>
+            <button
+              className={mode === "private" ? "active" : ""}
+              onClick={() => setMode("private")}
+            >
+              Import key
+            </button>
           </div>
-          <button className="secondaryButton dangerButton" disabled={busy} onClick={() => void clearAllWallets("solana")}>Clear all Solana wallets</button>
-        </div>
-      )}
-      <div className="segmented">
-        <button
-          className={mode === "generate" ? "active" : ""}
-          onClick={() => setMode("generate")}
-        >
-          Generate new
-        </button>
-        <button
-          className={mode === "mnemonic" ? "active" : ""}
-          onClick={() => setMode("mnemonic")}
-        >
-          Import phrase
-        </button>
-        <button
-          className={mode === "private" ? "active" : ""}
-          onClick={() => setMode("private")}
-        >
-          Import key
-        </button>
-      </div>
-      {mode !== "generate" && (
-        <Field label={mode === "mnemonic" ? "Recovery phrase" : "Private key"}>
-          <textarea
-            value={secret}
-            onChange={(event) => setSecret(event.target.value)}
-            rows={3}
-            spellCheck={false}
-            placeholder={
-              mode === "mnemonic"
-                ? "12 or 24 recovery words"
-                : "Base58 key or JSON byte array"
+          {mode !== "generate" && (
+            <Field
+              label={mode === "mnemonic" ? "Recovery phrase" : "Private key"}
+            >
+              <textarea
+                value={secret}
+                onChange={(event) => setSecret(event.target.value)}
+                rows={3}
+                spellCheck={false}
+                placeholder={
+                  mode === "mnemonic"
+                    ? "12 or 24 recovery words"
+                    : "Base58 key or JSON byte array"
+                }
+              />
+            </Field>
+          )}
+          <button
+            className="secondaryButton"
+            disabled={
+              busy ||
+              wallets.length >= 3 ||
+              (mode !== "generate" && secret.trim().length < 8)
             }
-          />
-        </Field>
+            onClick={() => void onboard()}
+          >
+            {busy
+              ? "Securing wallet…"
+              : configured
+                ? mode === "generate"
+                  ? "Add another wallet"
+                  : "Import another wallet"
+                : mode === "generate"
+                  ? "Generate wallet"
+                  : "Import wallet"}
+          </button>
+          {recovery && (
+            <Notice tone="danger" title="Write down this recovery phrase">
+              {recovery}
+            </Notice>
+          )}
+        </>
       )}
-      <button
-        className="secondaryButton"
-        disabled={busy || wallets.length >= 3 || (mode !== "generate" && secret.trim().length < 8)}
-        onClick={() => void onboard()}
-      >
-        {busy
-          ? "Securing wallet…"
-          : configured
-            ? mode === "generate"
-              ? "Add another wallet"
-              : "Import another wallet"
-            : mode === "generate"
-              ? "Generate wallet"
-              : "Import wallet"}
-      </button>
-      {recovery && (
-        <Notice tone="danger" title="Write down this recovery phrase">
-          {recovery}
-        </Notice>
+      {walletTab === "evm" && (
+        <section className="advanced transactionGuardSettings">
+          <strong>Robinhood Chain EVM wallets</strong>
+          <small className="providerHint">
+            Maximum 3 wallets. Creating or importing never authorizes a
+            transaction.
+          </small>
+          {evmWallets.length > 0 && (
+            <>
+              <div className="walletList">
+                {evmWallets.map((wallet, index) => (
+                  <div key={wallet.address}>
+                    <span>0{index + 1}</span>
+                    <strong>{shorten(wallet.address)}</strong>
+                    {wallet.primary && (
+                      <StatusPill tone="success">Primary</StatusPill>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleCopy(wallet.address)}
+                    >
+                      {copiedAddress === wallet.address ? "Copied" : "Copy"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <button
+                className="secondaryButton dangerButton"
+                disabled={busy}
+                onClick={() => void clearAllWallets("evm")}
+              >
+                Clear all EVM wallets
+              </button>
+            </>
+          )}
+          <div className="segmented">
+            <button
+              className={evmMode === "generate" ? "active" : ""}
+              onClick={() => setEvmMode("generate")}
+            >
+              Generate new
+            </button>
+            <button
+              className={evmMode === "mnemonic" ? "active" : ""}
+              onClick={() => setEvmMode("mnemonic")}
+            >
+              Import phrase
+            </button>
+            <button
+              className={evmMode === "private" ? "active" : ""}
+              onClick={() => setEvmMode("private")}
+            >
+              Import key
+            </button>
+          </div>
+          {evmMode === "mnemonic" && (
+            <Field label="EVM recovery phrase">
+              <textarea
+                value={evmMnemonic}
+                onChange={(event) => setEvmMnemonic(event.target.value)}
+                rows={3}
+                spellCheck={false}
+                placeholder="12 or 24 recovery words"
+              />
+            </Field>
+          )}
+          {evmMode === "private" && (
+            <Field label="EVM private key">
+              <textarea
+                value={evmPrivateKey}
+                onChange={(event) => setEvmPrivateKey(event.target.value)}
+                rows={3}
+                spellCheck={false}
+                placeholder="0x followed by 64 hexadecimal characters"
+              />
+            </Field>
+          )}
+          <button
+            className="secondaryButton"
+            disabled={
+              busy ||
+              evmWallets.length >= 3 ||
+              (evmMode === "mnemonic" && evmMnemonic.trim().length < 32) ||
+              (evmMode === "private" && evmPrivateKey.trim().length < 64)
+            }
+            onClick={() =>
+              void (evmMode === "generate"
+                ? createEvmWallet()
+                : evmMode === "mnemonic"
+                  ? importEvmWallet()
+                  : importEvmPrivateKey())
+            }
+          >
+            {busy
+              ? "Securing…"
+              : evmMode === "generate"
+                ? "Generate EVM wallet"
+                : evmMode === "mnemonic"
+                  ? "Import EVM phrase"
+                  : "Import EVM private key"}
+          </button>
+          {evmRecovery && (
+            <Notice tone="danger" title="Write down this EVM recovery phrase">
+              {evmRecovery}
+            </Notice>
+          )}
+          {evmMessage && <p className="inlineMessage">{evmMessage}</p>}
+        </section>
       )}
-      </>}
-{walletTab === "evm" && <section className="advanced transactionGuardSettings">
-        <strong>Robinhood Chain EVM wallets</strong>
-        <small className="providerHint">Maximum 3 wallets. Creating or importing never authorizes a transaction.</small>
-        {evmWallets.length > 0 && <><div className="walletList">{evmWallets.map((wallet, index) => <div key={wallet.address}><span>0{index + 1}</span><strong>{shorten(wallet.address)}</strong>{wallet.primary && <StatusPill tone="success">Primary</StatusPill>}<Button variant="ghost" size="sm" onClick={() => handleCopy(wallet.address)}>{copiedAddress === wallet.address ? "Copied" : "Copy"}</Button></div>)}</div><button className="secondaryButton dangerButton" disabled={busy} onClick={() => void clearAllWallets("evm")}>Clear all EVM wallets</button></>}
-        <div className="segmented"><button className={evmMode === "generate" ? "active" : ""} onClick={() => setEvmMode("generate")}>Generate new</button><button className={evmMode === "mnemonic" ? "active" : ""} onClick={() => setEvmMode("mnemonic")}>Import phrase</button><button className={evmMode === "private" ? "active" : ""} onClick={() => setEvmMode("private")}>Import key</button></div>
-        {evmMode === "mnemonic" && <Field label="EVM recovery phrase"><textarea value={evmMnemonic} onChange={(event) => setEvmMnemonic(event.target.value)} rows={3} spellCheck={false} placeholder="12 or 24 recovery words" /></Field>}
-        {evmMode === "private" && <Field label="EVM private key"><textarea value={evmPrivateKey} onChange={(event) => setEvmPrivateKey(event.target.value)} rows={3} spellCheck={false} placeholder="0x followed by 64 hexadecimal characters" /></Field>}
-        <button className="secondaryButton" disabled={busy || evmWallets.length >= 3 || (evmMode === "mnemonic" && evmMnemonic.trim().length < 32) || (evmMode === "private" && evmPrivateKey.trim().length < 64)} onClick={() => void (evmMode === "generate" ? createEvmWallet() : evmMode === "mnemonic" ? importEvmWallet() : importEvmPrivateKey())}>{busy ? "Securing…" : evmMode === "generate" ? "Generate EVM wallet" : evmMode === "mnemonic" ? "Import EVM phrase" : "Import EVM private key"}</button>
-        {evmRecovery && <Notice tone="danger" title="Write down this EVM recovery phrase">{evmRecovery}</Notice>}
-        {evmMessage && <p className="inlineMessage">{evmMessage}</p>}
-      </section>}
-       {false && walletTab === "evm" &&
-      <section className="advanced transactionGuardSettings">
-        <strong>Robinhood Chain EVM wallet</strong>
-        <small className="providerHint">Maximum 3 wallets. Separate from Solana; adding one never authorizes a transaction.</small>
-        {evmWallets.length > 0 && <div className="walletList">{evmWallets.map((wallet, index) => <div key={wallet.address}><span>0{index + 1}</span><strong>{shorten(wallet.address)}</strong>{wallet.primary && <StatusPill tone="success">Primary</StatusPill>}<button onClick={() => void copyWalletAddress(wallet.address)}>Copy</button></div>)}</div>}
-        {evmAddress ? (
-          <div className="configuredReceipt"><span>âœ“</span><div><strong>EVM wallet configured</strong><small>{evmAddress}</small></div></div>
-        ) : (
-          <>
-            <Field label="Import EVM recovery phrase"><textarea value={evmMnemonic} onChange={(event) => setEvmMnemonic(event.target.value)} rows={3} spellCheck={false} placeholder="12 or 24 recovery words" /></Field>
-            <button className="secondaryButton" disabled={busy || evmMnemonic.trim().length < 32} onClick={() => void importEvmWallet()}>{busy ? "Importing…" : "Import EVM wallet"}</button>
-            <button className="secondaryButton" disabled={busy} onClick={() => void createEvmWallet()}>{busy ? "Creating…" : "Create new EVM wallet"}</button>
-          </>
-        )}
-        {evmAddress && <>
-          <Field label="Import another EVM recovery phrase"><textarea value={evmMnemonic} onChange={(event) => setEvmMnemonic(event.target.value)} rows={3} spellCheck={false} placeholder="12 or 24 recovery words" /></Field>
-          <button className="secondaryButton" disabled={busy || evmMnemonic.trim().length < 32} onClick={() => void importEvmWallet()}>{busy ? "Importing…" : "Import another EVM wallet"}</button>
-          <button className="secondaryButton" disabled={busy} onClick={() => void createEvmWallet()}>{busy ? "Creating…" : "Generate another EVM wallet"}</button>
-        </>}
-         <Field label="Import EVM private key"><textarea value={evmPrivateKey} onChange={(event) => setEvmPrivateKey(event.target.value)} rows={3} spellCheck={false} placeholder="0x followed by 64 hexadecimal characters" /></Field>
-        <button className="secondaryButton" disabled={busy || evmPrivateKey.trim().length < 64} onClick={() => void importEvmPrivateKey()}>{busy ? "Importing…" : "Import EVM private key"}</button>
-        {evmRecovery && <Notice tone="danger" title="Write down this EVM recovery phrase">{evmRecovery}</Notice>}
-        {evmMessage && <p className="inlineMessage">{evmMessage}</p>}
-      </section>
-      }
+      {false && walletTab === "evm" && (
+        <section className="advanced transactionGuardSettings">
+          <strong>Robinhood Chain EVM wallet</strong>
+          <small className="providerHint">
+            Maximum 3 wallets. Separate from Solana; adding one never authorizes
+            a transaction.
+          </small>
+          {evmWallets.length > 0 && (
+            <div className="walletList">
+              {evmWallets.map((wallet, index) => (
+                <div key={wallet.address}>
+                  <span>0{index + 1}</span>
+                  <strong>{shorten(wallet.address)}</strong>
+                  {wallet.primary && (
+                    <StatusPill tone="success">Primary</StatusPill>
+                  )}
+                  <button
+                    onClick={() => void copyWalletAddress(wallet.address)}
+                  >
+                    Copy
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {evmAddress ? (
+            <div className="configuredReceipt">
+              <span>âœ“</span>
+              <div>
+                <strong>EVM wallet configured</strong>
+                <small>{evmAddress}</small>
+              </div>
+            </div>
+          ) : (
+            <>
+              <Field label="Import EVM recovery phrase">
+                <textarea
+                  value={evmMnemonic}
+                  onChange={(event) => setEvmMnemonic(event.target.value)}
+                  rows={3}
+                  spellCheck={false}
+                  placeholder="12 or 24 recovery words"
+                />
+              </Field>
+              <button
+                className="secondaryButton"
+                disabled={busy || evmMnemonic.trim().length < 32}
+                onClick={() => void importEvmWallet()}
+              >
+                {busy ? "Importing…" : "Import EVM wallet"}
+              </button>
+              <button
+                className="secondaryButton"
+                disabled={busy}
+                onClick={() => void createEvmWallet()}
+              >
+                {busy ? "Creating…" : "Create new EVM wallet"}
+              </button>
+            </>
+          )}
+          {evmAddress && (
+            <>
+              <Field label="Import another EVM recovery phrase">
+                <textarea
+                  value={evmMnemonic}
+                  onChange={(event) => setEvmMnemonic(event.target.value)}
+                  rows={3}
+                  spellCheck={false}
+                  placeholder="12 or 24 recovery words"
+                />
+              </Field>
+              <button
+                className="secondaryButton"
+                disabled={busy || evmMnemonic.trim().length < 32}
+                onClick={() => void importEvmWallet()}
+              >
+                {busy ? "Importing…" : "Import another EVM wallet"}
+              </button>
+              <button
+                className="secondaryButton"
+                disabled={busy}
+                onClick={() => void createEvmWallet()}
+              >
+                {busy ? "Creating…" : "Generate another EVM wallet"}
+              </button>
+            </>
+          )}
+          <Field label="Import EVM private key">
+            <textarea
+              value={evmPrivateKey}
+              onChange={(event) => setEvmPrivateKey(event.target.value)}
+              rows={3}
+              spellCheck={false}
+              placeholder="0x followed by 64 hexadecimal characters"
+            />
+          </Field>
+          <button
+            className="secondaryButton"
+            disabled={busy || evmPrivateKey.trim().length < 64}
+            onClick={() => void importEvmPrivateKey()}
+          >
+            {busy ? "Importing…" : "Import EVM private key"}
+          </button>
+          {evmRecovery && (
+            <Notice tone="danger" title="Write down this EVM recovery phrase">
+              {evmRecovery}
+            </Notice>
+          )}
+          {evmMessage && <p className="inlineMessage">{evmMessage}</p>}
+        </section>
+      )}
       {message && <p className="inlineMessage">{message}</p>}
       <SetupActions
         step={2}
@@ -469,9 +761,7 @@ export function IntegrationStep({
 }: {
   setup: SetupState;
   onBack: () => void;
-  onContinue: (
-    value: Pick<SetupState, "jupiterConfigured">,
-  ) => void;
+  onContinue: (value: Pick<SetupState, "jupiterConfigured">) => void;
 }) {
   const [jupiterKey, setJupiterKey] = useState("");
   const [jupiterConfigured, setJupiterConfigured] = useState(
@@ -496,7 +786,12 @@ export function IntegrationStep({
       .catch(() => undefined);
     window.silfable
       .getEvmSettings()
-      .then((settings) => setRobinhoodRpcConfigured(settings.chains.find((chain) => chain.chainKey === "robinhood")?.rpcConfigured === true))
+      .then((settings) =>
+        setRobinhoodRpcConfigured(
+          settings.chains.find((chain) => chain.chainKey === "robinhood")
+            ?.rpcConfigured === true,
+        ),
+      )
       .catch(() => undefined);
   }, []);
   async function saveKey(): Promise<void> {
@@ -513,7 +808,9 @@ export function IntegrationStep({
       setJupiterConfigured(true);
       setMessage("Jupiter key encrypted in the local vault.");
     } catch {
-      setMessage("Jupiter key could not be stored. Unlock the vault and try again.");
+      setMessage(
+        "Jupiter key could not be stored. Unlock the vault and try again.",
+      );
     } finally {
       setBusy(false);
     }
@@ -528,12 +825,19 @@ export function IntegrationStep({
         apiKey: uniswapKey,
         acknowledgedExternalQuoteProvider: true,
       });
-      await window.silfable.testUniswapKey({ schemaVersion: 1, requestId: crypto.randomUUID() });
+      await window.silfable.testUniswapKey({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+      });
       setUniswapKey("");
       setUniswapConfigured(true);
       setMessage("Uniswap API key verified and encrypted in the local vault.");
     } catch (error) {
-      setMessage(error instanceof Error ? `Uniswap key could not be verified: ${error.message}` : "Uniswap key could not be verified. Unlock the vault and try again.");
+      setMessage(
+        error instanceof Error
+          ? `Uniswap key could not be verified: ${error.message}`
+          : "Uniswap key could not be verified. Unlock the vault and try again.",
+      );
     } finally {
       setBusy(false);
     }
@@ -544,14 +848,25 @@ export function IntegrationStep({
     setBusy(true);
     setMessage(null);
     try {
-      const request = { schemaVersion: 1 as const, requestId: crypto.randomUUID(), chainKey: "robinhood" as const, rpcUrl };
+      const request = {
+        schemaVersion: 1 as const,
+        requestId: crypto.randomUUID(),
+        chainKey: "robinhood" as const,
+        rpcUrl,
+      };
       await window.silfable.testEvmRpc(request);
       await window.silfable.saveEvmRpcUrl(request);
       setRobinhoodRpcUrl("");
       setRobinhoodRpcConfigured(true);
-      setMessage("Robinhood Chain RPC verified and encrypted in the local vault.");
+      setMessage(
+        "Robinhood Chain RPC verified and encrypted in the local vault.",
+      );
     } catch (error) {
-      setMessage(error instanceof Error ? `Robinhood RPC could not be saved: ${error.message}` : "Robinhood RPC could not be saved. The default endpoint remains active.");
+      setMessage(
+        error instanceof Error
+          ? `Robinhood RPC could not be saved: ${error.message}`
+          : "Robinhood RPC could not be saved. The default endpoint remains active.",
+      );
     } finally {
       setBusy(false);
     }
@@ -607,7 +922,11 @@ export function IntegrationStep({
               type="password"
               value={uniswapKey}
               onChange={(event) => setUniswapKey(event.target.value)}
-              placeholder={uniswapConfigured ? "Replace saved key" : "Enter Uniswap API key"}
+              placeholder={
+                uniswapConfigured
+                  ? "Replace saved key"
+                  : "Enter Uniswap API key"
+              }
               autoComplete="new-password"
             />
             <Button
@@ -621,7 +940,8 @@ export function IntegrationStep({
           </div>
         </Field>
         <small className="providerHint">
-          Required only for Robinhood Chain EVM swaps. It is encrypted locally and never sent to the AI model.
+          Required only for Robinhood Chain EVM swaps. It is encrypted locally
+          and never sent to the AI model.
         </small>
       </ProviderCard>
       <ProviderCard
@@ -635,7 +955,11 @@ export function IntegrationStep({
               type="url"
               value={robinhoodRpcUrl}
               onChange={(event) => setRobinhoodRpcUrl(event.target.value)}
-              placeholder={robinhoodRpcConfigured ? "Replace saved Robinhood RPC" : "https://..."}
+              placeholder={
+                robinhoodRpcConfigured
+                  ? "Replace saved Robinhood RPC"
+                  : "https://..."
+              }
               autoComplete="off"
               spellCheck={false}
             />
@@ -650,7 +974,10 @@ export function IntegrationStep({
           </div>
         </Field>
         <small className="providerHint">
-          Optional. If no custom endpoint is saved, Silfable uses its verified Robinhood default and public fallback endpoints. A saved URL is encrypted on this device and is checked against Robinhood Chain ID 4663 before use.
+          Optional. If no custom endpoint is saved, Silfable uses its verified
+          Robinhood default and public fallback endpoints. A saved URL is
+          encrypted on this device and is checked against Robinhood Chain ID
+          4663 before use.
         </small>
       </ProviderCard>
       {message && <p className="inlineMessage">{message}</p>}
@@ -699,15 +1026,29 @@ export function TuningStep({
   const [missionMaxSteps, setMissionMaxSteps] = useState(
     String(setup.missionMaxSteps),
   );
-   const [retryLimit, setRetryLimit] = useState(String(setup.retryLimit));
-  const [maxNetworkFeeLamports, setMaxNetworkFeeLamports] = useState(String(setup.maxNetworkFeeLamports));
-  const [maxNetworkFeeUnit, setMaxNetworkFeeUnit] = useState<"lamports" | "sol" | "usd">("lamports");
+  const [retryLimit, setRetryLimit] = useState(String(setup.retryLimit));
+  const [maxNetworkFeeLamports, setMaxNetworkFeeLamports] = useState(
+    String(setup.maxNetworkFeeLamports),
+  );
+  const [maxNetworkFeeUnit, setMaxNetworkFeeUnit] = useState<
+    "lamports" | "sol" | "usd"
+  >("lamports");
   const [solPriceUsd, setSolPriceUsd] = useState<number | null>(null);
-  const [maxFeePercent, setMaxFeePercent] = useState(String(setup.maxFeePercent));
-  const [defaultSlippageBps, setDefaultSlippageBps] = useState(String(setup.defaultSlippageBps));
-  const [maxSlippageBps, setMaxSlippageBps] = useState(String(setup.maxSlippageBps));
-  const [defaultDeadlineMinutes, setDefaultDeadlineMinutes] = useState(String(setup.defaultDeadlineMinutes));
-  const [transactionPriority, setTransactionPriority] = useState<TransactionSettings["priority"]>(setup.transactionPriority);
+  const [maxFeePercent, setMaxFeePercent] = useState(
+    String(setup.maxFeePercent),
+  );
+  const [defaultSlippageBps, setDefaultSlippageBps] = useState(
+    String(setup.defaultSlippageBps),
+  );
+  const [maxSlippageBps, setMaxSlippageBps] = useState(
+    String(setup.maxSlippageBps),
+  );
+  const [defaultDeadlineMinutes, setDefaultDeadlineMinutes] = useState(
+    String(setup.defaultDeadlineMinutes),
+  );
+  const [transactionPriority, setTransactionPriority] = useState<
+    TransactionSettings["priority"]
+  >(setup.transactionPriority);
   const [pumpRisk, setPumpRisk] = useState({
     maxTradingFeeBps: "500",
     maxSlippageBps: "300",
@@ -721,25 +1062,49 @@ export function TuningStep({
   });
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   useEffect(() => {
-    window.silfable.getTransactionSettings().then(({ settings }) => {
-      setMaxNetworkFeeLamports(String(settings.maxNetworkFeeLamports));
-      setMaxFeePercent(String(settings.maxFeePercent));
-      setDefaultSlippageBps(String(settings.defaultSlippageBps));
-      setMaxSlippageBps(String(settings.maxSlippageBps));
-      setDefaultDeadlineMinutes(String(settings.defaultDeadlineMinutes));
-      setTransactionPriority(settings.priority);
-    }).catch(() => undefined);
-    window.silfable.getPumpRiskSettings().then(({ settings }) => {
-      setPumpRisk(Object.fromEntries(Object.entries(settings).map(([key, value]) => [key, String(value)])) as typeof pumpRisk);
-    }).catch(() => undefined);
-    window.silfable.listWallets().then((res) => {
-      const first = res.wallets[0];
-      if (first) {
-        window.silfable.getPortfolio({ schemaVersion: 1, requestId: crypto.randomUUID(), address: first.address }).then((p) => {
-          if (p.snapshot.solUsdPrice) setSolPriceUsd(p.snapshot.solUsdPrice);
-        }).catch(() => undefined);
-      }
-    }).catch(() => undefined);
+    window.silfable
+      .getTransactionSettings()
+      .then(({ settings }) => {
+        setMaxNetworkFeeLamports(String(settings.maxNetworkFeeLamports));
+        setMaxFeePercent(String(settings.maxFeePercent));
+        setDefaultSlippageBps(String(settings.defaultSlippageBps));
+        setMaxSlippageBps(String(settings.maxSlippageBps));
+        setDefaultDeadlineMinutes(String(settings.defaultDeadlineMinutes));
+        setTransactionPriority(settings.priority);
+      })
+      .catch(() => undefined);
+    window.silfable
+      .getPumpRiskSettings()
+      .then(({ settings }) => {
+        setPumpRisk(
+          Object.fromEntries(
+            Object.entries(settings).map(([key, value]) => [
+              key,
+              String(value),
+            ]),
+          ) as typeof pumpRisk,
+        );
+      })
+      .catch(() => undefined);
+    window.silfable
+      .listWallets()
+      .then((res) => {
+        const first = res.wallets[0];
+        if (first) {
+          window.silfable
+            .getPortfolio({
+              schemaVersion: 1,
+              requestId: crypto.randomUUID(),
+              address: first.address,
+            })
+            .then((p) => {
+              if (p.snapshot.solUsdPrice)
+                setSolPriceUsd(p.snapshot.solUsdPrice);
+            })
+            .catch(() => undefined);
+        }
+      })
+      .catch(() => undefined);
   }, []);
   const context = Number(contextLimit);
   const output = Number(outputLimit);
@@ -771,7 +1136,7 @@ export function TuningStep({
     Number.isInteger(numeric.subagentContextLimit) &&
     numeric.subagentContextLimit >= 1_000 &&
     numeric.subagentContextLimit <= 2_000_000 &&
-      (!subagentOutputLimit ||
+    (!subagentOutputLimit ||
       (Number.isInteger(Number(subagentOutputLimit)) &&
         Number(subagentOutputLimit) >= 256 &&
         Number(subagentOutputLimit) <= numeric.subagentContextLimit)) &&
@@ -792,31 +1157,59 @@ export function TuningStep({
     Number.isInteger(numeric.retryLimit) &&
     numeric.retryLimit >= 0 &&
     numeric.retryLimit <= 10;
-  const transactionValid = Number.isInteger(numeric.maxNetworkFeeLamports) && numeric.maxNetworkFeeLamports >= 5_000 && numeric.maxNetworkFeeLamports <= 10_000_000
-    && Number.isFinite(numeric.maxFeePercent) && numeric.maxFeePercent >= 0.1 && numeric.maxFeePercent <= 100
-    && Number.isInteger(numeric.defaultSlippageBps) && numeric.defaultSlippageBps >= 0 && numeric.defaultSlippageBps <= 300
-    && Number.isInteger(numeric.maxSlippageBps) && numeric.maxSlippageBps >= numeric.defaultSlippageBps && numeric.maxSlippageBps <= 300
-    && Number.isInteger(numeric.defaultDeadlineMinutes) && numeric.defaultDeadlineMinutes >= 5 && numeric.defaultDeadlineMinutes <= 43_200;
+  const transactionValid =
+    Number.isInteger(numeric.maxNetworkFeeLamports) &&
+    numeric.maxNetworkFeeLamports >= 5_000 &&
+    numeric.maxNetworkFeeLamports <= 10_000_000 &&
+    Number.isFinite(numeric.maxFeePercent) &&
+    numeric.maxFeePercent >= 0.1 &&
+    numeric.maxFeePercent <= 100 &&
+    Number.isInteger(numeric.defaultSlippageBps) &&
+    numeric.defaultSlippageBps >= 0 &&
+    numeric.defaultSlippageBps <= 300 &&
+    Number.isInteger(numeric.maxSlippageBps) &&
+    numeric.maxSlippageBps >= numeric.defaultSlippageBps &&
+    numeric.maxSlippageBps <= 300 &&
+    Number.isInteger(numeric.defaultDeadlineMinutes) &&
+    numeric.defaultDeadlineMinutes >= 5 &&
+    numeric.defaultDeadlineMinutes <= 43_200;
   const pumpSettings: PumpRiskSettings = {
     maxTradingFeeBps: Number(pumpRisk.maxTradingFeeBps),
     maxSlippageBps: Number(pumpRisk.maxSlippageBps),
     maxSpendPerTradeLamports: pumpRisk.maxSpendPerTradeLamports,
     maxDailySpendLamports: pumpRisk.maxDailySpendLamports,
-     maxPerTokenExposureLamports: pumpRisk.maxPerTokenExposureLamports,
+    maxPerTokenExposureLamports: pumpRisk.maxPerTokenExposureLamports,
     maxTotalExposureLamports: pumpRisk.maxTotalExposureLamports,
     maxOpenPositions: Number(pumpRisk.maxOpenPositions),
     maxTransactionsPerHour: Number(pumpRisk.maxTransactionsPerHour),
     minSolReserveLamports: pumpRisk.minSolReserveLamports,
   };
-  const rawLimitsValid = [pumpSettings.maxSpendPerTradeLamports, pumpSettings.maxDailySpendLamports, pumpSettings.maxPerTokenExposureLamports, pumpSettings.maxTotalExposureLamports].every((value) => /^[1-9]\d*$/u.test(value))
-    && /^\d+$/u.test(pumpSettings.minSolReserveLamports);
-  const pumpRiskValid = Number.isInteger(pumpSettings.maxTradingFeeBps) && pumpSettings.maxTradingFeeBps >= 1 && pumpSettings.maxTradingFeeBps <= 1_000
-    && Number.isInteger(pumpSettings.maxSlippageBps) && pumpSettings.maxSlippageBps >= 0 && pumpSettings.maxSlippageBps <= 1_000
-    && Number.isInteger(pumpSettings.maxOpenPositions) && pumpSettings.maxOpenPositions >= 1 && pumpSettings.maxOpenPositions <= 100
-    && Number.isInteger(pumpSettings.maxTransactionsPerHour) && pumpSettings.maxTransactionsPerHour >= 1 && pumpSettings.maxTransactionsPerHour <= 100
-    && rawLimitsValid
-    && BigInt(pumpSettings.maxDailySpendLamports) >= BigInt(pumpSettings.maxSpendPerTradeLamports)
-    && BigInt(pumpSettings.maxTotalExposureLamports) >= BigInt(pumpSettings.maxPerTokenExposureLamports);
+  const rawLimitsValid =
+    [
+      pumpSettings.maxSpendPerTradeLamports,
+      pumpSettings.maxDailySpendLamports,
+      pumpSettings.maxPerTokenExposureLamports,
+      pumpSettings.maxTotalExposureLamports,
+    ].every((value) => /^[1-9]\d*$/u.test(value)) &&
+    /^\d+$/u.test(pumpSettings.minSolReserveLamports);
+  const pumpRiskValid =
+    Number.isInteger(pumpSettings.maxTradingFeeBps) &&
+    pumpSettings.maxTradingFeeBps >= 1 &&
+    pumpSettings.maxTradingFeeBps <= 1_000 &&
+    Number.isInteger(pumpSettings.maxSlippageBps) &&
+    pumpSettings.maxSlippageBps >= 0 &&
+    pumpSettings.maxSlippageBps <= 1_000 &&
+    Number.isInteger(pumpSettings.maxOpenPositions) &&
+    pumpSettings.maxOpenPositions >= 1 &&
+    pumpSettings.maxOpenPositions <= 100 &&
+    Number.isInteger(pumpSettings.maxTransactionsPerHour) &&
+    pumpSettings.maxTransactionsPerHour >= 1 &&
+    pumpSettings.maxTransactionsPerHour <= 100 &&
+    rawLimitsValid &&
+    BigInt(pumpSettings.maxDailySpendLamports) >=
+      BigInt(pumpSettings.maxSpendPerTradeLamports) &&
+    BigInt(pumpSettings.maxTotalExposureLamports) >=
+      BigInt(pumpSettings.maxPerTokenExposureLamports);
   async function saveAndContinue(): Promise<void> {
     if (!valid || !transactionValid || !pumpRiskValid) return;
     setSaveMessage(null);
@@ -839,16 +1232,28 @@ export function TuningStep({
         settings: pumpSettings,
       });
       onContinue({
-        contextLimit: context, outputLimit: output, temperature,
-        subagentMaxConcurrent: numeric.subagentMaxConcurrent, subagentContextLimit: numeric.subagentContextLimit,
-        subagentOutputLimit, subagentTemperature, subagentMaxIterations: numeric.subagentMaxIterations,
-        subagentTimeoutMs: numeric.subagentTimeoutMs, maxToolCallsPerTurn: numeric.maxToolCallsPerTurn,
-        missionMaxSteps: numeric.missionMaxSteps, retryLimit: numeric.retryLimit,
-        maxNetworkFeeLamports: numeric.maxNetworkFeeLamports, maxFeePercent: numeric.maxFeePercent,
-        defaultSlippageBps: numeric.defaultSlippageBps, maxSlippageBps: numeric.maxSlippageBps, defaultDeadlineMinutes: numeric.defaultDeadlineMinutes,
+        contextLimit: context,
+        outputLimit: output,
+        temperature,
+        subagentMaxConcurrent: numeric.subagentMaxConcurrent,
+        subagentContextLimit: numeric.subagentContextLimit,
+        subagentOutputLimit,
+        subagentTemperature,
+        subagentMaxIterations: numeric.subagentMaxIterations,
+        subagentTimeoutMs: numeric.subagentTimeoutMs,
+        maxToolCallsPerTurn: numeric.maxToolCallsPerTurn,
+        missionMaxSteps: numeric.missionMaxSteps,
+        retryLimit: numeric.retryLimit,
+        maxNetworkFeeLamports: numeric.maxNetworkFeeLamports,
+        maxFeePercent: numeric.maxFeePercent,
+        defaultSlippageBps: numeric.defaultSlippageBps,
+        maxSlippageBps: numeric.maxSlippageBps,
+        defaultDeadlineMinutes: numeric.defaultDeadlineMinutes,
         transactionPriority,
       });
-    } catch { setSaveMessage("Transaction settings could not be saved."); }
+    } catch {
+      setSaveMessage("Transaction settings could not be saved.");
+    }
   }
   return (
     <SetupCard
@@ -880,7 +1285,7 @@ export function TuningStep({
         />
         <small>Must not exceed the context budget.</small>
       </Field>
-       <Field label="Temperature">
+      <Field label="Temperature">
         <input
           inputMode="decimal"
           value={temperature}
@@ -890,86 +1295,252 @@ export function TuningStep({
         <small>Optional · range 0–2.</small>
       </Field>
       <div className="tuningSectionHeader">Transaction guard</div>
-        <div className="advancedGrid">
-          <Field label={`Maximum network fee (${maxNetworkFeeUnit.toUpperCase()})`}>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              <input
-                inputMode={maxNetworkFeeUnit === "lamports" ? "numeric" : "decimal"}
-                value={
-                  maxNetworkFeeUnit === "lamports"
-                    ? maxNetworkFeeLamports
-                    : maxNetworkFeeUnit === "sol"
-                      ? String(Number(maxNetworkFeeLamports) / 1e9)
-                      : solPriceUsd
-                        ? String(Number(((Number(maxNetworkFeeLamports) / 1e9) * solPriceUsd).toFixed(4)))
-                        : maxNetworkFeeLamports
-                }
-                onChange={(event) => {
-                  const val = event.target.value;
-                  if (maxNetworkFeeUnit === "lamports") {
-                    setMaxNetworkFeeLamports(val);
-                  } else if (maxNetworkFeeUnit === "sol") {
-                    const num = parseFloat(val);
-                    setMaxNetworkFeeLamports(isNaN(num) ? "" : String(Math.round(num * 1e9)));
-                  } else if (maxNetworkFeeUnit === "usd" && solPriceUsd) {
-                    const num = parseFloat(val);
-                    setMaxNetworkFeeLamports(isNaN(num) ? "" : String(Math.round((num / solPriceUsd) * 1e9)));
-                  }
-                }}
-              />
-              <select
-                value={maxNetworkFeeUnit}
-                onChange={(e) => setMaxNetworkFeeUnit(e.target.value as "lamports" | "sol" | "usd")}
-                style={{ padding: "6px 10px", borderRadius: "6px" }}
-              >
-                <option value="lamports">Lamports</option>
-                <option value="sol">SOL</option>
-                <option value="usd" disabled={!solPriceUsd}>USD {!solPriceUsd ? "(No Price)" : ""}</option>
-              </select>
-            </div>
-            <small>
-              {maxNetworkFeeUnit === "lamports" && "5,000–10,000,000. Execution is blocked above this value."}
-              {maxNetworkFeeUnit === "sol" && `Stored as ${Number(maxNetworkFeeLamports).toLocaleString()} lamports (range: 0.000005–0.01 SOL).`}
-              {maxNetworkFeeUnit === "usd" && (solPriceUsd ? `Converted at $${solPriceUsd}/SOL (${Number(maxNetworkFeeLamports).toLocaleString()} lamports).` : "Price feed unavailable.")}
-            </small>
-          </Field>
-          <Field label="Maximum fee percentage">
-            <input inputMode="decimal" value={maxFeePercent} onChange={(event) => setMaxFeePercent(event.target.value)} />
-            <small>Percentage of the proposed input value.</small>
-          </Field>
-          <Field label="Default slippage (bps)">
-            <input inputMode="numeric" value={defaultSlippageBps} onChange={(event) => setDefaultSlippageBps(event.target.value)} />
-            <small>Used as the recommended mission default.</small>
-          </Field>
-          <Field label="Maximum slippage (bps)">
-            <input inputMode="numeric" value={maxSlippageBps} onChange={(event) => setMaxSlippageBps(event.target.value)} />
-            <small>Hard ceiling for AI drafts, simulations, Pump proposals, and limit orders. Must be at least the default and no more than 300 bps.</small>
-          </Field>
-          <Field label="Default deadline (minutes)">
-            <input inputMode="numeric" value={defaultDeadlineMinutes} onChange={(event) => setDefaultDeadlineMinutes(event.target.value)} />
-            <small>Range 5 minutes–30 days.</small>
-          </Field>
-          <Field label="Priority preference">
-            <select value={transactionPriority} onChange={(event) => setTransactionPriority(event.target.value as TransactionSettings["priority"])}>
-              <option value="economy">Economy</option><option value="standard">Standard</option><option value="fast">Fast</option>
-            </select>
-            <small>Preference is applied to Jupiter transaction order construction (Economy / Standard / Fast). Absolute fee guard always wins.</small>
-          </Field>
-        </div>
-      <div className="tuningSectionHeader">Pump.fun hard risk limits</div>
-      <p className="fieldHint" style={{ margin: "0 0 10px", color: "var(--muted)", fontSize: "11px" }}>These local limits override AI output and are checked again before every unsigned simulation.</p>
       <div className="advancedGrid">
-        <Field label="Maximum trading fee (bps)"><input inputMode="numeric" value={pumpRisk.maxTradingFeeBps} onChange={(event) => setPumpRisk({ ...pumpRisk, maxTradingFeeBps: event.target.value })} /><small>Protocol plus creator fee ceiling.</small></Field>
-        <Field label="Maximum Pump slippage (bps)"><input inputMode="numeric" value={pumpRisk.maxSlippageBps} onChange={(event) => setPumpRisk({ ...pumpRisk, maxSlippageBps: event.target.value })} /><small>A Pump proposal cannot exceed this value.</small></Field>
-        <Field label="Spend per trade (lamports)"><input inputMode="numeric" value={pumpRisk.maxSpendPerTradeLamports} onChange={(event) => setPumpRisk({ ...pumpRisk, maxSpendPerTradeLamports: event.target.value })} /></Field>
-        <Field label="Spend per day (lamports)"><input inputMode="numeric" value={pumpRisk.maxDailySpendLamports} onChange={(event) => setPumpRisk({ ...pumpRisk, maxDailySpendLamports: event.target.value })} /></Field>
-        <Field label="Exposure per token (lamports)"><input inputMode="numeric" value={pumpRisk.maxPerTokenExposureLamports} onChange={(event) => setPumpRisk({ ...pumpRisk, maxPerTokenExposureLamports: event.target.value })} /></Field>
-        <Field label="Total Pump exposure (lamports)"><input inputMode="numeric" value={pumpRisk.maxTotalExposureLamports} onChange={(event) => setPumpRisk({ ...pumpRisk, maxTotalExposureLamports: event.target.value })} /></Field>
-        <Field label="Maximum open positions"><input inputMode="numeric" value={pumpRisk.maxOpenPositions} onChange={(event) => setPumpRisk({ ...pumpRisk, maxOpenPositions: event.target.value })} /></Field>
-        <Field label="Transactions per hour"><input inputMode="numeric" value={pumpRisk.maxTransactionsPerHour} onChange={(event) => setPumpRisk({ ...pumpRisk, maxTransactionsPerHour: event.target.value })} /></Field>
-        <Field label="Minimum SOL reserve (lamports)"><input inputMode="numeric" value={pumpRisk.minSolReserveLamports} onChange={(event) => setPumpRisk({ ...pumpRisk, minSolReserveLamports: event.target.value })} /><small>Proposals are blocked if spend plus maximum network fee would cross this floor.</small></Field>
+        <Field
+          label={`Maximum network fee (${maxNetworkFeeUnit.toUpperCase()})`}
+        >
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <input
+              inputMode={
+                maxNetworkFeeUnit === "lamports" ? "numeric" : "decimal"
+              }
+              value={
+                maxNetworkFeeUnit === "lamports"
+                  ? maxNetworkFeeLamports
+                  : maxNetworkFeeUnit === "sol"
+                    ? String(Number(maxNetworkFeeLamports) / 1e9)
+                    : solPriceUsd
+                      ? String(
+                          Number(
+                            (
+                              (Number(maxNetworkFeeLamports) / 1e9) *
+                              solPriceUsd
+                            ).toFixed(4),
+                          ),
+                        )
+                      : maxNetworkFeeLamports
+              }
+              onChange={(event) => {
+                const val = event.target.value;
+                if (maxNetworkFeeUnit === "lamports") {
+                  setMaxNetworkFeeLamports(val);
+                } else if (maxNetworkFeeUnit === "sol") {
+                  const num = parseFloat(val);
+                  setMaxNetworkFeeLamports(
+                    isNaN(num) ? "" : String(Math.round(num * 1e9)),
+                  );
+                } else if (maxNetworkFeeUnit === "usd" && solPriceUsd) {
+                  const num = parseFloat(val);
+                  setMaxNetworkFeeLamports(
+                    isNaN(num)
+                      ? ""
+                      : String(Math.round((num / solPriceUsd) * 1e9)),
+                  );
+                }
+              }}
+            />
+            <select
+              value={maxNetworkFeeUnit}
+              onChange={(e) =>
+                setMaxNetworkFeeUnit(
+                  e.target.value as "lamports" | "sol" | "usd",
+                )
+              }
+              style={{ padding: "6px 10px", borderRadius: "6px" }}
+            >
+              <option value="lamports">Lamports</option>
+              <option value="sol">SOL</option>
+              <option value="usd" disabled={!solPriceUsd}>
+                USD {!solPriceUsd ? "(No Price)" : ""}
+              </option>
+            </select>
+          </div>
+          <small>
+            {maxNetworkFeeUnit === "lamports" &&
+              "5,000–10,000,000. Execution is blocked above this value."}
+            {maxNetworkFeeUnit === "sol" &&
+              `Stored as ${Number(maxNetworkFeeLamports).toLocaleString()} lamports (range: 0.000005–0.01 SOL).`}
+            {maxNetworkFeeUnit === "usd" &&
+              (solPriceUsd
+                ? `Converted at $${solPriceUsd}/SOL (${Number(maxNetworkFeeLamports).toLocaleString()} lamports).`
+                : "Price feed unavailable.")}
+          </small>
+        </Field>
+        <Field label="Maximum fee percentage">
+          <input
+            inputMode="decimal"
+            value={maxFeePercent}
+            onChange={(event) => setMaxFeePercent(event.target.value)}
+          />
+          <small>Percentage of the proposed input value.</small>
+        </Field>
+        <Field label="Default slippage (bps)">
+          <input
+            inputMode="numeric"
+            value={defaultSlippageBps}
+            onChange={(event) => setDefaultSlippageBps(event.target.value)}
+          />
+          <small>Used as the recommended mission default.</small>
+        </Field>
+        <Field label="Maximum slippage (bps)">
+          <input
+            inputMode="numeric"
+            value={maxSlippageBps}
+            onChange={(event) => setMaxSlippageBps(event.target.value)}
+          />
+          <small>
+            Hard ceiling for AI drafts, simulations, Pump proposals, and limit
+            orders. Must be at least the default and no more than 300 bps.
+          </small>
+        </Field>
+        <Field label="Default deadline (minutes)">
+          <input
+            inputMode="numeric"
+            value={defaultDeadlineMinutes}
+            onChange={(event) => setDefaultDeadlineMinutes(event.target.value)}
+          />
+          <small>Range 5 minutes–30 days.</small>
+        </Field>
+        <Field label="Priority preference">
+          <select
+            value={transactionPriority}
+            onChange={(event) =>
+              setTransactionPriority(
+                event.target.value as TransactionSettings["priority"],
+              )
+            }
+          >
+            <option value="economy">Economy</option>
+            <option value="standard">Standard</option>
+            <option value="fast">Fast</option>
+          </select>
+          <small>
+            Preference is applied to Jupiter transaction order construction
+            (Economy / Standard / Fast). Absolute fee guard always wins.
+          </small>
+        </Field>
       </div>
-      {!pumpRiskValid && <p className="fieldError">Pump limits are invalid. Daily spend must cover one trade and total exposure must cover per-token exposure.</p>}
+      <div className="tuningSectionHeader">Pump.fun hard risk limits</div>
+      <p
+        className="fieldHint"
+        style={{ margin: "0 0 10px", color: "var(--muted)", fontSize: "11px" }}
+      >
+        These local limits override AI output and are checked again before every
+        unsigned simulation.
+      </p>
+      <div className="advancedGrid">
+        <Field label="Maximum trading fee (bps)">
+          <input
+            inputMode="numeric"
+            value={pumpRisk.maxTradingFeeBps}
+            onChange={(event) =>
+              setPumpRisk({ ...pumpRisk, maxTradingFeeBps: event.target.value })
+            }
+          />
+          <small>Protocol plus creator fee ceiling.</small>
+        </Field>
+        <Field label="Maximum Pump slippage (bps)">
+          <input
+            inputMode="numeric"
+            value={pumpRisk.maxSlippageBps}
+            onChange={(event) =>
+              setPumpRisk({ ...pumpRisk, maxSlippageBps: event.target.value })
+            }
+          />
+          <small>A Pump proposal cannot exceed this value.</small>
+        </Field>
+        <Field label="Spend per trade (lamports)">
+          <input
+            inputMode="numeric"
+            value={pumpRisk.maxSpendPerTradeLamports}
+            onChange={(event) =>
+              setPumpRisk({
+                ...pumpRisk,
+                maxSpendPerTradeLamports: event.target.value,
+              })
+            }
+          />
+        </Field>
+        <Field label="Spend per day (lamports)">
+          <input
+            inputMode="numeric"
+            value={pumpRisk.maxDailySpendLamports}
+            onChange={(event) =>
+              setPumpRisk({
+                ...pumpRisk,
+                maxDailySpendLamports: event.target.value,
+              })
+            }
+          />
+        </Field>
+        <Field label="Exposure per token (lamports)">
+          <input
+            inputMode="numeric"
+            value={pumpRisk.maxPerTokenExposureLamports}
+            onChange={(event) =>
+              setPumpRisk({
+                ...pumpRisk,
+                maxPerTokenExposureLamports: event.target.value,
+              })
+            }
+          />
+        </Field>
+        <Field label="Total Pump exposure (lamports)">
+          <input
+            inputMode="numeric"
+            value={pumpRisk.maxTotalExposureLamports}
+            onChange={(event) =>
+              setPumpRisk({
+                ...pumpRisk,
+                maxTotalExposureLamports: event.target.value,
+              })
+            }
+          />
+        </Field>
+        <Field label="Maximum open positions">
+          <input
+            inputMode="numeric"
+            value={pumpRisk.maxOpenPositions}
+            onChange={(event) =>
+              setPumpRisk({ ...pumpRisk, maxOpenPositions: event.target.value })
+            }
+          />
+        </Field>
+        <Field label="Transactions per hour">
+          <input
+            inputMode="numeric"
+            value={pumpRisk.maxTransactionsPerHour}
+            onChange={(event) =>
+              setPumpRisk({
+                ...pumpRisk,
+                maxTransactionsPerHour: event.target.value,
+              })
+            }
+          />
+        </Field>
+        <Field label="Minimum SOL reserve (lamports)">
+          <input
+            inputMode="numeric"
+            value={pumpRisk.minSolReserveLamports}
+            onChange={(event) =>
+              setPumpRisk({
+                ...pumpRisk,
+                minSolReserveLamports: event.target.value,
+              })
+            }
+          />
+          <small>
+            Proposals are blocked if spend plus maximum network fee would cross
+            this floor.
+          </small>
+        </Field>
+      </div>
+      {!pumpRiskValid && (
+        <p className="fieldError">
+          Pump limits are invalid. Daily spend must cover one trade and total
+          exposure must cover per-token exposure.
+        </p>
+      )}
       <details className="advanced">
         <summary>Advanced agent and subagent tuning</summary>
         <div className="advancedGrid">
@@ -1258,7 +1829,7 @@ export function ReviewStep({
       step: 3,
       ok: setup.jupiterConfigured,
     },
-   {
+    {
       title: "Agent core",
       state: "Saved",
       detail: `${setup.contextLimit.toLocaleString()} context · ${setup.outputLimit.toLocaleString()} output · ${setup.subagentMaxConcurrent} subagents`,
@@ -1305,8 +1876,8 @@ export function ReviewStep({
         <details className="advanced">
           <summary>Advanced safety · Emergency stop</summary>
           <p>
-            Use only when a prepared transaction or local strategy must be halted immediately.
-            Normal sessions do not require this control.
+            Use only when a prepared transaction or local strategy must be
+            halted immediately. Normal sessions do not require this control.
           </p>
           <div className="advancedSafetyPanel">
             <EmergencyStopPanel />
@@ -1336,4 +1907,3 @@ export function ReviewStep({
     </SetupCard>
   );
 }
-
