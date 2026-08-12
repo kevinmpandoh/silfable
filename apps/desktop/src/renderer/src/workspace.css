@@ -250,6 +250,15 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .providerCard > header { display: flex; align-items: center; justify-content: space-between; }
 .providerCard p { margin: 9px 0 12px; color: var(--muted); font-size: 11px; line-height: 1.55; }
 .providerHint { display: block; margin-top: 8px; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.desktopStepCanvas .providerCard { padding: 18px; border-radius: 14px 30px 14px 14px; background: rgb(16 20 38 / .66); }
+.desktopStepCanvas .providerCard > header { gap: 18px; }
+.desktopStepCanvas .providerCard > header strong { color: var(--bone); font-size: 14px; }
+.integrationInputAction { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; min-height: 48px; padding: 4px; border-radius: 11px 23px 11px 11px; background: rgb(9 12 25 / .92); }
+.integrationInputAction input { min-width: 0; min-height: 38px; padding-inline: 13px; font-size: 11px; }
+.integrationSaveButton { min-width: 112px; height: 36px; padding-inline: 14px; border-color: rgb(167 139 250 / .52) !important; border-radius: 999px !important; color: var(--lilac) !important; background: rgb(167 139 250 / .1) !important; box-shadow: none !important; font: 700 8.5px/1 var(--mono) !important; letter-spacing: .1em !important; }
+.integrationSaveButton:hover:not(:disabled) { border-color: var(--lilac) !important; color: var(--bone) !important; background: rgb(167 139 250 / .18) !important; transform: translateY(-1px); }
+.integrationSaveButton:disabled { border-color: var(--line) !important; color: var(--muted) !important; background: rgb(33 22 44 / .48) !important; opacity: .62; }
+.integrationSaveButton svg { color: var(--aqua); }
 .checkboxRow { display: flex; align-items: flex-start; gap: 10px; margin: 12px 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .checkboxRow input { width: 14px; min-width: 14px; height: 14px; margin-top: 1px; accent-color: var(--coral); }
 .detailsGrid { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
@@ -288,6 +297,47 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .desktopSettingsCanvas .notice { margin-top: 4px; border-radius: 12px 30px 12px 12px; }
 .desktopSettingsCanvas .setupActions { margin: 4px -14px -14px; border: 1px solid var(--line); border-radius: 999px; padding: 10px; background: rgb(14 11 22 / .92); }
 .desktopSettingsCanvas .settingsActions > span { padding-left: 10px; }
+
+.desktopStepCanvas { display: grid; grid-template-columns: minmax(285px, .36fr) minmax(0, .64fr); width: min(1180px, calc(100vw - 76px)); overflow: clip; border-radius: 22px 76px 22px 22px; }
+.desktopStepCanvas > header { position: relative; min-width: 0; min-height: 620px; flex-direction: column; align-items: flex-start; gap: 28px; border-right: 1px solid var(--line); border-bottom: 0; padding: 42px 38px; overflow: hidden; background: rgb(167 139 250 / .055); }
+.desktopStepCanvas > header::after { position: absolute; right: -138px; bottom: -138px; width: 310px; height: 310px; border: 1px solid rgb(167 139 250 / .15); border-radius: 50%; content: ""; box-shadow: 0 0 0 56px rgb(167 139 250 / .025), 0 0 0 112px rgb(103 232 212 / .012); }
+.desktopStepCanvas > header .setupIcon { width: 54px; height: 54px; flex-basis: 54px; background: transparent; font: 700 11px var(--mono); }
+.desktopStepCanvas > header > div { position: relative; z-index: 1; margin-top: 18px; }
+.desktopStepCanvas > header h1 { max-width: 360px; font-size: clamp(40px, 3.6vw, 60px); line-height: .92; }
+.desktopStepCanvas > header p { max-width: 340px; margin-top: 22px; font-size: 13px; line-height: 1.75; }
+.desktopStepCanvas > .setupBody { min-width: 0; padding: 34px; background: rgb(14 11 22 / .34); }
+
+.desktopStepCanvas .chainTabs { gap: 8px; padding: 7px; border-color: var(--line); border-radius: 999px; background: var(--bg); }
+.desktopStepCanvas .chainTabs button { min-height: 46px; border-radius: 999px; }
+.walletNetworkIdentity { display: flex; min-width: 0; align-items: center; justify-content: center; gap: 11px; text-align: left; }
+.walletNetworkIdentity > span:last-child { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.walletNetworkIdentity strong { color: inherit; font: 700 9px var(--mono); letter-spacing: .11em; text-transform: uppercase; }
+.walletNetworkIdentity small { color: var(--muted); font: 7px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.walletNetworkLogo { display: grid; width: 27px; height: 27px; flex: 0 0 27px; place-items: center; overflow: hidden; border: 1px solid var(--line); border-radius: 50%; background: var(--panel); }
+.walletNetworkLogo img { display: block; width: 17px; height: 17px; object-fit: contain; }
+.walletNetworkLogoRobinhood { border-color: rgb(199 243 107 / .38); background: #c7f36b; }
+.walletNetworkLogoRobinhood img { width: 19px; height: 19px; object-fit: cover; }
+.walletNetworkLogoSolana { border-color: rgb(103 232 212 / .38); background: rgb(103 232 212 / .08); }
+.desktopStepCanvas .chainTabs button:first-child.active { border-color: rgb(103 232 212 / .45); color: var(--aqua); background: rgb(103 232 212 / .1); }
+.desktopStepCanvas .chainTabs button:last-child.active { border-color: rgb(167 139 250 / .48); color: var(--lilac); background: rgb(167 139 250 / .12); }
+.walletWorkspace { min-width: 0; }
+.walletNetworkPanel { display: grid; gap: 16px; }
+.walletEvmPanel { padding: 20px; border-radius: 14px 42px 14px 14px; background: var(--bg); }
+.walletRegistryBlock { overflow: hidden; border: 1px solid var(--line); border-radius: 14px 36px 14px 14px; background: var(--bg); }
+.walletRegistryBlock .walletList { border: 0; border-radius: 0; }
+.walletList { border-radius: 12px 30px 12px 12px; background: var(--bg); }
+.walletList > div { grid-template-columns: 34px minmax(0, 1fr) auto 58px; min-height: 58px; padding: 0 16px; }
+.walletList > div > strong { color: var(--bone); font-size: 10px; letter-spacing: .04em; }
+.walletList > div > button { justify-self: end; color: var(--aqua); }
+.walletDangerRow { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 12px 14px; border-top: 1px solid var(--line); background: rgb(255 107 92 / .035); }
+.walletDangerRow > span { color: var(--muted); font-size: 9px; line-height: 1.5; }
+.walletDangerRow .walletClearButton { flex: 0 0 auto; min-width: 0 !important; padding: 8px 12px !important; border-radius: 999px !important; color: var(--coral) !important; background: transparent !important; box-shadow: none !important; }
+.walletDangerRow .walletClearButton:hover:not(:disabled) { color: var(--bg) !important; background: var(--coral) !important; box-shadow: none !important; }
+.walletMethodPanel { display: grid; gap: 14px; padding: 18px; border: 1px solid var(--line); border-radius: 14px 42px 14px 14px; background: var(--bg); }
+.walletSectionLabel { color: var(--lilac); font: 700 8px var(--mono); letter-spacing: .16em; text-transform: uppercase; }
+.walletMethods { border-color: var(--line); background: var(--panel); }
+.walletPrimaryAction { min-width: 170px; justify-self: end; border-color: var(--lilac); color: var(--lilac); }
+.walletPrimaryAction:hover:not(:disabled) { color: var(--bg); background: var(--lilac); }
 
 .workspace { display: grid; grid-template-columns: clamp(238px, 15vw, 286px) minmax(0, 1fr) clamp(292px, 19vw, 354px); width: 100vw; height: 100vh; overflow: hidden; background: var(--bg); }
 .leftRail, .rightRail { min-width: 0; overflow: hidden; background: var(--panel); }
@@ -1038,6 +1088,18 @@ button:disabled { cursor: not-allowed; opacity: .38; }
   .setupStepper > div small { white-space: normal; }
   .setupCard, .editingBar { width: 100%; }
   .desktopSettingsCanvas { display: block; min-height: 0; }
+  .desktopStepCanvas { display: block; width: 100%; }
+  .desktopStepCanvas > header { min-height: 330px; border-right: 0; border-bottom: 1px solid var(--line); padding: 28px 24px; }
+  .desktopStepCanvas > header h1 { font-size: 42px; }
+  .desktopStepCanvas > .setupBody { padding: 20px; }
+  .desktopStepCanvas .chainTabs { grid-template-columns: 1fr; border-radius: 18px; }
+  .integrationInputAction { grid-template-columns: 1fr; border-radius: 12px; }
+  .integrationSaveButton { width: 100%; min-width: 0; }
+  .walletDangerRow { align-items: flex-start; flex-direction: column; }
+  .walletDangerRow .walletClearButton, .walletPrimaryAction { width: 100%; justify-self: stretch; }
+  .walletList > div { grid-template-columns: 26px minmax(0, 1fr) auto; }
+  .walletList > div .statusPill { grid-column: 2; width: fit-content; margin-bottom: 9px; }
+  .walletList > div > button { grid-column: 3; grid-row: 1 / span 2; }
   .desktopSettingsCanvas > header { min-height: 330px; border-right: 0; border-bottom: 1px solid var(--line); padding: 28px 24px; }
   .desktopSettingsCanvas > header h1 { font-size: 42px; }
   .desktopSettingsCanvas > .setupBody { padding: 20px; }

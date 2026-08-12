@@ -21,6 +21,8 @@ import {
   STORAGE_KEY,
 } from "../types";
 import { Button, Modal } from "../ui";
+import robinhoodLogoUrl from "../../../../assets/robinhood.png";
+import solanaLogoUrl from "../../../../assets/solana.svg";
 export function SetupFlow({
   setup,
   runtime,
@@ -396,17 +398,24 @@ export function WalletStep({
           className={walletTab === "solana" ? "active" : ""}
           onClick={() => setWalletTab("solana")}
         >
-          ◎ Solana
+          <span className="walletNetworkIdentity">
+            <span className="walletNetworkLogo walletNetworkLogoSolana"><img src={solanaLogoUrl} alt="" /></span>
+            <span><strong>Solana</strong><small>Connected ecosystem</small></span>
+          </span>
         </button>
         <button
           className={walletTab === "evm" ? "active" : ""}
           onClick={() => setWalletTab("evm")}
         >
-          ◆ EVM · Robinhood Chain
+          <span className="walletNetworkIdentity">
+            <span className="walletNetworkLogo walletNetworkLogoRobinhood"><img src={robinhoodLogoUrl} alt="" /></span>
+            <span><strong>Robinhood Chain</strong><small>EVM · Primary network</small></span>
+          </span>
         </button>
       </div>
+      <div className="walletWorkspace">
       {walletTab === "solana" && (
-        <>
+        <div className="walletNetworkPanel">
           {configured && (
             <div className="configuredReceipt">
               <span>✓</span>
@@ -423,7 +432,7 @@ export function WalletStep({
             </div>
           )}
           {wallets.length > 0 && (
-            <div>
+            <div className="walletRegistryBlock">
               <div className="walletList">
                 {wallets.map((wallet, index) => (
                   <div key={wallet.address}>
@@ -442,16 +451,21 @@ export function WalletStep({
                   </div>
                 ))}
               </div>
+              <div className="walletDangerRow">
+              <span>Removes local wallet records from this vault.</span>
               <button
-                className="secondaryButton dangerButton"
+                className="secondaryButton dangerButton walletClearButton"
                 disabled={busy}
                 onClick={() => void clearAllWallets("solana")}
               >
                 Clear all Solana wallets
               </button>
+              </div>
             </div>
           )}
-          <div className="segmented">
+          <div className="walletMethodPanel">
+          <span className="walletSectionLabel">Add wallet</span>
+          <div className="segmented walletMethods">
             <button
               className={mode === "generate" ? "active" : ""}
               onClick={() => setMode("generate")}
@@ -489,7 +503,7 @@ export function WalletStep({
             </Field>
           )}
           <button
-            className="secondaryButton"
+            className="secondaryButton walletPrimaryAction"
             disabled={
               busy ||
               wallets.length >= 3 ||
@@ -507,15 +521,16 @@ export function WalletStep({
                   ? "Generate wallet"
                   : "Import wallet"}
           </button>
+          </div>
           {recovery && (
             <Notice tone="danger" title="Write down this recovery phrase">
               {recovery}
             </Notice>
           )}
-        </>
+        </div>
       )}
       {walletTab === "evm" && (
-        <section className="advanced transactionGuardSettings">
+        <section className="advanced transactionGuardSettings walletNetworkPanel walletEvmPanel">
           <strong>Robinhood Chain EVM wallets</strong>
           <small className="providerHint">
             Maximum 3 wallets. Creating or importing never authorizes a
@@ -541,16 +556,21 @@ export function WalletStep({
                   </div>
                 ))}
               </div>
+              <div className="walletDangerRow">
+              <span>Removes local wallet records from this vault.</span>
               <button
-                className="secondaryButton dangerButton"
+                className="secondaryButton dangerButton walletClearButton"
                 disabled={busy}
                 onClick={() => void clearAllWallets("evm")}
               >
                 Clear all EVM wallets
               </button>
+              </div>
             </>
           )}
-          <div className="segmented">
+          <div className="walletMethodPanel">
+          <span className="walletSectionLabel">Add wallet</span>
+          <div className="segmented walletMethods">
             <button
               className={evmMode === "generate" ? "active" : ""}
               onClick={() => setEvmMode("generate")}
@@ -593,7 +613,7 @@ export function WalletStep({
             </Field>
           )}
           <button
-            className="secondaryButton"
+            className="secondaryButton walletPrimaryAction"
             disabled={
               busy ||
               evmWallets.length >= 3 ||
@@ -616,6 +636,7 @@ export function WalletStep({
                   ? "Import EVM phrase"
                   : "Import EVM private key"}
           </button>
+          </div>
           {evmRecovery && (
             <Notice tone="danger" title="Write down this EVM recovery phrase">
               {evmRecovery}
@@ -624,6 +645,7 @@ export function WalletStep({
           {evmMessage && <p className="inlineMessage">{evmMessage}</p>}
         </section>
       )}
+      </div>
       {false && walletTab === "evm" && (
         <section className="advanced transactionGuardSettings">
           <strong>Robinhood Chain EVM wallet</strong>
@@ -762,7 +784,9 @@ export function IntegrationStep({
   const [uniswapConfigured, setUniswapConfigured] = useState(false);
   const [robinhoodRpcUrl, setRobinhoodRpcUrl] = useState("");
   const [robinhoodRpcConfigured, setRobinhoodRpcConfigured] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<
+    "jupiter" | "uniswap" | "robinhood-rpc" | null
+  >(null);
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
     window.silfable
@@ -786,7 +810,7 @@ export function IntegrationStep({
       .catch(() => undefined);
   }, []);
   async function saveKey(): Promise<void> {
-    setBusy(true);
+    setBusyAction("jupiter");
     setMessage(null);
     try {
       await window.silfable.saveJupiterKey({
@@ -803,11 +827,11 @@ export function IntegrationStep({
         "Jupiter key could not be stored. Unlock the vault and try again.",
       );
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   }
   async function saveUniswapKey(): Promise<void> {
-    setBusy(true);
+    setBusyAction("uniswap");
     setMessage(null);
     try {
       await window.silfable.saveUniswapKey({
@@ -830,13 +854,13 @@ export function IntegrationStep({
           : "Uniswap key could not be verified. Unlock the vault and try again.",
       );
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   }
   async function saveRobinhoodRpc(): Promise<void> {
     const rpcUrl = robinhoodRpcUrl.trim();
     if (!rpcUrl) return;
-    setBusy(true);
+    setBusyAction("robinhood-rpc");
     setMessage(null);
     try {
       const request = {
@@ -859,7 +883,7 @@ export function IntegrationStep({
           : "Robinhood RPC could not be saved. The default endpoint remains active.",
       );
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   }
   return (
@@ -876,7 +900,7 @@ export function IntegrationStep({
         description="Mainnet Solana quotes, swap routes, and portfolio routing metadata."
       >
         <Field label="Jupiter API key">
-          <div className="inputWithAction">
+          <div className="inputWithAction integrationInputAction">
             <input
               type="password"
               value={jupiterKey}
@@ -891,10 +915,12 @@ export function IntegrationStep({
             <Button
               size="sm"
               variant="secondary"
-              disabled={busy || jupiterKey.trim().length < 8}
+              className="integrationSaveButton"
+              loading={busyAction === "jupiter"}
+              disabled={busyAction !== null || jupiterKey.trim().length < 8}
               onClick={() => void saveKey()}
             >
-              {busy ? "Saving" : "Save key"}
+              Save
             </Button>
           </div>
         </Field>
@@ -908,7 +934,7 @@ export function IntegrationStep({
         description="Official Uniswap Trading API with Classic routes only and the pinned Universal Router 2.1.1."
       >
         <Field label="Uniswap API key">
-          <div className="inputWithAction">
+          <div className="inputWithAction integrationInputAction">
             <input
               type="password"
               value={uniswapKey}
@@ -923,10 +949,12 @@ export function IntegrationStep({
             <Button
               size="sm"
               variant="secondary"
-              disabled={busy || uniswapKey.trim().length < 8}
+              className="integrationSaveButton"
+              loading={busyAction === "uniswap"}
+              disabled={busyAction !== null || uniswapKey.trim().length < 8}
               onClick={() => void saveUniswapKey()}
             >
-              {busy ? "Saving" : "Save & test"}
+              Verify &amp; save
             </Button>
           </div>
         </Field>
@@ -941,7 +969,7 @@ export function IntegrationStep({
         description="Optional HTTPS RPC for Robinhood balances, preflight, and transaction verification."
       >
         <Field label="Robinhood HTTPS RPC URL">
-          <div className="inputWithAction">
+          <div className="inputWithAction integrationInputAction">
             <input
               type="url"
               value={robinhoodRpcUrl}
@@ -957,10 +985,14 @@ export function IntegrationStep({
             <Button
               size="sm"
               variant="secondary"
-              disabled={busy || robinhoodRpcUrl.trim().length < 12}
+              className="integrationSaveButton"
+              loading={busyAction === "robinhood-rpc"}
+              disabled={
+                busyAction !== null || robinhoodRpcUrl.trim().length < 12
+              }
               onClick={() => void saveRobinhoodRpc()}
             >
-              {busy ? "Testing" : "Save & test"}
+              Verify &amp; save
             </Button>
           </div>
         </Field>
@@ -1712,7 +1744,7 @@ export function ProviderStep({
       subtitle="OpenRouter supplies the model; Silfable keeps authority and tool enforcement local."
     >
       <Field label="OpenRouter API key">
-        <div className="inputWithAction">
+        <div className="inputWithAction integrationInputAction">
           <input
             type="password"
             value={apiKey}
@@ -1722,12 +1754,16 @@ export function ProviderStep({
               storedConfigured ? "Enter a new key to reconfigure" : "sk-or-…"
             }
           />
-          <button
+          <Button
+            size="sm"
+            variant="secondary"
+            className="integrationSaveButton"
+            loading={busy}
             disabled={busy || apiKey.trim().length < 8}
             onClick={() => void loadModels()}
           >
-            {busy ? "Checking" : "Verify"}
-          </button>
+            Verify
+          </Button>
         </div>
       </Field>
       <Field label="Compatible model">
