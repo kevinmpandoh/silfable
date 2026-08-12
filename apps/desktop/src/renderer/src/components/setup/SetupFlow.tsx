@@ -122,7 +122,6 @@ export function SetupFlow({
     </main>
   );
 }
-
 export function SetupStepper({ current }: { current: number }) {
   return (
     <nav className="setupStepper" aria-label="Setup progress">
@@ -142,7 +141,6 @@ export function SetupStepper({ current }: { current: number }) {
     </nav>
   );
 }
-
 export function WalletStep({
   runtime,
   setRuntime,
@@ -1302,13 +1300,7 @@ export function ReviewStep({
           </div>
         ))}
       </div>
-       <Notice tone="warning" title="Mainnet safety status">
-        Verified reads and restricted Jupiter swaps are available. Every swap
-        requires a mission contract, passed simulation, master-password recheck,
-        and explicit final confirmation. A restricted Robinhood Chain EVM
-        execution path is available only after its independent release gate is
-        satisfied. Autonomous execution and Full Access remain unavailable.
-      </Notice>
+
       {false && editing && (
         <details className="advanced">
           <summary>Advanced safety · Emergency stop</summary>
@@ -1343,4 +1335,5 @@ export function ReviewStep({
       )}
     </SetupCard>
   );
-}
+}
+
