@@ -1391,29 +1391,37 @@ function MainWorkspace({
       sessionId: target.id,
       input,
     });
+    let automaticPreflight: PumpLaunchPreflight | undefined;
+    let automaticPreflightError: string | null = null;
+    try {
+      const preflightResponse = await window.silfable.preflightPumpLaunch({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        sessionId: target.id,
+        draftId: response.draft.id,
+        acknowledgedNoExecution: true,
+      });
+      automaticPreflight = preflightResponse.preflight;
+    } catch (reason) {
+      automaticPreflightError = reason instanceof Error
+        ? reason.message
+        : "The automatic unsigned preflight could not be completed.";
+    }
     const current = sessions.find((item) => item.id === target.id);
     if (current === undefined) throw new Error("Session is unavailable");
     const message: ChatMessage = {
       id: crypto.randomUUID(),
       role: "assistant",
       at: new Date().toISOString(),
-      text: "Token Launch draft prepared for review. No metadata was uploaded and no Pump.fun transaction was created, signed, or broadcast.",
+      text: automaticPreflight
+        ? "Token Launch draft and unsigned Mainnet preflight are ready for review. No transaction was signed or broadcast."
+        : `Token Launch draft was saved, but its automatic unsigned preflight could not complete. You can retry safely from the draft card. Details: ${automaticPreflightError}`,
       pumpLaunchDraft: response.draft,
+      pumpLaunchPreflight: automaticPreflight,
     };
     const next = { ...current, messages: [...current.messages, message] };
     setSessions((items) => items.map((item) => item.id === next.id ? next : item));
     await persistSession(next);
-  }
-  async function openPumpLaunchOfficialCreate(
-    target: SessionItem,
-    draft: PumpLaunchDraft,
-  ): Promise<void> {
-    await window.silfable.openPumpLaunchOfficialCreate({
-      schemaVersion: 1,
-      requestId: crypto.randomUUID(),
-      sessionId: target.id,
-      draftId: draft.id,
-    });
   }
   async function preflightPumpLaunch(target: SessionItem, launchDraft: PumpLaunchDraft): Promise<void> {
     const response = await window.silfable.preflightPumpLaunch({
@@ -2123,7 +2131,6 @@ function MainWorkspace({
               draft.trim() && void sendMessage(active, draft.trim())
             }
             onCreatePumpLaunchDraft={(input) => createPumpLaunchDraft(active, input)}
-            onOpenPumpLaunchOfficialCreate={(launchDraft) => openPumpLaunchOfficialCreate(active, launchDraft)}
             onPreflightPumpLaunch={(launchDraft) => preflightPumpLaunch(active, launchDraft)}
             onFinalRevalidatePumpLaunch={(launchDraft, preflight) => finalRevalidatePumpLaunch(active, launchDraft, preflight)}
             onExecutePumpLaunch={(launchDraft, preflight, revalidation, credentials) => executePumpLaunch(active, launchDraft, preflight, revalidation, credentials)}

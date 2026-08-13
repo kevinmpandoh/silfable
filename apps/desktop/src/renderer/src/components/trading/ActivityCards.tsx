@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Activity, ArrowUp, Bot, Brain, CirclePlus, Settings, ShieldCheck, Target, ShieldAlert, Sparkles, Zap, KeyRound, KeySquare, ChevronRight, MessageSquare, History, List, X, Flame } from 'lucide-react';
 import { Button, Modal, Input, Badge } from '../ui';
 import { shorten, cn } from '../../lib/utils';
-import { formatEvmTokenAmount, formatWeiToGweiOrEth, formatRuntimeTokens, formatPortfolioUsd, portfolioAssetUsd, formatPortfolioAmount, formatPumpMetric, formatPumpPercent, formatPumpBps, formatPumpRawAmount } from '../../lib/formatters';
+import { formatEvmTokenAmount, formatWeiToGweiOrEth, formatRuntimeTokens, formatPortfolioUsd, portfolioAssetUsd, formatPortfolioAmount, formatPumpMetric, formatPumpPercent, formatPumpBps, formatPumpRawAmount, formatLamportsToSol } from '../../lib/formatters';
 import { StatusPill, Notice, Field, SetupCard, SetupActions, Brand, BrandMark, CornerFooter, RailSection, ProviderCard } from '../setup/SetupHelpers';
 import { ACTIVITY_LEVELS, INTEGRATION_CATEGORIES, SETUP_STEPS, STORAGE_KEY } from '../types';
 import type { BridgePreflightEvidence, BridgeProposal, BridgeReceipt, BridgeDestinationChain, EmergencyStopStatus, EvmBridgeContract, EvmBridgePreflight, EvmBridgeQuote, EvmBridgeReceipt, EvmChainKey, EvmPortfolioSnapshot, EvmSessionExecutionReceipt, EvmSwapPreflightEvidence, EvmSwapProposal, LimitOrderCancelSimulation, LimitOrderContractPreview, LimitOrderExecutionReceipt, LimitOrderSimulationPreview, LegacyPumpLaunchMetadataPackage, MissionContractPreview, MissionExecutionReceipt, MissionSimulationPreview, OpenRouterModelView, PortfolioSnapshot, PumpExecutionRecord, PumpFinalRevalidation, PumpLaunchDraft, PumpLaunchDraftInput, PumpLaunchMetadata, PumpLaunchPreflight, PumpLaunchFinalRevalidation, PumpLaunchExecutionRecord, PumpRiskSettings, PumpSimulationArtifact, PumpTokenIntelligence, PumpTradeContractPreview, RuntimeStatus, SessionRecord, TransactionSettings, WalletActivitySnapshot, SetupState, AgentSettings } from '@silfable/contracts';
@@ -212,7 +212,7 @@ export function FullAccessEvmAssetReviewCard({
         </div>
         <StatusPill tone="warning">Review required</StatusPill>
       </header>
-      <dl>
+      <dl className="launchDraftSummary">
         <div><dt>Contract</dt><dd className="font-mono text-[11px]">{review.address}</dd></div>
         <div><dt>Token metadata</dt><dd>{review.symbol} · {review.decimals} decimals</dd></div>
         <div><dt>Verified</dt><dd>{new Date(review.verifiedAt).toLocaleTimeString()}</dd></div>
@@ -977,7 +977,7 @@ export function PumpLaunchDraftForm({
           </div>
           <label className="launchDraftAcknowledgement"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /> I understand this draft is not a launch and any future publication would be irreversible.</label>
           {error && <p className="launchDraftError">{error}</p>}
-          <footer><button disabled={submitting} onClick={() => setOpen(false)}>Cancel</button><button className="primary" disabled={submitting || !name.trim() || !symbol.trim() || !imageFile || !acknowledged} onClick={() => void submit()}>{submitting ? "Uploading to Pinata..." : "Upload & save draft"}</button></footer>
+          <footer><button disabled={submitting} onClick={() => setOpen(false)}>Cancel</button><button className="primary" disabled={submitting || !name.trim() || !symbol.trim() || !imageFile || !acknowledged} onClick={() => void submit()}>{submitting ? "Saving..." : "Save"}</button></footer>
         </section>
       </Modal>
     </>
@@ -1023,7 +1023,6 @@ export function PumpLaunchDraftCard({
   onFinalRevalidate,
   onExecute,
   onVerify,
-  onOpenOfficialCreate,
 }: {
   draft: PumpLaunchDraft;
   metadataPackage: LegacyPumpLaunchMetadataPackage | PumpLaunchMetadata | undefined;
@@ -1039,9 +1038,7 @@ export function PumpLaunchDraftCard({
     credentials: { masterPassword: string },
   ) => Promise<void>;
   onVerify: (draft: PumpLaunchDraft, execution: PumpLaunchExecutionRecord) => Promise<void>;
-  onOpenOfficialCreate: (draft: PumpLaunchDraft) => Promise<void>;
 }) {
-  const [opening, setOpening] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [revalidating, setRevalidating] = useState(false);
   const [executing, setExecuting] = useState(false);
@@ -1049,18 +1046,15 @@ export function PumpLaunchDraftCard({
   const [masterPassword, setMasterPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [approvalRequested, setApprovalRequested] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const handoff = async (): Promise<void> => {
-    setOpening(true);
-    setError(null);
-    try {
-      await onOpenOfficialCreate(draft);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The official Pump.fun page could not be opened.");
-    } finally {
-      setOpening(false);
+  useEffect(() => {
+    if (approvalRequested && revalidation?.status === "ready-for-password") {
+      setApprovalOpen(true);
+      setApprovalRequested(false);
     }
-  };
+  }, [approvalRequested, revalidation?.status]);
   const simulate = async (): Promise<void> => {
     setSimulating(true);
     setError(null);
@@ -1078,7 +1072,9 @@ export function PumpLaunchDraftCard({
     setError(null);
     try {
       await onFinalRevalidate(draft, preflight);
+      setApprovalRequested(true);
     } catch (reason) {
+      setApprovalRequested(false);
       setError(reason instanceof Error ? reason.message : "Final Token Launch revalidation failed safely.");
     } finally {
       setRevalidating(false);
@@ -1090,6 +1086,7 @@ export function PumpLaunchDraftCard({
     setError(null);
     try {
       await onExecute(draft, preflight, revalidation, { masterPassword });
+      setApprovalOpen(false);
       setMasterPassword("");
       setConfirmation("");
       setAcknowledged(false);
@@ -1118,16 +1115,18 @@ export function PumpLaunchDraftCard({
       <dl>
         <div><dt>Creator</dt><dd>{shorten(draft.creatorWallet)}</dd></div>
         <div><dt>Pairing</dt><dd>{draft.quoteAsset}</dd></div>
-        <div><dt>Initial purchase</dt><dd>{draft.initialPurchaseAmount} raw {draft.quoteAsset}</dd></div>
+        <div><dt>Initial purchase</dt><dd>{formatLamportsToSol(draft.initialPurchaseAmount)}</dd></div>
         <div><dt>Metadata JSON</dt><dd>{metadataPackage ? "Published" : draft.metadata.metadataUri ? "Provided" : "Not published"}</dd></div>
-        <div><dt>Outflow cap</dt><dd>{draft.maxCreatorOutflowLamports} lamports</dd></div>
-        <div><dt>Priority cap</dt><dd>{draft.maxPriorityFeeLamports} lamports</dd></div>
+        <div><dt>Maximum wallet outflow</dt><dd>{formatLamportsToSol(draft.maxCreatorOutflowLamports)}</dd></div>
+        <div><dt>Maximum priority fee</dt><dd>{formatLamportsToSol(draft.maxPriorityFeeLamports)}</dd></div>
       </dl>
-      <p>{metadataPackage ? `Metadata URI: ${(metadataPackage as any).uri || (metadataPackage as any).metadataUri || draft.metadata.metadataUri}` : draft.metadata.metadataUri ? "Hosted metadata JSON is recorded for a future preflight." : "Supply your own hosted metadata URL before preparing the launch."} No transaction, signing, or broadcast occurred.</p>
+      <p className="launchDraftNote">{metadataPackage ? `Metadata URI: ${(metadataPackage as any).uri || (metadataPackage as any).metadataUri || draft.metadata.metadataUri}` : draft.metadata.metadataUri ? "Hosted metadata is ready for unsigned validation." : "Supply a hosted metadata URL before preparing the launch."} No transaction, signing, or broadcast has occurred.</p>
       {metadataReady && (
-        <button className="launchDraftHandoff" disabled={simulating} onClick={() => void simulate()}>
-          {simulating ? "Simulating unsigned launch..." : preflight ? "Refresh unsigned Mainnet preflight" : "Run unsigned Mainnet preflight"}
-        </button>
+        <div className="launchDraftActions">
+          <button className="launchDraftHandoff launchDraftPrimaryAction" disabled={simulating} onClick={() => void simulate()}>
+            {simulating ? "Running preflight..." : preflight ? "Refresh preflight" : "Retry preflight"}
+          </button>
+        </div>
       )}
       {preflight && (
         <div className="launchPreflightReview">
@@ -1136,19 +1135,21 @@ export function PumpLaunchDraftCard({
             <div><dt>Mint</dt><dd>{shorten(preflight.mintAddress)}</dd></div>
             <div><dt>Simulation slot</dt><dd>{preflight.simulationSlot.toLocaleString()}</dd></div>
             <div><dt>Compute</dt><dd>{preflight.computeUnitsConsumed?.toLocaleString() ?? "Unavailable"} CU</dd></div>
-            <div><dt>Network fee</dt><dd>{preflight.networkFeeLamports} lamports</dd></div>
-            <div><dt>Priority fee</dt><dd>{preflight.priorityFeeLamports} lamports</dd></div>
-            <div><dt>Account rent</dt><dd>{preflight.rentLamports} lamports</dd></div>
-            <div><dt>Total estimate</dt><dd>{preflight.totalEstimatedOutflowLamports} lamports</dd></div>
+            <div><dt>Network fee</dt><dd>{formatLamportsToSol(preflight.networkFeeLamports)}</dd></div>
+            <div><dt>Priority fee</dt><dd>{formatLamportsToSol(preflight.priorityFeeLamports)}</dd></div>
+            <div><dt>Account funding</dt><dd>{formatLamportsToSol(preflight.rentLamports)}</dd></div>
+            <div><dt>Estimated wallet outflow</dt><dd>{formatLamportsToSol(preflight.totalEstimatedOutflowLamports)}</dd></div>
             <div><dt>Expires</dt><dd>{new Date(preflight.expiresAt).toLocaleTimeString()}</dd></div>
           </dl>
           <p>Digest: {preflight.transactionDigest.slice(0, 16)}… · {preflight.checks.length}/{preflight.checks.length} checks passed. The non-extractable mint signer exists only in volatile main-process memory and is discarded on expiry or lock.</p>
         </div>
       )}
       {preflight && execution === undefined && (
-        <button className="launchDraftHandoff" disabled={revalidating} onClick={() => void finalRevalidate()}>
-          {revalidating ? "Revalidating..." : revalidation ? "Refresh final Mainnet checks" : "Run final Mainnet checks"}
-        </button>
+        <div className="launchDraftActions">
+          <button className="launchDraftHandoff launchDraftPrimaryAction" disabled={revalidating} onClick={() => void finalRevalidate()}>
+            {revalidating ? "Checking final route..." : revalidation ? "Refresh final checks" : "Run final checks"}
+          </button>
+        </div>
       )}
       {revalidation?.status === "blocked" && execution === undefined && (
         <div className="launchDraftError">
@@ -1156,19 +1157,9 @@ export function PumpLaunchDraftCard({
         </div>
       )}
       {revalidation?.status === "ready-for-password" && execution === undefined && (
-         <div className="launchPreflightReview">
-          <strong>Irreversible Mainnet approval</strong>
-          <p>{revalidation.checks.filter((check) => check.passed).length}/{revalidation.checks.length} final checks passed. This action creates a real token mint and cannot be undone.</p>
-          <label>Master password<input type="password" autoComplete="current-password" value={masterPassword} onChange={(event) => setMasterPassword(event.target.value)} /></label>
-          <label>Type LAUNCH TOKEN MAINNET<input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>
-          <label className="launchDraftAcknowledgement"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /> I approve one local signing operation and one Mainnet broadcast attempt for this exact digest.</label>
-          <button
-            className="executeButton"
-            disabled={executing || !masterPassword || confirmation !== "LAUNCH TOKEN MAINNET" || !acknowledged}
-            onClick={() => void execute()}
-          >
-            {executing ? "Signing and submitting..." : "Launch token on Mainnet"}
-          </button>
+        <div className="launchFinalReady">
+          <div><strong>Final checks passed</strong><span>{revalidation.checks.filter((check) => check.passed).length}/{revalidation.checks.length} checks · approval required</span></div>
+          <button className="launchDraftHandoff" onClick={() => setApprovalOpen(true)}>Review &amp; launch</button>
         </div>
       )}
       {execution && (
@@ -1177,11 +1168,11 @@ export function PumpLaunchDraftCard({
           <dl>
             <div><dt>Status</dt><dd>{execution.status}</dd></div>
             <div><dt>Mint</dt><dd>{shorten(execution.mintAddress)}</dd></div>
-            <div><dt>Network fee estimate</dt><dd>{execution.networkFeeLamports} lamports</dd></div>
-            <div><dt>Rent estimate</dt><dd>{execution.rentLamports} lamports</dd></div>
-            <div><dt>Actual network fee</dt><dd>{execution.actualNetworkFeeLamports === null ? "Pending" : `${execution.actualNetworkFeeLamports.toLocaleString()} lamports`}</dd></div>
-            <div><dt>Actual account funding</dt><dd>{execution.actualAccountFundingLamports === null ? "Pending" : `${execution.actualAccountFundingLamports.toLocaleString()} lamports`}</dd></div>
-            <div><dt>Actual wallet outflow</dt><dd>{execution.actualWalletOutflowLamports === null ? "Pending" : `${execution.actualWalletOutflowLamports} lamports`}</dd></div>
+            <div><dt>Network fee estimate</dt><dd>{formatLamportsToSol(execution.networkFeeLamports)}</dd></div>
+            <div><dt>Account funding estimate</dt><dd>{formatLamportsToSol(execution.rentLamports)}</dd></div>
+            <div><dt>Actual network fee</dt><dd>{execution.actualNetworkFeeLamports === null ? "Pending" : formatLamportsToSol(execution.actualNetworkFeeLamports)}</dd></div>
+            <div><dt>Actual account funding</dt><dd>{execution.actualAccountFundingLamports === null ? "Pending" : formatLamportsToSol(execution.actualAccountFundingLamports)}</dd></div>
+            <div><dt>Actual wallet outflow</dt><dd>{execution.actualWalletOutflowLamports === null ? "Pending" : formatLamportsToSol(execution.actualWalletOutflowLamports)}</dd></div>
             <div><dt>Finalized slot</dt><dd>{execution.finalizedSlot?.toLocaleString() ?? "Pending"}</dd></div>
           </dl>
           <p>Signature: {shorten(execution.signature)}. {execution.error ?? "No RPC error is recorded."}</p>
@@ -1192,8 +1183,35 @@ export function PumpLaunchDraftCard({
           )}
         </div>
       )}
-      <button className="launchDraftHandoff" disabled={opening} onClick={() => void handoff()}>{opening ? "Opening..." : "Open official Pump.fun create page"}</button>
       {error && <p className="launchDraftError">{error}</p>}
+      <Modal
+        isOpen={approvalOpen && revalidation?.status === "ready-for-password" && execution === undefined}
+        onClose={() => { if (!executing) setApprovalOpen(false); }}
+        title="Confirm token launch"
+        subtitle="Review the exact Mainnet action before releasing the local signer."
+        maxWidth="680px"
+        className="launchApprovalModal"
+      >
+        {preflight && revalidation?.status === "ready-for-password" && (
+          <section className="launchApprovalContent">
+            <div className="launchApprovalRoute"><span>Pump.fun · Solana Mainnet</span><StatusPill tone="warning">Irreversible</StatusPill></div>
+            <dl>
+              <div><dt>Token</dt><dd>{draft.metadata.name} (${draft.metadata.symbol})</dd></div>
+              <div><dt>Creator</dt><dd>{shorten(draft.creatorWallet)}</dd></div>
+              <div><dt>Initial purchase</dt><dd>{formatLamportsToSol(draft.initialPurchaseAmount)}</dd></div>
+              <div><dt>Estimated wallet outflow</dt><dd>{formatLamportsToSol(preflight.totalEstimatedOutflowLamports)}</dd></div>
+              <div><dt>Mint</dt><dd>{shorten(preflight.mintAddress)}</dd></div>
+              <div><dt>Checks</dt><dd>{revalidation.checks.filter((check) => check.passed).length}/{revalidation.checks.length} passed</dd></div>
+            </dl>
+            <Notice tone="danger" title="Permanent Mainnet action">This creates a real token mint and submits one Mainnet broadcast attempt. It cannot be undone.</Notice>
+            <Field label="Master password"><input type="password" autoComplete="current-password" value={masterPassword} onChange={(event) => setMasterPassword(event.target.value)} autoFocus /></Field>
+            <Field label='Type "LAUNCH TOKEN MAINNET"'><input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></Field>
+            <label className="launchDraftAcknowledgement"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /><span>I authorize one local signing operation and one Mainnet broadcast attempt for this exact launch.</span></label>
+            {error && <p className="launchDraftError">{error}</p>}
+            <footer><button disabled={executing} onClick={() => setApprovalOpen(false)}>Cancel</button><button className="launchApprovalSubmit" disabled={executing || !masterPassword || confirmation !== "LAUNCH TOKEN MAINNET" || !acknowledged} onClick={() => void execute()}>{executing ? "Signing & submitting..." : "Launch token"}</button></footer>
+          </section>
+        )}
+      </Modal>
     </section>
   );
 }

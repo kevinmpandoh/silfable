@@ -26,7 +26,6 @@ export function Conversation({
   setDraft,
   onSend,
   onCreatePumpLaunchDraft,
-  onOpenPumpLaunchOfficialCreate,
   onPreflightPumpLaunch,
   onFinalRevalidatePumpLaunch,
   onExecutePumpLaunch,
@@ -80,7 +79,6 @@ export function Conversation({
   setDraft: (value: string) => void;
   onSend: () => void;
   onCreatePumpLaunchDraft: (input: PumpLaunchDraftInput) => Promise<void>;
-  onOpenPumpLaunchOfficialCreate: (draft: PumpLaunchDraft) => Promise<void>;
   onPreflightPumpLaunch: (draft: PumpLaunchDraft) => Promise<void>;
   onFinalRevalidatePumpLaunch: (draft: PumpLaunchDraft, preflight: PumpLaunchPreflight) => Promise<void>;
   onExecutePumpLaunch: (
@@ -394,7 +392,6 @@ export function Conversation({
                 onFinalRevalidate={onFinalRevalidatePumpLaunch}
                 onExecute={onExecutePumpLaunch}
                 onVerify={onVerifyPumpLaunchExecution}
-                onOpenOfficialCreate={onOpenPumpLaunchOfficialCreate}
               />}
               {message.pumpTradePreview && message.pumpExecution && (
                 <PumpExecutionCard

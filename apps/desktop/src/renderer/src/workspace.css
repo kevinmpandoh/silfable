@@ -1009,12 +1009,49 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .receiptActions button { border-color: color-mix(in srgb, var(--blue) 44%, transparent); }
 .launchDraftToggle { border-color: color-mix(in srgb, var(--blue) 48%, transparent); background: color-mix(in srgb, var(--blue) 18%, var(--panel)); color: var(--foreground); }
 .launchDraftForm, .launchDraftCard { border-color: var(--line); background: var(--panel); }
+.launchDraftCard { display: grid; gap: 16px; padding: 20px; overflow: hidden; }
+.launchDraftCard > header { padding-bottom: 15px; border-bottom: 1px solid var(--line); }
+.launchDraftCard > header strong { color: var(--bone); font: 500 22px/1.15 Fraunces, Georgia, serif; }
 .launchDraftForm header span, .launchDraftCard header span { color: var(--blue-2); }
 .launchDraftForm > p, .launchDraftCard > p, .launchDraftGrid label, .launchDraftAcknowledgement { color: var(--muted); }
 .launchDraftGrid input, .launchDraftGrid textarea, .launchDraftGrid select { border-color: var(--line); background: var(--bg); color: var(--foreground); }
 .launchDraftForm footer button, .launchDraftHandoff { border-color: var(--line); color: var(--foreground); }
 .launchDraftForm footer .primary { border-color: var(--blue); background: var(--primary-gradient); }
 .launchDraftCard dl div { border-color: var(--line); }
+.launchDraftCard .launchDraftSummary { gap: 10px; margin: 0; }
+.launchDraftCard .launchDraftSummary > div { min-height: 64px; padding: 12px 14px; border-radius: 8px 18px 8px 8px; background: rgb(255 255 255 / .018); }
+.launchDraftCard .launchDraftSummary dd { margin-top: 7px; font: 600 12px/1.35 var(--sans); }
+.launchDraftCard .launchDraftNote { margin: 0; padding: 12px 14px; border-left: 2px solid var(--lilac); background: rgb(167 139 250 / .055); }
+.launchDraftActions { display: flex; justify-content: flex-end; }
+.launchDraftCard .launchDraftHandoff { min-height: 38px; padding: 9px 16px; border-radius: 999px; font: 700 8px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.launchDraftCard .launchDraftPrimaryAction { border-color: var(--coral); color: var(--bg); background: var(--coral); }
+.launchDraftCard .launchDraftPrimaryAction:hover:not(:disabled) { background: color-mix(in srgb, var(--coral) 88%, white); }
+.launchDraftCard .launchPreflightReview { display: grid; gap: 12px; margin: 0; padding: 16px; border: 1px solid rgb(103 232 212 / .34); border-radius: 10px 24px 10px 10px; background: rgb(103 232 212 / .045); }
+.launchDraftCard .launchPreflightReview > strong { color: var(--aqua); font: 700 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.launchDraftCard .launchPreflightReview dl { margin: 0; }
+.launchDraftCard .launchPreflightReview p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
+.launchFinalReady { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 15px; border: 1px solid rgb(103 232 212 / .3); border-radius: 10px 22px 10px 10px; background: rgb(103 232 212 / .045); }
+.launchFinalReady > div { display: grid; gap: 4px; }
+.launchFinalReady strong { color: var(--bone); font: 600 12px var(--sans); }
+.launchFinalReady span { color: var(--muted); font: 8px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.launchApprovalModal { border-color: rgb(255 107 92 / .42) !important; border-radius: 24px 56px 12px 24px !important; background: var(--panel) !important; background-image: repeating-radial-gradient(ellipse at 100% 0%, transparent 0 38px, rgb(255 107 92 / .045) 39px 40px, transparent 41px 72px) !important; box-shadow: 0 36px 100px rgb(0 0 0 / .7) !important; }
+.launchApprovalModal > div:first-child h2 { color: var(--bone); font: 500 28px/1.05 Fraunces, Georgia, serif; letter-spacing: -.025em; }
+.launchApprovalModal > div:first-child p { color: var(--muted); }
+.launchApprovalContent { display: grid; gap: 15px; }
+.launchApprovalRoute { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.launchApprovalRoute > span { color: var(--lilac); font: 700 9px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.launchApprovalContent dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.launchApprovalContent dl > div { min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px 16px 8px 8px; background: rgb(255 255 255 / .018); }
+.launchApprovalContent dt { color: var(--muted); font: 700 8px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.launchApprovalContent dd { margin: 6px 0 0; color: var(--bone); font: 600 11px var(--sans); overflow-wrap: anywhere; }
+.launchApprovalContent .field { gap: 7px; }
+.launchApprovalContent input[type="password"], .launchApprovalContent .field input { min-height: 42px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px 18px 7px 9px; color: var(--bone); background: var(--bg); }
+.launchApprovalContent input:focus { outline: 0; border-color: var(--coral); box-shadow: 0 0 0 3px rgb(255 107 92 / .12); }
+.launchApprovalContent footer { display: flex; justify-content: flex-end; gap: 9px; padding-top: 14px; border-top: 1px solid var(--line); }
+.launchApprovalContent footer button { min-height: 38px; padding: 9px 16px; border: 1px solid var(--line); border-radius: 999px; color: var(--bone); background: transparent; font: 700 8px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+.launchApprovalContent footer .launchApprovalSubmit { border-color: var(--coral); color: var(--bg); background: var(--coral); }
+.launchApprovalContent footer button:disabled { opacity: .42; cursor: not-allowed; }
+@media (max-width: 680px) { .launchFinalReady { align-items: stretch; flex-direction: column; } .launchApprovalContent dl { grid-template-columns: 1fr; } }
 .launchDraftCard dt { color: var(--muted); }
 .launchDraftCard dd { color: var(--foreground); }
 .portfolioScopeTabs, .portfolioChainTabs { scrollbar-color: var(--blue) transparent; }
