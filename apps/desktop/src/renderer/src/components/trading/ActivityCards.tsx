@@ -50,10 +50,10 @@ export function EvmSwapProposalCard({
     });
   }
   return (
-    <section className={`missionPreview ${proposal.quote.liquidityAvailable ? "ready" : "blocked"}`}>
+    <section className={`missionPreview swapRouteCard evmSwapCard ${proposal.quote.liquidityAvailable ? "ready" : "blocked"}`}>
       <header>
         <div>
-          <span>{proposal.chainKey ?? "EVM"} · {proposal.quote.provider ?? "chain router"} · quote only</span>
+          <span>ROBINHOOD CHAIN · {proposal.quote.provider ?? "chain router"} · QUOTE ONLY</span>
           <strong>
             {proposal.quote.sellTokenSymbol} → {proposal.quote.buyTokenSymbol}
           </strong>
@@ -68,12 +68,14 @@ export function EvmSwapProposalCard({
                 : "Blocked"}
         </StatusPill>
       </header>
-      <dl>
-        <div><dt>Sell Amount</dt><dd>{formatEvmTokenAmount(proposal.quote.sellAmount, proposal.quote.sellTokenSymbol)}</dd></div>
-        <div><dt>Expected Buy</dt><dd>{formatEvmTokenAmount(proposal.quote.buyAmount, proposal.quote.buyTokenSymbol)}</dd></div>
-        <div><dt>Minimum Buy</dt><dd>{formatEvmTokenAmount(proposal.quote.minBuyAmount, proposal.quote.buyTokenSymbol)}</dd></div>
-        <div><dt>Slippage Limit</dt><dd>{proposal.slippageBps} bps</dd></div>
-        <div><dt>Provider / Chain</dt><dd>{proposal.quote.provider === "uniswap" ? "Uniswap Classic" : "KyberSwap"} · {proposal.chainKey ?? "EVM"}</dd></div>
+      <dl className="swapRouteMetrics">
+        <div><dt>Input</dt><dd>{formatEvmTokenAmount(proposal.quote.sellAmount, proposal.quote.sellTokenSymbol)}</dd></div>
+        <div><dt>Expected output</dt><dd>{formatEvmTokenAmount(proposal.quote.buyAmount, proposal.quote.buyTokenSymbol)}</dd></div>
+        <div><dt>Minimum output</dt><dd>{formatEvmTokenAmount(proposal.quote.minBuyAmount, proposal.quote.buyTokenSymbol)}</dd></div>
+        <div><dt>Maximum slippage</dt><dd>{proposal.slippageBps} bps</dd></div>
+      </dl>
+      <dl className="swapRouteDetails">
+        <div><dt>Route</dt><dd>{proposal.quote.provider === "uniswap" ? "Uniswap Classic" : "KyberSwap"} · Robinhood</dd></div>
         <div><dt>Wallet</dt><dd>{shorten(proposal.walletAddress)}</dd></div>
         <div><dt>Sell Contract</dt><dd>{shorten(proposal.quote.sellToken)}</dd></div>
         <div><dt>Buy Contract</dt><dd>{shorten(proposal.quote.buyToken)}</dd></div>
@@ -93,14 +95,14 @@ export function EvmSwapProposalCard({
           {receipts.map((receipt) => {
             const explorerTxUrl = `https://robinhoodchain.blockscout.com/tx/${receipt.transactionHash}`;
             return (
-              <div key={receipt.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "10px 14px", margin: "8px 14px", border: "1px solid rgba(32, 201, 151, 0.3)", borderRadius: "8px", background: "rgba(5, 25, 27, 0.75)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <span style={{ padding: "3px 8px", borderRadius: "4px", font: "700 9px var(--mono)", textTransform: "uppercase", letterSpacing: "0.05em", color: receipt.status === "confirmed" ? "#34d399" : "#f87171", background: receipt.status === "confirmed" ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)", border: receipt.status === "confirmed" ? "1px solid rgba(16, 185, 129, 0.35)" : "1px solid rgba(239, 68, 68, 0.35)" }}>
+              <div key={receipt.id} className="swapReceiptRow">
+                <div className="swapReceiptIdentity">
+                  <span className={`swapReceiptStatus ${receipt.status}`}>
                     {receipt.status}
                   </span>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                    <strong style={{ color: "#e2e8f0", font: "600 11px var(--mono)" }}>{receipt.kind} · {shorten(receipt.transactionHash)}</strong>
-                    <small style={{ color: "#64748b", font: "9px var(--mono)" }}>{new Date(receipt.reconciledAt).toLocaleTimeString()}</small>
+                  <div>
+                    <strong>{receipt.kind} · {shorten(receipt.transactionHash)}</strong>
+                    <small>{new Date(receipt.reconciledAt).toLocaleTimeString()}</small>
                   </div>
                 </div>
                 <a
@@ -111,24 +113,9 @@ export function EvmSwapProposalCard({
                     event.preventDefault();
                     void openEvmExplorer(receipt);
                   }}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "5px",
-                    padding: "5px 12px",
-                    background: "rgba(8, 127, 99, 0.2)",
-                    border: "1px solid rgba(32, 201, 151, 0.38)",
-                    borderRadius: "6px",
-                    color: "#62d9df",
-                    fontSize: "10px",
-                    fontWeight: 600,
-                    textDecoration: "none",
-                    whiteSpace: "nowrap",
-                    transition: "all 0.2s ease",
-                    flexShrink: 0,
-                  }}
+                  className="swapExplorerLink"
                 >
-                  <span>🔗</span> Open Explorer
+                  Open explorer
                 </a>
               </div>
             );
@@ -168,8 +155,8 @@ export function EvmSwapProposalCard({
             {preparing
               ? "Preparing…"
               : approvalConfirmed
-                ? "Prepare fresh swap review"
-                : "Prepare trade review"}
+                ? "Review route again"
+                : "Review route"}
           </button>
         )}
         {!fullAccess && !swapConfirmed && preflight && (
@@ -181,8 +168,8 @@ export function EvmSwapProposalCard({
             {executing
               ? "Submitting…"
               : preflight.allowanceRequired
-                ? "Review exact approval"
-                : "Review restricted swap"}
+                ? "Review in wallet"
+                : "Review in wallet"}
           </button>
         )}
       </footer>
@@ -890,86 +877,141 @@ export function PumpLaunchDraftForm({
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("");
   const [description, setDescription] = useState("");
-  const [imageUri, setImageUri] = useState("");
-  const [metadataUri, setMetadataUri] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [xUrl, setXUrl] = useState("");
   const [telegramUrl, setTelegramUrl] = useState("");
   const [quoteAsset, setQuoteAsset] = useState<PumpLaunchDraft["quoteAsset"]>("SOL");
   const [initialPurchase, setInitialPurchase] = useState("0");
-  const [outflow, setOutflow] = useState("10000000");
-  const [priorityFee, setPriorityFee] = useState("100000");
+  const [outflow, setOutflow] = useState("0.01");
+  const [priorityFee, setPriorityFee] = useState("0.0001");
   const [acknowledged, setAcknowledged] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const deadline = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-  if (!open) {
-    return (
-      <button className="launchDraftToggle" onClick={() => setOpen(true)}>
-        Launch Token Draft
-      </button>
-    );
-  }
   const submit = async (): Promise<void> => {
-    if (!name.trim() || !symbol.trim() || !imageUri.trim() || !acknowledged) return;
+    if (!name.trim() || !symbol.trim() || !imageFile || !acknowledged) return;
     setSubmitting(true);
     setError(null);
     try {
+      if (typeof window.silfable.publishManagedPumpLaunchMetadata !== "function") {
+        throw new Error("Pinata upload was added to the desktop preload. Fully quit and reopen Silfable before uploading a token image.");
+      }
+      const imageBase64 = await fileToBase64(imageFile);
+      const published = await window.silfable.publishManagedPumpLaunchMetadata({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        creatorWallet,
+        name: name.trim(),
+        symbol: symbol.trim(),
+        description: description.trim(),
+        websiteUrl: websiteUrl.trim() || null,
+        xUrl: xUrl.trim() || null,
+        telegramUrl: telegramUrl.trim() || null,
+        imageBase64,
+        imageContentType: imageFile.type as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+      });
       await onCreate({
         creatorWallet,
         metadata: {
           name: name.trim(),
           symbol: symbol.trim(),
           description: description.trim(),
-          imageUri: imageUri.trim(),
-          metadataUri: metadataUri.trim() || null,
+          imageUri: published.imageGatewayUrl || published.imageUri || "",
+          metadataUri: published.metadataGatewayUrl || published.metadataUri,
           websiteUrl: websiteUrl.trim() || null,
           xUrl: xUrl.trim() || null,
           telegramUrl: telegramUrl.trim() || null,
         },
         quoteAsset,
-        initialPurchaseAmount: initialPurchase,
-        maxCreatorOutflowLamports: outflow,
-        maxPriorityFeeLamports: priorityFee,
+        initialPurchaseAmount: decimalToRaw(initialPurchase, quoteAsset === "SOL" ? 9 : 6, "Initial purchase"),
+        maxCreatorOutflowLamports: decimalToRaw(outflow, 9, "Maximum creator outflow"),
+        maxPriorityFeeLamports: decimalToRaw(priorityFee, 9, "Maximum priority fee"),
         deadlineAt: deadline,
         acknowledgedIrreversiblePublication: true,
       });
       setOpen(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The launch draft could not be saved.");
+      const message = reason instanceof Error ? reason.message : "The launch draft could not be saved.";
+      setError(/No handler registered for ['"]pump:launch-managed-metadata-publish['"]/u.test(message)
+        ? "The desktop main process is still using an older build. Quit Silfable from the tray or stop the desktop dev command, then start the app again. Reloading the window is not enough."
+        : message);
     } finally {
       setSubmitting(false);
     }
   };
   return (
-    <section className="launchDraftForm">
-      <header>
-        <div>
-          <span>Token launch</span>
-          <strong>Prepare a review-only Pump.fun draft</strong>
-        </div>
-        <StatusPill tone="warning">No execution</StatusPill>
-      </header>
-      <p>Metadata upload, transaction construction, signing, and broadcast are unavailable at this stage.</p>
-      <div className="launchDraftGrid">
-        <label>Name<input value={name} maxLength={32} onChange={(event) => setName(event.target.value)} /></label>
-        <label>Symbol<input value={symbol} maxLength={10} onChange={(event) => setSymbol(event.target.value.toUpperCase())} /></label>
-        <label className="wide">HTTPS image URL<input value={imageUri} placeholder="https://..." onChange={(event) => setImageUri(event.target.value)} /></label>
-        <label className="wide">Hosted metadata JSON URL (required before launch)<input value={metadataUri} placeholder="https://.../metadata.json" onChange={(event) => setMetadataUri(event.target.value)} /></label>
-        <label className="wide">Description<textarea value={description} maxLength={500} onChange={(event) => setDescription(event.target.value)} /></label>
-        <label>Website (optional)<input value={websiteUrl} placeholder="https://..." onChange={(event) => setWebsiteUrl(event.target.value)} /></label>
-        <label>X profile (optional)<input value={xUrl} placeholder="https://x.com/..." onChange={(event) => setXUrl(event.target.value)} /></label>
-        <label className="wide">Telegram (optional)<input value={telegramUrl} placeholder="https://t.me/..." onChange={(event) => setTelegramUrl(event.target.value)} /></label>
-        <label>Quote asset<select value={quoteAsset} onChange={(event) => setQuoteAsset(event.target.value as PumpLaunchDraft["quoteAsset"])}><option value="SOL">SOL</option><option value="USDC">USDC</option></select></label>
-        <label>Initial purchase (raw {quoteAsset})<input inputMode="numeric" value={initialPurchase} onChange={(event) => setInitialPurchase(event.target.value.replace(/\D/gu, ""))} /></label>
-        <label>Max creator outflow (lamports)<input inputMode="numeric" value={outflow} onChange={(event) => setOutflow(event.target.value.replace(/\D/gu, ""))} /></label>
-        <label>Max priority fee (lamports)<input inputMode="numeric" value={priorityFee} onChange={(event) => setPriorityFee(event.target.value.replace(/\D/gu, ""))} /></label>
-      </div>
-      <label className="launchDraftAcknowledgement"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /> I understand this draft is not a launch and any future publication would be irreversible.</label>
-      {error && <p className="launchDraftError">{error}</p>}
-      <footer><button disabled={submitting} onClick={() => setOpen(false)}>Cancel</button><button className="primary" disabled={submitting || !name.trim() || !symbol.trim() || !imageUri.trim() || !acknowledged} onClick={() => void submit()}>{submitting ? "Saving..." : "Save launch draft"}</button></footer>
-    </section>
+    <>
+      <button className="launchDraftToggle" onClick={() => setOpen(true)}>
+        Launch Token Draft
+      </button>
+      <Modal
+        isOpen={open}
+        onClose={() => { if (!submitting) setOpen(false); }}
+        title="Prepare a Pump.fun token draft"
+        subtitle="Define metadata and local safety limits before creating a review-only draft."
+        maxWidth="900px"
+        className="launchDraftModal"
+      >
+        <section className="launchDraftForm launchDraftModalForm">
+          <div className="launchDraftModalStatus">
+            <span>ROUTE CHAPTER / TOKEN LAUNCH</span>
+            <StatusPill tone="warning">No execution</StatusPill>
+          </div>
+          <p>Saving this form creates a local draft only. Metadata upload, signing, and Mainnet broadcast remain separate review steps.</p>
+          <div className="launchDraftGrid">
+            <label>Name<input value={name} maxLength={32} onChange={(event) => setName(event.target.value)} autoFocus /></label>
+            <label>Symbol<input value={symbol} maxLength={10} onChange={(event) => setSymbol(event.target.value.toUpperCase())} /></label>
+            <label className="wide launchImagePicker">Token image · Pinata
+              <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={(event) => setImageFile(event.target.files?.[0] ?? null)} />
+              <span>{imageFile ? `${imageFile.name} · ${(imageFile.size / 1024).toFixed(1)} KB` : "Choose PNG, JPG, GIF, or WebP · maximum 10 MB"}</span>
+            </label>
+            <label className="wide">Description<textarea value={description} maxLength={500} onChange={(event) => setDescription(event.target.value)} /></label>
+            <label>Website (optional)<input value={websiteUrl} placeholder="https://..." onChange={(event) => setWebsiteUrl(event.target.value)} /></label>
+            <label>X profile (optional)<input value={xUrl} placeholder="https://x.com/..." onChange={(event) => setXUrl(event.target.value)} /></label>
+            <label className="wide">Telegram (optional)<input value={telegramUrl} placeholder="https://t.me/..." onChange={(event) => setTelegramUrl(event.target.value)} /></label>
+            <label>Quote asset<select value={quoteAsset} onChange={(event) => setQuoteAsset(event.target.value as PumpLaunchDraft["quoteAsset"])}><option value="SOL">SOL</option><option value="USDC">USDC</option></select></label>
+            <label>Initial purchase ({quoteAsset})<input inputMode="decimal" value={initialPurchase} placeholder="0" onChange={(event) => setInitialPurchase(sanitizeDecimal(event.target.value))} /><small>Optional amount purchased with the launch.</small></label>
+            <label>Maximum creator outflow (SOL)<input inputMode="decimal" value={outflow} placeholder="0.01" onChange={(event) => setOutflow(sanitizeDecimal(event.target.value))} /><small>Total SOL spending ceiling for this launch.</small></label>
+            <label>Maximum priority fee (SOL)<input inputMode="decimal" value={priorityFee} placeholder="0.0001" onChange={(event) => setPriorityFee(sanitizeDecimal(event.target.value))} /><small>Included inside the creator outflow ceiling.</small></label>
+          </div>
+          <label className="launchDraftAcknowledgement"><input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} /> I understand this draft is not a launch and any future publication would be irreversible.</label>
+          {error && <p className="launchDraftError">{error}</p>}
+          <footer><button disabled={submitting} onClick={() => setOpen(false)}>Cancel</button><button className="primary" disabled={submitting || !name.trim() || !symbol.trim() || !imageFile || !acknowledged} onClick={() => void submit()}>{submitting ? "Uploading to Pinata..." : "Upload & save draft"}</button></footer>
+        </section>
+      </Modal>
+    </>
   );
+}
+
+function fileToBase64(file: File): Promise<string> {
+  if (file.size < 8 || file.size > 10 * 1024 * 1024) throw new Error("Token image must be between 8 bytes and 10 MB.");
+  if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(file.type)) throw new Error("Choose a PNG, JPG, GIF, or WebP image.");
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("The selected token image could not be read."));
+    reader.onload = () => {
+      const value = typeof reader.result === "string" ? reader.result.split(",")[1] : null;
+      if (!value) reject(new Error("The selected token image is invalid."));
+      else resolve(value);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function sanitizeDecimal(value: string): string {
+  const normalized = value.replace(",", ".").replace(/[^\d.]/gu, "");
+  const [whole = "", ...fractions] = normalized.split(".");
+  return fractions.length === 0 ? whole : `${whole}.${fractions.join("")}`;
+}
+
+function decimalToRaw(value: string, decimals: number, label: string): string {
+  const normalized = value.trim();
+  if (!/^\d+(?:\.\d+)?$/u.test(normalized)) throw new Error(`${label} must be a valid nonnegative amount.`);
+  const [whole = "0", fraction = ""] = normalized.split(".");
+  if (fraction.length > decimals) throw new Error(`${label} supports at most ${decimals} decimal places.`);
+  const raw = `${whole}${fraction.padEnd(decimals, "0")}`.replace(/^0+(?=\d)/u, "");
+  return raw || "0";
 }
 export function PumpLaunchDraftCard({
   draft,
@@ -1183,18 +1225,19 @@ export function MissionPreviewCard({
   ).length;
   return (
     <section
-      className={`missionPreview ${preview.status === "blocked" ? "blocked" : "ready"}`}
+      className={`missionPreview swapRouteCard solanaSwapCard ${preview.status === "blocked" ? "blocked" : "ready"}`}
     >
       <header>
         <div>
-          <span>Mission contract</span>
-          <strong>{preview.goal}</strong>
+          <span>SOLANA · JUPITER · QUOTE ONLY</span>
+          <strong>{shorten(preview.inputMint)} → {shorten(preview.outputMint)}</strong>
+          <small>{preview.goal}</small>
         </div>
         <StatusPill tone={preview.status === "blocked" ? "danger" : "success"}>
           {preview.status}
         </StatusPill>
       </header>
-      <dl>
+      <dl className="swapRouteMetrics">
         <div>
           <dt>Input</dt>
           <dd>{preview.inputAmount} raw</dd>
@@ -1204,15 +1247,21 @@ export function MissionPreviewCard({
           <dd>{preview.quote?.outAmount ?? "Unavailable"}</dd>
         </div>
         <div>
-          <dt>Slippage limit</dt>
-          <dd>{preview.maxSlippageBps} bps</dd>
+          <dt>Minimum output</dt>
+          <dd>{preview.quote ? ((BigInt(preview.quote.outAmount) * BigInt(10_000 - preview.maxSlippageBps)) / 10_000n).toString() : "Unavailable"}</dd>
         </div>
         <div>
-          <dt>Policy</dt>
-          <dd>
-            {passed}/{preview.checks.length} passed
-          </dd>
+          <dt>Maximum slippage</dt>
+          <dd>{preview.maxSlippageBps} bps</dd>
         </div>
+      </dl>
+      <dl className="swapRouteDetails">
+        <div>
+          <dt>Route</dt><dd>{preview.quote?.router ?? "Jupiter"}</dd>
+        </div>
+        <div><dt>Wallet</dt><dd>{shorten(preview.walletAddress)}</dd></div>
+        <div><dt>Deadline</dt><dd>{new Date(preview.deadlineAt).toLocaleTimeString()}</dd></div>
+        <div><dt>Policy</dt><dd>{passed}/{preview.checks.length} passed</dd></div>
       </dl>
       <div className="missionChecks">
         {preview.checks.map((check) => (
@@ -1255,7 +1304,7 @@ export function MissionPreviewCard({
             disabled={executing}
             onClick={onExecute}
           >
-            {executing ? "Submitting…" : "Execute Mainnet"}
+            {executing ? "Submitting…" : "Review in wallet"}
           </button>
         ) : (
           <button
@@ -1270,7 +1319,7 @@ export function MissionPreviewCard({
               ? "Simulating…"
               : simulation
                 ? "Simulate again"
-                : "Review & simulate"}
+                : "Review route"}
           </button>
         )}
       </footer>

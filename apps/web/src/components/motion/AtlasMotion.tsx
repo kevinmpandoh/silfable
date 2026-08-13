@@ -16,7 +16,7 @@ export function AtlasReveal({ children, className, delay = 0 }: MotionBlockProps
       className={className}
       initial={reduced ? false : { opacity: 0, y: 28 }}
       whileInView={reduced ? undefined : { opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.16 }}
+      viewport={{ once: true, amount: "some" }}
       transition={{ duration: 0.68, delay, ease: [0.22, 1, 0.36, 1] }}
     >
       {children}
@@ -31,7 +31,7 @@ export function AtlasStagger({ children, className }: MotionBlockProps) {
       className={className}
       initial={reduced ? false : "hidden"}
       whileInView={reduced ? undefined : "visible"}
-      viewport={{ once: true, amount: 0.12 }}
+      viewport={{ once: true, amount: "some" }}
       variants={{
         hidden: {},
         visible: { transition: { staggerChildren: 0.1, delayChildren: 0.08 } },

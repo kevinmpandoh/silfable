@@ -123,6 +123,7 @@ export const IPC_CHANNELS = {
   aiSaveProvider: "ai:save-provider",
   aiChat: "ai:chat",
   pumpLaunchDraft: "pump:launch-draft",
+  pumpLaunchManagedMetadataPublish: "pump:launch-managed-metadata-publish",
   pumpLaunchPreflight: "pump:launch-preflight",
   pumpLaunchFinalRevalidate: "pump:launch-final-revalidate",
   pumpLaunchExecute: "pump:launch-execute",

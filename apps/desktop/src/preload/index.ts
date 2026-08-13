@@ -65,6 +65,8 @@ import {
   PumpExecuteResponseSchema,
   PumpLaunchDraftRequestSchema,
   PumpLaunchDraftResponseSchema,
+  PumpLaunchManagedMetadataPublishRequestSchema,
+  PumpLaunchManagedMetadataPublishResponseSchema,
   PumpLaunchPreflightRequestSchema,
   PumpLaunchPreflightResponseSchema,
   PumpLaunchFinalRevalidateRequestSchema,
@@ -197,6 +199,7 @@ import {
   type PumpFinalRevalidateRequest,
   type PumpExecuteRequest,
   type PumpLaunchDraftRequest,
+  type PumpLaunchManagedMetadataPublishRequest,
   type PumpLaunchPreflightRequest,
   type PumpLaunchFinalRevalidateRequest,
   type PumpLaunchExecuteRequest,
@@ -436,6 +439,12 @@ const api = {
   },
   async executeMission(request: MissionExecuteRequest) {
     return MissionExecuteResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.missionExecute, MissionExecuteRequestSchema.parse(request)));
+  },
+  async publishManagedPumpLaunchMetadata(request: PumpLaunchManagedMetadataPublishRequest) {
+    return PumpLaunchManagedMetadataPublishResponseSchema.parse(await ipcRenderer.invoke(
+      IPC_CHANNELS.pumpLaunchManagedMetadataPublish,
+      PumpLaunchManagedMetadataPublishRequestSchema.parse(request),
+    ));
   },
   async executeFullAccessMission(request: import("@silfable/contracts").MissionFullAccessExecuteRequest) {
     return MissionExecuteResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.missionExecuteFullAccess, MissionFullAccessExecuteRequestSchema.parse(request)));

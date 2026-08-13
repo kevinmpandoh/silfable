@@ -11,6 +11,7 @@ import {
 } from "@silfable/contracts";
 
 const DEFAULT_API_BASE_URL = "https://silfable-web.vercel.app";
+const LOCAL_API_BASE_URL = "http://localhost:3000";
 
 type WalletMessageSigner = {
   withWalletSigner<T>(
@@ -44,7 +45,7 @@ export class ManagedLaunchMetadataClient {
     this.#baseUrl = normalizeBaseUrl(
       input.baseUrl
         ?? process.env.SILFABLE_MANAGED_API_BASE_URL
-        ?? DEFAULT_API_BASE_URL,
+        ?? defaultManagedApiBaseUrl(process.env),
     );
     this.#wallets = input.wallets;
     this.#fetch = input.fetch ?? fetch;
@@ -137,6 +138,12 @@ export class ManagedLaunchMetadataClient {
       imageBytes.fill(0);
     }
   }
+}
+
+function defaultManagedApiBaseUrl(env: NodeJS.ProcessEnv): string {
+  return env.ELECTRON_RENDERER_URL || env.NODE_ENV === "development"
+    ? LOCAL_API_BASE_URL
+    : DEFAULT_API_BASE_URL;
 }
 
 function normalizeBaseUrl(value: string): string {

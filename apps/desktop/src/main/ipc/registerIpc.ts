@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { ManagedLaunchMetadataClient } from "../pump/managed-metadata.js";
 
 import {
   AiChatRequestSchema,
@@ -112,6 +113,8 @@ import {
   PumpExecuteResponseSchema,
   PumpLaunchDraftRequestSchema,
   PumpLaunchDraftResponseSchema,
+  PumpLaunchManagedMetadataPublishRequestSchema,
+  PumpLaunchManagedMetadataPublishResponseSchema,
   PumpLaunchPreflightRequestSchema,
   PumpLaunchPreflightResponseSchema,
   PumpLaunchFinalRevalidateRequestSchema,
@@ -267,6 +270,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
 
   const kyberPreflight = new KyberSwapPreflightService();
   const venueReadiness = new VenueReadinessService(database);
+  const managedLaunchMetadata = new ManagedLaunchMetadataClient({ wallets });
 
   // Register EVM venue readiness for Robinhood Chain swap testing
   if (venueReadiness.get("evm") === null) {
@@ -1867,6 +1871,20 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     const messages = sessionRecord.messages.map((entry, index) => index === messageIndex ? { ...entry, missionExecution: receipt } : entry);
     await sessions.upsert({ ...sessionRecord, messages });
     return MissionExecuteResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.pumpLaunchManagedMetadataPublish, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = PumpLaunchManagedMetadataPublishRequestSchema.parse(raw);
+    requireUnlocked();
+    const registered = (await wallets.listWallets()).some(
+      (wallet) => wallet.address === request.creatorWallet,
+    );
+    if (!registered) {
+      throw new Error("Managed Pinata uploads require a wallet registered in the encrypted vault");
+    }
+    const response = await managedLaunchMetadata.publish(request);
+    return PumpLaunchManagedMetadataPublishResponseSchema.parse(response);
   });
 
   ipcMain.handle(IPC_CHANNELS.missionExecuteFullAccess, async (event, raw: unknown) => {

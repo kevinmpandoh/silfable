@@ -80,6 +80,8 @@ import type {
   PumpExecuteResponse,
   PumpLaunchDraftRequest,
   PumpLaunchDraftResponse,
+  PumpLaunchManagedMetadataPublishRequest,
+  PumpLaunchManagedMetadataPublishResponse,
   PumpLaunchPreflightRequest,
   PumpLaunchPreflightResponse,
   PumpLaunchFinalRevalidateRequest,
@@ -158,6 +160,7 @@ declare global {
       saveAiProvider(request: AiSaveProviderRequest): Promise<AiProviderMutationResponse>;
       chatWithAi(request: AiChatRequest): Promise<AiChatResponse>;
       createPumpLaunchDraft(request: PumpLaunchDraftRequest): Promise<PumpLaunchDraftResponse>;
+      publishManagedPumpLaunchMetadata(request: PumpLaunchManagedMetadataPublishRequest): Promise<PumpLaunchManagedMetadataPublishResponse>;
       preflightPumpLaunch(request: PumpLaunchPreflightRequest): Promise<PumpLaunchPreflightResponse>;
       finalRevalidatePumpLaunch(request: PumpLaunchFinalRevalidateRequest): Promise<PumpLaunchFinalRevalidateResponse>;
       executePumpLaunch(request: PumpLaunchExecuteRequest): Promise<PumpLaunchExecuteResponse>;
