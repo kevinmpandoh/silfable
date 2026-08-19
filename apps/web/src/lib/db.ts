@@ -103,6 +103,7 @@ export interface WebProposal {
   perpReduceOnly?: boolean;
   perpBaseAmount?: string;
   perpNotionalUsd?: string;
+  perpCollateralUsdc?: string;
   perpLimitPriceUsd?: string;
   perpOraclePriceUsd?: string;
   perpFreeCollateralUsd?: string;

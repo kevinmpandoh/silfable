@@ -85,6 +85,7 @@ function proposalToPerpRequest(proposal: WebProposal): PerpOrderRequest | null {
     direction: proposal.perpDirection,
     baseAmount: proposal.perpBaseAmount,
     notionalUsd: proposal.perpNotionalUsd,
+    collateralUsdc: proposal.perpCollateralUsdc,
   };
 }
 
@@ -1453,7 +1454,7 @@ async function assertEvmBridgeFunds(input: {
         perpReduceOnly: request.action === "close",
         perpBaseAmount: request.action === "open" ? request.baseAmount : undefined,
         perpNotionalUsd: request.action === "open" ? request.notionalUsd : undefined,
-
+        perpCollateralUsdc: request.action === "open" ? request.collateralUsdc : undefined,
         perpStage: "draft",
       },
     };

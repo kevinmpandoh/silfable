@@ -360,32 +360,39 @@ export async function buildPerpOrderTransaction(input: BuildPerpOrderInput): Pro
     throw new Error(`The ${market.symbol} mark price is ${market.oracleAgeSlots} slots behind, so it is not tradable right now.`);
   }
 
-  const collateral = Number(input.collateralUsdc ?? 0);
+  const quantity = resolveQuantity(input, market);
+  const notionalUsd = quantity * market.oraclePriceUsd;
+
+  let effectiveCollateral = Number(input.collateralUsdc ?? 0);
   if (!input.reduceOnly) {
     const account = await getPerpAccount(walletAddress);
-    if (!account.accountExists && !(collateral > 0)) {
-      throw new Error("This wallet has no perpetuals account yet, so the first order must post USDC collateral. Enter a collateral amount and try again.");
+    if (!effectiveCollateral || effectiveCollateral <= 0) {
+      if (!account.accountExists || account.freeCollateralUsd < (notionalUsd / MAX_PERP_LEVERAGE)) {
+        effectiveCollateral = Number((notionalUsd / 2).toFixed(2));
+      }
     }
-    if (collateral > 0) {
+
+    if (effectiveCollateral > 0) {
       const available = account.walletUsdcBalance;
       if (Number.isNaN(available)) throw new Error("The wallet's USDC balance could not be verified, so no order was built.");
       if (available <= 0) {
-        throw new Error("This wallet holds no USDC. Phoenix funds positions with USDC only, so deposit or swap into USDC before opening a position.");
+        throw new Error("This wallet holds 0 USDC. Phoenix requires USDC collateral to open a position. Please swap SOL to USDC first.");
       }
-      if (available < collateral) {
-        throw new Error(`Insufficient USDC: the order posts $${collateral.toFixed(2)} but the wallet holds ${available.toFixed(2)} USDC. Top up, or lower the collateral.`);
+      if (available < effectiveCollateral) {
+        const minMargin = Number((notionalUsd / MAX_PERP_LEVERAGE).toFixed(2));
+        if (available >= minMargin) {
+          effectiveCollateral = Number(available.toFixed(2));
+        } else {
+          throw new Error(`Insufficient USDC in wallet: order requires at least $${minMargin.toFixed(2)} USDC (at ${MAX_PERP_LEVERAGE}x max leverage), but wallet holds $${available.toFixed(2)} USDC.`);
+        }
       }
     }
-  }
 
-  const quantity = resolveQuantity(input, market);
-  const notionalUsd = quantity * market.oraclePriceUsd;
-  if (!input.reduceOnly) {
     if (notionalUsd > MAX_PERP_NOTIONAL_USD) {
       throw new Error(`Position notional $${notionalUsd.toFixed(2)} exceeds the guarded $${MAX_PERP_NOTIONAL_USD} per-order ceiling.`);
     }
-    if (collateral > 0 && notionalUsd / collateral > MAX_PERP_LEVERAGE) {
-      throw new Error(`This order implies ${(notionalUsd / collateral).toFixed(1)}x leverage against $${collateral.toFixed(2)} collateral, above the guarded ${MAX_PERP_LEVERAGE}x ceiling.`);
+    if (effectiveCollateral > 0 && notionalUsd / effectiveCollateral > MAX_PERP_LEVERAGE) {
+      throw new Error(`This order implies ${(notionalUsd / effectiveCollateral).toFixed(1)}x leverage against $${effectiveCollateral.toFixed(2)} collateral, above the guarded ${MAX_PERP_LEVERAGE}x ceiling.`);
     }
   }
 
@@ -397,7 +404,7 @@ export async function buildPerpOrderTransaction(input: BuildPerpOrderInput): Pro
       side: input.direction === "long" ? "bid" : "ask",
       quantity,
       isReduceOnly: Boolean(input.reduceOnly),
-      ...(input.collateralUsdc ? { transferAmount: usdcToBaseUnits(input.collateralUsdc) } : {}),
+      ...(effectiveCollateral > 0 ? { transferAmount: usdcToBaseUnits(String(effectiveCollateral)) } : {}),
     }),
   });
   if (!Array.isArray(instructions) || instructions.length === 0) {
