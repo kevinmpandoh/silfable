@@ -509,20 +509,6 @@ export function Conversation({
                   }
                 />
               )}
-              {message.role === "assistant" && (
-                <div className="evidenceTag">
-                  {message.pumpExecution
-                    ? `Pump Mainnet execution: ${message.pumpExecution.status}`
-                    : message.evmExecutionReceipts?.length
-                      ? `EVM Mainnet execution: ${message.evmExecutionReceipts.at(-1)!.kind} ${message.evmExecutionReceipts.at(-1)!.status}`
-                    : message.missionExecution
-                    ? `Mainnet execution: ${message.missionExecution.status}`
-                    : "No execution attempted"}
-                  {message.toolsUsed?.length
-                    ? ` · evidence: ${message.toolsUsed.join(", ")}`
-                    : " · external inference"}
-                </div>
-              )}
             </div>
           </article>
         ))}
