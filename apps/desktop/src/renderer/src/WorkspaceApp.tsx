@@ -61,6 +61,7 @@ import {
   LimitOrderFinalModal,
   EvmExecutionApprovalModal,
   BridgeExecutionApprovalModal,
+  PerpsPanel,
   DriftPerpsPanel
 } from "./components";
 import {
