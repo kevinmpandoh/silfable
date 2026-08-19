@@ -369,6 +369,12 @@ export async function buildPerpOrderTransaction(input: BuildPerpOrderInput): Pro
     throw new Error(`The ${market.symbol} mark price is ${market.oracleAgeSlots} slots behind, so it is not tradable right now.`);
   }
 
+  const connection = new Connection(selectSolanaRpc(), "confirmed");
+  const solBalanceLamports = await connection.getBalance(new PublicKey(walletAddress)).catch(() => 0);
+  if (solBalanceLamports < 1_000_000) {
+    throw new Error(`Dompet Anda (${shortAddress(walletAddress)}) memiliki saldo ${solBalanceLamports === 0 ? "0" : (solBalanceLamports / 1e9).toFixed(4)} SOL di Solana Mainnet. Untuk membayar gas fee transaksi Solana on-chain, silakan isi minimal 0.01 SOL ke alamat dompet Anda.`);
+  }
+
   const quantity = resolveQuantity(input, market);
   const notionalUsd = quantity * market.oraclePriceUsd;
 
