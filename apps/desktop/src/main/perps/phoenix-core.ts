@@ -368,58 +368,62 @@ export async function buildPhoenixOrderProposal(params: {
 
   let plan: PerpOrderPlan | undefined;
   try {
-    const instructions = await phoenixRequest<ApiInstruction[]>("/v1/ix/place-isolated-market-order", {
-      method: "POST",
-      body: JSON.stringify({
-        authority: params.walletAddress,
-        symbol: normSym,
-        side: params.direction === "long" ? "bid" : "ask",
-        quantity,
-        isReduceOnly: false,
-        transferAmount: usdcToBaseUnits(String(collateral)),
-      }),
-    });
-
-    if (Array.isArray(instructions) && instructions.length > 0) {
-      const connection = new Connection(params.rpcUrl, "confirmed");
-      const blockhash = await connection.getLatestBlockhash("finalized");
-      const transaction = new VersionedTransaction(
-        new TransactionMessage({
-          payerKey: new PublicKey(params.walletAddress),
-          recentBlockhash: blockhash.blockhash,
-          instructions: [
-            ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
-            ...instructions.map(toTransactionInstruction),
-          ],
-        }).compileToV0Message(),
-      );
-
-      const simulation = await connection.simulateTransaction(transaction, {
-        commitment: "confirmed",
-        sigVerify: false,
-        replaceRecentBlockhash: false,
+    if (!account.accountExists) {
+      plan = await buildRegisterTraderTransaction(params.walletAddress, params.rpcUrl);
+    } else {
+      const instructions = await phoenixRequest<ApiInstruction[]>("/v1/ix/place-isolated-market-order", {
+        method: "POST",
+        body: JSON.stringify({
+          authority: params.walletAddress,
+          symbol: normSym,
+          side: params.direction === "long" ? "bid" : "ask",
+          quantity,
+          isReduceOnly: false,
+          transferAmount: usdcToBaseUnits(String(collateral)),
+        }),
       });
 
-      plan = {
-        transactionBase64: Buffer.from(transaction.serialize()).toString("base64"),
-        transactionDigest: messageDigest(transaction),
-        walletAddress: params.walletAddress,
-        symbol: market.symbol,
-        direction: params.direction,
-        orderKind: "market",
-        reduceOnly: false,
-        baseAmount: String(quantity),
-        notionalUsd: params.notionalUsd.toFixed(2),
-        oraclePriceUsd: market.oraclePriceUsd.toFixed(4),
-        limitPriceUsd: null,
-        networkFeeLamports: "5000",
-        simulationSlot: simulation.context.slot,
-        computeUnitsConsumed: simulation.value.unitsConsumed ?? null,
-        invokedPrograms: invokedPrograms(simulation.value.logs),
-        lastValidBlockHeight: blockhash.lastValidBlockHeight,
-        expiresAt: Date.now() + ORDER_VALIDITY_MS,
-        checks: checks.map((c) => c.message),
-      };
+      if (Array.isArray(instructions) && instructions.length > 0) {
+        const connection = new Connection(params.rpcUrl, "confirmed");
+        const blockhash = await connection.getLatestBlockhash("finalized");
+        const transaction = new VersionedTransaction(
+          new TransactionMessage({
+            payerKey: new PublicKey(params.walletAddress),
+            recentBlockhash: blockhash.blockhash,
+            instructions: [
+              ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
+              ...instructions.map(toTransactionInstruction),
+            ],
+          }).compileToV0Message(),
+        );
+
+        const simulation = await connection.simulateTransaction(transaction, {
+          commitment: "confirmed",
+          sigVerify: false,
+          replaceRecentBlockhash: false,
+        });
+
+        plan = {
+          transactionBase64: Buffer.from(transaction.serialize()).toString("base64"),
+          transactionDigest: messageDigest(transaction),
+          walletAddress: params.walletAddress,
+          symbol: market.symbol,
+          direction: params.direction,
+          orderKind: "market",
+          reduceOnly: false,
+          baseAmount: String(quantity),
+          notionalUsd: params.notionalUsd.toFixed(2),
+          oraclePriceUsd: market.oraclePriceUsd.toFixed(4),
+          limitPriceUsd: null,
+          networkFeeLamports: "5000",
+          simulationSlot: simulation.context.slot,
+          computeUnitsConsumed: simulation.value.unitsConsumed ?? null,
+          invokedPrograms: invokedPrograms(simulation.value.logs),
+          lastValidBlockHeight: blockhash.lastValidBlockHeight,
+          expiresAt: Date.now() + ORDER_VALIDITY_MS,
+          checks: checks.map((c) => c.message),
+        };
+      }
     }
   } catch {
     // If API preflight instruction fails, proposal still renders checks cleanly
@@ -480,6 +484,59 @@ export async function executePhoenixOrder(params: {
   }, "confirmed");
 
   return { signature };
+}
+
+export async function buildRegisterTraderTransaction(walletAddress: string, rpcUrl: string): Promise<PerpOrderPlan> {
+  const address = new PublicKey(walletAddress).toBase58();
+  const ix = await phoenixRequest<ApiInstruction>("/v1/ix/register-trader", {
+    method: "POST",
+    body: JSON.stringify({ authority: address }),
+  });
+  if (!ix || !ix.programId) throw new Error("Phoenix returned no register instruction.");
+
+  const connection = new Connection(rpcUrl, "confirmed");
+  const blockhash = await connection.getLatestBlockhash("finalized");
+  const transaction = new VersionedTransaction(
+    new TransactionMessage({
+      payerKey: new PublicKey(address),
+      recentBlockhash: blockhash.blockhash,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+        toTransactionInstruction(ix),
+      ],
+    }).compileToV0Message(),
+  );
+
+  const simulation = await connection.simulateTransaction(transaction, {
+    commitment: "confirmed",
+    sigVerify: false,
+    replaceRecentBlockhash: false,
+  });
+
+  return {
+    transactionBase64: Buffer.from(transaction.serialize()).toString("base64"),
+    transactionDigest: messageDigest(transaction),
+    walletAddress: address,
+    symbol: "ACCOUNT-INIT",
+    direction: "long",
+    orderKind: "market",
+    reduceOnly: false,
+    baseAmount: "0",
+    notionalUsd: "0.00",
+    oraclePriceUsd: "0.0000",
+    limitPriceUsd: null,
+    networkFeeLamports: "5000",
+    simulationSlot: simulation.context.slot,
+    computeUnitsConsumed: simulation.value.unitsConsumed ?? null,
+    invokedPrograms: invokedPrograms(simulation.value.logs),
+    lastValidBlockHeight: blockhash.lastValidBlockHeight,
+    expiresAt: Date.now() + ORDER_VALIDITY_MS,
+    checks: [
+      "Initializes your Phoenix perpetuals trading subaccount on Solana Mainnet.",
+      "Unsigned Mainnet simulation completed successfully.",
+      "Your local vault remains the only signer.",
+    ],
+  };
 }
 
 function toTransactionInstruction(instruction: ApiInstruction): TransactionInstruction {
