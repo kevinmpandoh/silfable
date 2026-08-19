@@ -346,6 +346,13 @@ export async function buildPhoenixOrderProposal(params: {
       message: `Notional $${params.notionalUsd.toFixed(2)} is within the guarded $${MAX_PERP_NOTIONAL_USD} ceiling.`,
     },
     {
+      code: "min_order_size",
+      status: quantity >= market.minOrderBase ? "pass" : "block",
+      message: quantity >= market.minOrderBase
+        ? `Order quantity ${quantity} ${market.baseAssetSymbol} satisfies contract minimum (${market.minOrderBase}).`
+        : `Order quantity ${quantity} ${market.baseAssetSymbol} (~$${params.notionalUsd.toFixed(2)}) is below the minimum lot size ${market.minOrderBase} (~$${(market.minOrderBase * market.oraclePriceUsd).toFixed(2)} USD).`,
+    },
+    {
       code: "collateral_check",
       status: hasSpendableUsdc ? "pass" : "block",
       message: hasSpendableUsdc

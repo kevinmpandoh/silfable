@@ -489,7 +489,8 @@ function resolveQuantity(input: BuildPerpOrderInput, market: PerpMarketSnapshot)
   const stepped = Math.floor(raw / market.stepSizeBase) * market.stepSizeBase;
   const rounded = Number(stepped.toFixed(Math.max(0, Math.round(-Math.log10(market.stepSizeBase)))));
   if (rounded < market.minOrderBase) {
-    throw new Error(`The minimum ${market.symbol} order size is ${market.minOrderBase}.`);
+    const minUsd = (market.minOrderBase * market.oraclePriceUsd).toFixed(2);
+    throw new Error(`The minimum ${market.symbol} order size is ${market.minOrderBase} ${market.baseAssetSymbol} (~$${minUsd} USD). Order size of $${input.notionalUsd ?? raw} is below the contract lot minimum.`);
   }
   return rounded;
 }
