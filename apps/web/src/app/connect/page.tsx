@@ -10,6 +10,7 @@ import { isUserRejectedWalletRequest } from "@/lib/wallet-errors";
 
 type AuthResponse = {
   authenticated?: boolean;
+  walletAddress?: string;
   challengeId?: string;
   message?: string;
   error?: string;
@@ -52,13 +53,21 @@ function ConnectContent() {
 
   useEffect(() => {
     let cancelled = false;
+    const force = searchParams.get("force") === "1";
+    if (force) {
+      void fetch("/api/auth/wallet/logout", { method: "POST" });
+      setAuthState("ready");
+      return;
+    }
     fetch("/api/auth/wallet/session", { cache: "no-store" })
       .then((response) => readAuthResponse(response, "Wallet session check failed"))
       .then((session) => {
         if (cancelled) return;
-        if (session.authenticated === true) {
-          router.replace(next);
-          return;
+        if (session.authenticated === true && !force) {
+          if (!publicKey || session.walletAddress?.toLowerCase() === publicKey.toBase58().toLowerCase()) {
+            router.replace(next);
+            return;
+          }
         }
         setAuthState("ready");
       })
@@ -68,7 +77,7 @@ function ConnectContent() {
     return () => {
       cancelled = true;
     };
-  }, [router, next]);
+  }, [router, next, searchParams, publicKey]);
 
   const authenticateSolanaWallet = useCallback(async () => {
     setAuthError(null);

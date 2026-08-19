@@ -2342,6 +2342,19 @@ async function assertEvmBridgeFunds(input: {
                 <span>RESTRICTED POSTURE</span>
               </header>
 
+              {walletAddress && authenticatedWallet && walletAddress.toLowerCase() !== authenticatedWallet.toLowerCase() && (
+                <div className="flex items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-200">
+                  <span>Phantom aktif ({shortWallet(walletAddress)}) belum disinkronkan dengan sesi login ({shortWallet(authenticatedWallet)}).</span>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/connect?force=1&next=${encodeURIComponent(window.location.pathname + window.location.search)}`)}
+                    className="shrink-0 rounded-lg border border-amber-400/40 bg-amber-500/20 px-3 py-1 font-bold text-amber-100 hover:bg-amber-500/30"
+                  >
+                    Sync Dompet Aktif
+                  </button>
+                </div>
+              )}
+
               <TradeMessageFeed
                 messages={messages}
                 activeSessionId={activeSessionId}
