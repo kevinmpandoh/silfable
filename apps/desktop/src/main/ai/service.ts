@@ -290,7 +290,7 @@ export class AiService {
       return { model: this.#model(), text: `Robinhood TP/SL ${directRobinhoodExit.inputSymbol} → ${directRobinhoodExit.outputSymbol} created. The local monitor will use fresh USD price evidence and a fresh Uniswap preflight only if a trigger is reached.`, inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, toolsUsed: ["create_automation_strategy" as const], missionPreview: null, pumpTokenIntelligence: null, pumpDiscoverySnapshot: null, pumpTradePreview: null, limitOrderPreview: null, evmSwapProposal: null, automationStrategy: strategy };
     }
     const directSolanaSwap = parseDirectSolanaSwap(input.prompt, input.walletScope);
-    if (directSolanaSwap !== null && input.mode === "mission" && input.walletAddress !== null && this.#readService !== null) {
+    if (directSolanaSwap !== null && input.walletAddress !== null && this.#readService !== null) {
       const settings = input.transactionSettings ?? this.#transactionSettings.get();
       const preview = await new MissionPolicyService(this.#readService, { get: () => settings }).preview({
         goal: `Swap ${directSolanaSwap.displayAmount} ${directSolanaSwap.inputSymbol} to ${directSolanaSwap.outputSymbol}`,

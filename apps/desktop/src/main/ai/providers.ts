@@ -100,7 +100,7 @@ export async function callOpenRouterChat(input: {
   if (toolCalls.length === 0) {
     const text = firstMessage?.content;
     if (typeof text !== "string" || text.length === 0) throw new Error("OpenRouter returned no assistant message");
-    return { text: text.slice(0, 12_000), ...usage(first.usage), toolsUsed: [], missionPreview: null, pumpTokenIntelligence: null, pumpDiscoverySnapshot: null, pumpTradePreview: null, limitOrderPreview: null, evmSwapProposal: null };
+    return { text: cleanAssistantText(text.slice(0, 12_000)), ...usage(first.usage), toolsUsed: [], missionPreview: null, pumpTokenIntelligence: null, pumpDiscoverySnapshot: null, pumpTradePreview: null, limitOrderPreview: null, evmSwapProposal: null };
   }
   messages.push({ role: "assistant", content: typeof firstMessage?.content === "string" ? firstMessage.content : null, tool_calls: toolCalls });
   const toolsUsed: ReadOnlyAiToolName[] = [];
@@ -139,7 +139,7 @@ export async function callOpenRouterChat(input: {
   const firstUsage = usage(first.usage);
   const secondUsage = usage(second.usage);
   return {
-    text: text.slice(0, 12_000),
+    text: cleanAssistantText(text.slice(0, 12_000)),
     inputTokens: firstUsage.inputTokens + secondUsage.inputTokens,
     outputTokens: firstUsage.outputTokens + secondUsage.outputTokens,
     totalTokens: firstUsage.totalTokens + secondUsage.totalTokens,
@@ -212,4 +212,16 @@ function providerError(status: number, body: unknown): string {
   const value = body as { error?: { type?: unknown } };
   const type = typeof value.error?.type === "string" ? ` (${value.error.type})` : "";
   return `OpenRouter request failed with status ${status}${type}`;
+}
+
+function cleanAssistantText(text: string): string {
+  const cleaned = text
+    .replace(/<tool_call>[\s\S]*?<\/tool_call>/giu, "")
+    .replace(/<function=[a-zA-Z0-9_]+>[\s\S]*?<\/function>/giu, "")
+    .replace(/<parameter=[a-zA-Z0-9_]+>[\s\S]*?<\/parameter>/giu, "")
+    .trim();
+  if (cleaned.length === 0) {
+    return "I processed your request against the active session policy. Please let me know how you would like to proceed.";
+  }
+  return cleaned;
 }
