@@ -1,0 +1,83 @@
+name: Desktop macOS Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to build and review
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  macos-artifacts:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Prisma Client
+        env:
+          DATABASE_URL: mongodb://localhost:27017/mirae_ci
+        run: npm run db:generate --workspace @mirae/web
+
+      - name: Validate release version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          node -e "const actual=require('./apps/desktop/package.json').version; if (actual !== process.env.VERSION) { throw new Error('Desktop package version does not match workflow version') }"
+
+      - name: Install Electron runtime
+        run: npm run setup:electron
+
+      - name: Verify
+        run: npm run typecheck && npm test
+
+      - name: Build macOS DMG and ZIP (ARM64 & x64)
+        run: npm run dist:mac --workspace @mirae/desktop
+
+      - name: Generate checksums
+        working-directory: apps/desktop/release
+        run: shasum -a 256 Mirae-* > SHA256SUMS.txt
+
+      - name: Upload draft artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mirae-macos-${{ inputs.version }}
+          path: |
+            apps/desktop/release/Mirae-*.dmg
+            apps/desktop/release/Mirae-*.zip
+            apps/desktop/release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: >-
+          gh release upload "v${VERSION}"
+          apps/desktop/release/Mirae-*.dmg
+          apps/desktop/release/Mirae-*.zip
+          apps/desktop/release/SHA256SUMS.txt
+          --clobber ||
+          gh release create "v${VERSION}"
+          apps/desktop/release/Mirae-*.dmg
+          apps/desktop/release/Mirae-*.zip
+          apps/desktop/release/SHA256SUMS.txt
+          --draft
+          --generate-notes
+          --title "Mirae v${VERSION}"
+          --target "${GITHUB_SHA}"

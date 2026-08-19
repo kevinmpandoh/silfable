@@ -1,0 +1,5 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm ci --workspace @mirae/web --include-workspace-root=false",
+  "buildCommand": "npm run build --workspace @mirae/web"
+}
