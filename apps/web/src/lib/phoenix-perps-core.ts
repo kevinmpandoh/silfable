@@ -382,6 +382,13 @@ export async function buildPerpOrderTransaction(input: BuildPerpOrderInput): Pro
   let effectiveCollateral = Number(input.collateralUsdc ?? 0);
   if (!input.reduceOnly) {
     const account = await getPerpAccount(walletAddress);
+    if (!account.accountExists) {
+      const solBal = solBalanceLamports / 1e9;
+      if (solBalanceLamports < 40_000_000) {
+        const needed = Math.max(0, 0.0382 - solBal).toFixed(4);
+        throw new Error(`Inisialisasi akun Phoenix di Solana Mainnet membutuhkan deposit sewa akun on-chain (~0.0382 SOL / ~$2.95). Saldo SOL dompet Anda saat ini ${solBal.toFixed(4)} SOL (kurang ~${needed} SOL). Silakan isi sedikit SOL tambahan (rekomendasi: minimal 0.05 SOL) agar akun trading on-chain Anda dapat diaktifkan.`);
+      }
+    }
     if (!effectiveCollateral || effectiveCollateral <= 0) {
       if (!account.accountExists || account.freeCollateralUsd < (notionalUsd / MAX_PERP_LEVERAGE)) {
         effectiveCollateral = Number((notionalUsd / 2).toFixed(2));
@@ -482,6 +489,63 @@ export async function buildPerpOrderTransaction(input: BuildPerpOrderInput): Pro
       "Your browser wallet remains the only signer.",
     ],
   } satisfies PerpOrderPlan;
+}
+
+export async function buildRegisterTraderTransaction(walletAddress: string): Promise<PerpOrderPlan> {
+  const address = new PublicKey(walletAddress).toBase58();
+  const ix = await phoenixRequest<ApiInstruction>("/v1/ix/register-trader", {
+    method: "POST",
+    body: JSON.stringify({ authority: address }),
+  });
+  if (!ix || !ix.programId) throw new Error("Phoenix returned no register instruction.");
+
+  const connection = new Connection(selectSolanaRpc(), "confirmed");
+  const blockhash = await connection.getLatestBlockhash("finalized");
+  const transaction = new VersionedTransaction(
+    new TransactionMessage({
+      payerKey: new PublicKey(address),
+      recentBlockhash: blockhash.blockhash,
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+        toTransactionInstruction(ix),
+      ],
+    }).compileToV0Message(),
+  );
+
+  const [simulation, fee, blockHeight] = await Promise.all([
+    connection.simulateTransaction(transaction, { commitment: "confirmed", sigVerify: false, replaceRecentBlockhash: false }),
+    connection.getFeeForMessage(transaction.message, "confirmed"),
+    connection.getBlockHeight("confirmed"),
+  ]);
+  if (simulation.value.err) throw new Error(describeSimulationError(simulation.value.err, simulation.value.logs));
+  if (fee.value === null) throw new Error("The network fee could not be verified.");
+  const programs = invokedPrograms(simulation.value.logs);
+  assertAllowedPrograms(programs, [ix]);
+
+  return {
+    transactionBase64: Buffer.from(transaction.serialize()).toString("base64"),
+    transactionDigest: messageDigest(transaction),
+    walletAddress: address,
+    symbol: "ACCOUNT-INIT",
+    direction: "long",
+    orderKind: "market",
+    reduceOnly: false,
+    baseAmount: "0",
+    notionalUsd: "0.00",
+    oraclePriceUsd: "0.0000",
+    limitPriceUsd: null,
+    networkFeeLamports: String(fee.value),
+    simulationSlot: simulation.context.slot,
+    computeUnitsConsumed: simulation.value.unitsConsumed ?? null,
+    invokedPrograms: programs,
+    lastValidBlockHeight: blockhash.lastValidBlockHeight,
+    expiresAt: Date.now() + ORDER_VALIDITY_MS,
+    checks: [
+      "Initializes your Phoenix perpetuals trading subaccount on Solana Mainnet.",
+      "Unsigned Mainnet simulation completed successfully.",
+      "Your browser wallet remains the only signer.",
+    ],
+  };
 }
 
 function resolveQuantity(input: BuildPerpOrderInput, market: PerpMarketSnapshot): number {
