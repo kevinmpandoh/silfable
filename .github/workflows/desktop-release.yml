@@ -66,11 +66,15 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Create draft GitHub Release
+      - name: Upload to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: >-
+          gh release upload "v${VERSION}"
+          apps/desktop/release/Mirae-*
+          apps/desktop/release/SHA256SUMS.txt
+          --clobber ||
           gh release create "v${VERSION}"
           apps/desktop/release/Mirae-*
           apps/desktop/release/SHA256SUMS.txt
