@@ -388,6 +388,7 @@ export async function buildPerpOrderTransaction(input: BuildPerpOrderInput): Pro
         const needed = Math.max(0, 0.0382 - solBal).toFixed(4);
         throw new Error(`Initializing a Phoenix perpetuals subaccount on Solana Mainnet requires an on-chain rent deposit (~0.0382 SOL / ~$2.95 USD). Your wallet holds ${solBal.toFixed(4)} SOL (~${needed} SOL short). Please fund a small additional amount of SOL (recommended: at least 0.05 SOL) to activate your on-chain trading account.`);
       }
+      return await buildRegisterTraderTransaction(walletAddress);
     }
     if (!effectiveCollateral || effectiveCollateral <= 0) {
       if (!account.accountExists || account.freeCollateralUsd < (notionalUsd / MAX_PERP_LEVERAGE)) {

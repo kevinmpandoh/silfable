@@ -101,6 +101,41 @@ export function PerpPreviewCard({
     );
   }
 
+  const isAccountInit = market === "ACCOUNT-INIT" || market === "REGISTER";
+
+  if (isAccountInit) {
+    return <SwapRouteCard
+      network="solana"
+      venue="Phoenix"
+      inputSymbol="ACTIVATE"
+      outputSymbol="ACCOUNT"
+      statusLabel={expired && !settled ? "Preflight expired" : status.label}
+      statusTone={expired && !settled ? "warning" : status.tone}
+      details={[
+        { label: "Action", value: "Initialize Phoenix Subaccount" },
+        { label: "Network", value: "Solana Mainnet" },
+        { label: "Rent deposit", value: "~0.0382 SOL (persisted on-chain)" },
+        { label: "Network fee", value: proposal.perpNetworkFeeLamports ? `${(Number(proposal.perpNetworkFeeLamports) / 1_000_000_000).toFixed(6)} SOL` : "Measured by simulation" },
+      ]}
+      checks={(proposal.checks ?? []).filter((check) => check.status === "pass").map(({ code, message }) => ({ code, message }))}
+      helperText={
+        proposal.perpError
+          ? proposal.perpError
+          : settled
+            ? "Your Phoenix trading subaccount was created. You can now place perpetuals orders."
+            : expired
+              ? "The simulated blockhash expired. Run preflight again to rebuild the transaction."
+              : ready
+                ? "Simulated unsigned on Solana Mainnet. Approving initializes your trading account."
+                : "Preflight simulates account initialization unsigned on Solana Mainnet."
+      }
+      actionLabel={busy ? "Working…" : settled ? "Account Activated" : expired ? "Re-run preflight" : ready ? "Activate Account in Wallet" : "Prepare Activation"}
+      actionDisabled={busy || settled}
+      explorerUrl={proposal.perpExplorerUrl ?? null}
+      onAction={() => (ready && !expired ? onExecute() : onPrepare())}
+    />;
+  }
+
   return <SwapRouteCard
     network="solana"
     venue="Phoenix"
