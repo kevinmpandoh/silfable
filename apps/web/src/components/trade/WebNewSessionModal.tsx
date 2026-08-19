@@ -58,7 +58,7 @@ export function WebNewSessionModal({
   const evmWallets = useMemo(() => linkedWallets.filter((wallet) => wallet.namespace === "evm"), [linkedWallets]);
   const solanaWallets = useMemo(() => linkedWallets.filter((wallet) => wallet.namespace === "solana"), [linkedWallets]);
   const effectiveEvmAddress = evmWallets[0]?.address || "";
-  const effectiveSolanaAddress = solanaWallets[0]?.address || "";
+  const effectiveSolanaAddress = solanaPublicKey?.toBase58() || solanaWallets[0]?.address || "";
 
   useEffect(() => {
     if (!isOpen || !solanaLinkRequested || !selectedSolanaWallet || solanaConnected || solanaConnecting) return;
