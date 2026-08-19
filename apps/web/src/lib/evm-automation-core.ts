@@ -8,18 +8,50 @@ function number(value: string | undefined) {
 const TOKEN_REFERENCE = String.raw`(?:0x[0-9a-f]{40}|[a-z][a-z0-9_-]{1,31})`;
 
 export function parseEvmAutomationText(text: string) {
-  const pair = new RegExp(`(\\d+(?:\\.\\d+)?)\\s+(${TOKEN_REFERENCE})\\s*(?:ke|to|→|->)\\s*(${TOKEN_REFERENCE})(?:\\s+(?:address|contract)?\\s*(0x[0-9a-f]{40}))?`, "iu").exec(text);
-  if (!pair) return null;
-  const interval = /(?:every|setiap)\s+(\d+(?:\.\d+)?)\s*(minute|minutes|min|menit|hour|hours|jam|day|days|hari)/iu.exec(text);
+  let amount = "1";
+  let inputReference = "USDG";
+  let outputReference = "AAPL";
+
+  const dollarMatch = /dca\s+\$([0-9]+(?:[.,][0-9]+)?)/iu.exec(text);
+  const targetMatch = /(?:into|in|ke|to)\s+(?:tokenized\s+stock\s+)?([a-zA-Z0-9_-]{2,42})(?:\s+tokenized\s+stock|\s+stock)?/iu.exec(text);
+  const pair = new RegExp(`(\\d+(?:[.,]\\d+)?)\\s+(${TOKEN_REFERENCE})\\s*(?:ke|to|→|->)\\s*(${TOKEN_REFERENCE})(?:\\s+(?:address|contract)?\\s*(0x[0-9a-f]{40}))?`, "iu").exec(text);
+
+  if (pair) {
+    amount = pair[1]!.replace(",", ".");
+    inputReference = pair[2]!;
+    outputReference = (pair[4] || pair[3])!;
+  } else if (dollarMatch && targetMatch) {
+    amount = dollarMatch[1]!.replace(",", ".");
+    inputReference = "USDG";
+    outputReference = targetMatch[1]!;
+  } else {
+    return null;
+  }
+
+  const interval = /(?:every|setiap)\s+(\d+(?:[.,]\d+)?)\s*(second|seconds|sec|detik|minute|minutes|min|menit|hour|hours|jam|day|days|hari)/iu.exec(text);
   const units = interval?.[2]?.toLowerCase() ?? "";
-  const multiplier = /hour|jam/u.test(units) ? 3600 : /day|hari/u.test(units) ? 86_400 : 60;
-  const cycleMatch = /(?:for|selama|sebanyak|maximum|max)\s+(\d+)\s*(?:cycles?|kali)?|\b(\d+)\s*(?:cycles?|kali)\b/iu.exec(text);
+  const multiplier = /hour|jam/u.test(units) ? 3600 : /day|hari/u.test(units) ? 86_400 : /second|sec|detik/u.test(units) ? 1 : 60;
+  const intervalSeconds = Math.round((number(interval?.[1]?.replace(",", ".")) ?? 0) * multiplier);
+
+  let maximumExecutions: number | undefined;
+  const cycleMatch = /(?:for|selama|sebanyak|maximum|max)\s+(\d+)\s*(?:cycles?|times?|kali)?|\b(\d+)\s*(?:cycles?|times?|kali)\b/iu.exec(text);
+  const durationMatch = /(?:selama|for\s+(?:up\s+to\s+|up\s+)?)\s*(\d+)\s*(detik|seconds?|sec|s|menit|minutes?|min|m|jam|hours?|hrs?|h)\b/iu.exec(text);
+
+  if (cycleMatch) {
+    maximumExecutions = number(cycleMatch[1] ?? cycleMatch[2]);
+  } else if (durationMatch && intervalSeconds > 0) {
+    const durVal = number(durationMatch[1]);
+    const durUnit = durationMatch[2]!.toLowerCase();
+    const durMult = /hours?|hrs?|jam/u.test(durUnit) ? 3600 : /minutes?|mins?|menit/u.test(durUnit) ? 60 : 1;
+    if (durVal) maximumExecutions = Math.max(1, Math.floor((durVal * durMult) / intervalSeconds));
+  }
+
   return {
-    amount: pair[1]!,
-    inputReference: pair[2]!,
-    outputReference: (pair[4] || pair[3])!,
-    intervalSeconds: Math.round((number(interval?.[1]) ?? 0) * multiplier),
-    maximumExecutions: number(cycleMatch?.[1] ?? cycleMatch?.[2]),
+    amount,
+    inputReference,
+    outputReference,
+    intervalSeconds,
+    maximumExecutions,
   };
 }
 

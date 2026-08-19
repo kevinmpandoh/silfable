@@ -103,6 +103,49 @@ test("complete Solana DCA instructions bind directly to the active session", { c
   });
 });
 
+test("Solana tokenized stock DCA instructions bind directly with calculated cycles", { concurrency: false }, async () => {
+  const secrets = new MemorySecrets();
+  secrets.values.set("openrouter-api-key", "sk-or-test");
+  let createInput: Record<string, unknown> | null = null;
+  let providerFetches = 0;
+  globalThis.fetch = async () => {
+    providerFetches += 1;
+    return Response.json({ choices: [{ message: { content: "unexpected" } }], usage: {} });
+  };
+  const service = new AiService({
+    keystore: secrets,
+    settings: new MemorySettings(),
+    automationManager: {
+      createDca: (input: Record<string, unknown>) => {
+        createInput = input;
+        return { id: "strategy-aapl-1", ...input };
+      },
+    } as never,
+  });
+  const result = await service.chat({
+    prompt: "DCA $1 into AAPL tokenized stock every 2 minutes for up 10 minutes",
+    mode: "agent",
+    walletAddress: "2r2pXUspsXamwzNWc8dQn52GK2BJJWmr63MPzDDxjTcg",
+    walletScope: "solana",
+    sessionId: "session-aapl-123",
+  });
+  assert.equal(providerFetches, 0);
+  assert.equal(result.toolsUsed.includes("create_automation_strategy"), true);
+  assert.ok(createInput);
+  const { expiresAt, ...boundInput } = createInput as unknown as Record<string, unknown>;
+  assert.equal(typeof expiresAt, "string");
+  assert.deepEqual(boundInput, {
+    sessionId: "session-aapl-123",
+    walletAddress: "2r2pXUspsXamwzNWc8dQn52GK2BJJWmr63MPzDDxjTcg",
+    inputMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    outputMint: "xaapL5RKeptHp1ErTtNuivj4AiJyNWupkK4YBNZzSTj",
+    orderAmountRaw: "1000000",
+    maximumTotalRaw: "5000000",
+    intervalSeconds: 120,
+    maximumExecutions: 5,
+  });
+});
+
 test("complete Solana TP/SL instructions bind directly to the active session", { concurrency: false }, async () => {
   const secrets = new MemorySecrets();
   secrets.values.set("openrouter-api-key", "sk-or-test");

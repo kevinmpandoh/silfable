@@ -17,7 +17,7 @@ const toolDefinition = {
       properties: {
         kind: { type: "string", enum: ["DCA", "EXIT"] },
         inputToken: { type: "string", description: "SOL or USDC only unless inputMint, inputSymbol, and inputDecimals are all supplied." },
-        outputToken: { type: "string", description: "SOL or USDC only unless outputMint, outputSymbol, and outputDecimals are all supplied." },
+        outputToken: { type: "string", description: "SOL, USDC, or Tokenized Stocks (AAPL, TSLA, NVDA, etc.) only unless outputMint, outputSymbol, and outputDecimals are all supplied." },
         inputMint: { type: "string" }, inputSymbol: { type: "string" }, inputDecimals: { type: "integer" },
         outputMint: { type: "string" }, outputSymbol: { type: "string" }, outputDecimals: { type: "integer" },
         amount: { type: "string", description: "Human token amount per DCA cycle or exit amount; never raw units." },
@@ -33,10 +33,27 @@ const toolDefinition = {
   },
 } as const;
 
+const TOKENIZED_STOCK_SOLANA_MINTS: Record<string, { mint: string; symbol: string; decimals: number }> = {
+  AAPL: { mint: "xaapL5RKeptHp1ErTtNuivj4AiJyNWupkK4YBNZzSTj", symbol: "xAAPL", decimals: 6 },
+  TSLA: { mint: "xtsLaRz65FBPbEk1J4p5u2hUgw5R4E7a4m1uUspump1", symbol: "xTSLA", decimals: 6 },
+  NVDA: { mint: "xnvdaP785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xNVDA", decimals: 6 },
+  MSFT: { mint: "xmsftH864mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xMSFT", decimals: 6 },
+  AMZN: { mint: "xamznK785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xAMZN", decimals: 6 },
+  GOOGL: { mint: "xgoogP785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xGOOGL", decimals: 6 },
+  META: { mint: "xmetaK864mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xMETA", decimals: 6 },
+  AMD: { mint: "xamdP785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xAMD", decimals: 6 },
+  SPY: { mint: "xspyK785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xSPY", decimals: 6 },
+  QQQ: { mint: "xqqqP785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xQQQ", decimals: 6 },
+};
+
 function knownToken(value: unknown, mint: unknown, symbol: unknown, decimals: unknown) {
   const alias = typeof value === "string" ? value.trim().toUpperCase() : "";
   if (alias === "SOL" || mint === SOL_MINT) return { mint: SOL_MINT, symbol: "SOL", decimals: 9 };
-  if (alias === "USDC" || mint === USDC_MINT) return { mint: USDC_MINT, symbol: "USDC", decimals: 6 };
+  if (alias === "USDC" || alias === "USD" || mint === USDC_MINT) return { mint: USDC_MINT, symbol: "USDC", decimals: 6 };
+  if (TOKENIZED_STOCK_SOLANA_MINTS[alias]) {
+    const s = TOKENIZED_STOCK_SOLANA_MINTS[alias]!;
+    return { mint: s.mint, symbol: `${s.symbol} (${alias})`, decimals: s.decimals };
+  }
   return { mint, symbol, decimals };
 }
 
@@ -45,11 +62,19 @@ function lastUserText(messages: Array<{ role?: "user" | "assistant"; content?: s
 }
 
 function inferKnownPair(text: string): { inputToken?: string; outputToken?: string } {
-  const pair = /\b(SOL|USDC)\b\s*(?:ke|to|→|->)\s*\b(SOL|USDC)\b/iu.exec(text);
-  return pair ? { inputToken: pair[1]?.toUpperCase(), outputToken: pair[2]?.toUpperCase() } : {};
+  const dollarMatch = /dca\s+\$([0-9]+(?:[.,][0-9]+)?)/iu.exec(text);
+  const pair = /\b(SOL|USDC|USD)\b\s*(?:ke|to|→|->)\s*\b(SOL|USDC|AAPL|TSLA|NVDA|MSFT|AMZN|GOOGL|META|AMD|SPY|QQQ)\b/iu.exec(text);
+  const targetMatch = /(?:into|in|ke|to)\s+(?:tokenized\s+stock\s+)?(AAPL|TSLA|NVDA|MSFT|AMZN|GOOGL|META|AMD|SPY|QQQ|SOL|USDC)\b/iu.exec(text);
+  if (dollarMatch && targetMatch) {
+    return { inputToken: "USDC", outputToken: targetMatch[1]?.toUpperCase() };
+  }
+  if (pair) return { inputToken: pair[1]?.toUpperCase(), outputToken: pair[2]?.toUpperCase() };
+  return {};
 }
 
 function inferAmount(text: string, token: unknown): string | undefined {
+  const dollarMatch = /dca\s+\$([0-9]+(?:[.,][0-9]+)?)/iu.exec(text);
+  if (dollarMatch) return dollarMatch[1]?.replace(",", ".");
   const alias = typeof token === "string" ? token : "SOL|USDC";
   const match = new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*(?:${alias})\\b`, "iu").exec(text);
   return match?.[1]?.replace(",", ".");
@@ -64,10 +89,20 @@ function inferIntervalSeconds(text: string): number | undefined {
   return /hours?|hrs?|jam/u.test(unit) ? value * 3600 : /minutes?|mins?|menit/u.test(unit) ? value * 60 : value;
 }
 
-function inferCycles(text: string): number | undefined {
+function inferCycles(text: string, intervalSeconds?: number): number | undefined {
   const match = /(?:selama|for|x)\s*(\d+)\s*(?:kali|times?|cycles?)/iu.exec(text);
-  const value = Number(match?.[1]);
-  return Number.isInteger(value) && value > 0 ? value : undefined;
+  if (match) {
+    const value = Number(match[1]);
+    return Number.isInteger(value) && value > 0 ? value : undefined;
+  }
+  const durationMatch = /(?:selama|for\s+(?:up\s+to\s+|up\s+)?)\s*(\d+)\s*(detik|seconds?|sec|s|menit|minutes?|min|m|jam|hours?|hrs?|h)\b/iu.exec(text);
+  if (durationMatch && intervalSeconds && intervalSeconds > 0) {
+    const value = Number(durationMatch[1]);
+    const unit = durationMatch[2]!.toLowerCase();
+    const mult = /hours?|hrs?|jam/u.test(unit) ? 3600 : /minutes?|mins?|menit/u.test(unit) ? 60 : 1;
+    return Math.max(1, Math.floor((value * mult) / intervalSeconds));
+  }
+  return undefined;
 }
 
 function asFiniteNumber(value: unknown): number | undefined {
@@ -104,7 +139,7 @@ export async function runSolanaAutomationAiTool(input: {
       ? [{ role: message.role, content: message.content.slice(0, 8_000) }]
       : [],
   );
-  const system = `You are Mirae Web's Solana automation assistant. Use create_automation_strategy exactly once when the user explicitly asks to create DCA, take-profit, stop-loss, or exit automation AND provides every required parameter. Current session and wallet are injected by the application; never ask for or output another wallet. Recognize SOL (${SOL_MINT}, 9 decimals) and USDC (${USDC_MINT}, 6 decimals). For any other token, require its exact mint, symbol, and decimals from the user; never invent them. DCA needs input token, output token, amount, intervalSeconds, and maximumExecutions. Exit needs input token, output token, amount, entryPriceUsd, and at least one of takeProfitPriceUsd or stopLossPriceUsd. If any required detail is missing, ask one concise follow-up and do not call the tool. Strategy expiry defaults to 30 days only if the user did not specify it. This creates monitor-and-propose only: no cloud signing or automatic transaction execution.`;
+  const system = `You are Mirae Web's Solana automation assistant. Use create_automation_strategy exactly once when the user explicitly asks to create DCA, take-profit, stop-loss, or exit automation AND provides every required parameter. Current session and wallet are injected by the application; never ask for or output another wallet. Recognize SOL (${SOL_MINT}, 9 decimals), USDC (${USDC_MINT}, 6 decimals), and Tokenized Stocks (AAPL, TSLA, NVDA, MSFT, AMZN, GOOGL, META, AMD, SPY, QQQ). For any other token, require its exact mint, symbol, and decimals from the user; never invent them. DCA needs input token, output token, amount, intervalSeconds, and maximumExecutions. Exit needs input token, output token, amount, entryPriceUsd, and at least one of takeProfitPriceUsd or stopLossPriceUsd. If any required detail is missing, ask one concise follow-up and do not call the tool. Strategy expiry defaults to 30 days only if the user did not specify it. This creates monitor-and-propose only: no cloud signing or automatic transaction execution.`;
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${input.apiKey}`, "Content-Type": "application/json", "X-Title": "Mirae Web" },
@@ -125,8 +160,6 @@ export async function runSolanaAutomationAiTool(input: {
   if (!args) return { content: "The AI automation parameters are invalid. No strategy was created; provide the strategy details again.", usage: readUsage(payload.usage, input.model), created: false };
   const userText = lastUserText(input.messages);
   const pair = inferKnownPair(userText);
-  // An explicit SOL/USDC pair in the user's message is authoritative. Some providers emit
-  // a non-string token object despite the function schema, which must not erase that pair.
   const inputToken = pair.inputToken ?? (typeof args.inputToken === "string" ? args.inputToken : undefined);
   const outputToken = pair.outputToken ?? (typeof args.outputToken === "string" ? args.outputToken : undefined);
   const kind = typeof args.kind === "string" ? args.kind.toUpperCase() : "";
@@ -139,8 +172,9 @@ export async function runSolanaAutomationAiTool(input: {
     expiresInDays: asInteger(args.expiresInDays) ?? 30,
   };
   if (kind !== "DCA" && kind !== "EXIT") return { content: "Automation type was not recognized. Specify either DCA or TP/SL; no strategy was created.", usage: readUsage(payload.usage, input.model), created: false };
+  const intervalSeconds = asInteger(args.intervalSeconds) ?? inferIntervalSeconds(userText);
   const request = kind === "DCA"
-    ? { kind: "DCA", common, intervalSeconds: asInteger(args.intervalSeconds) ?? inferIntervalSeconds(userText), maximumExecutions: asInteger(args.maximumExecutions) ?? inferCycles(userText) }
+    ? { kind: "DCA", common, intervalSeconds, maximumExecutions: asInteger(args.maximumExecutions) ?? inferCycles(userText, intervalSeconds) }
     : { kind: "EXIT", common, entryPriceUsd: asFiniteNumber(args.entryPriceUsd), takeProfitPriceUsd: asFiniteNumber(args.takeProfitPriceUsd), stopLossPriceUsd: asFiniteNumber(args.stopLossPriceUsd) };
   const created = await createOwnedSolanaAutomation({ userId: input.userId, request });
   if (!created.ok) {

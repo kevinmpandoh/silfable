@@ -664,25 +664,106 @@ type RobinhoodTokenSymbol = "ETH" | "USDG";
 const ROBINHOOD_NATIVE_TOKEN = "0x0000000000000000000000000000000000000000";
 const ROBINHOOD_USDG_TOKEN = "0x5fc5360d0400a0fd4f2af552add042d716f1d168";
 
+const TOKENIZED_STOCK_SOLANA_MINTS: Record<string, { mint: string; symbol: string; name: string; decimals: number }> = {
+  AAPL: { mint: "xaapL5RKeptHp1ErTtNuivj4AiJyNWupkK4YBNZzSTj", symbol: "xAAPL", name: "Apple Inc. (Tokenized)", decimals: 6 },
+  TSLA: { mint: "xtsLaRz65FBPbEk1J4p5u2hUgw5R4E7a4m1uUspump1", symbol: "xTSLA", name: "Tesla Inc. (Tokenized)", decimals: 6 },
+  NVDA: { mint: "xnvdaP785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xNVDA", name: "NVIDIA Corp. (Tokenized)", decimals: 6 },
+  MSFT: { mint: "xmsftH864mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xMSFT", name: "Microsoft Corp. (Tokenized)", decimals: 6 },
+  AMZN: { mint: "xamznK785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xAMZN", name: "Amazon.com Inc. (Tokenized)", decimals: 6 },
+  GOOGL: { mint: "xgoogP785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xGOOGL", name: "Alphabet Inc. (Tokenized)", decimals: 6 },
+  META: { mint: "xmetaK864mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xMETA", name: "Meta Platforms Inc. (Tokenized)", decimals: 6 },
+  AMD: { mint: "xamdP785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xAMD", name: "Advanced Micro Devices (Tokenized)", decimals: 6 },
+  SPY: { mint: "xspyK785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xSPY", name: "SPDR S&P 500 ETF (Tokenized)", decimals: 6 },
+  QQQ: { mint: "xqqqP785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xQQQ", name: "Invesco QQQ Trust (Tokenized)", decimals: 6 },
+};
+
+const TOKENIZED_STOCK_ROBINHOOD_ADDRESSES: Record<string, { address: string; symbol: string; name: string; decimals: number }> = {
+  AAPL: { address: "0x2D7882beDcbfDDce29Ba99965dd3cdF7fcB002E2", symbol: "AAPL", name: "Apple Inc. (Tokenized)", decimals: 18 },
+  TSLA: { address: "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43", symbol: "TSLA", name: "Tesla Inc. (Tokenized)", decimals: 18 },
+  NVDA: { address: "0x43D4876793f7A1eD718aFEE7f637f763C449E256", symbol: "NVDA", name: "NVIDIA Corp. (Tokenized)", decimals: 18 },
+};
+
+function resolveSolanaMintAndDecimals(symbol: string): { mint: string; symbol: string; decimals: number } | null {
+  const clean = symbol.trim().toUpperCase();
+  if (clean === "SOL") return { mint: SOLANA_NATIVE_MINT, symbol: "SOL", decimals: 9 };
+  if (clean === "USDC" || clean === "USD") return { mint: SOLANA_USDC_MINT, symbol: "USDC", decimals: 6 };
+  if (clean === "JUP") return { mint: SOLANA_JUP_MINT, symbol: "JUP", decimals: 6 };
+  if (TOKENIZED_STOCK_SOLANA_MINTS[clean]) {
+    const s = TOKENIZED_STOCK_SOLANA_MINTS[clean]!;
+    return { mint: s.mint, symbol: `${s.symbol} (${clean})`, decimals: s.decimals };
+  }
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/u.test(symbol)) {
+    return { mint: symbol, symbol: `${symbol.slice(0, 4)}...${symbol.slice(-4)}`, decimals: 6 };
+  }
+  return null;
+}
+
 function parseDirectRobinhoodDca(prompt: string, walletScope: SessionWalletScope | undefined, chainKey: EvmChainKey | undefined): {
-  inputToken: string; outputToken: string; inputSymbol: RobinhoodTokenSymbol; outputSymbol: RobinhoodTokenSymbol;
+  inputToken: string; outputToken: string; inputSymbol: string; outputSymbol: string;
   orderAmountRaw: string; maximumTotalRaw: string; intervalSeconds: number; maximumExecutions: number; displayAmount: string;
 } | null {
   if (walletScope !== "evm" || (chainKey ?? "robinhood") !== "robinhood" || !/\bdca\b/iu.test(prompt)) return null;
-  const pair = /([0-9]+(?:[.,][0-9]+)?)\s*(usdg|eth)\s+(?:ke|to)\s+(usdg|eth)\b/iu.exec(prompt);
-  const cadence = /(?:setiap|every)\s+([0-9]+)\s*(detik|seconds?|sec|s|menit|minutes?|min|m|jam|hours?|hr|h)\b/iu.exec(prompt);
-  const cycles = /(?:selama\s+)?([0-9]+)\s*(?:kali|times?|cycles?|x)\b/iu.exec(prompt);
-  if (!pair || !cadence || !cycles) return null;
-  const inputSymbol = pair[2]!.toUpperCase() as RobinhoodTokenSymbol;
-  const outputSymbol = pair[3]!.toUpperCase() as RobinhoodTokenSymbol;
-  if (inputSymbol === outputSymbol) return null;
-  const displayAmount = pair[1]!.replace(",", ".");
-  const raw = decimalToRawAmount(displayAmount, inputSymbol === "ETH" ? 18 : 6);
-  const unit = cadence[2]!.toLowerCase();
-  const intervalSeconds = Number(cadence[1]) * (/^(?:jam|hours?|hr|h)$/u.test(unit) ? 3600 : /^(?:menit|minutes?|min|m)$/u.test(unit) ? 60 : 1);
-  const maximumExecutions = Number(cycles[1]);
-  if (raw === null || intervalSeconds < 60 || intervalSeconds > 31_536_000 || !Number.isInteger(maximumExecutions) || maximumExecutions < 1 || maximumExecutions > 365) return null;
-  return { inputToken: inputSymbol === "ETH" ? ROBINHOOD_NATIVE_TOKEN : ROBINHOOD_USDG_TOKEN, outputToken: outputSymbol === "ETH" ? ROBINHOOD_NATIVE_TOKEN : ROBINHOOD_USDG_TOKEN, inputSymbol, outputSymbol, orderAmountRaw: raw, maximumTotalRaw: (BigInt(raw) * BigInt(maximumExecutions)).toString(), intervalSeconds, maximumExecutions, displayAmount };
+
+  let inputSymbolRaw = "USDG";
+  let displayAmount = "1";
+
+  const dollarMatch = /dca\s+\$([0-9]+(?:[.,][0-9]+)?)/iu.exec(prompt);
+  const explicitAmountMatch = /dca\s+(?:untuk\s+swap\s+)?([0-9]+(?:[.,][0-9]+)?)\s*(usdg|eth|usd|aapl|tsla|nvda)?/iu.exec(prompt);
+
+  if (dollarMatch) {
+    displayAmount = dollarMatch[1]!.replace(",", ".");
+    inputSymbolRaw = "USDG";
+  } else if (explicitAmountMatch) {
+    displayAmount = explicitAmountMatch[1]!.replace(",", ".");
+    const sym = explicitAmountMatch[2]?.toUpperCase();
+    inputSymbolRaw = sym === "ETH" ? "ETH" : sym === "USDG" || sym === "USD" ? "USDG" : sym ?? "USDG";
+  } else {
+    return null;
+  }
+
+  const targetMatch = /(?:into|in|ke|to)\s+(?:swap\s+)?(?:tokenized\s+stock\s+)?([a-zA-Z0-9]{2,10})(?:\s+tokenized\s+stock|\s+stock)?/iu.exec(prompt);
+  if (!targetMatch) return null;
+  const outputSymbolRaw = targetMatch[1]!.toUpperCase();
+
+  const resolveRobinhoodToken = (sym: string): { address: string; symbol: string; decimals: number } | null => {
+    if (sym === "ETH") return { address: ROBINHOOD_NATIVE_TOKEN, symbol: "ETH", decimals: 18 };
+    if (sym === "USDG" || sym === "USD") return { address: ROBINHOOD_USDG_TOKEN, symbol: "USDG", decimals: 6 };
+    if (TOKENIZED_STOCK_ROBINHOOD_ADDRESSES[sym]) {
+      const s = TOKENIZED_STOCK_ROBINHOOD_ADDRESSES[sym]!;
+      return { address: s.address, symbol: s.symbol, decimals: s.decimals };
+    }
+    return null;
+  };
+
+  const inputAsset = resolveRobinhoodToken(inputSymbolRaw);
+  const outputAsset = resolveRobinhoodToken(outputSymbolRaw);
+  if (!inputAsset || !outputAsset || inputAsset.address.toLowerCase() === outputAsset.address.toLowerCase()) return null;
+
+  const raw = decimalToRawAmount(displayAmount, inputAsset.decimals);
+  if (!raw) return null;
+
+  const cadenceMatch = /(?:setiap|every)\s+([0-9]+)\s*(detik|seconds?|sec|s|menit|minutes?|min|m|jam|hours?|hr|h)\b/iu.exec(prompt);
+  if (!cadenceMatch) return null;
+  const unit = cadenceMatch[2]!.toLowerCase();
+  const intervalSeconds = Number(cadenceMatch[1]) * (/^(?:jam|hours?|hr|h)$/u.test(unit) ? 3600 : /^(?:menit|minutes?|min|m)$/u.test(unit) ? 60 : 1);
+
+  let maximumExecutions = 5;
+  const tail = prompt.slice(cadenceMatch.index + cadenceMatch[0].length);
+  const cycleMatch = /(?:selama\s+|for\s+)?([0-9]+)\s*(?:kali|times?|cycles?|x)\b/iu.exec(tail);
+  const durationMatch = /(?:selama\s+|for\s+(?:up\s+to\s+|up\s+)?)?([0-9]+)\s*(detik|seconds?|sec|s|menit|minutes?|min|m|jam|hours?|hr|h)\b/iu.exec(tail);
+
+  if (cycleMatch) {
+    maximumExecutions = Number(cycleMatch[1]);
+  } else if (durationMatch) {
+    const durVal = Number(durationMatch[1]);
+    const durUnit = durationMatch[2]!.toLowerCase();
+    const durMult = /^(?:jam|hours?|hr|h)$/u.test(durUnit) ? 3600 : /^(?:menit|minutes?|min|m)$/u.test(durUnit) ? 60 : 1;
+    maximumExecutions = Math.max(1, Math.floor((durVal * durMult) / intervalSeconds));
+  }
+
+  if (intervalSeconds < 60 || intervalSeconds > 31_536_000 || !Number.isInteger(maximumExecutions) || maximumExecutions < 1 || maximumExecutions > 365) return null;
+
+  return { inputToken: inputAsset.address, outputToken: outputAsset.address, inputSymbol: inputAsset.symbol as RobinhoodTokenSymbol, outputSymbol: outputAsset.symbol as RobinhoodTokenSymbol, orderAmountRaw: raw, maximumTotalRaw: (BigInt(raw) * BigInt(maximumExecutions)).toString(), intervalSeconds, maximumExecutions, displayAmount };
 }
 
 function parseDirectRobinhoodExit(prompt: string, walletScope: SessionWalletScope | undefined, chainKey: EvmChainKey | undefined): {
@@ -727,8 +808,8 @@ function parseDirectSolanaDca(
 ): {
   inputMint: string;
   outputMint: string;
-  inputSymbol: "SOL" | "USDC";
-  outputSymbol: "SOL" | "USDC";
+  inputSymbol: string;
+  outputSymbol: string;
   orderAmountRaw: string;
   maximumTotalRaw: string;
   intervalSeconds: number;
@@ -736,31 +817,65 @@ function parseDirectSolanaDca(
   displayAmount: string;
 } | null {
   if (walletScope !== "solana" || !/\bdca\b/iu.test(prompt)) return null;
-  const pair = /([0-9]+(?:[.,][0-9]+)?)\s*(sol|usdc)\s+(?:ke|to)\s+(sol|usdc)\b/iu.exec(prompt);
-  const cadence = /(?:setiap|every)\s+([0-9]+)\s*(detik|seconds?|sec|s|menit|minutes?|min|m|jam|hours?|hr|h)\b/iu.exec(prompt);
-  const cycles = /(?:selama\s+)?([0-9]+)\s*(?:kali|times?|cycles?|x)\b/iu.exec(prompt);
-  if (!pair || !cadence || !cycles) return null;
-  const inputSymbol = pair[2]!.toUpperCase() as "SOL" | "USDC";
-  const outputSymbol = pair[3]!.toUpperCase() as "SOL" | "USDC";
-  if (inputSymbol === outputSymbol) return null;
-  const displayAmount = pair[1]!.replace(",", ".");
-  const orderAmountRaw = decimalToRawAmount(displayAmount, inputSymbol === "SOL" ? 9 : 6);
-  const cadenceValue = Number(cadence[1]);
-  const cadenceUnit = cadence[2]!.toLowerCase();
-  const intervalMultiplier = /^(?:jam|hours?|hr|h)$/u.test(cadenceUnit)
-    ? 3_600
-    : /^(?:menit|minutes?|min|m)$/u.test(cadenceUnit)
-      ? 60
-      : 1;
-  const intervalSeconds = cadenceValue * intervalMultiplier;
-  const maximumExecutions = Number(cycles[1]);
-  if (orderAmountRaw === null || !Number.isInteger(intervalSeconds) || intervalSeconds < 60 || intervalSeconds > 31_536_000
-    || !Number.isInteger(maximumExecutions) || maximumExecutions < 1 || maximumExecutions > 365) return null;
+
+  let inputSymbolRaw = "USDC";
+  let displayAmount = "1";
+
+  const dollarMatch = /dca\s+\$([0-9]+(?:[.,][0-9]+)?)/iu.exec(prompt);
+  const explicitAmountMatch = /dca\s+(?:untuk\s+swap\s+)?([0-9]+(?:[.,][0-9]+)?)\s*(sol|usdc|usd|jup)?/iu.exec(prompt);
+
+  if (dollarMatch) {
+    displayAmount = dollarMatch[1]!.replace(",", ".");
+    inputSymbolRaw = "USDC";
+  } else if (explicitAmountMatch) {
+    displayAmount = explicitAmountMatch[1]!.replace(",", ".");
+    const sym = explicitAmountMatch[2]?.toUpperCase();
+    inputSymbolRaw = sym === "SOL" ? "SOL" : sym === "JUP" ? "JUP" : "USDC";
+  } else {
+    return null;
+  }
+
+  const targetMatch = /(?:into|in|ke|to)\s+(?:swap\s+)?(?:tokenized\s+stock\s+)?([a-zA-Z0-9]{2,10})(?:\s+tokenized\s+stock|\s+stock)?/iu.exec(prompt);
+  if (!targetMatch) return null;
+  const outputSymbolRaw = targetMatch[1]!.toUpperCase();
+
+  const inputAsset = resolveSolanaMintAndDecimals(inputSymbolRaw);
+  const outputAsset = resolveSolanaMintAndDecimals(outputSymbolRaw);
+  if (!inputAsset || !outputAsset || inputAsset.mint === outputAsset.mint) return null;
+
+  const orderAmountRaw = decimalToRawAmount(displayAmount, inputAsset.decimals);
+  if (!orderAmountRaw) return null;
+
+  const cadenceMatch = /(?:setiap|every)\s+([0-9]+)\s*(detik|seconds?|sec|s|menit|minutes?|min|m|jam|hours?|hr|h)\b/iu.exec(prompt);
+  if (!cadenceMatch) return null;
+  const cadenceVal = Number(cadenceMatch[1]);
+  const cadenceUnit = cadenceMatch[2]!.toLowerCase();
+  const mult = /^(?:jam|hours?|hr|h)$/u.test(cadenceUnit) ? 3600 : /^(?:menit|minutes?|min|m)$/u.test(cadenceUnit) ? 60 : 1;
+  const intervalSeconds = cadenceVal * mult;
+
+  let maximumExecutions = 5;
+  const tail = prompt.slice(cadenceMatch.index + cadenceMatch[0].length);
+  const cycleMatch = /(?:selama\s+|for\s+)?([0-9]+)\s*(?:kali|times?|cycles?|x)\b/iu.exec(tail);
+  const durationMatch = /(?:selama\s+|for\s+(?:up\s+to\s+|up\s+)?)?([0-9]+)\s*(detik|seconds?|sec|s|menit|minutes?|min|m|jam|hours?|hr|h)\b/iu.exec(tail);
+
+  if (cycleMatch) {
+    maximumExecutions = Number(cycleMatch[1]);
+  } else if (durationMatch) {
+    const durVal = Number(durationMatch[1]);
+    const durUnit = durationMatch[2]!.toLowerCase();
+    const durMult = /^(?:jam|hours?|hr|h)$/u.test(durUnit) ? 3600 : /^(?:menit|minutes?|min|m)$/u.test(durUnit) ? 60 : 1;
+    maximumExecutions = Math.max(1, Math.floor((durVal * durMult) / intervalSeconds));
+  }
+
+  if (intervalSeconds < 60 || intervalSeconds > 31_536_000 || !Number.isInteger(maximumExecutions) || maximumExecutions < 1 || maximumExecutions > 365) {
+    return null;
+  }
+
   return {
-    inputMint: inputSymbol === "SOL" ? SOLANA_NATIVE_MINT : SOLANA_USDC_MINT,
-    outputMint: outputSymbol === "SOL" ? SOLANA_NATIVE_MINT : SOLANA_USDC_MINT,
-    inputSymbol,
-    outputSymbol,
+    inputMint: inputAsset.mint,
+    outputMint: outputAsset.mint,
+    inputSymbol: inputAsset.symbol as "SOL" | "USDC",
+    outputSymbol: outputAsset.symbol as "SOL" | "USDC",
     orderAmountRaw,
     maximumTotalRaw: (BigInt(orderAmountRaw) * BigInt(maximumExecutions)).toString(),
     intervalSeconds,
