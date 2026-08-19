@@ -373,7 +373,7 @@ export async function buildPerpOrderTransaction(input: BuildPerpOrderInput): Pro
   const solBalanceLamports = await connection.getBalance(new PublicKey(walletAddress)).catch(() => 0);
   if (solBalanceLamports < 1_000_000) {
     const shortAddr = walletAddress.length > 10 ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}` : walletAddress;
-    throw new Error(`Dompet Anda (${shortAddr}) memiliki saldo ${solBalanceLamports === 0 ? "0" : (solBalanceLamports / 1e9).toFixed(4)} SOL di Solana Mainnet. Untuk membayar gas fee transaksi Solana on-chain, silakan isi minimal 0.01 SOL ke alamat dompet Anda.`);
+    throw new Error(`Your wallet (${shortAddr}) holds ${solBalanceLamports === 0 ? "0" : (solBalanceLamports / 1e9).toFixed(4)} SOL on Solana Mainnet. To cover on-chain network transaction fees, please fund at least 0.01 SOL to your wallet address.`);
   }
 
   const quantity = resolveQuantity(input, market);
@@ -386,7 +386,7 @@ export async function buildPerpOrderTransaction(input: BuildPerpOrderInput): Pro
       const solBal = solBalanceLamports / 1e9;
       if (solBalanceLamports < 40_000_000) {
         const needed = Math.max(0, 0.0382 - solBal).toFixed(4);
-        throw new Error(`Inisialisasi akun Phoenix di Solana Mainnet membutuhkan deposit sewa akun on-chain (~0.0382 SOL / ~$2.95). Saldo SOL dompet Anda saat ini ${solBal.toFixed(4)} SOL (kurang ~${needed} SOL). Silakan isi sedikit SOL tambahan (rekomendasi: minimal 0.05 SOL) agar akun trading on-chain Anda dapat diaktifkan.`);
+        throw new Error(`Initializing a Phoenix perpetuals subaccount on Solana Mainnet requires an on-chain rent deposit (~0.0382 SOL / ~$2.95 USD). Your wallet holds ${solBal.toFixed(4)} SOL (~${needed} SOL short). Please fund a small additional amount of SOL (recommended: at least 0.05 SOL) to activate your on-chain trading account.`);
       }
     }
     if (!effectiveCollateral || effectiveCollateral <= 0) {
