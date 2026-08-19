@@ -118,26 +118,35 @@ type ApiAccountMeta = { pubkey: string; isSigner: boolean; isWritable: boolean }
 type ApiInstruction = { programId: string; keys: ApiAccountMeta[]; data: number[] };
 
 async function phoenixRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${PHOENIX_API}${path}`, {
-    ...init,
-    cache: "no-store",
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-  });
-  const raw = await response.text();
-  let payload: unknown;
-  try {
-    payload = raw ? JSON.parse(raw) : null;
-  } catch {
-    throw new Error(`Phoenix returned an unreadable response for ${path} (HTTP ${response.status}).`);
+  let attempts = 0;
+  while (attempts < 3) {
+    attempts += 1;
+    const response = await fetch(`${PHOENIX_API}${path}`, {
+      ...init,
+      cache: "no-store",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    });
+    if (response.status === 429 && attempts < 3) {
+      await new Promise((resolve) => setTimeout(resolve, 350 * attempts));
+      continue;
+    }
+    const raw = await response.text();
+    let payload: unknown;
+    try {
+      payload = raw ? JSON.parse(raw) : null;
+    } catch {
+      throw new Error(`Phoenix returned an unreadable response for ${path} (HTTP ${response.status}).`);
+    }
+    if (!response.ok) {
+      const message = payload && typeof payload === "object" && "error" in payload
+        ? String((payload as { error: unknown }).error)
+        : `Phoenix request failed with status ${response.status}.`;
+      throw new PhoenixApiError(message, response.status);
+    }
+    return payload as T;
   }
-  if (!response.ok) {
-    const message = payload && typeof payload === "object" && "error" in payload
-      ? String((payload as { error: unknown }).error)
-      : `Phoenix request failed with status ${response.status}.`;
-    throw new PhoenixApiError(message, response.status);
-  }
-  return payload as T;
+  throw new PhoenixApiError("Phoenix is busy. Please try again in a few moments.", 429);
 }
 
 /**
