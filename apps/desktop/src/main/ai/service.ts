@@ -702,20 +702,21 @@ function parseDirectRobinhoodDca(prompt: string, walletScope: SessionWalletScope
   inputToken: string; outputToken: string; inputSymbol: string; outputSymbol: string;
   orderAmountRaw: string; maximumTotalRaw: string; intervalSeconds: number; maximumExecutions: number; displayAmount: string;
 } | null {
-  if (walletScope !== "evm" || (chainKey ?? "robinhood") !== "robinhood" || !/\bdca\b/iu.test(prompt)) return null;
+  if (walletScope !== "evm" || (chainKey ?? "robinhood") !== "robinhood" || !/\bdca(?:ing)?\b/iu.test(prompt)) return null;
 
   let inputSymbolRaw = "USDG";
   let displayAmount = "1";
 
-  const dollarMatch = /dca\s+\$([0-9]+(?:[.,][0-9]+)?)/iu.exec(prompt);
-  const explicitAmountMatch = /dca\s+(?:untuk\s+swap\s+)?([0-9]+(?:[.,][0-9]+)?)\s*(usdg|eth|usd|aapl|tsla|nvda)?/iu.exec(prompt);
+  const dollarMatch = /dca(?:ing)?\s+\$([0-9]+(?:[.,][0-9]+)?)/iu.exec(prompt);
+  const explicitAmountMatch = /dca(?:ing)?\s+(?:untuk\s+swap\s+)?(?:(?:\$([0-9]+(?:[.,][0-9]+)?)\s*(usdg|eth|usd|aapl|tsla|nvda)?)|([0-9]+(?:[.,][0-9]+)?)\s*(usdg|eth|usd|aapl|tsla|nvda)?)/iu.exec(prompt);
 
   if (dollarMatch) {
     displayAmount = dollarMatch[1]!.replace(",", ".");
     inputSymbolRaw = "USDG";
   } else if (explicitAmountMatch) {
-    displayAmount = explicitAmountMatch[1]!.replace(",", ".");
-    const sym = explicitAmountMatch[2]?.toUpperCase();
+    const rawVal = explicitAmountMatch[1] || explicitAmountMatch[3];
+    displayAmount = rawVal ? rawVal.replace(",", ".") : "1";
+    const sym = (explicitAmountMatch[2] || explicitAmountMatch[4])?.toUpperCase();
     inputSymbolRaw = sym === "ETH" ? "ETH" : sym === "USDG" || sym === "USD" ? "USDG" : sym ?? "USDG";
   } else {
     return null;
@@ -816,20 +817,21 @@ function parseDirectSolanaDca(
   maximumExecutions: number;
   displayAmount: string;
 } | null {
-  if (walletScope !== "solana" || !/\bdca\b/iu.test(prompt)) return null;
+  if (walletScope !== "solana" || !/\bdca(?:ing)?\b/iu.test(prompt)) return null;
 
   let inputSymbolRaw = "USDC";
   let displayAmount = "1";
 
-  const dollarMatch = /dca\s+\$([0-9]+(?:[.,][0-9]+)?)/iu.exec(prompt);
-  const explicitAmountMatch = /dca\s+(?:untuk\s+swap\s+)?([0-9]+(?:[.,][0-9]+)?)\s*(sol|usdc|usd|jup)?/iu.exec(prompt);
+  const dollarMatch = /dca(?:ing)?\s+\$([0-9]+(?:[.,][0-9]+)?)/iu.exec(prompt);
+  const explicitAmountMatch = /dca(?:ing)?\s+(?:untuk\s+swap\s+)?(?:(?:\$([0-9]+(?:[.,][0-9]+)?)\s*(sol|usdc|usd|jup)?)|([0-9]+(?:[.,][0-9]+)?)\s*(sol|usdc|usd|jup)?)/iu.exec(prompt);
 
   if (dollarMatch) {
     displayAmount = dollarMatch[1]!.replace(",", ".");
     inputSymbolRaw = "USDC";
   } else if (explicitAmountMatch) {
-    displayAmount = explicitAmountMatch[1]!.replace(",", ".");
-    const sym = explicitAmountMatch[2]?.toUpperCase();
+    const rawVal = explicitAmountMatch[1] || explicitAmountMatch[3];
+    displayAmount = rawVal ? rawVal.replace(",", ".") : "1";
+    const sym = (explicitAmountMatch[2] || explicitAmountMatch[4])?.toUpperCase();
     inputSymbolRaw = sym === "SOL" ? "SOL" : sym === "JUP" ? "JUP" : "USDC";
   } else {
     return null;
