@@ -34,9 +34,12 @@ const toolDefinition = {
 } as const;
 
 const TOKENIZED_STOCK_SOLANA_MINTS: Record<string, { mint: string; symbol: string; decimals: number }> = {
-  AAPL: { mint: "xaapL5RKeptHp1ErTtNuivj4AiJyNWupkK4YBNZzSTj", symbol: "xAAPL", decimals: 6 },
+  AAPL: { mint: "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp", symbol: "AAPLx", decimals: 6 },
+  AAPLX: { mint: "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp", symbol: "AAPLx", decimals: 6 },
   TSLA: { mint: "xtsLaRz65FBPbEk1J4p5u2hUgw5R4E7a4m1uUspump1", symbol: "xTSLA", decimals: 6 },
+  TSLAX: { mint: "xtsLaRz65FBPbEk1J4p5u2hUgw5R4E7a4m1uUspump1", symbol: "xTSLA", decimals: 6 },
   NVDA: { mint: "xnvdaP785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xNVDA", decimals: 6 },
+  NVDAX: { mint: "xnvdaP785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xNVDA", decimals: 6 },
   MSFT: { mint: "xmsftH864mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xMSFT", decimals: 6 },
   AMZN: { mint: "xamznK785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xAMZN", decimals: 6 },
   GOOGL: { mint: "xgoogP785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xGOOGL", decimals: 6 },

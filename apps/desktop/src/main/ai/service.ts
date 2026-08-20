@@ -665,9 +665,12 @@ const ROBINHOOD_NATIVE_TOKEN = "0x0000000000000000000000000000000000000000";
 const ROBINHOOD_USDG_TOKEN = "0x5fc5360d0400a0fd4f2af552add042d716f1d168";
 
 const TOKENIZED_STOCK_SOLANA_MINTS: Record<string, { mint: string; symbol: string; name: string; decimals: number }> = {
-  AAPL: { mint: "xaapL5RKeptHp1ErTtNuivj4AiJyNWupkK4YBNZzSTj", symbol: "xAAPL", name: "Apple Inc. (Tokenized)", decimals: 6 },
+  AAPL: { mint: "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp", symbol: "AAPLx", name: "Apple Inc. (Tokenized)", decimals: 6 },
+  AAPLX: { mint: "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp", symbol: "AAPLx", name: "Apple Inc. (Tokenized)", decimals: 6 },
   TSLA: { mint: "xtsLaRz65FBPbEk1J4p5u2hUgw5R4E7a4m1uUspump1", symbol: "xTSLA", name: "Tesla Inc. (Tokenized)", decimals: 6 },
+  TSLAX: { mint: "xtsLaRz65FBPbEk1J4p5u2hUgw5R4E7a4m1uUspump1", symbol: "xTSLA", name: "Tesla Inc. (Tokenized)", decimals: 6 },
   NVDA: { mint: "xnvdaP785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xNVDA", name: "NVIDIA Corp. (Tokenized)", decimals: 6 },
+  NVDAX: { mint: "xnvdaP785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xNVDA", name: "NVIDIA Corp. (Tokenized)", decimals: 6 },
   MSFT: { mint: "xmsftH864mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xMSFT", name: "Microsoft Corp. (Tokenized)", decimals: 6 },
   AMZN: { mint: "xamznK785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xAMZN", name: "Amazon.com Inc. (Tokenized)", decimals: 6 },
   GOOGL: { mint: "xgoogP785mR387Wd92iUoXv5pA9xNu23L7yF1Mspump", symbol: "xGOOGL", name: "Alphabet Inc. (Tokenized)", decimals: 6 },
