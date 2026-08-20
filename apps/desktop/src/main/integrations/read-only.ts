@@ -9,12 +9,10 @@ import { writeSafeAuditLog } from "../telemetry/safe-audit-log.js";
 import { ProviderCircuitBreaker } from "./provider-circuit-breaker.js";
 import { ProviderRateBudget } from "./provider-rate-budget.js";
 
-const MAINNET_RPC_URL = "https://api.mainnet-beta.solana.com";
+const MAINNET_RPC_URL = "https://mainnet.helius-rpc.com/?api-key=1a26ad61-c60d-477c-8c51-cd8b07815421";
 export const DEFAULT_SOLANA_FALLBACK_RPCS = [
-  "https://api.mainnet-beta.solana.com",
-  "https://solana-rpc.publicnode.com",
-  "https://rpc.ankr.com/solana",
   "https://mainnet.helius-rpc.com/?api-key=1a26ad61-c60d-477c-8c51-cd8b07815421",
+  "https://api.mainnet-beta.solana.com",
 ] as const;
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";

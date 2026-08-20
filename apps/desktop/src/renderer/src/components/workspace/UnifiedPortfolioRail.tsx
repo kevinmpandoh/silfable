@@ -152,8 +152,8 @@ export function UnifiedPortfolioRail({
 
   useEffect(() => {
     let active = true;
-    setSolanaViews([]);
     if (runtime?.keystore !== "unlocked" || solanaTargets.length === 0) {
+      setSolanaViews([]);
       setSolanaState("idle");
       return () => { active = false; };
     }
@@ -177,9 +177,9 @@ export function UnifiedPortfolioRail({
 
   useEffect(() => {
     let active = true;
-    setEvmViews([]);
-    setEvmFailureChains([]);
     if (runtime?.keystore !== "unlocked" || evmTargets.length === 0) {
+      setEvmViews([]);
+      setEvmFailureChains([]);
       setEvmState("idle");
       return () => { active = false; };
     }
@@ -267,10 +267,10 @@ export function UnifiedPortfolioRail({
     ? (sessionWallet ? 1 : 0)
     : (includesSolana ? solanaWallets.length : 0) + (includesEvm ? evmWallets.length : 0);
   const hasEvmSelection = sessionScope === "evm" || walletFilter === "evm";
-  const totalLabel = !hasVisibleAssets
-    ? "$0.00"
-    : loading
+  const totalLabel = loading && !hasVisibleAssets
     ? "Loading…"
+    : !hasVisibleAssets
+    ? (failed ? "Unavailable" : "$0.00")
     : totalUsd === null ? "Unpriced" : formatPortfolioUsd(totalUsd);
 
   return (

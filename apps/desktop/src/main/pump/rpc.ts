@@ -2,12 +2,10 @@ import { ProviderRateBudget } from "../integrations/provider-rate-budget.js";
 import { writeSafeAuditLog } from "../telemetry/safe-audit-log.js";
 import type { PumpFinalizedAccount } from "./state.js";
 
-const MAINNET_RPC_URL = "https://api.mainnet-beta.solana.com";
+const MAINNET_RPC_URL = "https://mainnet.helius-rpc.com/?api-key=1a26ad61-c60d-477c-8c51-cd8b07815421";
 export const DEFAULT_SOLANA_FALLBACK_RPCS = [
-  "https://api.mainnet-beta.solana.com",
-  "https://solana-rpc.publicnode.com",
-  "https://rpc.ankr.com/solana",
   "https://mainnet.helius-rpc.com/?api-key=1a26ad61-c60d-477c-8c51-cd8b07815421",
+  "https://api.mainnet-beta.solana.com",
 ] as const;
 const ADDRESS_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/u;
 const SIGNATURE_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{64,88}$/u;
