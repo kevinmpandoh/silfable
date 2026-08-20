@@ -76,7 +76,7 @@ import {
   formatPumpBps,
   formatPumpRawAmount
 } from "./lib/formatters";
-import { cleanErrorMessage } from "./lib/utils";
+import { cleanErrorMessage, resolveTokenSymbol } from "./lib/utils";
 
 import type {
   BridgePreflightEvidence,
@@ -2453,7 +2453,7 @@ function MainWorkspace({
                 <div className="rounded-xl border border-emerald-200/20 bg-black/20 p-3">
                   <strong>Pinned Solana swap</strong>
                   <p className="mt-1 text-xs text-muted-foreground">{activeSolanaMissions[0]!.preview.goal}</p>
-                  <p className="mt-1 font-mono text-[11px] text-emerald-200">{activeSolanaMissions[0]!.preview.inputMint} → {activeSolanaMissions[0]!.preview.outputMint}</p>
+                  <p className="mt-1 font-mono text-[11px] text-emerald-200">{resolveTokenSymbol(activeSolanaMissions[0]!.preview.inputMint)} → {resolveTokenSymbol(activeSolanaMissions[0]!.preview.outputMint)}</p>
                 </div>
                 <label className="grid gap-1"><span className="text-xs font-semibold">Master password</span><input type="password" value={fullAccessPassword} onChange={(event) => setFullAccessPassword(event.target.value)} /></label>
                 <label className="grid gap-1"><span className="text-xs font-semibold">Type ENABLE FULL ACCESS FOR 24 HOURS</span><input value={fullAccessConfirmation} onChange={(event) => setFullAccessConfirmation(event.target.value)} /></label>

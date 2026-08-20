@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Activity, ArrowUp, Bot, Brain, CirclePlus, Settings, ShieldCheck, Target, ShieldAlert, Sparkles, Zap, KeyRound, KeySquare, ChevronRight, MessageSquare, History, List, X, Flame } from 'lucide-react';
 import { Button, Modal, Input, Badge } from '../ui';
-import { shorten, cn } from '../../lib/utils';
+import { shorten, resolveTokenSymbol, cn } from '../../lib/utils';
 import { formatEvmTokenAmount, formatWeiToGweiOrEth, formatRuntimeTokens, formatPortfolioUsd, portfolioAssetUsd, formatPortfolioAmount, formatPumpMetric, formatPumpPercent, formatPumpBps, formatPumpRawAmount, formatLamportsToSol } from '../../lib/formatters';
 import { StatusPill, Notice, Field, SetupCard, SetupActions, Brand, BrandMark, CornerFooter, RailSection, ProviderCard } from '../setup/SetupHelpers';
 import { ACTIVITY_LEVELS, INTEGRATION_CATEGORIES, SETUP_STEPS, STORAGE_KEY } from '../types';
@@ -1248,7 +1248,7 @@ export function MissionPreviewCard({
       <header>
         <div>
           <span>SOLANA · JUPITER · QUOTE ONLY</span>
-          <strong>{shorten(preview.inputMint)} → {shorten(preview.outputMint)}</strong>
+          <strong>{resolveTokenSymbol(preview.inputMint)} → {resolveTokenSymbol(preview.outputMint)}</strong>
           <small>{preview.goal}</small>
         </div>
         <StatusPill tone={preview.status === "blocked" ? "danger" : "success"}>

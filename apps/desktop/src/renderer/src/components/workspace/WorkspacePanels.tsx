@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Activity, ArrowUp, Bot, Brain, CirclePlus, Settings, ShieldCheck, Target, ShieldAlert, Sparkles, Zap, KeyRound, KeySquare, ChevronRight, MessageSquare, History, List, X, Flame } from 'lucide-react';
 import { Button, Modal, Input, Badge } from '../ui';
-import { shorten, cn } from '../../lib/utils';
+import { shorten, resolveTokenSymbol, cn } from '../../lib/utils';
 import { formatEvmTokenAmount, formatWeiToGweiOrEth, formatRuntimeTokens, formatPortfolioUsd, portfolioAssetUsd, formatPortfolioAmount, formatPumpMetric, formatPumpPercent, formatPumpBps, formatPumpRawAmount } from '../../lib/formatters';
 import { StatusPill, Notice, Field, SetupCard, SetupActions, Brand, BrandMark, CornerFooter, RailSection, ProviderCard } from '../setup/SetupHelpers';
 import { ACTIVITY_LEVELS, INTEGRATION_CATEGORIES, SETUP_STEPS, STORAGE_KEY } from '../types';
@@ -221,7 +221,7 @@ export function MissionsView({
             <span className="missionIndex">{String(index + 1).padStart(2, "0")}</span>
             <div className="missionRoute">
               <span>{status === "blocked" ? "Blocked route" : status === "expired" ? "Expired route" : "Ready for review"}</span>
-              <strong>{short(preview.inputMint)} <ChevronRight aria-hidden="true" /> {short(preview.outputMint)}</strong>
+              <strong>{resolveTokenSymbol(preview.inputMint)} <ChevronRight aria-hidden="true" /> {resolveTokenSymbol(preview.outputMint)}</strong>
               <small>{preview.goal.replace(/\b[1-9A-HJ-NP-Za-km-z]{24,44}\b/gu, (value) => short(value))}</small>
             </div>
             <dl className="missionFacts">
