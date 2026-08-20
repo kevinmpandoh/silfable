@@ -544,11 +544,6 @@ export function Conversation({
             sourceWallet={session.walletAddress}
           />
         )}
-        <Notice tone={session.permission === "full" ? "info" : "warning"} title={session.permission === "full" ? "Full Access session" : "Restricted Mainnet session"}>
-          {session.permission === "full"
-            ? "Exact actions still require a pinned execution job and active local-vault grant. Until then, the normal review and approval flow remains active."
-            : "Every mutating action requires a validated contract, passed simulation, password recheck, and explicit approval."}
-        </Notice>
         <Composer
           value={draft}
           setValue={setDraft}

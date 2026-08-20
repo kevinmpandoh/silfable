@@ -456,13 +456,18 @@ export async function buildPhoenixOrderProposal(params: {
 export async function executePhoenixOrder(params: {
   plan?: PerpOrderPlan;
   transactionBase64?: string;
-  privateKeyBase58: string;
+  keypair?: Keypair;
+  privateKeyBase58?: string;
   rpcUrl: string;
 }): Promise<{ signature: string }> {
   const connection = new Connection(params.rpcUrl, "confirmed");
-  const keypair = Keypair.fromSecretKey(
-    Buffer.from(JSON.parse(params.privateKeyBase58.startsWith("[") ? params.privateKeyBase58 : `[${params.privateKeyBase58}]`)),
-  );
+  let keypair = params.keypair;
+  if (!keypair && params.privateKeyBase58) {
+    keypair = Keypair.fromSecretKey(
+      Buffer.from(JSON.parse(params.privateKeyBase58.startsWith("[") ? params.privateKeyBase58 : `[${params.privateKeyBase58}]`)),
+    );
+  }
+  if (!keypair) throw new Error("Wallet keypair is unavailable or locked.");
 
   const rawTx = params.plan?.transactionBase64 ?? params.transactionBase64;
   if (!rawTx) throw new Error("No unsigned transaction provided for signing.");

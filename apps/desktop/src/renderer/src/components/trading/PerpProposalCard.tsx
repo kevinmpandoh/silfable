@@ -47,76 +47,76 @@ export function PerpProposalCard({
   };
 
   return (
-    <div className="my-3 overflow-hidden rounded-2xl border border-[#FF8A00]/30 bg-[#0c101c] p-5 shadow-xl">
+    <div className="my-3 overflow-hidden rounded-2xl border border-[rgb(32_33_42_/_0.12)] bg-white p-5 shadow-sm">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[#22283a] pb-3">
+      <div className="flex items-center justify-between border-b border-[#20212A]/10 pb-3">
         <div className="flex items-center gap-2.5">
-          <div className={`flex size-8 items-center justify-center rounded-lg ${isLong ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"}`}>
+          <div className={`flex size-8 items-center justify-center rounded-lg border ${isLong ? "border-emerald-200 bg-emerald-50 text-emerald-600" : "border-rose-200 bg-rose-50 text-rose-600"}`}>
             {isLong ? <TrendingUp className="size-4" /> : <TrendingDown className="size-4" />}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-white">{proposal.symbol}</span>
-              <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${isLong ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"}`}>
+              <span className="font-bold text-[#20212A]">{proposal.symbol}</span>
+              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] font-bold ${isLong ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700"}`}>
                 {proposal.direction.toUpperCase()} · {proposal.leverage}x
               </span>
             </div>
-            <p className="text-[11px] text-gray-400">{proposal.venue} · ISOLATED MARKET ORDER</p>
+            <p className="text-[11px] text-[#686970]">{proposal.venue} · ISOLATED MARKET ORDER</p>
           </div>
         </div>
         <div className="text-right">
-          <span className="text-[10px] text-gray-400">Mark Price</span>
-          <p className="font-mono text-xs font-bold text-white">${Number(proposal.oraclePriceUsd).toLocaleString()}</p>
+          <span className="text-[10px] text-[#686970]">Mark Price</span>
+          <p className="font-mono text-xs font-bold text-[#20212A]">${Number(proposal.oraclePriceUsd).toLocaleString()}</p>
         </div>
       </div>
 
       {/* Metrics Grid */}
-      <div className="my-4 grid grid-cols-3 gap-2 rounded-xl bg-[#131929] p-3 text-xs">
+      <div className="my-4 grid grid-cols-3 gap-2 rounded-xl border border-[#20212A]/08 bg-[#F8F9FA] p-3 text-xs">
         <div>
-          <span className="text-[10px] text-gray-400">Position Size</span>
-          <p className="font-semibold text-white">${Number(proposal.notionalUsd).toFixed(2)}</p>
+          <span className="text-[10px] font-medium text-[#686970]">Position Size</span>
+          <p className="text-[13px] font-bold text-[#20212A]">${Number(proposal.notionalUsd).toFixed(2)}</p>
         </div>
         <div>
-          <span className="text-[10px] text-gray-400">Collateral (USDC)</span>
-          <p className="font-semibold text-white">${Number(proposal.collateralUsdc ?? (Number(proposal.notionalUsd) / proposal.leverage)).toFixed(2)}</p>
+          <span className="text-[10px] font-medium text-[#686970]">Collateral (USDC)</span>
+          <p className="text-[13px] font-bold text-[#20212A]">${Number(proposal.collateralUsdc ?? (Number(proposal.notionalUsd) / proposal.leverage)).toFixed(2)}</p>
         </div>
         <div>
-          <span className="text-[10px] text-gray-400">Network Fee</span>
-          <p className="font-semibold text-[#FFAD45]">~0.000005 SOL</p>
+          <span className="text-[10px] font-medium text-[#686970]">Network Fee</span>
+          <p className="text-[13px] font-bold text-[#E85D04]">~0.000005 SOL</p>
         </div>
       </div>
 
       {/* Security Checks */}
-      <div className="space-y-1.5 border-t border-[#22283a] pt-3 text-[11px]">
+      <div className="space-y-1.5 border-t border-[#20212A]/10 pt-3 text-[11px]">
         {proposal.checks.map((check, idx) => (
-          <div key={idx} className="flex items-center gap-2 text-gray-300">
+          <div key={idx} className="flex items-center gap-2 text-[#40424E]">
             {check.status === "pass" ? (
-              <ShieldCheck className="size-3.5 flex-none text-emerald-400" />
+              <ShieldCheck className="size-3.5 flex-none text-emerald-600" />
             ) : (
-              <ShieldAlert className="size-3.5 flex-none text-rose-400" />
+              <ShieldAlert className="size-3.5 flex-none text-rose-600" />
             )}
-            <span className={check.status === "block" ? "text-rose-300" : ""}>{check.message}</span>
+            <span className={check.status === "block" ? "font-medium text-rose-700" : ""}>{check.message}</span>
           </div>
         ))}
       </div>
 
       {error && (
-        <div className="mt-3 rounded-lg border border-rose-500/20 bg-rose-500/10 p-2.5 text-xs text-rose-300">
+        <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-800">
           <strong>Execution Error:</strong> {error}
         </div>
       )}
 
       {signature ? (
-        <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">
+        <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-800">
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="size-4 text-emerald-400" />
+            <CheckCircle2 className="size-4 text-emerald-600" />
             <span>Order executed and confirmed on Solana Mainnet!</span>
           </div>
           <a
             href={`https://solscan.io/tx/${signature}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1 font-bold text-emerald-400 hover:underline"
+            className="flex items-center gap-1 font-bold text-emerald-700 hover:underline"
           >
             <span>View Solscan</span>
             <ExternalLink className="size-3" />
@@ -128,12 +128,12 @@ export function PerpProposalCard({
             type="button"
             disabled={hasFailingCheck || executing}
             onClick={handleExecute}
-            className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition ${
+            className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition shadow-sm ${
               hasFailingCheck
-                ? "cursor-not-allowed border border-gray-700 bg-gray-800 text-gray-500"
+                ? "cursor-not-allowed border border-gray-200 bg-gray-100 text-gray-400"
                 : isLong
-                  ? "bg-emerald-500 text-black hover:bg-emerald-400 shadow-md shadow-emerald-500/20"
-                  : "bg-rose-500 text-white hover:bg-rose-400 shadow-md shadow-rose-500/20"
+                  ? "bg-[#10B981] text-white hover:bg-[#059669]"
+                  : "bg-[#F43F5E] text-white hover:bg-[#E11D48]"
             }`}
           >
             {executing ? (

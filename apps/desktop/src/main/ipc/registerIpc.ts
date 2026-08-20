@@ -2625,15 +2625,14 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     assertTrustedSender(event);
     requireUnlocked();
     const rpcUrl = (database.getSetting("solana_rpc_url") as string | null) ?? "https://api.mainnet-beta.solana.com";
-    const secret = await secretStore.getSecret(`wallet-key-${request.walletAddress}`);
-    if (!secret) throw new Error("Wallet private key is not unlocked or unavailable.");
-    const result = await executePhoenixOrder({
-      plan: request.plan,
-      transactionBase64: request.transactionBase64,
-      privateKeyBase58: secret,
-      rpcUrl,
+    return await wallets.withWalletWeb3Keypair(request.walletAddress, async (keypair) => {
+      return await executePhoenixOrder({
+        plan: request.plan,
+        transactionBase64: request.transactionBase64,
+        keypair,
+        rpcUrl,
+      });
     });
-    return result;
   });
 
   ipcMain.handle(IPC_CHANNELS.driftMarketsGet, async (event) => {
