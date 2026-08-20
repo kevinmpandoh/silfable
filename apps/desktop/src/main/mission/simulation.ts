@@ -39,7 +39,22 @@ export class MissionSimulationService {
         goal: mission.goal, walletAddress: mission.walletAddress, inputMint: mission.inputMint, outputMint: mission.outputMint,
         inputAmount: mission.inputAmount, maxSlippageBps: mission.maxSlippageBps, deadlineAt: mission.deadlineAt, stopConditions: mission.stopConditions,
       });
-      if (refreshed.status !== "ready-for-review" || refreshed.quote === null) return result(base, "blocked", null, null, [], null, null, [], "Mission policy no longer passes against current Mainnet evidence.");
+      if (refreshed.status !== "ready-for-review" || refreshed.quote === null) {
+        const failedReason = refreshed.checks.find((item) => item.status === "fail")?.detail;
+        return result(
+          base,
+          "blocked",
+          null,
+          null,
+          [],
+          null,
+          null,
+          [],
+          failedReason
+            ? `Mission policy no longer passes: ${failedReason}`
+            : "Mission policy no longer passes against current Mainnet evidence.",
+        );
+      }
       const priority = sessionSettings.priority;
       const order = await this.#reads.buildUnsignedSwapOrder(mission.inputMint, mission.outputMint, mission.inputAmount, mission.walletAddress, mission.maxSlippageBps, priority);
       const minimumOut = BigInt(refreshed.quote.outAmount) * BigInt(10_000 - mission.maxSlippageBps) / 10_000n;
@@ -75,7 +90,14 @@ export class MissionSimulationService {
       goal: mission.goal, walletAddress: mission.walletAddress, inputMint: mission.inputMint, outputMint: mission.outputMint,
       inputAmount: mission.inputAmount, maxSlippageBps: mission.maxSlippageBps, deadlineAt: mission.deadlineAt, stopConditions: mission.stopConditions,
     });
-    if (refreshed.status !== "ready-for-review" || refreshed.quote === null) throw new Error("Mission policy no longer passes against current Mainnet evidence");
+    if (refreshed.status !== "ready-for-review" || refreshed.quote === null) {
+      const failedReason = refreshed.checks.find((item) => item.status === "fail")?.detail;
+      throw new Error(
+        failedReason
+          ? `Mission policy no longer passes: ${failedReason}`
+          : "Mission policy no longer passes against current Mainnet evidence",
+      );
+    }
     const minimumOut = BigInt(refreshed.quote.outAmount) * BigInt(10_000 - mission.maxSlippageBps) / 10_000n;
     if (BigInt(prepared.order.outAmount) < minimumOut) throw new Error("Approved transaction is now below the mission slippage floor");
     inspectUnsignedTransaction(prepared.order.transaction, mission.walletAddress);
