@@ -421,10 +421,11 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .sessionItemWrapper > button.sessionButton:hover { border-color: rgb(120 220 232 / .14); background: rgb(120 220 232 / .06); transform: translateX(1px); }
 .sessionItemWrapper > button.sessionButton.active { border-color: var(--lilac); background: var(--panel-2); box-shadow: inset 3px 0 var(--lilac); }
 .deleteSessionButton { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; border-radius: 4px; color: #7f8ba4; background: transparent; cursor: pointer; opacity: 0; visibility: hidden; transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease; }
-.deleteSessionButton:hover { color: #ff4d4d; background: rgba(255, 77, 77, 0.15); }
-.deleteSessionModalContent { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
-.deleteSessionWarning { color: var(--muted); font-size: 12px; line-height: 1.5; }
-.modalFooterActions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+.deleteSessionModalContent { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; color: #20212a; }
+.deleteSessionModalContent > p { margin: 0; color: #20212a; font-size: 14px; line-height: 1.5; }
+.deleteSessionModalContent strong { color: #20212a; font-weight: 600; }
+.deleteSessionWarning { margin: 0; color: #686970 !important; font-size: 13px !important; line-height: 1.55; }
+.modalFooterActions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .sessionList button > div { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .sessionList strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .sessionList small { color: var(--muted); font: 8px var(--mono); text-transform: uppercase; }

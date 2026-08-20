@@ -9,11 +9,11 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: "border-[#ff8a00] bg-[#ff8a00] text-[#160a02] shadow-[0_10px_28px_rgb(255_138_0/0.16)] hover:border-[#ffad45] hover:bg-[#ffad45]",
-        secondary: "border-border bg-secondary text-secondary-foreground hover:border-[#ff8a00]/45 hover:bg-[#ff8a00]/8 hover:text-[#ffad45]",
-        danger: "border-red-300/30 bg-destructive text-white shadow-[0_10px_28px_rgb(255_72_94/0.2)] hover:brightness-110",
-        ghost: "border-transparent bg-transparent text-muted-foreground hover:border-[#ff8a00]/35 hover:bg-[#ff8a00]/8 hover:text-[#ffad45]",
-        outline: "border-[#ff8a00]/35 bg-[#ff8a00]/5 text-[#ffad45] hover:border-[#ff8a00]/60 hover:bg-[#ff8a00]/12",
+        primary: "border-[#df6b22] bg-[#df6b22] text-white shadow-xs hover:border-[#c95b18] hover:bg-[#c95b18]",
+        secondary: "border-[rgb(32_33_42_/_0.12)] bg-white text-[#20212a] hover:bg-[#f3f4f6] hover:text-[#20212a]",
+        danger: "border-rose-600 bg-rose-600 text-white shadow-xs hover:border-rose-700 hover:bg-rose-700",
+        ghost: "border-[rgb(32_33_42_/_0.12)] bg-white text-[#686970] hover:bg-[#f3f4f6] hover:text-[#20212a]",
+        outline: "border-[rgb(32_33_42_/_0.12)] bg-white text-[#20212a] hover:bg-[#f3f4f6]",
       },
       size: {
         sm: "h-8 px-3 text-[10px]",

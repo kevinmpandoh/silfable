@@ -2147,11 +2147,21 @@ export type EvmBridgeReceiptsResponse = z.infer<typeof EvmBridgeReceiptsResponse
 export type EvmBridgeReconcileRequest = z.infer<typeof EvmBridgeReconcileRequestSchema>;
 export type EvmBridgeReconcileResponse = z.infer<typeof EvmBridgeReconcileResponseSchema>;
 
-export const UniswapSettingsResponseSchema = z.object({ schemaVersion: z.literal(1), configured: z.boolean() }).strict();
+export const UniswapSettingsResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  configured: z.boolean(),
+  chainId: z.number().int().positive().optional(),
+  routerAddress: SessionEvmAddressSchema.optional(),
+  routerVersion: z.string().optional(),
+}).strict();
 export const UniswapSaveKeyRequestSchema = RequestBaseSchema.extend({ apiKey: z.string().trim().min(8).max(512) }).strict();
 export const UniswapKeyMutationResponseSchema = RequestBaseSchema.extend({ configured: z.boolean() }).strict();
 export const UniswapTestKeyRequestSchema = RequestBaseSchema.strict();
-export const UniswapTestKeyResponseSchema = RequestBaseSchema.extend({ chainId: z.number().int().positive() }).strict();
+export const UniswapTestKeyResponseSchema = RequestBaseSchema.extend({
+  chainId: z.number().int().positive(),
+  routerAddress: SessionEvmAddressSchema.optional(),
+  routerVersion: z.string().optional(),
+}).strict();
 
 export type UniswapSettingsResponse = z.infer<typeof UniswapSettingsResponseSchema>;
 export type UniswapSaveKeyRequest = z.infer<typeof UniswapSaveKeyRequestSchema>;

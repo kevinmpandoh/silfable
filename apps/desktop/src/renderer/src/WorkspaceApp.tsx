@@ -2492,12 +2492,13 @@ function MainWorkspace({
           isOpen={true}
           onClose={() => setSessionToDelete(null)}
           title="Delete session"
+          maxWidth="440px"
         >
           <div className="deleteSessionModalContent">
-            <p>
-              Are you sure you want to delete <strong>"{sessionToDelete.title}"</strong>?
+            <p className="text-sm text-[#20212a] leading-relaxed">
+              Are you sure you want to delete <strong className="font-semibold text-[#20212a]">"{sessionToDelete.title}"</strong>?
             </p>
-            <p className="deleteSessionWarning">
+            <p className="deleteSessionWarning text-xs text-[#686970] leading-normal">
               All messages and history associated with this session will be permanently removed.
             </p>
             <div className="modalFooterActions">
