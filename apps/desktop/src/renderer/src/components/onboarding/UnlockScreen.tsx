@@ -6,7 +6,13 @@ import { Button } from "../ui/Button";
 
 const STORAGE_KEY = "mirae.mainnet-setup.v2";
 
-export function UnlockScreen({ onUnlocked }: { onUnlocked: () => Promise<void> }) {
+export function UnlockScreen({
+  onUnlocked,
+  onResetVault,
+}: {
+  onUnlocked: () => Promise<void>;
+  onResetVault?: () => Promise<void> | void;
+}) {
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -19,10 +25,10 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => Promise<void> }
     setBusy(true);
     setMessage(null);
     try {
-      await window.mirae.unlockVault({
+      await window.mirae.unlock({
         schemaVersion: 1,
         requestId: crypto.randomUUID(),
-        password,
+        masterPassword: password,
       });
       setPassword("");
       await onUnlocked();
@@ -46,8 +52,12 @@ export function UnlockScreen({ onUnlocked }: { onUnlocked: () => Promise<void> }
         confirmation: "SET UP NEW VAULT",
         acknowledgedPermanentAccessLoss: true,
       });
-      localStorage.removeItem(STORAGE_KEY);
-      window.location.reload();
+      localStorage.clear();
+      if (onResetVault) {
+        await onResetVault();
+      } else {
+        window.location.reload();
+      }
     } catch (error) {
       if (!(error instanceof Error) || !/cancelled/u.test(error.message))
         setMessage(

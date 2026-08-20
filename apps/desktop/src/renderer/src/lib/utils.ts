@@ -58,3 +58,50 @@ export function cleanErrorMessage(error: unknown): string {
     .trim();
 }
 
+export async function copyToClipboard(text: string): Promise<boolean> {
+  if (!text) return false;
+  let success = false;
+  // 1. Try Main Process IPC (Electron native clipboard)
+  if (typeof window !== "undefined" && window.mirae?.copyWalletAddress) {
+    try {
+      await window.mirae.copyWalletAddress({
+        schemaVersion: 1,
+        requestId: crypto.randomUUID(),
+        address: text,
+      });
+      success = true;
+    } catch {
+      // continue to fallback
+    }
+  }
+  // 2. Try Navigator Clipboard API
+  if (!success && typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      success = true;
+    } catch {
+      // continue to fallback
+    }
+  }
+  // 3. Fallback execCommand with temporary textarea
+  if (!success && typeof document !== "undefined") {
+    try {
+      const el = document.createElement("textarea");
+      el.value = text;
+      el.setAttribute("readonly", "");
+      el.style.position = "fixed";
+      el.style.top = "-9999px";
+      el.style.left = "-9999px";
+      el.style.opacity = "0";
+      document.body.appendChild(el);
+      el.select();
+      el.setSelectionRange(0, 99999);
+      success = document.execCommand("copy");
+      document.body.removeChild(el);
+    } catch {
+      // ignore
+    }
+  }
+  return success;
+}
+

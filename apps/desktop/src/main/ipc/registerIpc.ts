@@ -731,20 +731,6 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
   ipcMain.handle(IPC_CHANNELS.securityResetVault, async (event, raw: unknown) => {
     assertTrustedSender(event);
     const request = SecurityResetVaultRequestSchema.parse(raw);
-    const win = getMainWindow();
-    const result = win
-      ? await dialog.showMessageBox(win, {
-        type: "warning",
-        buttons: ["Cancel", "Set up new vault"],
-        defaultId: 0,
-        cancelId: 0,
-        noLink: true,
-        title: "Set up a new vault?",
-        message: "Set up a new encrypted vault and abandon the current one?",
-        detail: "The old encrypted vault and local database will be copied to a backup folder. They cannot be opened without the forgotten password. Active session data and current configuration will be removed from Mirae.",
-      })
-      : { response: 0 };
-    if (result.response !== 1) throw new Error("Vault reset was cancelled");
     secretStore.lock();
     const backupDirectory = join(app.getPath("userData"), "vault-backups", new Date().toISOString().replaceAll(":", "-"));
     await database.backupTo(join(backupDirectory, "mirae-mainnet.sqlite3"));
@@ -793,7 +779,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     assertTrustedSender(event);
     const request = ClipboardWriteWalletAddressRequestSchema.parse(raw);
     requireUnlocked();
-    clipboard.writeText(request.address, "clipboard");
+    clipboard.writeText(request.address);
     return ClipboardWriteWalletAddressResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, copied: true });
   });
 
@@ -801,7 +787,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     assertTrustedSender(event);
     const request = ClipboardWriteTransactionSignatureRequestSchema.parse(raw);
     requireUnlocked();
-    clipboard.writeText(request.signature, "clipboard");
+    clipboard.writeText(request.signature);
     return ClipboardWriteTransactionSignatureResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, copied: true });
   });
 

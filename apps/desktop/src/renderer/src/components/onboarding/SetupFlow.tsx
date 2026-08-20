@@ -62,7 +62,7 @@ export function SetupFlow({
           <button type="button" onClick={() => edit(6)}>← Return to review</button>
         </div>
       )}
-      {setup.step === 1 &&
+      {(setup.step <= 1) &&
         (runtime?.masterPassword === "configured" ? (
           <ChangePasswordStep
             onContinue={() => next({ passwordConfigured: true })}

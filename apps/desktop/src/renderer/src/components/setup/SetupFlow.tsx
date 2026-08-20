@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef } from "react";
-import { shorten } from "../../lib/utils";
+import { shorten, copyToClipboard } from "../../lib/utils";
 import {
   SetupCard,
   SetupActions,
@@ -70,7 +70,7 @@ export function SetupFlow({
       </header>
       <SetupStepper current={index} />
 
-      {setup.step === 1 &&
+      {(setup.step <= 1) &&
         (runtime?.masterPassword === "configured" ? (
           <ChangePasswordStep
             onContinue={() => next({ passwordConfigured: true })}
@@ -186,21 +186,9 @@ export function WalletStep({
   const configured = runtime?.wallet === "configured";
 
   async function handleCopy(address: string): Promise<void> {
-    try {
-      if (window.mirae?.copyWalletAddress) {
-        await window.mirae.copyWalletAddress({
-          schemaVersion: 1,
-          requestId: crypto.randomUUID(),
-          address,
-        });
-      } else {
-        await navigator.clipboard.writeText(address);
-      }
-      setCopiedAddress(address);
-      setTimeout(() => setCopiedAddress(null), 1500);
-    } catch (err) {
-      console.error("Failed to copy address:", err);
-    }
+    await copyToClipboard(address);
+    setCopiedAddress(address);
+    setTimeout(() => setCopiedAddress(null), 1500);
   }
 
   useEffect(() => {

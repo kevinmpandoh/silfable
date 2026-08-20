@@ -346,10 +346,25 @@ export function UnifiedPortfolioRail({
             ...(walletFilter !== "solana" ? evmWallets.map((wallet) => ({ ...wallet, family: "ROBINHOOD" })) : []),
           ]
         ).map((wallet) => (
-          <div className="walletLine" key={`${wallet.family}:${wallet.address}`}>
+          <div
+            className={`walletLine ${copiedAddress === wallet.address ? "copied" : ""}`}
+            key={`${wallet.family}:${wallet.address}`}
+            onClick={() => onCopyAddress(wallet.address)}
+            style={{ cursor: "pointer" }}
+            title="Click to copy wallet address"
+          >
             <span>{wallet.family} {wallet.primary ? "PRIMARY" : "WALLET"}</span>
             <strong>{shorten(wallet.address)}</strong>
-            <Button variant="ghost" size="sm" onClick={() => onCopyAddress(wallet.address)}>{copiedAddress === wallet.address ? "Copied" : "Copy"}</Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCopyAddress(wallet.address);
+              }}
+            >
+              {copiedAddress === wallet.address ? "Copied" : "Copy"}
+            </Button>
           </div>
         ))}
       </div>

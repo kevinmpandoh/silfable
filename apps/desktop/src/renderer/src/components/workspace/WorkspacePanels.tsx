@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Activity, ArrowUp, Bot, Brain, CirclePlus, Settings, ShieldCheck, Target, ShieldAlert, Sparkles, Zap, KeyRound, KeySquare, ChevronRight, MessageSquare, History, List, X, Flame } from 'lucide-react';
 import { Button, Modal, Input, Badge } from '../ui';
-import { shorten, resolveTokenSymbol, cn } from '../../lib/utils';
+import { shorten, resolveTokenSymbol, copyToClipboard, cn } from '../../lib/utils';
 import { formatEvmTokenAmount, formatWeiToGweiOrEth, formatRuntimeTokens, formatPortfolioUsd, portfolioAssetUsd, formatPortfolioAmount, formatPumpMetric, formatPumpPercent, formatPumpBps, formatPumpRawAmount } from '../../lib/formatters';
 import { StatusPill, Notice, Field, SetupCard, SetupActions, Brand, BrandMark, CornerFooter, RailSection, ProviderCard } from '../setup/SetupHelpers';
 import { ACTIVITY_LEVELS, INTEGRATION_CATEGORIES, SETUP_STEPS, STORAGE_KEY } from '../types';
@@ -445,15 +445,14 @@ export function RightRail({
       active = false;
     };
   }, [session?.id, visibleWallet, isEvmSession, refreshToken]);
-  function copyAddress(address: string): void {
-    void copyWalletAddress(address).then(() => {
-      setCopiedAddress(address);
-      window.setTimeout(
-        () =>
-          setCopiedAddress((current) => (current === address ? null : current)),
-        1600,
-      );
-    });
+  async function copyAddress(address: string): Promise<void> {
+    await copyToClipboard(address);
+    setCopiedAddress(address);
+    window.setTimeout(
+      () =>
+        setCopiedAddress((current) => (current === address ? null : current)),
+      1600,
+    );
   }
   const latestPumpPreview = session?.messages
     .slice()
@@ -1011,7 +1010,7 @@ export function Composer({
       <Button
         className="composerSubmit"
         size="sm"
-        icon={<ArrowUp className="size-4" />}
+        icon={<ArrowUp className="size-4.5" strokeWidth={2.5} />}
         disabled={disabled || !value.trim()}
         aria-label="Send message"
         onClick={onSubmit}

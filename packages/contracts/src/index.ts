@@ -1818,7 +1818,7 @@ export type SessionListResponse = z.infer<typeof SessionListResponseSchema>;
 export type SessionUpsertRequest = z.infer<typeof SessionUpsertRequestSchema>;
 export type SessionUpsertResponse = z.infer<typeof SessionUpsertResponseSchema>;
 
-export const ClipboardWriteWalletAddressRequestSchema = RequestBaseSchema.extend({ address: z.string().min(32).max(44) }).strict();
+export const ClipboardWriteWalletAddressRequestSchema = RequestBaseSchema.extend({ address: z.string().min(32).max(64) }).strict();
 export const ClipboardWriteWalletAddressResponseSchema = RequestBaseSchema.extend({ copied: z.literal(true) }).strict();
 export type ClipboardWriteWalletAddressRequest = z.infer<typeof ClipboardWriteWalletAddressRequestSchema>;
 export type ClipboardWriteWalletAddressResponse = z.infer<typeof ClipboardWriteWalletAddressResponseSchema>;

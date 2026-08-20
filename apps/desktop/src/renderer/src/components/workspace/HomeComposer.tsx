@@ -49,7 +49,7 @@ export function Composer({
       <Button
         className="composerSubmit"
         size="sm"
-        icon={<ArrowUp className="size-4" />}
+        icon={<ArrowUp className="size-4.5" strokeWidth={2.5} />}
         disabled={disabled || !value.trim()}
         aria-label="Send message"
         onClick={onSubmit}

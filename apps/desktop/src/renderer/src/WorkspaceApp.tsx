@@ -76,7 +76,7 @@ import {
   formatPumpBps,
   formatPumpRawAmount
 } from "./lib/formatters";
-import { cleanErrorMessage, resolveTokenSymbol } from "./lib/utils";
+import { cleanErrorMessage, copyToClipboard, resolveTokenSymbol } from "./lib/utils";
 
 import type {
   BridgePreflightEvidence,
@@ -213,7 +213,7 @@ type SessionItem = SessionRecord;
 const STORAGE_KEY = "mirae.mainnet-setup.v2";
 const SOLANA_ADDRESS_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/u;
 const DEFAULT_SETUP: SetupState = {
-  step: 0,
+  step: 1,
   complete: false,
   passwordConfigured: false,
   walletSkipped: false,
@@ -318,6 +318,13 @@ export function WorkspaceApp() {
               passwordConfigured: true,
               step: Math.max(2, setup.step),
             });
+        }}
+        onResetVault={async () => {
+          localStorage.clear();
+          const nextStatus = await window.mirae.getRuntimeStatus();
+          setRuntime(nextStatus);
+          setSetup(DEFAULT_SETUP);
+          setBootPassed(true);
         }}
       />
     );
@@ -2700,11 +2707,7 @@ function shorten(value: string): string {
   return value.length > 14 ? `${value.slice(0, 6)}…${value.slice(-6)}` : value;
 }
 async function copyWalletAddress(address: string): Promise<void> {
-  await window.mirae.copyWalletAddress({
-    schemaVersion: 1,
-    requestId: crypto.randomUUID(),
-    address,
-  });
+  await copyToClipboard(address);
 }
 function readSetup(): SetupState {
   try {

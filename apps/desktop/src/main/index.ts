@@ -306,7 +306,6 @@ function createMainWindow(): BrowserWindow {
   window.webContents.on("will-navigate", preventRendererNavigation);
   window.webContents.on("will-attach-webview", preventRendererNavigation);
   window.once("ready-to-show", () => window.show());
-  window.on("minimize", () => { launchPreflightService?.clear(); keystore?.lock(); window.hide(); });
   window.on("close", (event) => {
     if (!isQuitting) {
       event.preventDefault();
