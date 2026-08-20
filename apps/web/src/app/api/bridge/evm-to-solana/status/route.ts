@@ -3,11 +3,12 @@ import { Connection, PublicKey } from "@solana/web3.js";
 
 import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
 import { RELAY_SOLANA_CHAIN_ID, ROBINHOOD_CHAIN_ID, SOLANA_USDC_MINT } from "@/lib/relay-evm-bridge-core";
+import { selectSolanaRpc } from "@/lib/server-solana-rpc";
 
 export const runtime = "nodejs";
 
 const RELAY_API = "https://api.relay.link";
-const SOLANA_RPC = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+const SOLANA_RPC = process.env.SOLANA_RPC_URL || selectSolanaRpc();
 const REQUEST_ID = /^0x[a-fA-F0-9]{64}$/u;
 const RAW_AMOUNT = /^\d+$/u;
 

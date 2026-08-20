@@ -10,6 +10,12 @@ import { ProviderCircuitBreaker } from "./provider-circuit-breaker.js";
 import { ProviderRateBudget } from "./provider-rate-budget.js";
 
 const MAINNET_RPC_URL = "https://api.mainnet-beta.solana.com";
+export const DEFAULT_SOLANA_FALLBACK_RPCS = [
+  "https://api.mainnet-beta.solana.com",
+  "https://solana-rpc.publicnode.com",
+  "https://rpc.ankr.com/solana",
+  "https://mainnet.helius-rpc.com/?api-key=1a26ad61-c60d-477c-8c51-cd8b07815421",
+] as const;
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 export const PUMP_PROGRAM_ID = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
@@ -971,7 +977,13 @@ export class MainnetReadService {
     const maxRetries = isBroadcast ? 0 : 3;
     let delayMs = 500;
 
+    const urlsToTry = [
+      this.#rpcUrl,
+      ...DEFAULT_SOLANA_FALLBACK_RPCS.filter((url) => url !== this.#rpcUrl),
+    ];
+
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      const currentUrl = urlsToTry[attempt % urlsToTry.length] || this.#rpcUrl;
       try {
         try {
           this.#solanaRpcRateBudget.consume();
@@ -983,7 +995,7 @@ export class MainnetReadService {
           });
           throw error;
         }
-        const response = await this.#fetch(this.#rpcUrl, {
+        const response = await this.#fetch(currentUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ jsonrpc: "2.0", id: crypto.randomUUID(), method, params }),
@@ -1002,7 +1014,7 @@ export class MainnetReadService {
         if (envelope.error !== undefined || envelope.result === undefined) throw new Error("Solana RPC returned an error");
         return envelope.result;
       } catch (err) {
-        if (attempt < maxRetries && err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError" || err.message.includes("fetch failed"))) {
+        if (attempt < maxRetries && err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError" || err.message.includes("fetch failed") || err.message.includes("429"))) {
           await this.#sleep(delayMs);
           delayMs *= 2;
           continue;

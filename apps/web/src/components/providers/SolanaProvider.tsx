@@ -10,7 +10,7 @@ import { isUserRejectedWalletRequest } from "@/lib/wallet-errors";
 
 import "@solana/wallet-adapter-react-ui/styles.css";
 
-const DEFAULT_RPC = "https://api.mainnet-beta.solana.com";
+const DEFAULT_RPC = "https://mainnet.helius-rpc.com/?api-key=1a26ad61-c60d-477c-8c51-cd8b07815421";
 
 export function SolanaProvider({ children }: { children: React.ReactNode }) {
   const endpoint = useMemo(

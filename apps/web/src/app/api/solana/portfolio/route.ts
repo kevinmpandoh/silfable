@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PublicKey } from "@solana/web3.js";
 import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
+import { selectSolanaRpc } from "@/lib/server-solana-rpc";
 
 const DEFAULT_MAINNET_RPC =
   process.env.SOLANA_RPC_URL
   || process.env.NEXT_PUBLIC_SOLANA_RPC_URL
-  || "https://api.mainnet-beta.solana.com";
+  || selectSolanaRpc();
 const WRAPPED_SOL_MINT = "So11111111111111111111111111111111111111112";
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const JUPITER_TOKENS_API = "https://api.jup.ag/tokens/v2";

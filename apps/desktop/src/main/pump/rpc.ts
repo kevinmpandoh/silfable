@@ -3,6 +3,12 @@ import { writeSafeAuditLog } from "../telemetry/safe-audit-log.js";
 import type { PumpFinalizedAccount } from "./state.js";
 
 const MAINNET_RPC_URL = "https://api.mainnet-beta.solana.com";
+export const DEFAULT_SOLANA_FALLBACK_RPCS = [
+  "https://api.mainnet-beta.solana.com",
+  "https://solana-rpc.publicnode.com",
+  "https://rpc.ankr.com/solana",
+  "https://mainnet.helius-rpc.com/?api-key=1a26ad61-c60d-477c-8c51-cd8b07815421",
+] as const;
 const ADDRESS_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/u;
 const SIGNATURE_PATTERN = /^[1-9A-HJ-NP-Za-km-z]{64,88}$/u;
 const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/u;
@@ -138,7 +144,13 @@ export class PumpMainnetRpc {
     const maxRetries = isBroadcast ? 0 : 3;
     let delayMs = 500;
 
+    const urlsToTry = [
+      this.#url,
+      ...DEFAULT_SOLANA_FALLBACK_RPCS.filter((url) => url !== this.#url),
+    ];
+
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      const currentUrl = urlsToTry[attempt % urlsToTry.length] || this.#url;
       try {
         try {
           this.#rateBudget.consume();
@@ -150,7 +162,7 @@ export class PumpMainnetRpc {
           });
           throw error;
         }
-        const response = await this.#fetch(this.#url, {
+        const response = await this.#fetch(currentUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ jsonrpc: "2.0", id: crypto.randomUUID(), method, params }),
@@ -169,7 +181,7 @@ export class PumpMainnetRpc {
         if (envelope.error !== undefined || envelope.result === undefined) throw new Error("Pump Mainnet RPC returned an error");
         return envelope.result;
       } catch (err) {
-        if (attempt < maxRetries && err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError" || err.message.includes("fetch failed"))) {
+        if (attempt < maxRetries && err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError" || err.message.includes("fetch failed") || err.message.includes("429"))) {
           await this.#sleep(delayMs);
           delayMs *= 2;
           continue;

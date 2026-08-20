@@ -9,6 +9,7 @@ import {
 
 import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
 import { assertSolanaBridgeBalance } from "@/lib/solana-bridge-preflight";
+import { selectSolanaRpc } from "@/lib/server-solana-rpc";
 
 export const runtime = "nodejs";
 
@@ -16,7 +17,7 @@ const RELAY_API = "https://api.relay.link";
 const RELAY_SOLANA_CHAIN_ID = 792_703_809;
 const SOLANA_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const RELAY_SOURCE_PROGRAM = "99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2";
-const DEFAULT_SOLANA_RPC = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+const DEFAULT_SOLANA_RPC = process.env.SOLANA_RPC_URL || selectSolanaRpc();
 const EVM_ADDRESS = /^0x[a-fA-F0-9]{40}$/u;
 const DECIMAL_USDC = /^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/u;
 const RELAY_REQUEST_ID = /^0x[a-fA-F0-9]{64}$/u;

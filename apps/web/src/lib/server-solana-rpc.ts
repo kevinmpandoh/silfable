@@ -3,9 +3,10 @@ import "server-only";
 const RPC_ENDPOINTS = [
   process.env.SOLANA_RPC_URL,
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL,
-  "https://solana-rpc.publicnode.com",
   "https://api.mainnet-beta.solana.com",
+  "https://solana-rpc.publicnode.com",
   "https://rpc.ankr.com/solana",
+  "https://mainnet.helius-rpc.com/?api-key=1a26ad61-c60d-477c-8c51-cd8b07815421",
 ].filter((url): url is string => Boolean(url && url.trim().length > 0));
 
 let activeIndex = 0;

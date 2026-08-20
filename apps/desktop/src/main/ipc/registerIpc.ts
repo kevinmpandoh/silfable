@@ -2597,23 +2597,29 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     return { success: true };
   });
 
+  const resolveSolanaRpcUrl = (): string => {
+    const custom = database.getSetting("solana_rpc_url") as string | null;
+    if (custom && custom.trim().length > 0) return custom.trim();
+    return "https://mainnet.helius-rpc.com/?api-key=1a26ad61-c60d-477c-8c51-cd8b07815421";
+  };
+
   ipcMain.handle(IPC_CHANNELS.perpsMarketsGet, async (event) => {
     assertTrustedSender(event);
-    const rpcUrl = (database.getSetting("solana_rpc_url") as string | null) ?? "https://api.mainnet-beta.solana.com";
+    const rpcUrl = resolveSolanaRpcUrl();
     const markets = await listPhoenixPerpMarkets(rpcUrl);
     return { markets };
   });
 
   ipcMain.handle(IPC_CHANNELS.perpsAccountGet, async (event, walletAddress: string) => {
     assertTrustedSender(event);
-    const rpcUrl = (database.getSetting("solana_rpc_url") as string | null) ?? "https://api.mainnet-beta.solana.com";
+    const rpcUrl = resolveSolanaRpcUrl();
     const account = await getPhoenixPerpAccount(walletAddress, rpcUrl);
     return { account };
   });
 
   ipcMain.handle(IPC_CHANNELS.perpsOrderPrepare, async (event, request: any) => {
     assertTrustedSender(event);
-    const rpcUrl = (database.getSetting("solana_rpc_url") as string | null) ?? "https://api.mainnet-beta.solana.com";
+    const rpcUrl = resolveSolanaRpcUrl();
     const proposal = await buildPhoenixOrderProposal({
       ...request,
       rpcUrl,
@@ -2624,7 +2630,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
   ipcMain.handle(IPC_CHANNELS.perpsOrderExecute, async (event, request: any) => {
     assertTrustedSender(event);
     requireUnlocked();
-    const rpcUrl = (database.getSetting("solana_rpc_url") as string | null) ?? "https://api.mainnet-beta.solana.com";
+    const rpcUrl = resolveSolanaRpcUrl();
     return await wallets.withWalletWeb3Keypair(request.walletAddress, async (keypair) => {
       return await executePhoenixOrder({
         plan: request.plan,
@@ -2637,21 +2643,21 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
 
   ipcMain.handle(IPC_CHANNELS.driftMarketsGet, async (event) => {
     assertTrustedSender(event);
-    const rpcUrl = (database.getSetting("solana_rpc_url") as string | null) ?? "https://api.mainnet-beta.solana.com";
+    const rpcUrl = resolveSolanaRpcUrl();
     const markets = await listPhoenixPerpMarkets(rpcUrl);
     return { markets };
   });
 
   ipcMain.handle(IPC_CHANNELS.driftAccountGet, async (event, walletAddress: string) => {
     assertTrustedSender(event);
-    const rpcUrl = (database.getSetting("solana_rpc_url") as string | null) ?? "https://api.mainnet-beta.solana.com";
+    const rpcUrl = resolveSolanaRpcUrl();
     const account = await getPhoenixPerpAccount(walletAddress, rpcUrl);
     return { account };
   });
 
   ipcMain.handle(IPC_CHANNELS.driftOrderPrepare, async (event, request: any) => {
     assertTrustedSender(event);
-    const rpcUrl = (database.getSetting("solana_rpc_url") as string | null) ?? "https://api.mainnet-beta.solana.com";
+    const rpcUrl = resolveSolanaRpcUrl();
     const proposal = await buildPhoenixOrderProposal({
       ...request,
       rpcUrl,

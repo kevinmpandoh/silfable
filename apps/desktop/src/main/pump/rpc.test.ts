@@ -181,6 +181,25 @@ test("Pump Mainnet RPC rate budget blocks before another provider request", asyn
   assert.equal(requests, 1);
 });
 
+test("Pump Mainnet RPC falls back to secondary endpoint when primary is rate-limited", async () => {
+  const urlsCalled: string[] = [];
+  const rpc = new PumpMainnetRpc({
+    fetch: async (input) => {
+      const url = String(input);
+      urlsCalled.push(url);
+      if (urlsCalled.length === 1) {
+        return { ok: false, status: 429, json: async () => ({ error: "Too Many Requests" }) } as Response;
+      }
+      return response({ result: 999999 });
+    },
+    sleep: async () => {},
+  });
+  const blockHeight = await rpc.getBlockHeight({ commitment: "finalized" });
+  assert.equal(blockHeight, 999999);
+  assert.equal(urlsCalled.length, 2);
+  assert.notEqual(urlsCalled[0], urlsCalled[1]);
+});
+
 function response(body: unknown): Response {
   return { ok: true, status: 200, json: async () => body } as Response;
 }

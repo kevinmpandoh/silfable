@@ -31,7 +31,7 @@ import { formatPerpsSummary, loadSnapshot, runPerpsAiTool } from "@/lib/perps-ai
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const LAMPORTS_PER_SOL = 1_000_000_000;
-const SOLANA_RPC = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+const SOLANA_RPC = process.env.SOLANA_RPC_URL || selectSolanaRpc();
 const JUPITER_API_KEY = process.env.JUPITER_API_KEY?.trim() || undefined;
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY?.trim() || "";
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL?.trim() || "openai/gpt-4o-mini";

@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { Connection, PublicKey, VersionedTransaction } from "@solana/web3.js";
 
 import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
+import { selectSolanaRpc } from "@/lib/server-solana-rpc";
 
 export const runtime = "nodejs";
 
-const SOLANA_RPC = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+const SOLANA_RPC = process.env.SOLANA_RPC_URL || selectSolanaRpc();
 const RELAY_SOURCE_PROGRAM = "99vQwtBwYtrqqD9YSXbdum3KBdxPAVxYTaQ3cfnJSrN2";
 const MAX_SERIALIZED_TRANSACTION_BYTES = 16_384;
 
