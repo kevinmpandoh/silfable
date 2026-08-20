@@ -137,8 +137,6 @@ export class AiService {
   }
 
   async chat(input: { prompt: string; mode: "agent" | "mission"; walletAddress: string | null; sessionId?: string; sessionContext?: string; history?: Array<{ role: "user" | "assistant"; text: string }>; pumpScope?: PumpAiScope; intent?: SessionIntent; walletScope?: SessionWalletScope; evmChainKey?: EvmChainKey; permission?: "restricted" | "full"; transactionSettings?: TransactionSettings }) {
-    const apiKey = await this.#keystore.getSecret("openrouter-api-key");
-    if (apiKey === null) throw new Error("OpenRouter is not configured");
     const assetConfirmation = parseFullAccessAssetConfirmation(input.prompt);
     if (assetConfirmation !== null && input.sessionId && input.permission === "full" && input.walletScope === "evm" && input.evmChainKey === "robinhood" && this.#fullAccessEvmAssets !== null) {
       const asset = this.#fullAccessEvmAssets.confirm(input.sessionId, assetConfirmation);
@@ -381,6 +379,8 @@ export class AiService {
         evmSwapProposal: proposal,
       };
     }
+    const apiKey = await this.#keystore.getSecret("openrouter-api-key");
+    if (apiKey === null) throw new Error("OpenRouter is not configured");
     const { pumpScope, intent, walletScope, sessionId, ...providerInput } = input;
     return { model: this.#model(), ...(await callOpenRouterChat({ apiKey, model: this.#model(), ...providerInput, tools: await this.#tools(input.walletAddress, input.mode, pumpScope, intent, walletScope, input.transactionSettings ?? this.#transactionSettings.get(), sessionId, input.permission) })) };
   }

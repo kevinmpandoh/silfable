@@ -95,22 +95,24 @@ export function friendlyError(error: unknown, fallback: string): string {
 }
 export function inferenceFailureMessage(error: unknown): string {
   const detail = error instanceof Error ? error.message : "";
-  const prefix = "The inference request failed safely. No Mainnet action was attempted.";
+  const prefix = "The request failed safely. No Mainnet action was attempted.";
+  if (/not configured/i.test(detail))
+    return `${prefix} OpenRouter is not configured yet. Please add your API key in Settings (⚙️) to enable conversational AI and market planning. Direct execution commands (such as "swap 0.1 SOL to USDC" or "start DCAing $1 USDC into AAPL every 2 minutes") remain available without an API key.`;
   if (/status 401|status 403/i.test(detail))
-    return `${prefix} OpenRouter rejected the saved API key. Reconfigure it in Settings.`;
+    return `${prefix} OpenRouter rejected the saved API key. Please verify or re-enter your key in Settings (⚙️).`;
   if (/status 402/i.test(detail))
-    return `${prefix} The OpenRouter account has insufficient credit or requires payment.`;
+    return `${prefix} Your OpenRouter account has insufficient credit or requires payment. Check your credit balance at openrouter.ai.`;
   if (/status 429/i.test(detail))
-    return `${prefix} OpenRouter rate-limited the request. Wait briefly or choose another compatible model.`;
+    return `${prefix} OpenRouter rate-limited this request. Please wait a moment or switch to a high-capacity model in Settings (⚙️).`;
   if (/timeout|timed out|aborted/i.test(detail))
-    return `${prefix} OpenRouter did not respond before the timeout. Check the connection and try again.`;
+    return `${prefix} OpenRouter did not respond within the timeout window. Please check your internet connection and try again.`;
   if (/no assistant message/i.test(detail))
-    return `${prefix} The selected model returned no usable assistant response. Choose another compatible tool-capable model.`;
+    return `${prefix} The selected model returned no usable assistant response. Please choose a tool-capable model (like GPT-4o-mini or Gemini 2.0 Flash) in Settings (⚙️).`;
   if (/status 404|model/i.test(detail))
-    return `${prefix} The saved OpenRouter model may no longer be available. Verify the key and select a current compatible model in Settings.`;
+    return `${prefix} The selected OpenRouter model is unavailable. Please choose an active compatible model in Settings (⚙️).`;
   return detail
     ? `${prefix} ${detail.slice(0, 180)}`
-    : `${prefix} Verify the OpenRouter configuration in Settings and try again.`;
+    : `${prefix} Verify your OpenRouter configuration in Settings (⚙️) and try again.`;
 }
 export function AnimatedMarkdownMessage({
   message,
