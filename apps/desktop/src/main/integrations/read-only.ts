@@ -182,18 +182,33 @@ export class MainnetReadService {
     const raw = await this.#readPortfolio(address);
     const apiKey = await this.#secrets.getSecret("jupiter-api-key");
     const mints = [SOL_MINT, ...raw.assets.map((asset) => asset.mint)].slice(0, 100);
-    const [prices, metadataMap] = await Promise.all([
+    const [jupiterPrices, metadataMap] = await Promise.all([
       apiKey === null ? Promise.resolve(new Map<string, PricePoint>()) : this.prices(mints).catch(() => new Map<string, PricePoint>()),
       this.#fetchTokenMetadataBatch(raw.assets.map((asset) => asset.mint)),
     ]);
+
+    const missingMints = mints.filter((mint) => !jupiterPrices.has(mint));
+    const fallbackPrices = missingMints.length > 0
+      ? await this.#fetchPublicTokenPrices(missingMints)
+      : new Map<string, number>();
+
+    const getPrice = (mint: string): number | null => {
+      const jup = jupiterPrices.get(mint)?.usdPrice;
+      if (typeof jup === "number" && Number.isFinite(jup) && jup > 0) return jup;
+      const fb = fallbackPrices.get(mint);
+      if (typeof fb === "number" && Number.isFinite(fb) && fb > 0) return fb;
+      if (mint === USDC_MINT) return 1.0;
+      return null;
+    };
+
     const solBalance = amountToUi(raw.solLamports, 9);
-    const solUsdPrice = prices.get(SOL_MINT)?.usdPrice ?? null;
+    const solUsdPrice = getPrice(SOL_MINT);
     const assets: PortfolioAsset[] = raw.assets.slice(0, 100).map((asset) => {
       const meta = metadataMap.get(asset.mint);
       const symbol = meta?.symbol || null;
       const name = meta?.name || null;
       const uiAmount = amountToUi(asset.amount, asset.decimals);
-      const usdPrice = prices.get(asset.mint)?.usdPrice ?? null;
+      const usdPrice = getPrice(asset.mint);
       return { ...asset, symbol, name, uiAmount, usdPrice, usdValue: multiplyUsd(uiAmount, usdPrice) };
     });
     const values = [multiplyUsd(solBalance, solUsdPrice), ...assets.map((asset) => asset.usdValue)].filter((value): value is number => value !== null);
@@ -206,6 +221,41 @@ export class MainnetReadService {
       assets,
       verifiedAt: new Date().toISOString(),
     };
+  }
+
+  async #fetchPublicTokenPrices(mints: string[]): Promise<Map<string, number>> {
+    const unique = [...new Set(mints)].filter((mint) => ADDRESS_PATTERN.test(mint)).slice(0, 100);
+    if (unique.length === 0) return new Map();
+    const priceMap = new Map<string, number>();
+
+    if (unique.includes(USDC_MINT)) priceMap.set(USDC_MINT, 1.0);
+    if (unique.includes("Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB")) {
+      priceMap.set("Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", 1.0);
+    }
+
+    try {
+      const response = await this.#fetch(`https://api.dexscreener.com/tokens/v1/solana/${encodeURIComponent(unique.join(","))}`, {
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (response.ok) {
+        const data: unknown = await response.json();
+        if (Array.isArray(data)) {
+          for (const pair of data) {
+            if (typeof pair === "object" && pair !== null) {
+              const p = pair as { baseToken?: { address?: unknown }; priceUsd?: unknown };
+              const address = typeof p.baseToken?.address === "string" ? p.baseToken.address : null;
+              const priceUsd = typeof p.priceUsd === "string" ? parseFloat(p.priceUsd) : typeof p.priceUsd === "number" ? p.priceUsd : null;
+              if (address && priceUsd !== null && !isNaN(priceUsd) && priceUsd > 0 && !priceMap.has(address)) {
+                priceMap.set(address, priceUsd);
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // Fallback silently
+    }
+    return priceMap;
   }
 
   async #fetchTokenMetadataBatch(mints: string[]): Promise<Map<string, { symbol: string; name: string }>> {
