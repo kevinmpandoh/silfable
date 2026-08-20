@@ -941,8 +941,8 @@ function parseDirectSolanaSwap(
   inputAmount: string;
   displayAmount: string;
 } | null {
-  if (walletScope !== "solana" || /\bdca\b/iu.test(prompt)) return null;
-  const match = /\b(?:swap|tukar)\s+([0-9]+(?:[.,][0-9]+)?)\s+(sol|usdc|jup)\s+(?:ke|to)\s+(sol|usdc|jup)\b/iu.exec(prompt);
+  if (walletScope !== "solana" || /\bdca(?:ing)?\b/iu.test(prompt)) return null;
+  const match = /\b(?:swap|tukar)\s+(?:\$)?([0-9]+(?:[.,][0-9]+)?)\s*(sol|usdc|jup)\s+(?:ke|to)\s+(?:\$)?(sol|usdc|jup)\b/iu.exec(prompt);
   if (match === null) return null;
   const inputSymbol = match[2]!.toUpperCase() as SupportedSolanaSymbol;
   const outputSymbol = match[3]!.toUpperCase() as SupportedSolanaSymbol;
