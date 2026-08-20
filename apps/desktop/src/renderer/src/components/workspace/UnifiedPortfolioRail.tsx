@@ -3,6 +3,7 @@ import { useState, useMemo, useEffect } from "react";
 import type { EvmChainKey, EvmPortfolioSnapshot, PortfolioSnapshot, RuntimeStatus } from "@mirae/contracts";
 import { Button } from "../ui";
 import { RailSection } from "../setup/SetupHelpers";
+import { resolveTokenSymbol } from "../../lib/utils";
 import { EVM_PORTFOLIO_CHAINS, type SessionItem, type WalletSummary } from "../types";
 
 type SolanaPortfolioView = { wallet: WalletSummary; snapshot: PortfolioSnapshot };
@@ -316,14 +317,7 @@ export function UnifiedPortfolioRail({
             <div className="portfolioGroupTitle"><span>SOLANA</span><strong>{formatPortfolioUsd(entry.snapshot.totalUsd)}</strong></div>
             <PortfolioAssetRow symbol="SOL" amount={entry.snapshot.solBalance} usdValue={portfolioAssetUsd(entry.snapshot.solBalance, entry.snapshot.solUsdPrice)} />
             {entry.snapshot.assets.slice(0, 8).map((asset) => {
-              const knownMints: Record<string, string> = {
-                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
-                "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN": "JUP",
-                "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": "BONK",
-                "So11111111111111111111111111111111111111112": "SOL",
-                "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": "USDT",
-              };
-              const resolvedSymbol = knownMints[asset.mint] || shorten(asset.mint);
+              const resolvedSymbol = asset.symbol || resolveTokenSymbol(asset.mint);
               return (
                 <PortfolioAssetRow key={asset.mint} symbol={resolvedSymbol} amount={asset.uiAmount} usdValue={asset.usdValue} />
               );

@@ -1761,6 +1761,8 @@ export const PortfolioGetRequestSchema = RequestBaseSchema.extend({
 }).strict();
 export const PortfolioAssetSchema = z.object({
   mint: z.string().min(32).max(44),
+  symbol: z.string().max(32).optional().nullable(),
+  name: z.string().max(128).optional().nullable(),
   amount: z.string().regex(/^\d+$/u),
   decimals: z.number().int().min(0).max(18),
   uiAmount: z.string().min(1).max(128),

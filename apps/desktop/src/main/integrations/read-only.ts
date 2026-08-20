@@ -182,13 +182,19 @@ export class MainnetReadService {
     const raw = await this.#readPortfolio(address);
     const apiKey = await this.#secrets.getSecret("jupiter-api-key");
     const mints = [SOL_MINT, ...raw.assets.map((asset) => asset.mint)].slice(0, 100);
-    const prices = apiKey === null ? new Map<string, PricePoint>() : await this.prices(mints).catch(() => new Map<string, PricePoint>());
+    const [prices, metadataMap] = await Promise.all([
+      apiKey === null ? Promise.resolve(new Map<string, PricePoint>()) : this.prices(mints).catch(() => new Map<string, PricePoint>()),
+      this.#fetchTokenMetadataBatch(raw.assets.map((asset) => asset.mint)),
+    ]);
     const solBalance = amountToUi(raw.solLamports, 9);
     const solUsdPrice = prices.get(SOL_MINT)?.usdPrice ?? null;
     const assets: PortfolioAsset[] = raw.assets.slice(0, 100).map((asset) => {
+      const meta = metadataMap.get(asset.mint);
+      const symbol = meta?.symbol || null;
+      const name = meta?.name || null;
       const uiAmount = amountToUi(asset.amount, asset.decimals);
       const usdPrice = prices.get(asset.mint)?.usdPrice ?? null;
-      return { ...asset, uiAmount, usdPrice, usdValue: multiplyUsd(uiAmount, usdPrice) };
+      return { ...asset, symbol, name, uiAmount, usdPrice, usdValue: multiplyUsd(uiAmount, usdPrice) };
     });
     const values = [multiplyUsd(solBalance, solUsdPrice), ...assets.map((asset) => asset.usdValue)].filter((value): value is number => value !== null);
     return {
@@ -200,6 +206,30 @@ export class MainnetReadService {
       assets,
       verifiedAt: new Date().toISOString(),
     };
+  }
+
+  async #fetchTokenMetadataBatch(mints: string[]): Promise<Map<string, { symbol: string; name: string }>> {
+    const unique = [...new Set(mints)].filter((mint) => ADDRESS_PATTERN.test(mint)).slice(0, 100);
+    if (unique.length === 0) return new Map();
+    try {
+      const response = await this.#rpc("getAssetBatch", [{ ids: unique }]);
+      const map = new Map<string, { symbol: string; name: string }>();
+      if (Array.isArray(response)) {
+        for (const item of response) {
+          if (typeof item !== "object" || item === null) continue;
+          const val = item as { id?: unknown; token_info?: { symbol?: unknown }; content?: { metadata?: { symbol?: unknown; name?: unknown } } };
+          if (typeof val.id !== "string") continue;
+          const symbol = typeof val.token_info?.symbol === "string" ? val.token_info.symbol : typeof val.content?.metadata?.symbol === "string" ? val.content.metadata.symbol : "";
+          const name = typeof val.content?.metadata?.name === "string" ? val.content.metadata.name : "";
+          if (symbol || name) {
+            map.set(val.id, { symbol: symbol.slice(0, 32), name: name.slice(0, 128) });
+          }
+        }
+      }
+      return map;
+    } catch {
+      return new Map();
+    }
   }
 
   async activity(address: string, limit = 10): Promise<WalletActivitySnapshot> {

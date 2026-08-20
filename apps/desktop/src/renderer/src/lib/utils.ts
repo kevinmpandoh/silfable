@@ -15,6 +15,7 @@ export const KNOWN_TOKEN_SYMBOLS: Record<string, string> = {
   "So11111111111111111111111111111111111111112": "SOL",
   "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": "USDC",
   "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN": "JUP",
+  "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": "BONK",
   "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB": "USDT",
   "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp": "AAPLx",
   "xaapL5RKeptHp1ErTtNuivj4AiJyNWupkK4YBNZzSTj": "AAPLx",
