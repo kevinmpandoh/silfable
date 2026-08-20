@@ -14,6 +14,7 @@ type SecretStore = {
   isLocked(): boolean;
   getSecret(name: "evm-wallet-secret"): Promise<string | null>;
   setSecret(name: "evm-wallet-secret", plaintext: string): Promise<void>;
+  deleteSecret(name: "evm-wallet-secret"): Promise<void>;
 };
 
 /** Local-only EVM wallet for Robinhood Chain. It deliberately has no broadcast method. */
@@ -31,6 +32,13 @@ export class EvmWalletService {
       address: this.#toSigner(wallet).getAddress(),
       primary: index === 0,
     }));
+  }
+
+  async clearWallets(): Promise<number> {
+    this.#assertUnlocked();
+    const count = (await this.listWallets()).length;
+    await this.#secrets.deleteSecret("evm-wallet-secret");
+    return count;
   }
 
   async getAddress(): Promise<EvmAddress | null> {

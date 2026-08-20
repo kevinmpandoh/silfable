@@ -124,12 +124,16 @@ import type {
   TransactionSettingsSaveRequest,
   WalletCreateRequest,
   WalletCreateResponse,
+  WalletClearAllRequest,
+  WalletClearAllResponse,
   WalletActivityGetRequest,
   WalletActivityGetResponse,
   WalletImportMnemonicRequest,
   WalletImportPrivateKeyRequest,
   WalletImportResponse,
   WalletListResponse,
+  EvmWalletClearAllRequest,
+  EvmWalletClearAllResponse,
 } from "@mirae/contracts";
 
 declare global {
@@ -149,6 +153,8 @@ declare global {
       copyTransactionSignature(request: ClipboardWriteTransactionSignatureRequest): Promise<ClipboardWriteTransactionSignatureResponse>;
       openTransactionInExplorer(request: ExternalOpenTransactionRequest): Promise<ExternalOpenTransactionResponse>;
       createWallet(request: WalletCreateRequest): Promise<WalletCreateResponse>;
+      clearWallets(request: WalletClearAllRequest): Promise<WalletClearAllResponse>;
+      clearEvmWallets(request: EvmWalletClearAllRequest): Promise<EvmWalletClearAllResponse>;
       importWalletMnemonic(request: WalletImportMnemonicRequest): Promise<WalletImportResponse>;
       importWalletPrivateKey(request: WalletImportPrivateKeyRequest): Promise<WalletImportResponse>;
       listWallets(): Promise<WalletListResponse>;

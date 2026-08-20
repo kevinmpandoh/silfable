@@ -297,6 +297,10 @@ export class RuntimeDatabase {
     `).run(metadata.id, metadata.profileId, metadata.ciphertext, metadata.nonce, metadata.keyId, metadata.createdAt);
   }
 
+  deleteWallet(profileId: typeof MAINNET_PROFILE_ID): void {
+    this.#database.prepare("DELETE FROM wallet_metadata WHERE profile_id = ?").run(profileId);
+  }
+
   listSessionRecords(): EncryptedSessionRecord[] {
     const rows = this.#database.prepare("SELECT id, ciphertext, nonce, auth_tag, updated_at FROM session_records ORDER BY updated_at DESC").all() as Array<{ id: string; ciphertext: string; nonce: string; auth_tag: string; updated_at: string }>;
     return rows.map((row) => ({ id: row.id, ciphertext: row.ciphertext, nonce: row.nonce, tag: row.auth_tag, updatedAt: row.updated_at }));

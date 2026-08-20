@@ -40,6 +40,10 @@ class MemoryDatabase {
   insertWallet(metadata: EncryptedWalletMetadata) {
     this.metadata = metadata;
   }
+
+  deleteWallet() {
+    this.metadata = null;
+  }
 }
 
 test("new wallet returns a one-time mnemonic and persists only encrypted metadata", async () => {
@@ -112,4 +116,19 @@ test("a locked keystore blocks wallet onboarding", async () => {
     new WalletOnboardingService(keystore, new MemoryDatabase()).createWallet(),
     /Keystore must be unlocked/u,
   );
+});
+
+test("clearWallets removes all wallets from keystore and database", async () => {
+  const keystore = new MemoryKeystore();
+  const database = new MemoryDatabase();
+  const service = new WalletOnboardingService(keystore, database);
+  await service.createWallet();
+  assert.equal((await service.listWallets()).length, 1);
+  assert.equal(database.hasWallet(), true);
+
+  const removed = await service.clearWallets();
+  assert.equal(removed, 1);
+  assert.equal((await service.listWallets()).length, 0);
+  assert.equal(database.hasWallet(), false);
+  assert.equal(keystore.records.has("wallet-secret"), false);
 });

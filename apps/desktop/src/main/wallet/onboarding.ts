@@ -27,6 +27,7 @@ type WalletMetadataStore = {
   hasWallet(profileId: typeof PROFILE_ID): boolean;
   getWallet(profileId: typeof PROFILE_ID): EncryptedWalletMetadata | null;
   insertWallet(metadata: EncryptedWalletMetadata): void;
+  deleteWallet(profileId: typeof PROFILE_ID): void;
 };
 
 export class WalletOnboardingService {
@@ -84,6 +85,14 @@ export class WalletOnboardingService {
     } finally {
       for (const privateKey of privateKeys) privateKey.fill(0);
     }
+  }
+
+  async clearWallets(): Promise<number> {
+    this.#assertCanOnboard();
+    const count = (await this.listWallets()).length;
+    await this.#keystore.deleteSecret("wallet-secret");
+    this.#database.deleteWallet(PROFILE_ID);
+    return count;
   }
 
   async getWalletAddress(): Promise<string> {

@@ -133,6 +133,8 @@ import {
   TransactionSettingsSaveRequestSchema,
   WalletCreateRequestSchema,
   WalletCreateResponseSchema,
+  WalletClearAllRequestSchema,
+  WalletClearAllResponseSchema,
   WalletActivityGetRequestSchema,
   WalletActivityGetResponseSchema,
   WalletImportMnemonicRequestSchema,
@@ -223,6 +225,7 @@ import {
   type TavilySaveKeyRequest,
   type TransactionSettingsSaveRequest,
   type WalletCreateRequest,
+  type WalletClearAllRequest,
   type WalletActivityGetRequest,
   type WalletImportMnemonicRequest,
   type WalletImportPrivateKeyRequest,
@@ -355,6 +358,9 @@ const api = {
   },
   async createWallet(request: WalletCreateRequest) {
     return WalletCreateResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.walletCreate, WalletCreateRequestSchema.parse(request)));
+  },
+  async clearWallets(request: WalletClearAllRequest) {
+    return WalletClearAllResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.walletClearAll, WalletClearAllRequestSchema.parse(request)));
   },
   async importWalletMnemonic(request: WalletImportMnemonicRequest) {
     return WalletImportResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.walletImportMnemonic, WalletImportMnemonicRequestSchema.parse(request)));

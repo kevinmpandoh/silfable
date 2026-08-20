@@ -377,9 +377,10 @@ export function WalletStep({
           `${result.removed} EVM wallet(s) removed from this device.`,
         );
       }
-    } catch {
+    } catch (err: any) {
       const fallback = `${label} wallets could not be removed. Unlock the vault and try again.`;
-      family === "solana" ? setMessage(fallback) : setEvmMessage(fallback);
+      const finalMsg = err?.message && !err.message.includes("is not a function") ? err.message : fallback;
+      family === "solana" ? setMessage(finalMsg) : setEvmMessage(finalMsg);
     } finally {
       setBusy(false);
     }

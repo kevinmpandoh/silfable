@@ -9,6 +9,7 @@ function createSecrets() {
     isLocked: () => false,
     getSecret: async () => value,
     setSecret: async (_name: "evm-wallet-secret", next: string) => { value = next; },
+    deleteSecret: async (_name: "evm-wallet-secret") => { value = null; },
   };
 }
 
@@ -57,4 +58,16 @@ test("EVM wallet resolves the signer selected by a session instead of always usi
     () => service.withSignerForAddress(`0x${"33".repeat(20)}`, async (signer) => signer.getAddress()),
     /not registered/u,
   );
+});
+
+test("EVM wallet clearWallets removes all wallets from secrets", async () => {
+  const secrets = createSecrets();
+  const service = new EvmWalletService(secrets);
+  await service.createWallet();
+  assert.equal((await service.listWallets()).length, 1);
+
+  const removed = await service.clearWallets();
+  assert.equal(removed, 1);
+  assert.equal((await service.listWallets()).length, 0);
+  assert.equal(await secrets.getSecret(), null);
 });
