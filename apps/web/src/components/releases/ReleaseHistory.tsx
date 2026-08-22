@@ -5,7 +5,30 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
-const release = {
+const releases = [{
+  version: "0.2.0",
+  date: "Perpetuals Release",
+  status: "Latest",
+  summary: "Guarded Solana Perpetuals & Market Workspace",
+  added: [
+    "Solana perpetuals market workspace with live charts",
+    "Long, Short, and reduce-only Close review flows",
+    "Collateral, free collateral, health, and open-position visibility",
+    "Deterministic preflight checks before wallet confirmation",
+  ],
+  changed: [
+    "Perpetual actions can be reviewed directly inside the market panel",
+    "Managed provider defaults make first-run desktop setup optional",
+    "Release downloads distinguish current and legacy builds",
+  ],
+  fixed: [
+    "Perpetual preflight session validation",
+    "Market-data rate-limit fallback and candle loading",
+    "Tokenized-asset portfolio metadata resolution",
+  ],
+  windowsHref: null,
+  releaseHref: "https://github.com/mirae-trade/mirae/releases/tag/v0.2.0",
+}, {
   version: "0.1.0",
   date: "Windows & Linux Release",
   status: "Official",
@@ -28,7 +51,9 @@ const release = {
     "Desktop privilege-boundary audits",
     "Windows & Linux package compatibility checks",
   ],
-} as const;
+  windowsHref: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-windows-x64-setup.exe",
+  releaseHref: "https://github.com/mirae-trade/mirae/releases/tag/v0.1.0",
+}] as const;
 
 export function ReleaseHistory() {
   return (
@@ -39,12 +64,12 @@ export function ReleaseHistory() {
           <h2 className="mt-5 font-display text-5xl tracking-[-0.05em] sm:text-7xl">Version history</h2>
         </div>
         <p className="max-w-md text-sm leading-7 text-black/50 lg:justify-self-end">
-          The current 0.1.0 milestone, with Windows and Linux available now and macOS planned.
+          v0.2.0 is the current Perps milestone. The complete v0.1.0 Windows and Linux artifacts remain available below.
         </p>
       </CurrentReveal>
 
       <div className="releaseLedger releaseConsoleLedger relative grid gap-5">
-        <CurrentReveal>
+        {releases.map((release, index) => <CurrentReveal key={release.version} delay={index * 0.05}>
           <article className="releaseConsoleEntry relative grid gap-5">
             <span className="releaseConsoleNode absolute left-0 top-0 size-[9px] bg-[var(--sc-orange)]" />
             <div className="releaseVersionMeta border-b border-black/15 pb-5 pl-6">
@@ -65,11 +90,13 @@ export function ReleaseHistory() {
                   <ChangeList title="Fixed" items={release.fixed} />
                 </div>
                 <div className="mt-9 border-t border-black/10 pt-7 flex flex-wrap gap-4">
-                  <Button asChild className="solarPrimaryButton">
-                    <a href="https://github.com/mirae-trade/mirae/releases/download/v0.2.0/Mirae-0.2.0-windows-x64-setup.exe" download>
+                  {release.windowsHref ? <Button asChild className="solarPrimaryButton">
+                    <a href={release.windowsHref} download>
                       Download Windows (v{release.version})<ArrowDownToLine className="ml-3 size-3.5" />
                     </a>
-                  </Button>
+                  </Button> : <Button asChild className="solarPrimaryButton">
+                    <a href={release.releaseHref}>View v{release.version} artifacts<ArrowDownToLine className="ml-3 size-3.5" /></a>
+                  </Button>}
                   <Button asChild variant="outline">
                     <a href="#downloads">
                       All Downloads & Linux<ArrowDownToLine className="ml-3 size-3.5" />
@@ -79,7 +106,7 @@ export function ReleaseHistory() {
               </CardContent>
             </Card>
           </article>
-        </CurrentReveal>
+        </CurrentReveal>)}
       </div>
     </section>
   );

@@ -4,7 +4,7 @@ import { CurrentReveal } from "@/components/motion/CurrentMotion";
 import { Button } from "@/components/ui/button";
 
 const windowsArtifacts = [
-  { label: "Windows Installer · x64 (.exe)", href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.0/Mirae-0.2.0-windows-x64-setup.exe", primary: true },
+  { label: "Windows v0.1.0 · x64 (.exe)", href: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-windows-x64-setup.exe", primary: true },
 ] as const;
 
 const linuxArtifacts = [
@@ -23,7 +23,7 @@ export function ReleaseDownloads() {
     <section id="downloads" className="scroll-mt-24 border-b border-[var(--line)] py-20 sm:py-28">
       <CurrentReveal className="releaseDownloadHeading">
         <div>
-          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--sc-orange)]">Release artifacts / 0.1.0</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--sc-orange)]">Release artifacts / 0.2.0 + legacy 0.1.0</p>
           <h2 className="mt-5 text-5xl font-bold tracking-[-0.06em] sm:text-6xl">Install Mirae Desktop.</h2>
         </div>
         <p>Choose the artifact that matches your operating system. Every transaction keeps local key storage and requires an explicit wallet review.</p>
@@ -35,10 +35,10 @@ export function ReleaseDownloads() {
           <CurrentReveal className="releaseLinuxFeature" delay={0.04}>
             <div className="releaseLinuxIdentity">
               <div className="releasePlatformIcon"><Laptop /></div>
-              <div><span>AVAILABLE NOW</span><h3>Windows</h3><p>Windows 10 / 11 · x64 Installer</p></div>
+              <div><span>LEGACY AVAILABLE</span><h3>Windows</h3><p>v0.1.0 signed installer · v0.2.0 signing pending</p></div>
             </div>
             <div className="releaseBuildLedger">
-              <span>VERSION <strong>0.1.0</strong></span><span>CHANNEL <strong>Official</strong></span><span>EXECUTION <strong>Local Encrypted Vault</strong></span>
+              <span>VERSION <strong>0.1.0</strong></span><span>CHANNEL <strong>Legacy Official</strong></span><span>EXECUTION <strong>Local Encrypted Vault</strong></span>
             </div>
             <div className="releaseArtifactGrid">
               {windowsArtifacts.map((artifact) => (
@@ -68,7 +68,7 @@ export function ReleaseDownloads() {
               <div><span>AVAILABLE NOW</span><h3>Linux</h3><p>AppImage and Debian · x64 and ARM64</p></div>
             </div>
             <div className="releaseBuildLedger">
-              <span>VERSION <strong>0.1.0</strong></span><span>CHANNEL <strong>Official</strong></span><span>EXECUTION <strong>Wallet reviewed</strong></span>
+              <span>VERSION <strong>0.2.0</strong></span><span>CHANNEL <strong>Latest</strong></span><span>EXECUTION <strong>Perps + Wallet Review</strong></span>
             </div>
             <div className="releaseArtifactGrid">
               {linuxArtifacts.map((artifact) => (
