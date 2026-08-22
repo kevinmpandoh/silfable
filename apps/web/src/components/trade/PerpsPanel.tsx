@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Activity, ShieldAlert, TrendingDown, TrendingUp, X, Wallet, RefreshCw, Zap } from "lucide-react";
+import {
+  Activity,
+  ShieldAlert,
+  TrendingDown,
+  TrendingUp,
+  X,
+  Wallet,
+  RefreshCw,
+  Zap,
+} from "lucide-react";
 
 export type PerpMarket = {
   symbol: string;
@@ -43,8 +52,140 @@ export type PerpAccount = {
 };
 
 export type PerpOrderRequest =
-  | { action: "open"; symbol: string; direction: "long" | "short"; baseAmount?: string; notionalUsd?: string; collateralUsdc?: string }
+  | {
+      action: "open";
+      symbol: string;
+      direction: "long" | "short";
+      baseAmount?: string;
+      notionalUsd?: string;
+      collateralUsdc?: string;
+    }
   | { action: "close"; symbol: string };
+
+export type DirectPerpResult = {
+  status: "confirmed" | "submitted" | "unknown";
+  signature?: string;
+  explorerUrl?: string;
+};
+
+type PerpCandle = {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
+
+function PriceChart({
+  candles,
+  market,
+  loading,
+  error,
+}: {
+  candles: PerpCandle[];
+  market?: PerpMarket;
+  loading: boolean;
+  error: string | null;
+}) {
+  const width = 1000;
+  const height = 300;
+  const bottom = 42;
+  if (loading)
+    return (
+      <div className="grid h-[300px] place-items-center text-xs text-gray-400">
+        <span>
+          <RefreshCw className="mr-2 inline size-4 animate-spin text-[#ff8a00]" />
+          Loading live candles…
+        </span>
+      </div>
+    );
+  if (candles.length < 2)
+    return (
+      <div className="grid h-[300px] place-items-center px-6 text-center text-xs text-gray-400">
+        {error ?? "Live candles are unavailable for this interval."}
+      </div>
+    );
+  const minimum = Math.min(...candles.map((candle) => candle.low));
+  const maximum = Math.max(...candles.map((candle) => candle.high));
+  const range = Math.max(maximum - minimum, maximum * 0.002);
+  const cell = (width - 36) / candles.length;
+  const y = (value: number) =>
+    24 + ((maximum - value) / range) * (height - bottom - 24);
+  const maxVolume = Math.max(1, ...candles.map((candle) => candle.volume));
+  const last = candles.at(-1)!;
+  return (
+    <div className="relative h-[300px] overflow-hidden rounded-2xl border border-[#252b3d] bg-[#0c0f17]">
+      <div className="absolute left-5 top-4 z-10 flex flex-wrap gap-3 text-[10px]">
+        <b className="text-white">{market?.symbol}</b>
+        <span
+          className={
+            last.close >= last.open ? "text-emerald-400" : "text-rose-400"
+          }
+        >
+          O {last.open.toPrecision(5)} H {last.high.toPrecision(5)} L{" "}
+          {last.low.toPrecision(5)} C {last.close.toPrecision(5)}
+        </span>
+      </div>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-full w-full"
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={`${market?.symbol ?? "Market"} candlestick chart`}
+      >
+        {[0, 1, 2, 3, 4].map((line) => (
+          <line
+            key={line}
+            x1="0"
+            x2={width}
+            y1={24 + line * 54}
+            y2={24 + line * 54}
+            stroke="#ff8a00"
+            strokeOpacity=".08"
+          />
+        ))}
+        {candles.map((candle, index) => {
+          const x = 18 + index * cell + cell / 2;
+          const up = candle.close >= candle.open;
+          const color = up ? "#10b981" : "#f43f5e";
+          const top = y(Math.max(candle.open, candle.close));
+          const low = y(Math.min(candle.open, candle.close));
+          const volume = (candle.volume / maxVolume) * 32;
+          return (
+            <g key={`${candle.time}-${index}`}>
+              <rect
+                x={x - cell * 0.3}
+                y={height - 5 - volume}
+                width={Math.max(1, cell * 0.6)}
+                height={volume}
+                fill={color}
+                opacity=".16"
+              />
+              <line
+                x1={x}
+                x2={x}
+                y1={y(candle.high)}
+                y2={y(candle.low)}
+                stroke={color}
+              />
+              <rect
+                x={x - cell * 0.3}
+                y={top}
+                width={Math.max(1.5, cell * 0.6)}
+                height={Math.max(1.5, low - top)}
+                fill={color}
+              />
+            </g>
+          );
+        })}
+      </svg>
+      <div className="absolute bottom-3 right-4 rounded-lg border border-white/10 bg-[#121624]/90 px-2 py-1 font-mono text-[9px] text-gray-400">
+        LIVE · {new Date(last.time).toLocaleTimeString()}
+      </div>
+    </div>
+  );
+}
 
 export function PerpsPanel({
   walletAddress,
@@ -56,13 +197,17 @@ export function PerpsPanel({
   walletAddress: string;
   busy: boolean;
   onClose: () => void;
-  onSubmit: (request: PerpOrderRequest) => void;
+  onSubmit: (request: PerpOrderRequest) => Promise<DirectPerpResult>;
   onGetUsdc?: () => void;
 }) {
   const [markets, setMarkets] = useState<PerpMarket[]>([]);
   const [account, setAccount] = useState<PerpAccount | null>(null);
   const [maxNotionalUsd, setMaxNotionalUsd] = useState(5_000);
-  const [feedStatus, setFeedStatus] = useState<{ live: boolean; chainSlot: number; updatedAt: number } | null>(null);
+  const [feedStatus, setFeedStatus] = useState<{
+    live: boolean;
+    chainSlot: number;
+    updatedAt: number;
+  } | null>(null);
   const [selected, setSelected] = useState("SOL");
   const [direction, setDirection] = useState<"long" | "short">("long");
   const [sizeMode, setSizeMode] = useState<"notional" | "base">("notional");
@@ -73,44 +218,84 @@ export function PerpsPanel({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reviewRequest, setReviewRequest] = useState<PerpOrderRequest | null>(
+    null
+  );
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [directResult, setDirectResult] = useState<DirectPerpResult | null>(
+    null
+  );
+  const [timeframe, setTimeframe] = useState("1h");
+  const [candles, setCandles] = useState<PerpCandle[]>([]);
+  const [candleLoading, setCandleLoading] = useState(false);
+  const [candleError, setCandleError] = useState<string | null>(null);
 
   const readMarkets = useCallback(async () => {
     const response = await fetch("/api/perps/markets", { cache: "no-store" });
-    const result = await response.json() as {
-      markets?: PerpMarket[]; maxNotionalUsd?: number; chainSlot?: number; updatedAt?: number; live?: boolean; error?: string;
+    const result = (await response.json()) as {
+      markets?: PerpMarket[];
+      maxNotionalUsd?: number;
+      chainSlot?: number;
+      updatedAt?: number;
+      live?: boolean;
+      error?: string;
     };
-    if (!response.ok || !result.markets) throw new Error(result.error || "Perpetual market data is unavailable.");
+    if (!response.ok || !result.markets)
+      throw new Error(result.error || "Perpetual market data is unavailable.");
     return {
       markets: result.markets,
       maxNotionalUsd: result.maxNotionalUsd ?? 5_000,
-      status: { live: result.live ?? false, chainSlot: result.chainSlot ?? 0, updatedAt: result.updatedAt ?? Date.now() },
+      status: {
+        live: result.live ?? false,
+        chainSlot: result.chainSlot ?? 0,
+        updatedAt: result.updatedAt ?? Date.now(),
+      },
     };
   }, []);
 
   const readAccount = useCallback(async () => {
-    const response = await fetch(`/api/perps/account?walletAddress=${encodeURIComponent(walletAddress)}`, { cache: "no-store" });
-    const result = await response.json() as { account?: PerpAccount; error?: string };
-    if (!response.ok || !result.account) throw new Error(result.error || "The perpetuals account could not be read.");
+    const response = await fetch(
+      `/api/perps/account?walletAddress=${encodeURIComponent(walletAddress)}`,
+      { cache: "no-store" }
+    );
+    const result = (await response.json()) as {
+      account?: PerpAccount;
+      error?: string;
+    };
+    if (!response.ok || !result.account)
+      throw new Error(
+        result.error || "The perpetuals account could not be read."
+      );
     return result.account;
   }, [walletAddress]);
 
-  const loadData = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
-    try {
-      const [marketState, accountState] = await Promise.all([readMarkets(), readAccount()]);
-      setMarkets(marketState.markets);
-      setMaxNotionalUsd(marketState.maxNotionalUsd);
-      setFeedStatus(marketState.status);
-      setAccount(accountState);
-    } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : "Perpetual market state could not be loaded.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [readMarkets, readAccount]);
+  const loadData = useCallback(
+    async (isRefresh = false) => {
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+      setError(null);
+      try {
+        const [marketState, accountState] = await Promise.all([
+          readMarkets(),
+          readAccount(),
+        ]);
+        setMarkets(marketState.markets);
+        setMaxNotionalUsd(marketState.maxNotionalUsd);
+        setFeedStatus(marketState.status);
+        setAccount(accountState);
+      } catch (cause: unknown) {
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Perpetual market state could not be loaded."
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [readMarkets, readAccount]
+  );
 
   useEffect(() => {
     void loadData();
@@ -125,11 +310,17 @@ export function PerpsPanel({
           setMaxNotionalUsd(state.maxNotionalUsd);
           setFeedStatus(state.status);
         })
-        .catch(() => setFeedStatus((current) => (current ? { ...current, live: false } : current)));
-    }, 4_000);
+        .catch(() =>
+          setFeedStatus((current) =>
+            current ? { ...current, live: false } : current
+          )
+        );
+    }, 30_000);
     const pollAccount = setInterval(() => {
       if (document.hidden) return;
-      readAccount().then(setAccount).catch(() => undefined);
+      readAccount()
+        .then(setAccount)
+        .catch(() => undefined);
     }, 15_000);
     return () => {
       clearInterval(pollMarkets);
@@ -137,28 +328,80 @@ export function PerpsPanel({
     };
   }, [readMarkets, readAccount]);
 
-  const market = markets.find((entry) => entry.baseAssetSymbol === selected) ?? markets[0];
-  const position = account?.positions.find((entry) => entry.symbol === market?.symbol);
+  const market =
+    markets.find((entry) => entry.baseAssetSymbol === selected) ?? markets[0];
+  useEffect(() => {
+    if (!market) return;
+    const controller = new AbortController();
+    setCandleLoading(true);
+    setCandleError(null);
+    fetch(
+      `/api/perps/candles?symbol=${encodeURIComponent(
+        market.symbol
+      )}&timeframe=${timeframe}&limit=120`,
+      { cache: "no-store", signal: controller.signal }
+    )
+      .then(async (response) => {
+        const result = (await response.json()) as {
+          candles?: PerpCandle[];
+          error?: string;
+        };
+        if (!response.ok || !result.candles)
+          throw new Error(result.error || "Candle data is unavailable.");
+        setCandles(result.candles);
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setCandles([]);
+        setCandleError(
+          cause instanceof Error ? cause.message : "Candle data is unavailable."
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCandleLoading(false);
+      });
+    return () => controller.abort();
+  }, [market?.symbol, timeframe]);
+  const position = account?.positions.find(
+    (entry) => entry.symbol === market?.symbol
+  );
   const numericSize = Number(size.replace(",", "."));
-  const estimatedNotional = !market || !Number.isFinite(numericSize) || numericSize <= 0
-    ? null
-    : sizeMode === "notional" ? numericSize : numericSize * market.oraclePriceUsd;
-  const overCeiling = estimatedNotional !== null && estimatedNotional > maxNotionalUsd;
+  const estimatedNotional =
+    !market || !Number.isFinite(numericSize) || numericSize <= 0
+      ? null
+      : sizeMode === "notional"
+      ? numericSize
+      : numericSize * market.oraclePriceUsd;
+  const overCeiling =
+    estimatedNotional !== null && estimatedNotional > maxNotionalUsd;
 
   // Auto-derive collateral if not manually entered
-  const autoMargin = estimatedNotional ? (estimatedNotional / Math.max(1, leverage)).toFixed(2) : "0.00";
+  const autoMargin = estimatedNotional
+    ? (estimatedNotional / Math.max(1, leverage)).toFixed(2)
+    : "0.00";
   const activeCollateral = collateral.trim() ? collateral : autoMargin;
   const collateralAmount = Number(activeCollateral);
 
-  const walletUsdc = account && !Number.isNaN(account.walletUsdcBalance) ? account.walletUsdcBalance : 0;
+  const walletUsdc =
+    account && !Number.isNaN(account.walletUsdcBalance)
+      ? account.walletUsdcBalance
+      : 0;
   const freeCollateral = account?.freeCollateralUsd ?? 0;
   const totalAvailableUsdc = Math.max(walletUsdc, freeCollateral);
-  const shortfall = collateralAmount > totalAvailableUsdc ? collateralAmount - totalAvailableUsdc : 0;
+  const shortfall =
+    collateralAmount > totalAvailableUsdc
+      ? collateralAmount - totalAvailableUsdc
+      : 0;
 
   const canOpen = Boolean(
-    market && !market.stale && estimatedNotional !== null && !overCeiling && acknowledged && !busy
-      && (account?.accountExists || isPositive(activeCollateral))
-      && shortfall === 0,
+    market &&
+      !market.stale &&
+      estimatedNotional !== null &&
+      !overCeiling &&
+      acknowledged &&
+      !busy &&
+      (account?.accountExists || isPositive(activeCollateral)) &&
+      shortfall === 0
   );
 
   return (
@@ -170,7 +413,7 @@ export function PerpsPanel({
       }}
     >
       <section
-        className="flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#2a2e3f] bg-[#0c0f17] text-white shadow-2xl"
+        className="relative flex max-h-[calc(100vh-2rem)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[#2a2e3f] bg-[#0c0f17] text-white shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="perps-title"
@@ -184,14 +427,15 @@ export function PerpsPanel({
             <div>
               <div className="flex items-center gap-2">
                 <h2 id="perps-title" className="text-base font-bold text-white">
-                  Phoenix Perpetuals
+                  Perpetuals
                 </h2>
                 <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[9px] font-bold text-emerald-400">
                   SOLANA MAINNET
                 </span>
               </div>
               <p className="text-xs text-gray-400">
-                Direct wallet funding · Zero external app gates · Unsigned preflight simulation
+                Direct wallet funding · Zero external app gates · Unsigned
+                preflight simulation
               </p>
             </div>
           </div>
@@ -203,7 +447,11 @@ export function PerpsPanel({
               className="rounded-lg p-1.5 text-gray-400 transition hover:bg-white/10 hover:text-white"
               title="Refresh prices"
             >
-              <RefreshCw className={`size-4 ${refreshing ? "animate-spin text-[#FFAD45]" : ""}`} />
+              <RefreshCw
+                className={`size-4 ${
+                  refreshing ? "animate-spin text-[#FFAD45]" : ""
+                }`}
+              />
             </button>
             <button
               type="button"
@@ -224,20 +472,42 @@ export function PerpsPanel({
               <Wallet className="size-3 text-[#FFAD45]" />
               <span>Wallet USDC</span>
             </div>
-            <p className="text-sm font-bold text-white">${walletUsdc.toFixed(2)} USDC</p>
+            <p className="text-sm font-bold text-white">
+              ${walletUsdc.toFixed(2)} USDC
+            </p>
           </div>
           <div>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Total Collateral</span>
-            <p className="text-sm font-bold text-white">${(account?.collateralUsd ?? 0).toFixed(2)}</p>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              Total Collateral
+            </span>
+            <p className="text-sm font-bold text-white">
+              ${(account?.collateralUsd ?? 0).toFixed(2)}
+            </p>
           </div>
           <div>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Free Collateral</span>
-            <p className="text-sm font-bold text-white">${(account?.freeCollateralUsd ?? 0).toFixed(2)}</p>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              Free Collateral
+            </span>
+            <p className="text-sm font-bold text-white">
+              ${(account?.freeCollateralUsd ?? 0).toFixed(2)}
+            </p>
           </div>
           <div>
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Account Health</span>
-            <p className={`text-sm font-bold ${account?.accountExists ? ((account.healthPct < 25) ? "text-rose-400" : "text-emerald-400") : "text-gray-400"}`}>
-              {account?.accountExists ? `${account.healthPct}%` : "Ready to Open"}
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              Account Health
+            </span>
+            <p
+              className={`text-sm font-bold ${
+                account?.accountExists
+                  ? account.healthPct < 25
+                    ? "text-rose-400"
+                    : "text-emerald-400"
+                  : "text-gray-400"
+              }`}
+            >
+              {account?.accountExists
+                ? `${account.healthPct}%`
+                : "Ready to Open"}
             </p>
           </div>
         </div>
@@ -247,13 +517,17 @@ export function PerpsPanel({
           {loading ? (
             <div className="py-12 text-center text-xs text-gray-400">
               <RefreshCw className="mx-auto mb-2 size-5 animate-spin text-[#FFAD45]" />
-              Reading live Phoenix market state…
+              Reading live perpetual market state…
             </div>
           ) : error ? (
             <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 p-4 text-xs text-rose-300">
               <div className="flex items-center justify-between">
                 <span>{error}</span>
-                <button type="button" onClick={() => void loadData()} className="font-bold underline">
+                <button
+                  type="button"
+                  onClick={() => void loadData()}
+                  className="font-bold underline"
+                >
                   Retry
                 </button>
               </div>
@@ -266,7 +540,10 @@ export function PerpsPanel({
                   <p className="flex items-center gap-2 font-medium">
                     <Zap className="size-4 flex-none text-[#FF8A00]" />
                     <span>
-                      <strong>Direct Wallet Settlement:</strong> Phoenix opens an isolated subaccount with your order. Margin is automatically funded from your wallet USDC in this single transaction.
+                      <strong>Direct Wallet Settlement:</strong> An isolated
+                      trading account is opened with your order. Margin is
+                      automatically funded from your wallet USDC in this single
+                      transaction.
                     </span>
                   </p>
                 </div>
@@ -275,7 +552,9 @@ export function PerpsPanel({
               {/* Open Positions (if any) */}
               {account?.accountExists && account.positions.length > 0 && (
                 <div>
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">Open Positions</h3>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+                    Open Positions
+                  </h3>
                   <div className="space-y-2">
                     {account.positions.map((entry) => (
                       <div
@@ -283,27 +562,56 @@ export function PerpsPanel({
                         className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#222738] bg-[#121624] p-3 text-xs"
                       >
                         <div className="flex items-center gap-2">
-                          <span className={`flex size-6 items-center justify-center rounded-md ${entry.direction === "long" ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"}`}>
-                            {entry.direction === "long" ? <TrendingUp className="size-3.5" /> : <TrendingDown className="size-3.5" />}
+                          <span
+                            className={`flex size-6 items-center justify-center rounded-md ${
+                              entry.direction === "long"
+                                ? "bg-emerald-500/10 text-emerald-400"
+                                : "bg-rose-500/10 text-rose-400"
+                            }`}
+                          >
+                            {entry.direction === "long" ? (
+                              <TrendingUp className="size-3.5" />
+                            ) : (
+                              <TrendingDown className="size-3.5" />
+                            )}
                           </span>
                           <div>
-                            <span className="font-bold text-white">{entry.symbol}</span>
+                            <span className="font-bold text-white">
+                              {entry.symbol}
+                            </span>
                             <span className="ml-2 text-gray-400">
-                              {entry.direction.toUpperCase()} · {entry.baseAmount} {entry.symbol.split("-")[0]}
+                              {entry.direction.toUpperCase()} ·{" "}
+                              {entry.baseAmount} {entry.symbol.split("-")[0]}
                             </span>
                           </div>
                         </div>
                         <div className="flex items-center gap-4">
                           <div className="text-right">
-                            <span className={`font-semibold ${entry.unrealizedPnlUsd >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
-                              {entry.unrealizedPnlUsd >= 0 ? "+" : ""}${entry.unrealizedPnlUsd.toFixed(2)}
+                            <span
+                              className={`font-semibold ${
+                                entry.unrealizedPnlUsd >= 0
+                                  ? "text-emerald-400"
+                                  : "text-rose-400"
+                              }`}
+                            >
+                              {entry.unrealizedPnlUsd >= 0 ? "+" : ""}$
+                              {entry.unrealizedPnlUsd.toFixed(2)}
                             </span>
-                            <p className="text-[10px] text-gray-500">Entry ${entry.entryPriceUsd.toFixed(2)}</p>
+                            <p className="text-[10px] text-gray-500">
+                              Entry ${entry.entryPriceUsd.toFixed(2)}
+                            </p>
                           </div>
                           <button
                             type="button"
                             disabled={busy}
-                            onClick={() => onSubmit({ action: "close", symbol: entry.symbol.replace("-PERP", "") })}
+                            onClick={() => {
+                              setReviewError(null);
+                              setDirectResult(null);
+                              setReviewRequest({
+                                action: "close",
+                                symbol: entry.symbol.replace("-PERP", ""),
+                              });
+                            }}
                             className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-bold text-rose-300 transition hover:bg-rose-500/20 disabled:opacity-40"
                           >
                             Close
@@ -318,11 +626,19 @@ export function PerpsPanel({
               {/* Markets Watchlist (3x2 Grid) */}
               <div>
                 <div className="mb-2.5 flex items-center justify-between">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Live Perp Markets</h3>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                    Live Perp Markets
+                  </h3>
                   {feedStatus && (
                     <span className="flex items-center gap-1.5 text-[10px] text-gray-500">
-                      <span className={`size-1.5 rounded-full ${feedStatus.live ? "animate-pulse bg-emerald-400" : "bg-amber-400"}`} />
-                      {feedStatus.live ? "Live Phoenix Stream" : "Connected"}
+                      <span
+                        className={`size-1.5 rounded-full ${
+                          feedStatus.live
+                            ? "animate-pulse bg-emerald-400"
+                            : "bg-amber-400"
+                        }`}
+                      />
+                      {feedStatus.live ? "Live Market Stream" : "Connected"}
                     </span>
                   )}
                 </div>
@@ -342,29 +658,80 @@ export function PerpsPanel({
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-white">{entry.symbol}</span>
+                          <span className="font-bold text-white">
+                            {entry.symbol}
+                          </span>
                           <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-medium text-gray-300">
                             {entry.maxLeverage}x Max
                           </span>
                         </div>
                         <div className="mt-1 flex items-baseline justify-between">
                           <span className="text-sm font-bold text-white">
-                            ${entry.oraclePriceUsd.toLocaleString(undefined, { minimumFractionDigits: entry.oraclePriceUsd >= 100 ? 2 : 4 })}
+                            $
+                            {entry.oraclePriceUsd.toLocaleString(undefined, {
+                              minimumFractionDigits:
+                                entry.oraclePriceUsd >= 100 ? 2 : 4,
+                            })}
                           </span>
-                          <span className={`flex items-center gap-0.5 text-[10px] font-semibold ${isPositive ? "text-emerald-400" : "text-rose-400"}`}>
-                            {isPositive ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
-                            {isPositive ? "+" : ""}{entry.fundingRateHourlyPctLong.toFixed(4)}%/h
+                          <span
+                            className={`flex items-center gap-0.5 text-[10px] font-semibold ${
+                              isPositive ? "text-emerald-400" : "text-rose-400"
+                            }`}
+                          >
+                            {isPositive ? (
+                              <TrendingUp className="size-3" />
+                            ) : (
+                              <TrendingDown className="size-3" />
+                            )}
+                            {isPositive ? "+" : ""}
+                            {entry.fundingRateHourlyPctLong.toFixed(4)}%/h
                           </span>
                         </div>
                         {entry.stale && (
                           <span className="mt-1 block text-[10px] font-semibold text-amber-300">
-                            Price Stale ({formatSlotAge(entry.oracleAgeSlots)} ago)
+                            Price Stale ({formatSlotAge(entry.oracleAgeSlots)}{" "}
+                            ago)
                           </span>
                         )}
                       </button>
                     );
                   })}
                 </div>
+              </div>
+
+              <div>
+                <div className="mb-2.5 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                      {market?.symbol ?? "Market"} chart
+                    </h3>
+                    <p className="mt-0.5 text-[10px] text-gray-500">
+                      Native live candles · no embedded third-party widget
+                    </p>
+                  </div>
+                  <div className="flex gap-1">
+                    {["1m", "5m", "15m", "1h", "4h", "1d"].map((interval) => (
+                      <button
+                        type="button"
+                        key={interval}
+                        onClick={() => setTimeframe(interval)}
+                        className={`rounded-lg px-2.5 py-1.5 text-[10px] font-bold transition ${
+                          timeframe === interval
+                            ? "bg-[#ff8a00] text-black"
+                            : "bg-[#171b29] text-gray-400 hover:text-white"
+                        }`}
+                      >
+                        {interval}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <PriceChart
+                  candles={candles}
+                  market={market}
+                  loading={candleLoading}
+                  error={candleError}
+                />
               </div>
 
               {/* Order Placement Form */}
@@ -411,22 +778,35 @@ export function PerpsPanel({
                         </label>
                         <button
                           type="button"
-                          onClick={() => setSizeMode((m) => (m === "notional" ? "base" : "notional"))}
+                          onClick={() =>
+                            setSizeMode((m) =>
+                              m === "notional" ? "base" : "notional"
+                            )
+                          }
                           className="text-[10px] font-bold text-[#FFAD45] hover:underline"
                         >
-                          Switch to {sizeMode === "notional" ? `${market?.baseAssetSymbol ?? "Base"}` : "USD Notional"}
+                          Switch to{" "}
+                          {sizeMode === "notional"
+                            ? `${market?.baseAssetSymbol ?? "Base"}`
+                            : "USD Notional"}
                         </button>
                       </div>
                       <div className="relative">
                         {sizeMode === "notional" && (
-                          <span className="absolute left-3 top-2.5 text-xs text-gray-400">$</span>
+                          <span className="absolute left-3 top-2.5 text-xs text-gray-400">
+                            $
+                          </span>
                         )}
                         <input
                           inputMode="decimal"
                           value={size}
-                          onChange={(e) => setSize(sanitizeDecimal(e.target.value, 6))}
+                          onChange={(e) =>
+                            setSize(sanitizeDecimal(e.target.value, 6))
+                          }
                           placeholder={sizeMode === "notional" ? "10" : "0.05"}
-                          className={`w-full rounded-xl border border-[#2e3448] bg-[#0c0f17] py-2.5 pr-3 text-sm text-white placeholder-gray-500 focus:border-[#FF8A00] focus:outline-none ${sizeMode === "notional" ? "pl-7" : "pl-3"}`}
+                          className={`w-full rounded-xl border border-[#2e3448] bg-[#0c0f17] py-2.5 pr-3 text-sm text-white placeholder-gray-500 focus:border-[#FF8A00] focus:outline-none ${
+                            sizeMode === "notional" ? "pl-7" : "pl-3"
+                          }`}
                         />
                       </div>
                     </div>
@@ -434,8 +814,12 @@ export function PerpsPanel({
                     {/* Leverage Quick Select */}
                     <div>
                       <div className="mb-1.5 flex items-center justify-between text-xs">
-                        <span className="font-semibold uppercase tracking-wider text-gray-400">Leverage</span>
-                        <span className="font-bold text-[#FFAD45]">{leverage}x</span>
+                        <span className="font-semibold uppercase tracking-wider text-gray-400">
+                          Leverage
+                        </span>
+                        <span className="font-bold text-[#FFAD45]">
+                          {leverage}x
+                        </span>
                       </div>
                       <div className="grid grid-cols-5 gap-1.5">
                         {[2, 3, 5, 10, 20].map((lev) => (
@@ -465,12 +849,15 @@ export function PerpsPanel({
                       <input
                         inputMode="decimal"
                         value={collateral}
-                        onChange={(e) => setCollateral(sanitizeDecimal(e.target.value, 6))}
+                        onChange={(e) =>
+                          setCollateral(sanitizeDecimal(e.target.value, 6))
+                        }
                         placeholder={`Auto calculated: $${autoMargin} USDC`}
                         className="w-full rounded-xl border border-[#2e3448] bg-[#0c0f17] px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:border-[#FF8A00] focus:outline-none"
                       />
                       <span className="mt-1 block text-[10px] text-gray-500">
-                        Isolated margin backing this order. Defaults to ${autoMargin} USDC at {leverage}x.
+                        Isolated margin backing this order. Defaults to $
+                        {autoMargin} USDC at {leverage}x.
                       </span>
                     </div>
 
@@ -478,19 +865,31 @@ export function PerpsPanel({
                     <div className="space-y-2 rounded-xl border border-[#1f2433] bg-[#0c0f17] p-3.5 text-xs">
                       <div className="flex justify-between text-gray-400">
                         <span>Margin Required:</span>
-                        <strong className="text-white">${activeCollateral} USDC</strong>
+                        <strong className="text-white">
+                          ${activeCollateral} USDC
+                        </strong>
                       </div>
                       <div className="flex justify-between text-gray-400">
                         <span>Est. Base Tokens:</span>
                         <strong className="text-white">
-                          {market && estimatedNotional ? (estimatedNotional / market.oraclePriceUsd).toFixed(4) : "0"}{" "}
+                          {market && estimatedNotional
+                            ? (
+                                estimatedNotional / market.oraclePriceUsd
+                              ).toFixed(4)
+                            : "0"}{" "}
                           {market?.baseAssetSymbol}
                         </strong>
                       </div>
                       <div className="flex justify-between text-gray-400">
                         <span>Hourly Funding:</span>
                         <strong className="text-[#FFAD45]">
-                          {market ? (direction === "long" ? market.fundingRateHourlyPctLong : market.fundingRateHourlyPctShort).toFixed(4) : 0}% / hr
+                          {market
+                            ? (direction === "long"
+                                ? market.fundingRateHourlyPctLong
+                                : market.fundingRateHourlyPctShort
+                              ).toFixed(4)
+                            : 0}
+                          % / hr
                         </strong>
                       </div>
                     </div>
@@ -500,7 +899,8 @@ export function PerpsPanel({
                       <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-200">
                         <div className="flex items-center justify-between">
                           <span>
-                            Need ${shortfall.toFixed(2)} more USDC (Wallet holds ${walletUsdc.toFixed(2)}).
+                            Need ${shortfall.toFixed(2)} more USDC (Wallet holds
+                            ${walletUsdc.toFixed(2)}).
                           </span>
                           {onGetUsdc && (
                             <button
@@ -526,7 +926,8 @@ export function PerpsPanel({
                     className="mt-0.5 rounded border-gray-600 bg-transparent text-[#FF8A00] focus:ring-[#FF8A00]"
                   />
                   <span>
-                    I acknowledge that perpetuals use isolated leverage and are subject to funding rates and liquidation risks.
+                    I acknowledge that perpetuals use isolated leverage and are
+                    subject to funding rates and liquidation risks.
                   </span>
                 </label>
               </div>
@@ -538,7 +939,10 @@ export function PerpsPanel({
         <footer className="flex shrink-0 flex-col gap-3 border-t border-[#1f2433] bg-[#121520] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <span className="flex items-center gap-1.5 text-[11px] text-gray-400">
             <ShieldAlert className="size-3.5 flex-none text-[#FFAD45]" />
-            <span>Preflight simulates unsigned on Solana Mainnet. Your wallet is never opened by this panel.</span>
+            <span>
+              Preflight simulates unsigned on Solana Mainnet. Your wallet is
+              never opened by this panel.
+            </span>
           </span>
           <div className="flex items-center justify-end gap-2.5">
             <button
@@ -552,16 +956,22 @@ export function PerpsPanel({
             <button
               type="button"
               disabled={!canOpen}
-              onClick={() =>
-                market &&
-                onSubmit({
+              onClick={() => {
+                if (!market) return;
+                setReviewError(null);
+                setDirectResult(null);
+                setReviewRequest({
                   action: "open",
                   symbol: market.baseAssetSymbol,
                   direction,
-                  ...(sizeMode === "base" ? { baseAmount: size } : { notionalUsd: size }),
-                  ...(isPositive(activeCollateral) ? { collateralUsdc: activeCollateral } : {}),
-                })
-              }
+                  ...(sizeMode === "base"
+                    ? { baseAmount: size }
+                    : { notionalUsd: size }),
+                  ...(isPositive(activeCollateral)
+                    ? { collateralUsdc: activeCollateral }
+                    : {}),
+                });
+              }}
               className={`rounded-xl px-6 py-2.5 text-xs font-bold transition shadow-lg disabled:opacity-40 ${
                 direction === "long"
                   ? "bg-emerald-500 text-black hover:bg-emerald-400 shadow-emerald-500/20"
@@ -572,13 +982,124 @@ export function PerpsPanel({
             </button>
           </div>
         </footer>
+        {reviewRequest && (
+          <div className="absolute inset-0 z-20 grid place-items-center bg-[#25232A]/40 p-4 backdrop-blur-md">
+            <section className="w-full max-w-xl rounded-[24px] bg-[#fff8f2] p-6 text-[#20212a] shadow-[0_28px_90px_rgba(32,20,14,0.32)]">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#e85d04]">
+                    Final confirmation
+                  </span>
+                  <h3 className="mt-1 text-xl font-bold">
+                    Review before signing
+                  </h3>
+                  <p className="mt-1 text-xs text-[#686970]">
+                    This action stays inside Perpetuals and will not add a
+                    message to AI chat.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setReviewRequest(null)}
+                  className="rounded-full bg-white p-2 shadow-sm hover:bg-[#fff0e4] disabled:opacity-50"
+                  aria-label="Reject review"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+
+              <div className="my-5 grid grid-cols-2 gap-3 rounded-2xl bg-[#f6f2ee] p-4 text-sm sm:grid-cols-3">
+                <div>
+                  <span className="block text-[10px] uppercase text-[#777]">
+                    Action
+                  </span>
+                  <strong>
+                    {reviewRequest.action === "close"
+                      ? "Close position"
+                      : reviewRequest.direction.toUpperCase()}
+                  </strong>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase text-[#777]">
+                    Market
+                  </span>
+                  <strong>{reviewRequest.symbol}-PERP</strong>
+                </div>
+                <div>
+                  <span className="block text-[10px] uppercase text-[#777]">
+                    Size
+                  </span>
+                  <strong>
+                    {reviewRequest.action === "close"
+                      ? "Full reduce-only"
+                      : reviewRequest.notionalUsd
+                      ? `$${reviewRequest.notionalUsd}`
+                      : `${reviewRequest.baseAmount} ${reviewRequest.symbol}`}
+                  </strong>
+                </div>
+              </div>
+
+              {reviewError && (
+                <div className="mb-4 rounded-xl bg-rose-50 p-3 text-xs font-medium text-rose-700">
+                  {reviewError}
+                </div>
+              )}
+              {directResult && (
+                <div className="mb-4 rounded-xl bg-emerald-50 p-3 text-xs font-medium text-emerald-700">
+                  Transaction {directResult.status}.{" "}
+                  {directResult.signature
+                    ? `Signature: ${directResult.signature.slice(0, 8)}…`
+                    : ""}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setReviewRequest(null)}
+                  className="rounded-xl border-2 border-[#e85d04] bg-white px-6 py-3 text-xs font-bold text-[#c94e00] hover:bg-[#fff0e4] disabled:opacity-50"
+                >
+                  {directResult ? "Close" : "Reject"}
+                </button>
+                {!directResult && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={async () => {
+                      setReviewError(null);
+                      try {
+                        const result = await onSubmit(reviewRequest);
+                        setDirectResult(result);
+                        void loadData(true);
+                      } catch (cause) {
+                        setReviewError(
+                          cause instanceof Error
+                            ? cause.message
+                            : "The perpetual order was not submitted."
+                        );
+                      }
+                    }}
+                    className="min-w-[220px] rounded-xl bg-[#e85d04] px-6 py-3 text-xs font-bold text-white shadow-[0_10px_24px_rgba(232,93,4,0.24)] hover:bg-[#c94e00] disabled:cursor-wait disabled:!text-white disabled:opacity-75"
+                  >
+                    {busy
+                      ? "Signing & broadcasting…"
+                      : "Agree & continue to wallet"}
+                  </button>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
       </section>
     </div>
   );
 }
 
 function formatSlotAge(slots: number): string {
-  if (!Number.isFinite(slots) || slots >= Number.MAX_SAFE_INTEGER) return "an unknown time";
+  if (!Number.isFinite(slots) || slots >= Number.MAX_SAFE_INTEGER)
+    return "an unknown time";
   const seconds = slots * 0.4;
   if (seconds < 90) return `${Math.round(seconds)}s`;
   if (seconds < 5_400) return `${Math.round(seconds / 60)}m`;
@@ -589,7 +1110,9 @@ function formatSlotAge(slots: number): string {
 function sanitizeDecimal(value: string, decimals: number): string {
   const normalized = value.replace(/,/gu, ".").replace(/[^\d.]/gu, "");
   const [whole = "", ...fractions] = normalized.split(".");
-  return fractions.length === 0 ? whole : `${whole}.${fractions.join("").slice(0, decimals)}`;
+  return fractions.length === 0
+    ? whole
+    : `${whole}.${fractions.join("").slice(0, decimals)}`;
 }
 
 function isPositive(value: string): boolean {

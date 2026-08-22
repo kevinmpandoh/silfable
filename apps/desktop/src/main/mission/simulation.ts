@@ -40,7 +40,7 @@ export class MissionSimulationService {
         inputAmount: mission.inputAmount, maxSlippageBps: mission.maxSlippageBps, deadlineAt: mission.deadlineAt, stopConditions: mission.stopConditions,
       });
       if (refreshed.status !== "ready-for-review" || refreshed.quote === null) {
-        const failedReason = refreshed.checks.find((item) => item.status === "fail")?.detail;
+        const failedReason = refreshed.checks.find((item) => item.status === "fail")?.message;
         return result(
           base,
           "blocked",
@@ -91,7 +91,7 @@ export class MissionSimulationService {
       inputAmount: mission.inputAmount, maxSlippageBps: mission.maxSlippageBps, deadlineAt: mission.deadlineAt, stopConditions: mission.stopConditions,
     });
     if (refreshed.status !== "ready-for-review" || refreshed.quote === null) {
-      const failedReason = refreshed.checks.find((item) => item.status === "fail")?.detail;
+      const failedReason = refreshed.checks.find((item) => item.status === "fail")?.message;
       throw new Error(
         failedReason
           ? `Mission policy no longer passes: ${failedReason}`

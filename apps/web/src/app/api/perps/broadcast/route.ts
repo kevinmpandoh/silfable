@@ -7,6 +7,7 @@ import { cloudDb } from "@/lib/cloud-db";
 import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
 import { selectSolanaRpc } from "@/lib/server-solana-rpc";
 import { messageDigest } from "@/lib/phoenix-perps-core";
+import { verifyPerpPreflightToken } from "@/lib/perp-preflight-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ const RequestSchema = z.object({
   sessionId: z.string().regex(/^[0-9a-f]{24}$/iu),
   walletAddress: z.string().min(32).max(44),
   signedTransaction: z.string().regex(/^[A-Za-z0-9+/]+={0,2}$/u).max(32_768),
+  preflightToken: z.string().max(4_096).optional(),
 }).strict();
 
 export async function POST(request: NextRequest) {
@@ -44,7 +46,16 @@ export async function POST(request: NextRequest) {
     // a program allowlist here, the signed message is matched against the digest
     // this server stored when it prepared and simulated the order. Anything the
     // browser altered — or built elsewhere — no longer matches and is refused.
-    await assertPreparedHere(body.sessionId, messageDigest(transaction));
+    const digest = messageDigest(transaction);
+    const validDirectProof = Boolean(
+      body.preflightToken &&
+        verifyPerpPreflightToken(body.preflightToken, {
+          sessionId: body.sessionId,
+          walletAddress,
+          digest,
+        }),
+    );
+    if (!validDirectProof) await assertPreparedHere(body.sessionId, digest);
 
     localSignature = bs58.encode(transaction.signatures[0]!);
     const connection = new Connection(selectSolanaRpc(), "confirmed");
@@ -81,7 +92,12 @@ export async function POST(request: NextRequest) {
 
 async function assertPreparedHere(sessionId: string, digest: string): Promise<void> {
   const prepared = await cloudDb.chatMessage.findFirst({
-    where: { sessionId, proposalJson: { contains: digest } },
+    where: {
+      sessionId,
+      role: { in: ["preflight", "assistant"] },
+      proposalJson: { contains: digest },
+      createdAt: { gte: new Date(Date.now() - 10 * 60_000) },
+    },
     select: { id: true },
   });
   if (!prepared) {

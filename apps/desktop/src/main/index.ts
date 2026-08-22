@@ -6,6 +6,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkLatestRelease, MIRAE_RELEASES_URL } from "./update/release-check.js";
+import { BUNDLED_UNISWAP_API_KEY } from "./config/managed-provider-defaults.js";
 
 import {
   AiChatRequestSchema,
@@ -415,7 +416,10 @@ app.whenReady().then(async () => {
   const transactionSettings = new TransactionSettingsService(runtimeDatabase);
   const kyberQuotes = new KyberSwapQuoteService();
   const uniswapQuotes = new UniswapQuoteService({
-    apiKey: async () => await initializedKeystore.getSecret("uniswap-api-key"),
+    apiKey: async () =>
+      (await initializedKeystore.getSecret("uniswap-api-key")) ??
+      (process.env.MIRAE_DEFAULT_UNISWAP_API_KEY?.trim() ||
+        BUNDLED_UNISWAP_API_KEY),
   });
   const evmSwapQuotes = new EvmSwapRouterService(kyberQuotes, uniswapQuotes);
 

@@ -12,12 +12,12 @@ const communityLinks: { label: string; href?: string; available?: boolean }[] = 
 const downloadLinks: { label: string; href?: string; available?: boolean }[] = [
   {
     label: "Windows",
-    href: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-windows-x64-setup.exe",
+    href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.0/Mirae-0.2.0-windows-x64-setup.exe",
     available: true,
   },
   {
     label: "Linux",
-    href: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-x86_64.AppImage",
+    href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.0/Mirae-0.2.0-x86_64.AppImage",
     available: true,
   },
   { label: "macOS", available: false },

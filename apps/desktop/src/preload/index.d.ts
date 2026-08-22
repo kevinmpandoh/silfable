@@ -231,6 +231,7 @@ declare global {
       checkForUpdates(): Promise<{ ok: boolean; update?: { currentVersion: string; latestVersion: string; available: boolean; releaseUrl: string; publishedAt: string | null }; error?: string }>;
       openUpdateRelease(releaseUrl: string): Promise<{ ok: boolean }>;
       getPerpMarkets(): Promise<{ markets: import("@mirae/contracts").PerpMarket[] }>;
+      getPerpCandles(request: { symbol: string; timeframe: string; limit: number }): Promise<{ candles: import("@mirae/contracts").PerpCandle[] }>;
       getPerpAccount(walletAddress: string): Promise<{ account: import("@mirae/contracts").PerpAccount }>;
       preparePerpOrder(request: any): Promise<{ proposal: import("@mirae/contracts").PerpProposal }>;
       executePerpOrder(request: any): Promise<{ signature: string }>;

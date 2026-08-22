@@ -593,6 +593,9 @@ const api = {
   async getPerpMarkets() {
     return await ipcRenderer.invoke(IPC_CHANNELS.perpsMarketsGet) as { markets: import("@mirae/contracts").PerpMarket[] };
   },
+  async getPerpCandles(request: { symbol: string; timeframe: string; limit: number }) {
+    return await ipcRenderer.invoke(IPC_CHANNELS.perpsCandlesGet, request) as { candles: import("@mirae/contracts").PerpCandle[] };
+  },
   async getPerpAccount(walletAddress: string) {
     return await ipcRenderer.invoke(IPC_CHANNELS.perpsAccountGet, walletAddress) as { account: import("@mirae/contracts").PerpAccount };
   },

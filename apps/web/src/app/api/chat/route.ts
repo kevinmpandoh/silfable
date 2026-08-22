@@ -402,7 +402,7 @@ function perpProposal(input: {
     estimatedTokens: input.reduceOnly ? "Reduce-only close" : "Preflight pending",
     status: "preview_only",
     mode: "restricted_browser_wallet",
-    venue: "Phoenix Perpetuals",
+    venue: "Solana Perpetuals",
     explanation: input.explanation,
     perpMarket: input.market,
     perpMarketIndex: input.marketIndex,

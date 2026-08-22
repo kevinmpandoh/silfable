@@ -4,14 +4,14 @@ import { CurrentReveal } from "@/components/motion/CurrentMotion";
 import { Button } from "@/components/ui/button";
 
 const windowsArtifacts = [
-  { label: "Windows Installer · x64 (.exe)", href: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-windows-x64-setup.exe", primary: true },
+  { label: "Windows Installer · x64 (.exe)", href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.0/Mirae-0.2.0-windows-x64-setup.exe", primary: true },
 ] as const;
 
 const linuxArtifacts = [
-  { label: "AppImage · x64", href: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-x86_64.AppImage", primary: true },
-  { label: "AppImage · ARM64", href: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-arm64.AppImage", primary: false },
-  { label: "Debian · x64", href: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-amd64.deb", primary: false },
-  { label: "Debian · ARM64", href: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-arm64.deb", primary: false },
+  { label: "AppImage · x64", href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.0/Mirae-0.2.0-x86_64.AppImage", primary: true },
+  { label: "AppImage · ARM64", href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.0/Mirae-0.2.0-arm64.AppImage", primary: false },
+  { label: "Debian · x64", href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.0/Mirae-0.2.0-amd64.deb", primary: false },
+  { label: "Debian · ARM64", href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.0/Mirae-0.2.0-arm64.deb", primary: false },
 ] as const;
 
 const upcoming = [
@@ -56,7 +56,7 @@ export function ReleaseDownloads() {
               const Icon = build.icon;
               return <article key={build.platform} className="releaseUpcomingRow"><Icon /><div><h3>{build.platform}</h3><p>{build.detail}</p></div><span>COMING SOON</span><small>{build.note}</small></article>;
             })}
-            <div className="releaseAvailabilityNote"><CheckCircle2 /> Windows & Linux are active in v0.1.0.</div>
+            <div className="releaseAvailabilityNote"><CheckCircle2 /> Windows & Linux are active in v0.2.0.</div>
           </CurrentReveal>
         </div>
 

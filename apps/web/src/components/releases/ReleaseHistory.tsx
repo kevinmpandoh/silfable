@@ -66,7 +66,7 @@ export function ReleaseHistory() {
                 </div>
                 <div className="mt-9 border-t border-black/10 pt-7 flex flex-wrap gap-4">
                   <Button asChild className="solarPrimaryButton">
-                    <a href="https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-windows-x64-setup.exe" download>
+                    <a href="https://github.com/mirae-trade/mirae/releases/download/v0.2.0/Mirae-0.2.0-windows-x64-setup.exe" download>
                       Download Windows (v{release.version})<ArrowDownToLine className="ml-3 size-3.5" />
                     </a>
                   </Button>

@@ -4,8 +4,6 @@ import { Brand, CornerFooter } from "../common/Brand";
 import { Field } from "../common/Field";
 import { Button } from "../ui/Button";
 
-const STORAGE_KEY = "mirae.mainnet-setup.v2";
-
 export function UnlockScreen({
   onUnlocked,
   onResetVault,
@@ -25,10 +23,10 @@ export function UnlockScreen({
     setBusy(true);
     setMessage(null);
     try {
-      await window.mirae.unlock({
+      await window.mirae.unlockVault({
         schemaVersion: 1,
         requestId: crypto.randomUUID(),
-        masterPassword: password,
+        password,
       });
       setPassword("");
       await onUnlocked();

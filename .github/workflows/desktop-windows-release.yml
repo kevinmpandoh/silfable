@@ -18,6 +18,8 @@ jobs:
     env:
       WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
       WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      MIRAE_BUNDLED_OPENROUTER_API_KEY: ${{ secrets.MIRAE_BUNDLED_OPENROUTER_API_KEY }}
+      MIRAE_BUNDLED_UNISWAP_API_KEY: ${{ secrets.MIRAE_BUNDLED_UNISWAP_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -76,3 +78,19 @@ jobs:
             apps/desktop/release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish signed installer to GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          $tag = "v$env:VERSION"
+          $installer = Get-Item ./apps/desktop/release/Mirae-*-windows-x64-setup.exe
+          $checksum = Get-Item ./apps/desktop/release/SHA256SUMS.txt
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $installer.FullName $checksum.FullName --clobber
+          } else {
+            gh release create $tag $installer.FullName $checksum.FullName --title "Mirae $tag" --generate-notes --target $env:GITHUB_SHA
+          }

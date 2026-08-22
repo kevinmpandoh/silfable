@@ -254,7 +254,7 @@ export function Conversation({
               className="perpsToggle"
             >
               <Activity className="size-3.5" />
-              PERPS (Phoenix)
+              PERPS
             </button>
           )}
         </div>

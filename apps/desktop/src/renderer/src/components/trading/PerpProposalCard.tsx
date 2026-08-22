@@ -1,31 +1,58 @@
 import { useState } from "react";
-import { ShieldAlert, ShieldCheck, TrendingDown, TrendingUp, KeyRound, ExternalLink, Loader2, CheckCircle2 } from "lucide-react";
+import {
+  ShieldAlert,
+  ShieldCheck,
+  TrendingDown,
+  TrendingUp,
+  KeyRound,
+  ExternalLink,
+  Loader2,
+  CheckCircle2,
+} from "lucide-react";
 import type { PerpProposal } from "@mirae/contracts";
 
 export function PerpProposalCard({
   proposal,
   walletAddress,
   onExecute,
+  onReject,
+  embedded = false,
 }: {
   proposal: PerpProposal;
   walletAddress?: string;
   onExecute?: () => void;
+  onReject?: () => void;
+  embedded?: boolean;
 }) {
   const [executing, setExecuting] = useState(false);
   const [signature, setSignature] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const isLong = proposal.direction === "long";
+  const isFunding = proposal.action === "fund_collateral";
+  const isRegistration = proposal.action === "register_account";
   const hasFailingCheck = proposal.checks.some((c) => c.status === "block");
+  const canExecute =
+    proposal.status === "ready_for_user_signature" &&
+    Boolean(proposal.plan) &&
+    !hasFailingCheck;
+  const executionLabel = isRegistration
+    ? "Register Account"
+    : isFunding
+    ? "Fund Collateral"
+    : proposal.reduceOnly
+    ? "Close Position"
+    : `Execute ${proposal.direction.toUpperCase()} Order`;
 
   const handleExecute = async () => {
-    if (executing || signature) return;
+    if (executing || signature || !canExecute || !proposal.plan) return;
     try {
       setExecuting(true);
       setError(null);
 
       const targetWallet = walletAddress ?? proposal.account?.walletAddress;
-      if (!targetWallet) throw new Error("No active wallet address available for execution.");
+      if (!targetWallet)
+        throw new Error("No active wallet address available for execution.");
 
       const res = await window.mirae?.executePerpOrder?.({
         plan: proposal.plan,
@@ -47,42 +74,104 @@ export function PerpProposalCard({
   };
 
   return (
-    <div className="my-3 overflow-hidden rounded-2xl border border-[rgb(32_33_42_/_0.12)] bg-white p-5 shadow-sm">
+    <div
+      className={`${
+        embedded
+          ? "mt-2"
+          : "my-3 rounded-2xl border border-[rgb(32_33_42_/_0.12)] bg-white shadow-sm"
+      } overflow-hidden p-5`}
+    >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-[#20212A]/10 pb-3">
         <div className="flex items-center gap-2.5">
-          <div className={`flex size-8 items-center justify-center rounded-lg border ${isLong ? "border-emerald-200 bg-emerald-50 text-emerald-600" : "border-rose-200 bg-rose-50 text-rose-600"}`}>
-            {isLong ? <TrendingUp className="size-4" /> : <TrendingDown className="size-4" />}
+          <div
+            className={`flex size-8 items-center justify-center rounded-lg border ${
+              isLong
+                ? "border-emerald-200 bg-emerald-50 text-emerald-600"
+                : "border-rose-200 bg-rose-50 text-rose-600"
+            }`}
+          >
+            {isLong ? (
+              <TrendingUp className="size-4" />
+            ) : (
+              <TrendingDown className="size-4" />
+            )}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-[#20212A]">{proposal.symbol}</span>
-              <span className={`rounded-md border px-1.5 py-0.5 text-[9px] font-bold ${isLong ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700"}`}>
-                {proposal.direction.toUpperCase()} · {proposal.leverage}x
+              <span className="font-bold text-[#20212A]">
+                {proposal.symbol}
+              </span>
+              <span
+                className={`rounded-md border px-1.5 py-0.5 text-[9px] font-bold ${
+                  isLong
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-rose-200 bg-rose-50 text-rose-700"
+                }`}
+              >
+                {isRegistration
+                  ? "REGISTER ACCOUNT"
+                  : isFunding
+                  ? "FUND COLLATERAL"
+                  : proposal.reduceOnly
+                  ? "REDUCE ONLY"
+                  : `${proposal.direction.toUpperCase()} · ${
+                      proposal.leverage
+                    }x`}
               </span>
             </div>
-            <p className="text-[11px] text-[#686970]">{proposal.venue} · ISOLATED MARKET ORDER</p>
+            <p className="text-[11px] text-[#686970]">
+              {proposal.venue} ·{" "}
+              {isRegistration
+                ? "STEP 1 OF 3"
+                : isFunding
+                ? "STEP 2 OF 3"
+                : proposal.reduceOnly
+                ? "CLOSE POSITION"
+                : "ISOLATED MARKET ORDER"}
+            </p>
           </div>
         </div>
         <div className="text-right">
           <span className="text-[10px] text-[#686970]">Mark Price</span>
-          <p className="font-mono text-xs font-bold text-[#20212A]">${Number(proposal.oraclePriceUsd).toLocaleString()}</p>
+          <p className="font-mono text-xs font-bold text-[#20212A]">
+            ${Number(proposal.oraclePriceUsd).toLocaleString()}
+          </p>
         </div>
       </div>
 
       {/* Metrics Grid */}
-      <div className="my-4 grid grid-cols-3 gap-2 rounded-xl border border-[#20212A]/08 bg-[#F8F9FA] p-3 text-xs">
+      <div className="my-4 grid grid-cols-3 gap-2 rounded-xl bg-[#F6F2EE] p-3 text-xs">
         <div>
-          <span className="text-[10px] font-medium text-[#686970]">Position Size</span>
-          <p className="text-[13px] font-bold text-[#20212A]">${Number(proposal.notionalUsd).toFixed(2)}</p>
+          <span className="text-[10px] font-medium text-[#686970]">
+            Position Size
+          </span>
+          <p className="text-[13px] font-bold text-[#20212A]">
+            ${Number(proposal.notionalUsd).toFixed(2)}
+          </p>
         </div>
         <div>
-          <span className="text-[10px] font-medium text-[#686970]">Collateral (USDC)</span>
-          <p className="text-[13px] font-bold text-[#20212A]">${Number(proposal.collateralUsdc ?? (Number(proposal.notionalUsd) / proposal.leverage)).toFixed(2)}</p>
+          <span className="text-[10px] font-medium text-[#686970]">
+            {proposal.reduceOnly ? "Added Collateral" : "Collateral (USDC)"}
+          </span>
+          <p className="text-[13px] font-bold text-[#20212A]">
+            $
+            {Number(
+              proposal.collateralUsdc ??
+                Number(proposal.notionalUsd) / proposal.leverage
+            ).toFixed(2)}
+          </p>
         </div>
         <div>
-          <span className="text-[10px] font-medium text-[#686970]">Network Fee</span>
-          <p className="text-[13px] font-bold text-[#E85D04]">~0.000005 SOL</p>
+          <span className="text-[10px] font-medium text-[#686970]">
+            Network Fee
+          </span>
+          <p className="text-[13px] font-bold text-[#E85D04]">
+            {(Number(proposal.networkFeeLamports ?? 0) / 1_000_000_000).toFixed(
+              9
+            )}{" "}
+            SOL
+          </p>
         </div>
       </div>
 
@@ -95,7 +184,13 @@ export function PerpProposalCard({
             ) : (
               <ShieldAlert className="size-3.5 flex-none text-rose-600" />
             )}
-            <span className={check.status === "block" ? "font-medium text-rose-700" : ""}>{check.message}</span>
+            <span
+              className={
+                check.status === "block" ? "font-medium text-rose-700" : ""
+              }
+            >
+              {check.message}
+            </span>
           </div>
         ))}
       </div>
@@ -110,30 +205,61 @@ export function PerpProposalCard({
         <div className="mt-4 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-800">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="size-4 text-emerald-600" />
-            <span>Order executed and confirmed on Solana Mainnet!</span>
+            <span>
+              {isRegistration
+                ? "Trading account registered. Prepare the order again to fund collateral."
+                : isFunding
+                ? "Collateral deposit submitted. Wait for it to be credited, then refresh before preparing the order."
+                : "Order executed and confirmed on Solana Mainnet!"}
+            </span>
           </div>
-          <a
-            href={`https://solscan.io/tx/${signature}`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={() => {
+              void window.mirae
+                .openTransactionInExplorer({
+                  schemaVersion: 1,
+                  requestId: crypto.randomUUID(),
+                  signature,
+                })
+                .catch((reason) => {
+                  setError(
+                    reason instanceof Error
+                      ? reason.message
+                      : "Could not open Solscan."
+                  );
+                });
+            }}
             className="flex items-center gap-1 font-bold text-emerald-700 hover:underline"
           >
             <span>View Solscan</span>
             <ExternalLink className="size-3" />
-          </a>
+          </button>
         </div>
       ) : (
         <div className="mt-4 flex items-center justify-end gap-3">
+          {onReject && (
+            <button
+              type="button"
+              disabled={executing}
+              onClick={onReject}
+              className="rounded-xl border-2 border-[#E85D04] bg-white px-6 py-2.5 text-xs font-bold text-[#C94E00] transition hover:bg-[#FFF0E4] disabled:border-[#D9B9A4] disabled:text-[#A98D7B] disabled:opacity-100"
+            >
+              Reject
+            </button>
+          )}
           <button
             type="button"
-            disabled={hasFailingCheck || executing}
+            disabled={!canExecute || executing}
             onClick={handleExecute}
-            className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition shadow-sm ${
-              hasFailingCheck
-                ? "cursor-not-allowed border border-gray-200 bg-gray-100 text-gray-400"
+            className={`flex min-w-[240px] items-center justify-center gap-2 rounded-xl px-6 py-3 text-xs font-bold text-white shadow-[0_10px_24px_rgba(32,20,14,0.12)] transition disabled:cursor-wait disabled:!text-white disabled:opacity-80 ${
+              !canExecute
+                ? "cursor-not-allowed !bg-[#B8B6B3]"
+                : isRegistration || isFunding
+                ? "bg-[#E85D04] hover:bg-[#C94E00]"
                 : isLong
-                  ? "bg-[#10B981] text-white hover:bg-[#059669]"
-                  : "bg-[#F43F5E] text-white hover:bg-[#E11D48]"
+                ? "bg-[#10B981] text-white hover:bg-[#059669]"
+                : "bg-[#F43F5E] text-white hover:bg-[#E11D48]"
             }`}
           >
             {executing ? (
@@ -144,7 +270,13 @@ export function PerpProposalCard({
             ) : (
               <>
                 <KeyRound className="size-3.5" />
-                <span>Sign & Execute {proposal.direction.toUpperCase()} Order</span>
+                <span>
+                  {canExecute
+                    ? `${
+                        onReject ? "Agree & Sign" : "Sign"
+                      } · ${executionLabel}`
+                    : "Order unavailable"}
+                </span>
               </>
             )}
           </button>

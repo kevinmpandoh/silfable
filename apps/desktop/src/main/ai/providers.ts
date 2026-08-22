@@ -1,6 +1,6 @@
 import { EvmSwapProposalSchema, LimitOrderContractPreviewSchema, MissionContractPreviewSchema, PumpDiscoverySnapshotSchema, PumpTokenIntelligenceSchema, PumpTradeContractPreviewSchema, type EvmSwapProposal, type LimitOrderContractPreview, type MissionContractPreview, type OpenRouterModelView, type PumpDiscoverySnapshot, type PumpTokenIntelligence, type PumpTradeContractPreview } from "@mirae/contracts";
 
-export const DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o-mini";
+export const DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
 
 export type ReadOnlyAiToolName = "wallet_portfolio" | "wallet_activity" | "jupiter_prices" | "jupiter_token_search" | "jupiter_swap_quote" | "pump_token_analysis" | "pump_recent_candidates" | "pump_trade_contract_preview" | "mission_contract_preview" | "limit_order_contract_preview" | "robinhood_swap_quote" | "tavily_search" | "create_automation_strategy" | "cancel_automation_strategy";
 export type ReadOnlyAiTool = {

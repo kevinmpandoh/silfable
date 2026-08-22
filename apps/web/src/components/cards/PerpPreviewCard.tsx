@@ -74,7 +74,7 @@ export function PerpPreviewCard({
       <section className="swapRouteCard swapRouteCard--solana" aria-label="Choose a perpetual side">
         <header className="swapRouteHeader">
           <div className="swapRouteHeading">
-            <span className="swapRouteEyebrow">Solana · Phoenix</span>
+            <span className="swapRouteEyebrow">Solana · Perpetuals</span>
             <strong className="swapRoutePair"><span>{market}</span></strong>
           </div>
           <span className="swapRouteStatus swapRouteStatus--pending">Choose a side</span>
@@ -106,13 +106,13 @@ export function PerpPreviewCard({
   if (isAccountInit) {
     return <SwapRouteCard
       network="solana"
-      venue="Phoenix"
+      venue="Perpetuals"
       inputSymbol="ACTIVATE"
       outputSymbol="ACCOUNT"
       statusLabel={expired && !settled ? "Preflight expired" : status.label}
       statusTone={expired && !settled ? "warning" : status.tone}
       details={[
-        { label: "Action", value: "Initialize Phoenix Subaccount" },
+        { label: "Action", value: "Initialize Trading Account" },
         { label: "Network", value: "Solana Mainnet" },
         { label: "Rent deposit", value: "~0.0382 SOL (persisted on-chain)" },
         { label: "Network fee", value: proposal.perpNetworkFeeLamports ? `${(Number(proposal.perpNetworkFeeLamports) / 1_000_000_000).toFixed(6)} SOL` : "Measured by simulation" },
@@ -122,7 +122,7 @@ export function PerpPreviewCard({
         proposal.perpError
           ? proposal.perpError
           : settled
-            ? "Your Phoenix trading subaccount was created. You can now place perpetuals orders."
+            ? "Your perpetuals trading account was created. You can now place orders."
             : expired
               ? "The simulated blockhash expired. Run preflight again to rebuild the transaction."
               : ready
@@ -138,7 +138,7 @@ export function PerpPreviewCard({
 
   return <SwapRouteCard
     network="solana"
-    venue="Phoenix"
+    venue="Perpetuals"
     inputSymbol={proposal.perpReduceOnly ? "CLOSE" : direction}
     outputSymbol={market}
     statusLabel={expired && !settled ? "Preflight expired" : status.label}
@@ -160,7 +160,7 @@ export function PerpPreviewCard({
       proposal.perpError
         ? proposal.perpError
         : settled
-          ? "The order was submitted to Phoenix. Position and collateral update once the fill settles."
+          ? "The order was submitted. Position and collateral update once the fill settles."
           : expired
             ? "The simulated blockhash expired. Run preflight again to rebuild the transaction."
             : ready

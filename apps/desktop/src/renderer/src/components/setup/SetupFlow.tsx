@@ -919,7 +919,7 @@ export function IntegrationStep({
       </ProviderCard>
       <ProviderCard
         name="Uniswap · Robinhood Chain"
-        tag={uniswapConfigured ? "Configured" : "Required for Robinhood swaps"}
+        tag={uniswapConfigured ? "Mirae default ready" : "Optional override"}
         description="Official Uniswap Trading API with Classic routes only and the pinned Universal Router 2.1.1."
       >
         <Field label="Uniswap API key">
@@ -930,8 +930,8 @@ export function IntegrationStep({
               onChange={(event) => setUniswapKey(event.target.value)}
               placeholder={
                 uniswapConfigured
-                  ? "Replace saved key"
-                  : "Enter Uniswap API key"
+                  ? "Optional personal key override"
+                  : "Enter personal Uniswap API key"
               }
               autoComplete="new-password"
             />
@@ -948,8 +948,8 @@ export function IntegrationStep({
           </div>
         </Field>
         <small className="providerHint">
-          Required only for Robinhood Chain EVM swaps. It is encrypted locally
-          and never sent to the AI model.
+          Mirae uses its managed key by default. A personal key entered here
+          overrides it and is encrypted locally.
         </small>
       </ProviderCard>
       <ProviderCard
@@ -1670,7 +1670,7 @@ export function ProviderStep({
         setStoredConfigured(true);
         setModel((current) => current || saved.model);
         setMessage(
-          "OpenRouter is already configured. Enter a new key only to replace it.",
+          "Mirae AI is ready. Enter your own OpenRouter key only if you want to override the managed default.",
         );
       })
       .catch(() => undefined);
@@ -1740,7 +1740,7 @@ export function ProviderStep({
             onChange={(event) => setApiKey(event.target.value)}
             autoComplete="new-password"
             placeholder={
-              storedConfigured ? "Enter a new key to reconfigure" : "sk-or-…"
+              storedConfigured ? "Optional personal key override" : "sk-or-…"
             }
           />
           <Button
@@ -1792,7 +1792,7 @@ export function ProviderStep({
           !model || (!storedConfigured && apiKey.trim().length < 8) || busy
         }
         continueLabel={
-          storedConfigured && !apiKey ? "Continue with saved" : "Save provider"
+          storedConfigured && !apiKey ? "Continue with Mirae AI" : "Save provider"
         }
       />
     </SetupCard>

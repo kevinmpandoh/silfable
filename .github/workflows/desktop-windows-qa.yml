@@ -69,10 +69,11 @@ jobs:
       - name: Package unsigned portable QA build
         shell: pwsh
         run: |
-          $archive = "./apps/desktop/release/Mirae-0.1.0-windows-x64-unsigned-qa.zip"
+          $version = (Get-Content ./apps/desktop/package.json | ConvertFrom-Json).version
+          $archive = "./apps/desktop/release/Mirae-$version-windows-x64-unsigned-qa.zip"
           Compress-Archive -Path "./apps/desktop/release/win-unpacked/*" -DestinationPath $archive -CompressionLevel Optimal
           $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
-          "$hash  Mirae-0.1.0-windows-x64-unsigned-qa.zip" | Set-Content -Encoding ascii ./apps/desktop/release/SHA256SUMS-WINDOWS-QA.txt
+          "$hash  Mirae-$version-windows-x64-unsigned-qa.zip" | Set-Content -Encoding ascii ./apps/desktop/release/SHA256SUMS-WINDOWS-QA.txt
 
       - name: Upload QA evidence
         if: always()

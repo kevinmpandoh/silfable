@@ -15,7 +15,7 @@ type PlatformRelease = {
 
 export async function DownloadTable() {
   let version = "0.1.0";
-  let tag = "v0.1.0";
+  let tag = "v0.2.0";
 
   try {
     const response = await fetch("https://api.github.com/repos/mirae-trade/mirae/releases/latest", {

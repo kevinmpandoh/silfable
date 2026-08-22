@@ -29,6 +29,7 @@ import { callOpenRouterChat, DEFAULT_OPENROUTER_MODEL, type ReadOnlyAiTool } fro
 import type { AutomationManager } from "../execution/automation-manager.js";
 import { UNISWAP_NATIVE_TOKEN_ADDRESS } from "../integrations/uniswap.js";
 import type { FullAccessEvmAssetAuthorizationService } from "../security/full-access-evm-assets.js";
+import { BUNDLED_OPENROUTER_API_KEY } from "../config/managed-provider-defaults.js";
 
 type AiSecretStore = {
   getSecret(name: SecretName): Promise<string | null>;
@@ -61,6 +62,11 @@ type EvmBridgePreparationService = {
 };
 
 const SETTING_KEY = "ai.provider.openrouter";
+
+function managedOpenRouterKey(): string | null {
+  const value = process.env.MIRAE_DEFAULT_OPENROUTER_API_KEY?.trim();
+  return value && value.length >= 8 ? value : BUNDLED_OPENROUTER_API_KEY;
+}
 
 export type PumpAiScope = {
   kind: "exact-mint" | "watchlist" | "discovery";
@@ -120,7 +126,9 @@ export class AiService {
   }
 
   async listSettings(): Promise<AiProviderSetting[]> {
-    const configured = (await this.#keystore.getSecret("openrouter-api-key")) !== null;
+    const configured =
+      (await this.#keystore.getSecret("openrouter-api-key")) !== null ||
+      managedOpenRouterKey() !== null;
     return [AiProviderSettingSchema.parse({ provider: "openrouter", configured, model: this.#model() })];
   }
 
@@ -379,7 +387,9 @@ export class AiService {
         evmSwapProposal: proposal,
       };
     }
-    const apiKey = await this.#keystore.getSecret("openrouter-api-key");
+    const apiKey =
+      (await this.#keystore.getSecret("openrouter-api-key")) ??
+      managedOpenRouterKey();
     if (apiKey === null) throw new Error("OpenRouter is not configured");
     const { pumpScope, intent, walletScope, sessionId, ...providerInput } = input;
     return { model: this.#model(), ...(await callOpenRouterChat({ apiKey, model: this.#model(), ...providerInput, tools: await this.#tools(input.walletAddress, input.mode, pumpScope, intent, walletScope, input.transactionSettings ?? this.#transactionSettings.get(), sessionId, input.permission) })) };

@@ -30,9 +30,15 @@ test("OpenRouter key remains secret while public settings expose status", async 
   assert.equal(secrets.values.get("openrouter-api-key"), "sk-or-private-test");
 });
 
-test("unconfigured OpenRouter cannot start a chat", async () => {
+test("bundled OpenRouter fallback keeps a fresh install configured", async () => {
   const service = new AiService({ keystore: new MemorySecrets(), settings: new MemorySettings() });
-  await assert.rejects(() => service.chat({ prompt: "hello", mode: "agent", walletAddress: null }), /not configured/u);
+  assert.deepEqual(await service.listSettings(), [
+    {
+      provider: "openrouter",
+      configured: true,
+      model: "nvidia/nemotron-3-super-120b-a12b:free",
+    },
+  ]);
 });
 
 test("EVM wallet-scoped sessions receive only the typed EVM quote proposal from the trading tool surface", { concurrency: false }, async () => {

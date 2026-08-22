@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Session not found." }, { status: 404 });
     }
     const messages = await cloudDb.chatMessage.findMany({
-      where: { sessionId },
+      where: { sessionId, role: { in: ["user", "assistant"] } },
       orderBy: { createdAt: "asc" },
     });
 

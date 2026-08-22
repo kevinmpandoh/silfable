@@ -20,14 +20,14 @@ const communityLinks = [
 const downloadLinks = [
   {
     label: "Windows",
-    href: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-windows-x64-setup.exe",
+    href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.0/Mirae-0.2.0-windows-x64-setup.exe",
     external: true,
     download: true,
     soon: false,
   },
   {
     label: "Linux",
-    href: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-x86_64.AppImage",
+    href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.0/Mirae-0.2.0-x86_64.AppImage",
     external: true,
     download: true,
     soon: false,

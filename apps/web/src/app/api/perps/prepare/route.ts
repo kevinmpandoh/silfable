@@ -11,6 +11,7 @@ import {
   isAllowedSymbol,
   normalizeSymbol,
 } from "@/lib/phoenix-perps-core";
+import { createPerpPreflightToken } from "@/lib/perp-preflight-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,7 +69,17 @@ export async function POST(request: NextRequest) {
         baseAmount: String(position.baseAmount),
         reduceOnly: true,
       });
-      return NextResponse.json({ plan, closingPosition: position });
+      await storePreparedIntent(body.sessionId, plan.walletAddress, plan.transactionDigest, plan.expiresAt);
+      return NextResponse.json({
+        plan,
+        closingPosition: position,
+        preflightToken: createPerpPreflightToken({
+          sessionId: body.sessionId,
+          walletAddress: plan.walletAddress,
+          digest: plan.transactionDigest,
+          expiresAt: plan.expiresAt,
+        }),
+      });
     }
 
     if (!body.baseAmount && !body.notionalUsd) {
@@ -85,11 +96,38 @@ export async function POST(request: NextRequest) {
       notionalUsd: body.notionalUsd,
       collateralUsdc: body.collateralUsdc,
     });
-    return NextResponse.json({ plan, maxNotionalUsd: MAX_PERP_NOTIONAL_USD, maxLeverage: MAX_PERP_LEVERAGE });
+    await storePreparedIntent(body.sessionId, plan.walletAddress, plan.transactionDigest, plan.expiresAt);
+    return NextResponse.json({
+      plan,
+      preflightToken: createPerpPreflightToken({
+        sessionId: body.sessionId,
+        walletAddress: plan.walletAddress,
+        digest: plan.transactionDigest,
+        expiresAt: plan.expiresAt,
+      }),
+      maxNotionalUsd: MAX_PERP_NOTIONAL_USD,
+      maxLeverage: MAX_PERP_LEVERAGE,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "The perpetuals preflight failed safely.";
     return NextResponse.json({ error: message, code: "PERPS_PREFLIGHT_FAILED" }, { status: 400 });
   }
+}
+
+async function storePreparedIntent(
+  sessionId: string,
+  walletAddress: string,
+  digest: string,
+  expiresAt: number,
+): Promise<void> {
+  await cloudDb.chatMessage.create({
+    data: {
+      sessionId,
+      role: "preflight",
+      content: "Internal perpetuals preflight authorization.",
+      proposalJson: JSON.stringify({ kind: "perp_preflight", walletAddress, digest, expiresAt }),
+    },
+  });
 }
 
 async function assertSolanaSession(userId: string, sessionId: string, walletAddress: string): Promise<void> {

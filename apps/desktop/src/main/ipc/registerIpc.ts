@@ -6,8 +6,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { ManagedLaunchMetadataClient } from "../pump/managed-metadata.js";
-import { listPhoenixPerpMarkets, getPhoenixPerpAccount, buildPhoenixOrderProposal, executePhoenixOrder } from "../perps/phoenix-core.js";
+import { listPhoenixPerpMarkets, getPhoenixPerpCandles, getPhoenixPerpAccount, buildPhoenixOrderProposal, executePhoenixOrder, rememberSubmittedCollateral } from "../perps/phoenix-core.js";
 import { listDriftPerpMarkets, getDriftPerpAccount, buildDriftOrderProposal } from "../drift/drift-core.js";
+import { BUNDLED_UNISWAP_API_KEY } from "../config/managed-provider-defaults.js";
 
 import {
   AiChatRequestSchema,
@@ -109,6 +110,7 @@ import {
   PortfolioGetResponseSchema,
   PortfolioCostBasisGetRequestSchema,
   PortfolioCostBasisGetResponseSchema,
+  PerpOrderPlanSchema,
   PumpFinalRevalidateRequestSchema,
   PumpFinalRevalidateResponseSchema,
   PumpExecuteRequestSchema,
@@ -796,7 +798,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     const request = ExternalOpenTransactionRequestSchema.parse(raw);
     requireUnlocked();
     const explorerUrl = "signature" in request
-      ? `https://explorer.solana.com/tx/${request.signature}`
+      ? `https://solscan.io/tx/${request.signature}`
       : `${getEvmChain(request.chainKey).explorerUrl}/tx/${request.transactionHash}`;
     await shell.openExternal(explorerUrl, { activate: true });
     return ExternalOpenTransactionResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, opened: true });
@@ -2067,7 +2069,12 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     requireUnlocked();
     return UniswapSettingsResponseSchema.parse({
       schemaVersion: 1,
-      configured: (await secretStore.getSecret("uniswap-api-key")) !== null,
+      configured:
+        (await secretStore.getSecret("uniswap-api-key")) !== null ||
+        Boolean(
+          process.env.MIRAE_DEFAULT_UNISWAP_API_KEY?.trim() ||
+            BUNDLED_UNISWAP_API_KEY,
+        ),
       chainId: 4_663,
       routerAddress: ROBINHOOD_UNIVERSAL_ROUTER,
       routerVersion: ROBINHOOD_UNIVERSAL_ROUTER_VERSION,
@@ -2596,18 +2603,50 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     return { markets };
   });
 
+  ipcMain.handle(IPC_CHANNELS.perpsCandlesGet, async (event, request: unknown) => {
+    assertTrustedSender(event);
+    const input = z.object({ symbol: z.string().min(1).max(32), timeframe: z.string().max(4), limit: z.number().int().min(20).max(240) }).parse(request);
+    return { candles: await getPhoenixPerpCandles(input.symbol, input.timeframe, input.limit) };
+  });
+
   ipcMain.handle(IPC_CHANNELS.perpsAccountGet, async (event, walletAddress: string) => {
     assertTrustedSender(event);
     const rpcUrl = resolveSolanaRpcUrl();
-    const account = await getPhoenixPerpAccount(walletAddress, rpcUrl);
-    return { account };
+    try {
+      const savedPending = database.getSetting(`perps_pending_collateral_${walletAddress}`) as { amountUsd?: number; submittedAt?: number } | null;
+      if (savedPending?.amountUsd && savedPending?.submittedAt) {
+        rememberSubmittedCollateral(walletAddress, savedPending.amountUsd, savedPending.submittedAt);
+      }
+      const account = await getPhoenixPerpAccount(walletAddress, rpcUrl);
+      if (account.collateralUsd > 0 && savedPending) database.deleteSetting(`perps_pending_collateral_${walletAddress}`);
+      return { account, error: null };
+    } catch (error) {
+      return {
+        account: null,
+        error: error instanceof Error ? error.message : "Trading account data is temporarily unavailable.",
+      };
+    }
   });
 
   ipcMain.handle(IPC_CHANNELS.perpsOrderPrepare, async (event, request: any) => {
     assertTrustedSender(event);
     const rpcUrl = resolveSolanaRpcUrl();
+    const input = z.object({
+      walletAddress: z.string().min(32).max(44),
+      symbol: z.string().min(1).max(32),
+      direction: z.enum(["long", "short"]),
+      notionalUsd: z.number().finite().positive(),
+      leverage: z.number().int().positive(),
+      collateralUsdc: z.string().optional(),
+      reduceOnly: z.boolean().optional(),
+      baseAmount: z.number().finite().positive().optional(),
+    }).parse(request);
+    const savedPending = database.getSetting(`perps_pending_collateral_${input.walletAddress}`) as { amountUsd?: number; submittedAt?: number } | null;
+    if (savedPending?.amountUsd && savedPending?.submittedAt) {
+      rememberSubmittedCollateral(input.walletAddress, savedPending.amountUsd, savedPending.submittedAt);
+    }
     const proposal = await buildPhoenixOrderProposal({
-      ...request,
+      ...input,
       rpcUrl,
     });
     return { proposal };
@@ -2617,13 +2656,21 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     assertTrustedSender(event);
     requireUnlocked();
     const rpcUrl = resolveSolanaRpcUrl();
-    return await wallets.withWalletWeb3Keypair(request.walletAddress, async (keypair) => {
-      return await executePhoenixOrder({
-        plan: request.plan,
-        transactionBase64: request.transactionBase64,
+    const input = z.object({ walletAddress: z.string().min(32).max(44), plan: PerpOrderPlanSchema }).parse(request);
+    if (input.walletAddress !== input.plan.walletAddress) throw new Error("Prepared perpetual order is bound to another wallet.");
+    return await wallets.withWalletWeb3Keypair(input.walletAddress, async (keypair) => {
+      const result = await executePhoenixOrder({
+        plan: input.plan,
         keypair,
         rpcUrl,
       });
+      if (input.plan.action === "fund_collateral") {
+        const amountUsd = Number(input.plan.notionalUsd) / Math.max(1, Number(input.plan.leverage));
+        const submittedAt = Date.now();
+        database.setSetting(`perps_pending_collateral_${input.walletAddress}`, { amountUsd, submittedAt, signature: result.signature });
+        rememberSubmittedCollateral(input.walletAddress, amountUsd, submittedAt);
+      }
+      return result;
     });
   });
 

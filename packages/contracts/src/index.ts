@@ -207,6 +207,7 @@ export const IPC_CHANNELS = {
   driftDepositPrepare: "drift:prepare-deposit",
   driftDepositExecute: "drift:execute-deposit",
   perpsMarketsGet: "perps:get-markets",
+  perpsCandlesGet: "perps:get-candles",
   perpsAccountGet: "perps:get-account",
   perpsOrderPrepare: "perps:prepare-order",
   perpsOrderExecute: "perps:execute-order",
@@ -2898,6 +2899,16 @@ export const PerpMarketSchema = z.object({
 });
 export type PerpMarket = z.infer<typeof PerpMarketSchema>;
 
+export const PerpCandleSchema = z.object({
+  time: z.number().int(),
+  open: z.number(),
+  high: z.number(),
+  low: z.number(),
+  close: z.number(),
+  volume: z.number().nonnegative(),
+});
+export type PerpCandle = z.infer<typeof PerpCandleSchema>;
+
 export const PerpPositionSchema = z.object({
   symbol: z.string().min(1),
   direction: z.enum(["long", "short"]),
@@ -2919,10 +2930,13 @@ export const PerpAccountSchema = z.object({
   leverage: z.number(),
   healthPct: z.number(),
   positions: z.array(PerpPositionSchema),
+  pendingCollateralUsd: z.number().nonnegative().optional(),
+  tradingAccessReady: z.boolean().nullable().optional(),
 });
 export type PerpAccount = z.infer<typeof PerpAccountSchema>;
 
 export const PerpOrderPlanSchema = z.object({
+  action: z.enum(["place_order", "register_account", "fund_collateral"]).default("place_order"),
   transactionBase64: z.string(),
   transactionDigest: z.string(),
   walletAddress: z.string(),
@@ -2941,12 +2955,15 @@ export const PerpOrderPlanSchema = z.object({
   lastValidBlockHeight: z.number(),
   expiresAt: z.number(),
   checks: z.array(z.string()),
+  onboarderAddress: z.string().optional(),
+  maxPositions: z.number().int().min(32).max(128).optional(),
 });
 export type PerpOrderPlan = z.infer<typeof PerpOrderPlanSchema>;
 
 export const PerpProposalSchema = z.object({
   id: z.string(),
   type: z.literal("perp_order"),
+  action: z.enum(["place_order", "register_account", "fund_collateral"]).default("place_order"),
   symbol: z.string(),
   direction: z.enum(["long", "short"]),
   orderKind: z.literal("market"),

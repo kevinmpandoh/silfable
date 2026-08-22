@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Brand, Field, CornerFooter, StatusPill } from "./SetupHelpers";
-import { STORAGE_KEY } from "../types";
 
 export function UnlockScreen({
   onUnlocked,

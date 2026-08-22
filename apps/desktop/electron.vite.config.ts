@@ -9,6 +9,14 @@ const utf8ValidateStub = fileURLToPath(new URL("./src/main/stubs/utf-8-validate.
 
 export default defineConfig({
   main: {
+    define: {
+      __MIRAE_BUNDLED_OPENROUTER_API_KEY__: JSON.stringify(
+        process.env.MIRAE_BUNDLED_OPENROUTER_API_KEY ?? "",
+      ),
+      __MIRAE_BUNDLED_UNISWAP_API_KEY__: JSON.stringify(
+        process.env.MIRAE_BUNDLED_UNISWAP_API_KEY ?? "",
+      ),
+    },
     resolve: {
       alias: {
         bufferutil: bufferutilStub,

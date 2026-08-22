@@ -11,7 +11,7 @@ export function ReleaseHero() {
         <CurrentReveal className="releaseConsoleHeroGrid grid gap-10 lg:grid-cols-[.72fr_1fr] lg:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-3">
-              <Badge>v0.1.0 Release</Badge>
+              <Badge>v0.2.0 Release</Badge>
               <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/35">Windows & Linux Available</span>
             </div>
             <h1 className="releaseStamp mt-7 text-[clamp(3.6rem,7vw,7rem)] leading-[0.84] tracking-[-0.07em]">
@@ -30,7 +30,7 @@ export function ReleaseHero() {
             </div>
             <div className="mt-7 flex flex-wrap items-center gap-4">
               <Button asChild size="lg" className="solarPrimaryButton w-full sm:w-auto">
-                <a href="https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-windows-x64-setup.exe" download>
+                <a href="https://github.com/mirae-trade/mirae/releases/download/v0.2.0/Mirae-0.2.0-windows-x64-setup.exe" download>
                   Download for Windows <ArrowDownToLine className="ml-3 size-4" />
                 </a>
               </Button>
