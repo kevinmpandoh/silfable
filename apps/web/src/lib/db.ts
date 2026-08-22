@@ -112,6 +112,7 @@ export interface WebProposal {
   perpStage?: "draft" | "preflight" | "ready" | "submitted" | "confirmed" | "failed" | "unknown";
   perpTransactionBase64?: string;
   perpTransactionDigest?: string;
+  perpPreflightToken?: string;
   perpExpiresAt?: number;
   perpSignature?: string;
   perpExplorerUrl?: string;

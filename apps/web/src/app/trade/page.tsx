@@ -2042,6 +2042,8 @@ export default function TradePage() {
     return () => window.clearTimeout(timer);
   }, [activeSessionId, fetchWalletBalance]);
 
+  const refreshPortfolio = fetchWalletBalance;
+
   // --------------------------------------------------------------------------
   // SESSION HANDLERS (IndexedDB CRUD)
   // --------------------------------------------------------------------------
@@ -2413,7 +2415,7 @@ export default function TradePage() {
           result.error || "The perpetuals order was not broadcast."
         );
       }
-      if (result.status === "confirmed") void refreshPortfolio();
+      if (result.status === "confirmed") void fetchWalletBalance();
       return {
         status:
           result.status === "confirmed"
@@ -2541,6 +2543,7 @@ export default function TradePage() {
         perpNetworkFeeLamports: plan.networkFeeLamports,
         perpTransactionBase64: plan.transactionBase64,
         perpTransactionDigest: plan.transactionDigest,
+        perpPreflightToken: result.preflightToken,
         perpExpiresAt: plan.expiresAt,
         perpError: undefined,
         checks: Array.isArray(plan.checks)
@@ -2603,6 +2606,7 @@ export default function TradePage() {
           sessionId: activeSession.id,
           walletAddress,
           signedTransaction: bytesToBase64(signed.serialize()),
+          preflightToken: proposal.perpPreflightToken,
         }),
       });
       const result = await response.json();
@@ -2629,7 +2633,7 @@ export default function TradePage() {
         perpExplorerUrl: result.explorerUrl,
         perpError: result.error,
       });
-      if (result.status === "confirmed") void refreshPortfolio();
+      if (result.status === "confirmed") void fetchWalletBalance();
     } catch (cause) {
       await patchProposal(messageId, proposal.id, {
         perpError: normalizeWalletActionError(
@@ -2810,7 +2814,7 @@ export default function TradePage() {
         launchExplorerUrl: result.explorerUrl,
         launchError: result.error,
       });
-      if (result.status === "confirmed") void refreshPortfolio();
+      if (result.status === "confirmed") void fetchWalletBalance();
     } catch (cause) {
       const error = normalizeWalletActionError(
         cause,
@@ -2866,7 +2870,7 @@ export default function TradePage() {
             : String(result.networkFeeLamports),
         launchError: result.error,
       });
-      if (result.status === "confirmed") void refreshPortfolio();
+      if (result.status === "confirmed") void fetchWalletBalance();
     } catch (cause) {
       await patchProposal(messageId, proposal.id, {
         launchError:

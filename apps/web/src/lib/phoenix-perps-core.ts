@@ -1,5 +1,3 @@
-import "server-only";
-
 import { createHash } from "node:crypto";
 import {
   ComputeBudgetProgram,
@@ -667,6 +665,7 @@ export async function buildPerpOrderTransaction(
       recentBlockhash: blockhash.blockhash,
       instructions: [
         ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 10_000 }),
         ...instructions.map(toTransactionInstruction),
       ],
     }).compileToV0Message()
@@ -749,6 +748,7 @@ export async function buildRegisterTraderTransaction(
       recentBlockhash: blockhash.blockhash,
       instructions: [
         ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 10_000 }),
         toTransactionInstruction(ix),
       ],
     }).compileToV0Message()
@@ -831,25 +831,43 @@ function resolveQuantity(
 
 export function messageDigest(transaction: VersionedTransaction): string {
   const message = transaction.message;
-  // Wallet extensions may refresh a recent blockhash while presenting the
-  // approval. Authorize the immutable transaction intent instead: payer,
-  // account layout, address-table lookups, and every compiled instruction.
-  // Any change to programs, accounts, instruction data, or fee payer still
-  // produces a different digest and is rejected at broadcast.
+  // Wallet extensions may refresh recentBlockhash and inject or tune ComputeBudget
+  // instructions (e.g. setComputeUnitPrice for dynamic priority fees, setComputeUnitLimit).
+  // To ensure cryptographic binding of the business intent without breaking on wallet priority fees,
+  // we filter out ComputeBudgetProgram instructions and canonicalize the remaining instructions by their
+  // actual public keys and instruction data.
+  const payer = message.staticAccountKeys[0]?.toBase58() ?? "";
+
+  const businessInstructions = [];
+  for (const ix of message.compiledInstructions) {
+    const programId =
+      message.staticAccountKeys[ix.programIdIndex]?.toBase58() ?? "";
+    if (programId === COMPUTE_BUDGET_PROGRAM) {
+      continue;
+    }
+    const keys = Array.from(ix.accountKeyIndexes).map((idx) => {
+      if (idx < message.staticAccountKeys.length) {
+        return message.staticAccountKeys[idx]?.toBase58() ?? "";
+      }
+      return `lookup:${idx}`;
+    });
+    businessInstructions.push({
+      programId,
+      keys,
+      data: Buffer.from(ix.data).toString("base64"),
+    });
+  }
+
   const intent = {
-    header: message.header,
-    staticAccountKeys: message.staticAccountKeys.map((key) => key.toBase58()),
-    compiledInstructions: message.compiledInstructions.map((instruction) => ({
-      programIdIndex: instruction.programIdIndex,
-      accountKeyIndexes: Array.from(instruction.accountKeyIndexes),
-      data: Buffer.from(instruction.data).toString("base64"),
-    })),
+    payer,
+    instructions: businessInstructions,
     addressTableLookups: message.addressTableLookups.map((lookup) => ({
       accountKey: lookup.accountKey.toBase58(),
       writableIndexes: Array.from(lookup.writableIndexes),
       readonlyIndexes: Array.from(lookup.readonlyIndexes),
     })),
   };
+
   return createHash("sha256")
     .update(JSON.stringify(intent))
     .digest("hex");
