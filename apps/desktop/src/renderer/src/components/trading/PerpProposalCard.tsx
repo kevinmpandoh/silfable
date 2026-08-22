@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ShieldAlert,
   ShieldCheck,
@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Loader2,
   CheckCircle2,
+  Zap,
 } from "lucide-react";
 import type { PerpProposal } from "@mirae/contracts";
 
@@ -17,16 +18,19 @@ export function PerpProposalCard({
   onExecute,
   onReject,
   embedded = false,
+  fullAccess = false,
 }: {
   proposal: PerpProposal;
   walletAddress?: string;
   onExecute?: () => void;
   onReject?: () => void;
   embedded?: boolean;
+  fullAccess?: boolean;
 }) {
   const [executing, setExecuting] = useState(false);
   const [signature, setSignature] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const autoExecutedRef = useRef(false);
 
   const isLong = proposal.direction === "long";
   const isFunding = proposal.action === "fund_collateral";
@@ -72,6 +76,20 @@ export function PerpProposalCard({
       setExecuting(false);
     }
   };
+
+  useEffect(() => {
+    if (
+      fullAccess &&
+      canExecute &&
+      !executing &&
+      !signature &&
+      !error &&
+      !autoExecutedRef.current
+    ) {
+      autoExecutedRef.current = true;
+      void handleExecute();
+    }
+  }, [fullAccess, canExecute, executing, signature, error]);
 
   return (
     <div
@@ -119,6 +137,12 @@ export function PerpProposalCard({
                       proposal.leverage
                     }x`}
               </span>
+              {fullAccess && (
+                <span className="flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">
+                  <Zap className="size-2.5 fill-amber-500 text-amber-500" />
+                  <span>FULL ACCESS</span>
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-[#686970]">
               {proposal.venue} ·{" "}
@@ -206,6 +230,7 @@ export function PerpProposalCard({
           <div className="flex items-center gap-2">
             <CheckCircle2 className="size-4 text-emerald-600" />
             <span>
+              {fullAccess ? "⚡ Full Access: " : ""}
               {isRegistration
                 ? "Trading account registered. Prepare the order again to fund collateral."
                 : isFunding
@@ -265,7 +290,11 @@ export function PerpProposalCard({
             {executing ? (
               <>
                 <Loader2 className="size-3.5 animate-spin" />
-                <span>Signing & Broadcasting…</span>
+                <span>
+                  {fullAccess
+                    ? "⚡ Full Access: Signing & Broadcasting…"
+                    : "Signing & Broadcasting…"}
+                </span>
               </>
             ) : (
               <>

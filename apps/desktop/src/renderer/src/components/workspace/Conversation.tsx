@@ -306,12 +306,14 @@ export function Conversation({
                 <PerpProposalCard
                   proposal={(message as any).perpProposal}
                   walletAddress={session.walletAddress ?? undefined}
+                  fullAccess={session.permission === "full"}
                 />
               )}
               {(message as any).driftPerpProposal && (
                 <PerpProposalCard
                   proposal={(message as any).driftPerpProposal}
                   walletAddress={session.walletAddress ?? undefined}
+                  fullAccess={session.permission === "full"}
                 />
               )}
               {(message as any).evmAssetAuthorizationReview && (
