@@ -9,10 +9,15 @@ import {
   VersionedTransaction,
 } from "@solana/web3.js";
 
-import { messageDigest } from "./phoenix-perps-core";
+import { derivePerpCollateralUsdc, messageDigest } from "./phoenix-perps-core";
 
 const PHOENIX_PROGRAM_ID = new PublicKey("EtrnLzgbS7nMMy5fbD42kXiUzGg8XQzJ972Xtk1cjWih");
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+
+test("derives the same default isolated collateral as the perps form", () => {
+  assert.equal(derivePerpCollateralUsdc(0.5), "0.17");
+  assert.equal(derivePerpCollateralUsdc(250, 5), "50.00");
+});
 
 function createOrderTx(params?: {
   payer?: Keypair;

@@ -528,6 +528,14 @@ export type BuildPerpOrderInput = {
   collateralUsdc?: string;
 };
 
+export function derivePerpCollateralUsdc(notionalUsd: number, leverage = 3): string {
+  if (!Number.isFinite(notionalUsd) || notionalUsd <= 0) {
+    throw new Error("Perpetual notional must be positive before collateral is derived.");
+  }
+  const boundedLeverage = Math.max(1, Math.min(MAX_PERP_LEVERAGE, leverage));
+  return (notionalUsd / boundedLeverage).toFixed(2);
+}
+
 export async function buildPerpOrderTransaction(
   input: BuildPerpOrderInput
 ): Promise<PerpOrderPlan> {
@@ -580,12 +588,10 @@ export async function buildPerpOrderTransaction(
       return await buildRegisterTraderTransaction(walletAddress);
     }
     if (!effectiveCollateral || effectiveCollateral <= 0) {
-      if (
-        !account.accountExists ||
-        account.freeCollateralUsd < notionalUsd / MAX_PERP_LEVERAGE
-      ) {
-        effectiveCollateral = Number((notionalUsd / 2).toFixed(2));
-      }
+      // Phoenix orders use isolated collateral. The aggregate account snapshot
+      // cannot prove that collateral is available in the target market's
+      // subaccount, so match the form path and attach an explicit 3x margin.
+      effectiveCollateral = Number(derivePerpCollateralUsdc(notionalUsd));
     }
 
     if (effectiveCollateral > 0) {

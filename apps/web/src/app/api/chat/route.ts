@@ -21,6 +21,7 @@ import { parsePerpIntent, type PerpIntent } from "@/lib/perps-intent";
 import {
   MAX_PERP_NOTIONAL_USD,
   MIRAE_PERP_SYMBOLS,
+  derivePerpCollateralUsdc,
   getPerpAccount,
   isAllowedSymbol,
   normalizeSymbol,
@@ -374,6 +375,9 @@ async function resolvePerpsReply(input: {
       reduceOnly: false,
       baseAmount: intent.baseAmount,
       notionalUsd: intent.notionalUsd,
+      collateralUsdc: intent.notionalUsd
+        ? derivePerpCollateralUsdc(Number(intent.notionalUsd), intent.leverage ?? 3)
+        : undefined,
       oraclePriceUsd: null,
       limitPriceUsd: intent.limitPrice,
       account,
@@ -389,6 +393,7 @@ function perpProposal(input: {
   reduceOnly: boolean;
   baseAmount?: string | null;
   notionalUsd?: string | null;
+  collateralUsdc?: string;
   oraclePriceUsd: string | null;
   limitPriceUsd: string | null;
   account: PerpAccountSnapshot;
@@ -410,6 +415,7 @@ function perpProposal(input: {
     perpReduceOnly: input.reduceOnly,
     perpBaseAmount: input.baseAmount ?? undefined,
     perpNotionalUsd: input.notionalUsd ?? undefined,
+    perpCollateralUsdc: input.collateralUsdc,
     perpLimitPriceUsd: input.limitPriceUsd ?? undefined,
     perpOraclePriceUsd: input.oraclePriceUsd ?? undefined,
     perpFreeCollateralUsd: input.account.freeCollateralUsd.toFixed(2),
