@@ -6,9 +6,26 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 const releases = [{
+  version: "0.2.1",
+  date: "Perpetuals Desktop Update",
+  status: "Latest",
+  summary: "Refined Mirae Perpetuals Desktop Experience",
+  added: [
+    "Release-build audit preventing internal venue branding from reaching the desktop UI",
+  ],
+  changed: [
+    "Default Perpetuals leverage is now a conservative 2x",
+    "Perpetuals remain presented consistently as Mirae and Solana Perpetuals",
+  ],
+  fixed: [
+    "Desktop release metadata and downloadable Linux artifacts",
+  ],
+  windowsHref: null,
+  releaseHref: "https://github.com/mirae-trade/mirae/releases/tag/v0.2.1",
+}, {
   version: "0.2.0",
   date: "Perpetuals Release",
-  status: "Latest",
+  status: "Official",
   summary: "Guarded Solana Perpetuals & Market Workspace",
   added: [
     "Solana perpetuals market workspace with live charts",
@@ -64,7 +81,7 @@ export function ReleaseHistory() {
           <h2 className="mt-5 font-display text-5xl tracking-[-0.05em] sm:text-7xl">Version history</h2>
         </div>
         <p className="max-w-md text-sm leading-7 text-black/50 lg:justify-self-end">
-          v0.2.0 is the current Perps milestone. The complete v0.1.0 Windows and Linux artifacts remain available below.
+          v0.2.1 is the current Linux Perps desktop release. The signed v0.1.0 Windows installer remains available while v0.2.1 Windows signing is pending.
         </p>
       </CurrentReveal>
 
