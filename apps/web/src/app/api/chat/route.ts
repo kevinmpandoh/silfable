@@ -22,12 +22,15 @@ import {
   MAX_PERP_NOTIONAL_USD,
   MIRAE_PERP_SYMBOLS,
   derivePerpCollateralUsdc,
+  getPerpCandles,
   getPerpAccount,
   isAllowedSymbol,
   normalizeSymbol,
+  listPerpMarkets,
   type PerpAccountSnapshot,
 } from "@/lib/phoenix-perps-core";
 import { formatPerpsSummary, loadSnapshot, runPerpsAiTool } from "@/lib/perps-ai-tool";
+import { assessBullishPerpSetup, type PerpSetupAssessment } from "@/lib/perps-setup-analysis";
 
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -365,9 +368,35 @@ async function resolvePerpsReply(input: {
     return { role: "assistant", content: `This wallet has no perpetuals account yet. Open the PERPS panel and set the collateral for your first order; the account is opened in the same transaction. No order was prepared.` };
   }
 
+  let setup: PerpSetupAssessment | null = null;
+  if (intent.analyzeBeforeOpen) {
+    const [feed, candles] = await Promise.all([
+      listPerpMarkets(),
+      getPerpCandles(market.baseAssetSymbol, "1h", 120),
+    ]);
+    const liveMarket = feed.markets.find((entry) => entry.symbol === market.symbol);
+    if (!liveMarket) return { role: "assistant", content: `${market.symbol} live market data is unavailable, so no order was proposed.` };
+    setup = assessBullishPerpSetup(liveMarket, candles);
+    if (setup.verdict !== "bullish") {
+      const details = setup.checks.map((check) => `${check.passed ? "PASS" : "BLOCK"} — ${check.message}`).join("\n");
+      const freshness = liveMarket.stale ? "\nBLOCK — The market feed is stale." : "";
+      return {
+        role: "assistant",
+        content: `${market.symbol} does not qualify as bullish (${setup.score}/${setup.requiredScore} required checks passed), so Mirae created no order.\n\n${details}${freshness}`,
+      };
+    }
+  }
+
+  const stopLossPriceUsd = setup && intent.stopLossPct
+    ? setup.priceUsd * (1 - intent.stopLossPct / 100)
+    : null;
+  const takeProfitPriceUsd = setup && intent.takeProfitPct
+    ? setup.priceUsd * (1 + intent.takeProfitPct / 100)
+    : null;
+
   return {
     role: "assistant",
-    content: `A ${intent.direction} ${market.symbol} proposal is ready to prepare${intent.leverage ? ` (you mentioned ${intent.leverage}x; Mirae sizes from your stated amount and shows the resulting account leverage after preflight)` : ""}. Select Prepare order to build and simulate the unsigned transaction; nothing has been signed or broadcast.`,
+    content: `${setup ? `${market.symbol} qualified as bullish (${setup.score}/${setup.requiredScore} checks). ` : ""}A ${intent.direction} ${market.symbol} proposal is ready to prepare${intent.leverage ? ` (you mentioned ${intent.leverage}x; Mirae sizes from your stated amount and shows the resulting account leverage after preflight)` : ""}. Select Prepare order to build and simulate the unsigned entry transaction; nothing has been signed or broadcast.${intent.stopLossPct || intent.takeProfitPct ? " The stop-loss and take-profit prices are planning references only and are not active exit orders." : ""}`,
     proposal: perpProposal({
       market: market.symbol,
       marketIndex: market.marketIndex,
@@ -381,6 +410,11 @@ async function resolvePerpsReply(input: {
       oraclePriceUsd: null,
       limitPriceUsd: intent.limitPrice,
       account,
+      setup,
+      stopLossPct: intent.stopLossPct,
+      takeProfitPct: intent.takeProfitPct,
+      stopLossPriceUsd,
+      takeProfitPriceUsd,
       explanation: "The AI only produced a typed intent. Application code resolves the size against the live oracle, enforces the notional ceiling, simulates the transaction unsigned, and your wallet performs the only signature.",
     }),
   };
@@ -398,6 +432,11 @@ function perpProposal(input: {
   limitPriceUsd: string | null;
   account: PerpAccountSnapshot;
   explanation: string;
+  setup?: PerpSetupAssessment | null;
+  stopLossPct?: number | null;
+  takeProfitPct?: number | null;
+  stopLossPriceUsd?: number | null;
+  takeProfitPriceUsd?: number | null;
 }): Record<string, unknown> {
   return {
     id: `perp_${Date.now()}`,
@@ -420,12 +459,24 @@ function perpProposal(input: {
     perpOraclePriceUsd: input.oraclePriceUsd ?? undefined,
     perpFreeCollateralUsd: input.account.freeCollateralUsd.toFixed(2),
     perpAccountHealthPct: input.account.healthPct,
+    perpAnalysisVerdict: input.setup?.verdict,
+    perpAnalysisScore: input.setup?.score,
+    perpAnalysisRequiredScore: input.setup?.requiredScore,
+    perpStopLossPct: input.stopLossPct ?? undefined,
+    perpTakeProfitPct: input.takeProfitPct ?? undefined,
+    perpPlannedStopLossPriceUsd: input.stopLossPriceUsd?.toFixed(4),
+    perpPlannedTakeProfitPriceUsd: input.takeProfitPriceUsd?.toFixed(4),
+    perpExitProtectionStatus: input.stopLossPct || input.takeProfitPct ? "planned_not_placed" : undefined,
     perpStage: "draft",
     checks: [
       { code: "market_allowlisted", status: "pass", message: `Market is pinned to the allowlisted market ${input.market}.` },
       { code: "size_ceiling", status: "pass", message: `A single order is capped at $${MAX_PERP_NOTIONAL_USD} notional.` },
       { code: "unsigned_preflight", status: "pass", message: "The transaction is simulated unsigned on Mainnet before your wallet is asked." },
       { code: "wallet_approval", status: "pass", message: "Phantom/Solflare approval is required; Mirae never signs a perpetuals order." },
+      ...(input.setup?.checks.map((check) => ({ code: `setup_${check.code}`, status: check.passed ? "pass" as const : "block" as const, message: check.message })) ?? []),
+      ...(input.stopLossPct || input.takeProfitPct
+        ? [{ code: "exit_orders_not_placed", status: "block" as const, message: "Stop-loss and take-profit are planned targets only; this entry approval does not place native exit orders." }]
+        : []),
       { code: "liquidation_risk", status: "block", message: "Perpetual positions carry liquidation risk. Monitor account health after opening." },
     ],
   };

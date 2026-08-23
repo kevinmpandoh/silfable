@@ -23,13 +23,16 @@ export type PerpIntent =
       /** Limit price in USD. Null means a market order. */
       limitPrice: string | null;
       leverage: number | null;
+      analyzeBeforeOpen: boolean;
+      stopLossPct: number | null;
+      takeProfitPct: number | null;
     };
 
 /**
  * A bare "long"/"short" is far too common in ordinary conversation to treat as a
  * trading instruction, so an explicit perpetuals marker is always required.
  */
-const PERP_MARKER = /\bperp(?:s|etual|etuals)?\b|\bfutures\b|\bleverage\b|\bkontrak berjangka\b/iu;
+const PERP_MARKER = /\bperp(?:s|etual|etuals)?\b|\bfutures\b|\bleverage\b|\bkontrak berjangka\b|\bstop[ -]?loss\b|\btake[ -]?profit\b/iu;
 const OPEN_MARKER = /\b(?:long|short|buka|open|entry|masuk)\b/iu;
 const CLOSE_MARKER = /\b(?:close|closing|exit|tutup|keluar|flat)\b/iu;
 const OVERVIEW_MARKER = /\b(?:position|positions|posisi|portfolio|funding|market|markets|pasar|status|show|lihat|list)\b/iu;
@@ -59,6 +62,9 @@ export function parsePerpIntent(text: string): PerpIntent {
     notionalUsd: action === "open" ? resolveNotionalUsd(value) : null,
     limitPrice: action === "open" ? resolveLimitPrice(value) : null,
     leverage: action === "open" ? resolveLeverage(value) : null,
+    analyzeBeforeOpen: action === "open" && /\b(?:analy[sz]e|analisis|analisa)\b/iu.test(value),
+    stopLossPct: action === "open" ? resolveRiskPercent(value, "stop") : null,
+    takeProfitPct: action === "open" ? resolveRiskPercent(value, "take") : null,
   };
 }
 
@@ -73,11 +79,22 @@ function resolveDirection(value: string): "long" | "short" | null {
 function resolveBaseAsset(value: string): string | null {
   const explicit = new RegExp(String.raw`\b([A-Za-z0-9]{2,12})[-\s]?perp\b`, "iu").exec(value);
   if (explicit) return normalizeSymbol(explicit[1]);
+  const analyzed = /\b(?:analy[sz]e|analisis|analisa)\s+([A-Za-z0-9]{2,12})\b/iu.exec(value);
+  if (analyzed && !isNoiseWord(analyzed[1])) return normalizeSymbol(analyzed[1]);
   const named = new RegExp(String.raw`\b(?:on|di|pada|market|pasar)\s+([A-Za-z0-9]{2,12})\b`, "iu").exec(value);
   if (named && !isNoiseWord(named[1])) return normalizeSymbol(named[1]);
   const sized = new RegExp(String.raw`${NUMBER}\s*([A-Za-z][A-Za-z0-9]{1,11})\b`, "iu").exec(value);
   if (sized && !isNoiseWord(sized[1])) return normalizeSymbol(sized[1]);
   return null;
+}
+
+function resolveRiskPercent(value: string, kind: "stop" | "take"): number | null {
+  const marker = kind === "stop" ? String.raw`stop[ -]?loss` : String.raw`take[ -]?profit`;
+  const match = new RegExp(String.raw`(?:${NUMBER}\s*%\s*${marker}|${marker}\s*(?:of|at|:)?\s*${NUMBER}\s*%)`, "iu").exec(value);
+  if (!match) return null;
+  const number = new RegExp(NUMBER, "u").exec(match[0])?.[0];
+  const parsed = number ? Number(normalizeDecimal(number)) : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 && parsed <= 50 ? parsed : null;
 }
 
 /** Words that can follow a size or preposition without naming a market. */

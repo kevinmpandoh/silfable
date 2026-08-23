@@ -151,6 +151,10 @@ export function PerpPreviewCard({
       { label: "Notional", value: proposal.perpNotionalUsd ? `$${proposal.perpNotionalUsd}` : "Computed at preflight" },
       { label: "Free collateral", value: proposal.perpFreeCollateralUsd ? `$${proposal.perpFreeCollateralUsd}` : "Unavailable" },
       { label: "Account health", value: proposal.perpAccountHealthPct === undefined ? "Unavailable" : `${proposal.perpAccountHealthPct}%` },
+      ...(proposal.perpAnalysisVerdict ? [{ label: "Setup", value: `${proposal.perpAnalysisVerdict} · ${proposal.perpAnalysisScore}/${proposal.perpAnalysisRequiredScore} checks` }] : []),
+      ...(proposal.perpPlannedStopLossPriceUsd ? [{ label: "Planned stop loss", value: `$${proposal.perpPlannedStopLossPriceUsd} (-${proposal.perpStopLossPct}%)` }] : []),
+      ...(proposal.perpPlannedTakeProfitPriceUsd ? [{ label: "Planned take profit", value: `$${proposal.perpPlannedTakeProfitPriceUsd} (+${proposal.perpTakeProfitPct}%)` }] : []),
+      ...(proposal.perpExitProtectionStatus ? [{ label: "Exit protection", value: "Planned · not placed" }] : []),
       { label: "Network fee", value: proposal.perpNetworkFeeLamports ? `${(Number(proposal.perpNetworkFeeLamports) / 1_000_000_000).toFixed(6)} SOL` : "Measured by simulation" },
     ]}
     // Blocking checks are risk statements, not satisfied guarantees, so they are
@@ -164,7 +168,9 @@ export function PerpPreviewCard({
           : expired
             ? "The simulated blockhash expired. Run preflight again to rebuild the transaction."
             : ready
-              ? "Simulated unsigned on Mainnet. Approving opens a leveraged position that can be liquidated."
+              ? proposal.perpExitProtectionStatus
+                ? "Simulated unsigned on Mainnet. This approval opens only the entry; planned stop-loss/take-profit targets are not active orders."
+                : "Simulated unsigned on Mainnet. Approving opens a leveraged position that can be liquidated."
               : "Preflight simulates the order unsigned and measures the fee. It does not open your wallet."
     }
     actionLabel={busy ? "Working…" : settled ? "Submitted" : expired ? "Re-run preflight" : ready ? "Approve in wallet" : "Prepare order"}

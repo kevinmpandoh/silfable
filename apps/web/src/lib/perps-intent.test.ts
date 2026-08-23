@@ -78,3 +78,16 @@ test("rejects a leverage outside the supported range", () => {
   if (!intent.requested) return;
   assert.equal(intent.leverage, null);
 });
+
+test("parses analyze-then-propose with percentage exits", () => {
+  const intent = parsePerpIntent("Analyze ETH. If the setup is bullish, open a $500 long with a 3% stop loss and 8% take profit.");
+  assert.equal(intent.requested, true);
+  if (!intent.requested) return;
+  assert.equal(intent.action, "open");
+  assert.equal(intent.baseAssetSymbol, "ETH");
+  assert.equal(intent.direction, "long");
+  assert.equal(intent.notionalUsd, "500");
+  assert.equal(intent.analyzeBeforeOpen, true);
+  assert.equal(intent.stopLossPct, 3);
+  assert.equal(intent.takeProfitPct, 8);
+});

@@ -108,6 +108,14 @@ export interface WebProposal {
   perpOraclePriceUsd?: string;
   perpFreeCollateralUsd?: string;
   perpAccountHealthPct?: number;
+  perpAnalysisVerdict?: "bullish" | "neutral";
+  perpAnalysisScore?: number;
+  perpAnalysisRequiredScore?: number;
+  perpStopLossPct?: number;
+  perpTakeProfitPct?: number;
+  perpPlannedStopLossPriceUsd?: string;
+  perpPlannedTakeProfitPriceUsd?: string;
+  perpExitProtectionStatus?: "planned_not_placed";
   perpNetworkFeeLamports?: string;
   perpStage?: "draft" | "preflight" | "ready" | "submitted" | "confirmed" | "failed" | "unknown";
   perpTransactionBase64?: string;
