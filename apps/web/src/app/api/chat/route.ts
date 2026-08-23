@@ -382,7 +382,7 @@ async function resolvePerpsReply(input: {
       const freshness = liveMarket.stale ? "\nBLOCK — The market feed is stale." : "";
       return {
         role: "assistant",
-        content: `${market.symbol} does not qualify as bullish (${setup.score}/${setup.requiredScore} required checks passed), so Mirae created no order.\n\n${details}${freshness}`,
+        content: `${market.symbol} does not qualify as bullish (${setup.score}/${setup.checks.length} checks passed; at least ${setup.requiredScore} are required), so Mirae created no order.\n\n${details}${freshness}`,
       };
     }
   }
@@ -396,7 +396,7 @@ async function resolvePerpsReply(input: {
 
   return {
     role: "assistant",
-    content: `${setup ? `${market.symbol} qualified as bullish (${setup.score}/${setup.requiredScore} checks). ` : ""}A ${intent.direction} ${market.symbol} proposal is ready to prepare${intent.leverage ? ` (you mentioned ${intent.leverage}x; Mirae sizes from your stated amount and shows the resulting account leverage after preflight)` : ""}. Select Prepare order to build and simulate the unsigned entry transaction; nothing has been signed or broadcast.${intent.stopLossPct || intent.takeProfitPct ? " The stop-loss and take-profit prices are planning references only and are not active exit orders." : ""}`,
+    content: `${setup ? `${market.symbol} qualified as bullish (${setup.score}/${setup.checks.length} checks passed; at least ${setup.requiredScore} were required). ` : ""}A ${intent.direction} ${market.symbol} proposal is ready to prepare${intent.leverage ? ` (you mentioned ${intent.leverage}x; Mirae sizes from your stated amount and shows the resulting account leverage after preflight)` : ""}. Select Prepare order to build and simulate the unsigned entry transaction; nothing has been signed or broadcast.${intent.stopLossPct || intent.takeProfitPct ? " The stop-loss and take-profit prices are planning references only and are not active exit orders." : ""}`,
     proposal: perpProposal({
       market: market.symbol,
       marketIndex: market.marketIndex,
@@ -462,6 +462,7 @@ function perpProposal(input: {
     perpAnalysisVerdict: input.setup?.verdict,
     perpAnalysisScore: input.setup?.score,
     perpAnalysisRequiredScore: input.setup?.requiredScore,
+    perpAnalysisTotalChecks: input.setup?.checks.length,
     perpStopLossPct: input.stopLossPct ?? undefined,
     perpTakeProfitPct: input.takeProfitPct ?? undefined,
     perpPlannedStopLossPriceUsd: input.stopLossPriceUsd?.toFixed(4),

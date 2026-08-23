@@ -111,6 +111,7 @@ export interface WebProposal {
   perpAnalysisVerdict?: "bullish" | "neutral";
   perpAnalysisScore?: number;
   perpAnalysisRequiredScore?: number;
+  perpAnalysisTotalChecks?: number;
   perpStopLossPct?: number;
   perpTakeProfitPct?: number;
   perpPlannedStopLossPriceUsd?: string;

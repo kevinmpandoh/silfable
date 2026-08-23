@@ -151,7 +151,7 @@ export function PerpPreviewCard({
       { label: "Notional", value: proposal.perpNotionalUsd ? `$${proposal.perpNotionalUsd}` : "Computed at preflight" },
       { label: "Free collateral", value: proposal.perpFreeCollateralUsd ? `$${proposal.perpFreeCollateralUsd}` : "Unavailable" },
       { label: "Account health", value: proposal.perpAccountHealthPct === undefined ? "Unavailable" : `${proposal.perpAccountHealthPct}%` },
-      ...(proposal.perpAnalysisVerdict ? [{ label: "Setup", value: `${proposal.perpAnalysisVerdict} · ${proposal.perpAnalysisScore}/${proposal.perpAnalysisRequiredScore} checks` }] : []),
+      ...(proposal.perpAnalysisVerdict ? [{ label: "Setup", value: `${proposal.perpAnalysisVerdict} · ${proposal.perpAnalysisScore}/${proposal.perpAnalysisTotalChecks} passed (minimum ${proposal.perpAnalysisRequiredScore})` }] : []),
       ...(proposal.perpPlannedStopLossPriceUsd ? [{ label: "Planned stop loss", value: `$${proposal.perpPlannedStopLossPriceUsd} (-${proposal.perpStopLossPct}%)` }] : []),
       ...(proposal.perpPlannedTakeProfitPriceUsd ? [{ label: "Planned take profit", value: `$${proposal.perpPlannedTakeProfitPriceUsd} (+${proposal.perpTakeProfitPct}%)` }] : []),
       ...(proposal.perpExitProtectionStatus ? [{ label: "Exit protection", value: "Planned · not placed" }] : []),
