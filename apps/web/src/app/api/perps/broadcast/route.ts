@@ -47,15 +47,29 @@ export async function POST(request: NextRequest) {
     // this server stored when it prepared and simulated the order. Anything the
     // browser altered — or built elsewhere — no longer matches and is refused.
     const digest = messageDigest(transaction);
-    const validDirectProof = Boolean(
-      body.preflightToken &&
-        verifyPerpPreflightToken(body.preflightToken, {
+    const hasToken = Boolean(body.preflightToken);
+    const tokenValid = hasToken
+      ? verifyPerpPreflightToken(body.preflightToken!, {
           sessionId: body.sessionId,
           walletAddress,
           digest,
-        }),
-    );
-    if (!validDirectProof) await assertPreparedHere(body.sessionId, digest);
+        })
+      : false;
+    if (!tokenValid) {
+      // Log diagnostic details before falling back to DB check
+      console.error("[perps/broadcast] preflightToken verification failed", {
+        hasToken,
+        tokenValid,
+        digest,
+        sessionId: body.sessionId,
+        walletAddress,
+        tokenSlice: body.preflightToken?.slice(0, 60),
+        instructionCount: transaction.message.compiledInstructions.length,
+        staticKeyCount: transaction.message.staticAccountKeys.length,
+        altCount: transaction.message.addressTableLookups.length,
+      });
+      await assertPreparedHere(body.sessionId, digest);
+    }
 
     localSignature = bs58.encode(transaction.signatures[0]!);
     const connection = new Connection(selectSolanaRpc(), "confirmed");

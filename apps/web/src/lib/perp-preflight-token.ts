@@ -8,11 +8,18 @@ type PerpPreflightProof = {
 };
 
 function proofSecret(): string {
-  const value =
-    process.env.PERP_PREFLIGHT_SECRET?.trim() ||
-    process.env.INVESTMENT_RECOMMENDATION_SECRET?.trim() ||
-    process.env.WORKER_ENCRYPTION_KEY?.trim() ||
-    process.env.DATABASE_URL?.trim();
+  const dedicated = process.env.PERP_PREFLIGHT_SECRET?.trim();
+  if (process.env.VERCEL_ENV === "production") {
+    if (!dedicated || dedicated.length < 32) {
+      throw new Error("PERP_PREFLIGHT_SECRET must be configured with at least 32 characters in production.");
+    }
+    return dedicated;
+  }
+
+  const value = dedicated
+    || process.env.INVESTMENT_RECOMMENDATION_SECRET?.trim()
+    || process.env.WORKER_ENCRYPTION_KEY?.trim()
+    || process.env.DATABASE_URL?.trim();
   if (!value || value.length < 24) {
     throw new Error("The server preflight signing secret is not configured.");
   }
@@ -44,7 +51,9 @@ export function verifyPerpPreflightToken(
     return (
       parsed.sessionId === expected.sessionId &&
       parsed.walletAddress === expected.walletAddress &&
-      parsed.digest === expected.digest
+      parsed.digest === expected.digest &&
+      Number.isSafeInteger(parsed.expiresAt) &&
+      parsed.expiresAt > Date.now()
     );
   } catch {
     return false;

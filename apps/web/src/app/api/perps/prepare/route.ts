@@ -69,6 +69,12 @@ export async function POST(request: NextRequest) {
         baseAmount: String(position.baseAmount),
         reduceOnly: true,
       });
+      console.log("[perps/prepare] close digest created", {
+        digest: plan.transactionDigest,
+        sessionId: body.sessionId,
+        walletAddress: plan.walletAddress,
+        symbol,
+      });
       await storePreparedIntent(body.sessionId, plan.walletAddress, plan.transactionDigest, plan.expiresAt);
       return NextResponse.json({
         plan,
@@ -95,6 +101,12 @@ export async function POST(request: NextRequest) {
       baseAmount: body.baseAmount,
       notionalUsd: body.notionalUsd,
       collateralUsdc: body.collateralUsdc,
+    });
+    console.log("[perps/prepare] open digest created", {
+      digest: plan.transactionDigest,
+      sessionId: body.sessionId,
+      walletAddress: plan.walletAddress,
+      symbol,
     });
     await storePreparedIntent(body.sessionId, plan.walletAddress, plan.transactionDigest, plan.expiresAt);
     return NextResponse.json({
