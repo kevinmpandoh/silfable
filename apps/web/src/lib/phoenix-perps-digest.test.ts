@@ -13,6 +13,7 @@ import { derivePerpCollateralUsdc, messageDigest } from "./phoenix-perps-core";
 
 const PHOENIX_PROGRAM_ID = new PublicKey("EtrnLzgbS7nMMy5fbD42kXiUzGg8XQzJ972Xtk1cjWih");
 const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+const LIGHTHOUSE_PROGRAM_ID = new PublicKey("L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95");
 
 test("derives the same default isolated collateral as the perps form", () => {
   assert.equal(derivePerpCollateralUsdc(0.5), "0.17");
@@ -27,6 +28,7 @@ function createOrderTx(params?: {
   programId?: PublicKey;
   data?: Buffer;
   keys?: Array<{ pubkey: PublicKey; isSigner: boolean; isWritable: boolean }>;
+  lighthouseAssertion?: boolean;
 }): { payer: Keypair; transaction: VersionedTransaction } {
   const payer = params?.payer ?? Keypair.generate();
   const blockhash = params?.blockhash ?? Keypair.generate().publicKey.toBase58();
@@ -53,6 +55,16 @@ function createOrderTx(params?: {
     })
   );
 
+  if (params?.lighthouseAssertion) {
+    instructions.push(
+      new TransactionInstruction({
+        programId: LIGHTHOUSE_PROGRAM_ID,
+        keys: [{ pubkey: payer.publicKey, isSigner: false, isWritable: false }],
+        data: Buffer.from([8, 1, 2, 3, 4, 5, 6, 7]),
+      }),
+    );
+  }
+
   const transaction = new VersionedTransaction(
     new TransactionMessage({
       payerKey: payer.publicKey,
@@ -73,6 +85,14 @@ test("messageDigest matches across wallet priority fee additions", () => {
   const withPriorityFeeDigest = messageDigest(withPriorityFee.transaction);
 
   assert.equal(initialDigest, withPriorityFeeDigest);
+});
+
+test("messageDigest accepts Phantom Lighthouse safety assertions", () => {
+  const payer = Keypair.generate();
+  const prepared = createOrderTx({ payer });
+  const phantomSigned = createOrderTx({ payer, lighthouseAssertion: true });
+
+  assert.equal(messageDigest(prepared.transaction), messageDigest(phantomSigned.transaction));
 });
 
 test("messageDigest matches across wallet compute unit limit adjustments", () => {

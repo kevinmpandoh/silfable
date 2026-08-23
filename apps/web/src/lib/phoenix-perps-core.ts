@@ -52,6 +52,11 @@ export const MIRAE_PERP_SYMBOLS = [
 ] as const;
 
 const COMPUTE_BUDGET_PROGRAM = "ComputeBudget111111111111111111111111111111";
+// Phantom may append Lighthouse runtime assertions after previewing a Solana
+// transaction. They can only make the transaction fail when the previewed
+// state changes are not observed; they do not widen the prepared trade intent.
+// https://docs.phantom.com/developer-powertools/lighthouse
+const LIGHTHOUSE_ASSERTION_PROGRAM = "L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95";
 const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const ASSOCIATED_TOKEN_PROGRAM = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
@@ -848,7 +853,10 @@ export function messageDigestSnapshot(transaction: VersionedTransaction) {
   for (const ix of message.compiledInstructions) {
     const programId =
       message.staticAccountKeys[ix.programIdIndex]?.toBase58() ?? "";
-    if (programId === COMPUTE_BUDGET_PROGRAM) {
+    if (
+      programId === COMPUTE_BUDGET_PROGRAM ||
+      programId === LIGHTHOUSE_ASSERTION_PROGRAM
+    ) {
       continue;
     }
     const keys = Array.from(ix.accountKeyIndexes).map((idx) => {
