@@ -124,6 +124,7 @@ import type {
   TransactionSettings,
   WalletActivitySnapshot,
 } from "@mirae/contracts";
+import { parseMiraePerpPrompt } from "@mirae/contracts";
 import {
   BRIDGE_ROBINHOOD_CHAIN_ID,
   BRIDGE_ROBINHOOD_USDG_ADDRESS,
@@ -1052,7 +1053,41 @@ function MainWorkspace({
     setDraft("");
     try {
       await persistSession(sessionWithUser);
-      const response = await window.mirae.chatWithAi({
+      const perpIntent = target.walletScope !== "evm" && target.walletAddress
+        ? parseMiraePerpPrompt(text)
+        : { requested: false as const };
+      let response: any;
+      if (perpIntent.requested) {
+        if (perpIntent.error || !perpIntent.symbol || !perpIntent.direction || !perpIntent.notionalUsd) {
+          const reason = perpIntent.error === "conflicting_leverage"
+            ? "State exactly one leverage between 1x and 10x."
+            : perpIntent.error === "invalid_leverage"
+            ? "Leverage must be a whole number between 1x and 10x."
+            : !perpIntent.symbol
+            ? "Choose an available market: SOL-PERP, BTC-PERP, ETH-PERP, JUP-PERP, ONDO-PERP, or DOGE-PERP."
+            : "Provide a USD notional or margin amount.";
+          response = {
+            text: `${reason} No perpetual order was prepared.`,
+            toolsUsed: [],
+            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
+          };
+        } else {
+          const prepared = await window.mirae.preparePerpOrder({
+            walletAddress: target.walletAddress,
+            symbol: perpIntent.symbol,
+            direction: perpIntent.direction,
+            notionalUsd: perpIntent.notionalUsd,
+            leverage: perpIntent.leverage,
+            collateralUsdc: (perpIntent.marginUsd ?? perpIntent.notionalUsd / perpIntent.leverage).toFixed(2),
+          });
+          response = {
+            text: `Prepared a ${perpIntent.direction.toUpperCase()} ${perpIntent.symbol}-PERP order for $${perpIntent.notionalUsd.toFixed(2)} notional at ${perpIntent.leverage}x leverage. Review the deterministic preflight checks below before signing.`,
+            toolsUsed: [],
+            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
+            perpProposal: prepared.proposal,
+          };
+        }
+      } else response = await window.mirae.chatWithAi({
         schemaVersion: 1,
         requestId: crypto.randomUUID(),
         sessionId: target.id,
@@ -1101,6 +1136,7 @@ function MainWorkspace({
               bridgePreflight: response.bridgePreflight,
             }
           : {}),
+        ...(response.perpProposal ? { perpProposal: response.perpProposal } : {}),
       };
       setAnimatedMessageIds((current) => [...current, assistant.id]);
       const sessionWithAssistant = {
