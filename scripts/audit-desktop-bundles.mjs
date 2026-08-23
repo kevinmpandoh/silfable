@@ -24,6 +24,7 @@ const forbidden = [
   "signTransactionMessageWithSigners",
   "x-api-key",
 ];
+const forbiddenUserFacingBrandMarkers = ["phoenix"];
 
 const violations = [];
 for (const root of roots) {
@@ -32,6 +33,12 @@ for (const root of roots) {
     const source = await readFile(path, "utf8");
     for (const marker of forbidden) {
       if (source.includes(marker)) violations.push(`${path}: forbidden marker ${marker}`);
+    }
+    const normalizedSource = source.toLowerCase();
+    for (const marker of forbiddenUserFacingBrandMarkers) {
+      if (normalizedSource.includes(marker)) {
+        violations.push(`${path}: internal venue brand leaked into the desktop UI: ${marker}`);
+      }
     }
   }
 }
