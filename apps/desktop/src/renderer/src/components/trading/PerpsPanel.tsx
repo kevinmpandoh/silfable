@@ -150,7 +150,7 @@ export function PerpsPanel({
     [query, setQuery] = useState("");
   const [direction, setDirection] = useState<"long" | "short">("long"),
     [notionalUsd, setNotionalUsd] = useState("0.50"),
-    [leverage, setLeverage] = useState(3);
+    [leverage, setLeverage] = useState(2);
   const [loading, setLoading] = useState(true),
     [refreshing, setRefreshing] = useState(false),
     [error, setError] = useState<string | null>(null);
