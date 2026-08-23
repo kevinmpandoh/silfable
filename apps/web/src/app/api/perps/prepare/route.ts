@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { VersionedTransaction } from "@solana/web3.js";
 import { z } from "zod";
 
 import { cloudDb } from "@/lib/cloud-db";
@@ -10,6 +11,7 @@ import {
   getPerpAccount,
   isAllowedSymbol,
   normalizeSymbol,
+  messageDigestSnapshot,
 } from "@/lib/phoenix-perps-core";
 import { createPerpPreflightToken } from "@/lib/perp-preflight-token";
 
@@ -74,6 +76,9 @@ export async function POST(request: NextRequest) {
         sessionId: body.sessionId,
         walletAddress: plan.walletAddress,
         symbol,
+        snapshot: messageDigestSnapshot(
+          VersionedTransaction.deserialize(Buffer.from(plan.transactionBase64, "base64")),
+        ),
       });
       await storePreparedIntent(body.sessionId, plan.walletAddress, plan.transactionDigest, plan.expiresAt);
       return NextResponse.json({
@@ -107,6 +112,9 @@ export async function POST(request: NextRequest) {
       sessionId: body.sessionId,
       walletAddress: plan.walletAddress,
       symbol,
+      snapshot: messageDigestSnapshot(
+        VersionedTransaction.deserialize(Buffer.from(plan.transactionBase64, "base64")),
+      ),
     });
     await storePreparedIntent(body.sessionId, plan.walletAddress, plan.transactionDigest, plan.expiresAt);
     return NextResponse.json({

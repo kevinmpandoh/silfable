@@ -6,7 +6,7 @@ import { z } from "zod";
 import { cloudDb } from "@/lib/cloud-db";
 import { isAuthFailure, requireWalletAuth } from "@/lib/wallet-auth";
 import { selectSolanaRpc } from "@/lib/server-solana-rpc";
-import { messageDigest } from "@/lib/phoenix-perps-core";
+import { messageDigest, messageDigestSnapshot } from "@/lib/phoenix-perps-core";
 import { verifyPerpPreflightToken } from "@/lib/perp-preflight-token";
 
 export const runtime = "nodejs";
@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
         instructionCount: transaction.message.compiledInstructions.length,
         staticKeyCount: transaction.message.staticAccountKeys.length,
         altCount: transaction.message.addressTableLookups.length,
+        snapshot: messageDigestSnapshot(transaction),
       });
       await assertPreparedHere(body.sessionId, digest);
     }

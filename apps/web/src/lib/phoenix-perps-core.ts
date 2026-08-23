@@ -835,7 +835,7 @@ function resolveQuantity(
   return rounded;
 }
 
-export function messageDigest(transaction: VersionedTransaction): string {
+export function messageDigestSnapshot(transaction: VersionedTransaction) {
   const message = transaction.message;
   // Wallet extensions may refresh recentBlockhash and inject or tune ComputeBudget
   // instructions (e.g. setComputeUnitPrice for dynamic priority fees, setComputeUnitLimit).
@@ -864,7 +864,7 @@ export function messageDigest(transaction: VersionedTransaction): string {
     });
   }
 
-  const intent = {
+  return {
     payer,
     instructions: businessInstructions,
     addressTableLookups: message.addressTableLookups.map((lookup) => ({
@@ -873,9 +873,11 @@ export function messageDigest(transaction: VersionedTransaction): string {
       readonlyIndexes: Array.from(lookup.readonlyIndexes),
     })),
   };
+}
 
+export function messageDigest(transaction: VersionedTransaction): string {
   return createHash("sha256")
-    .update(JSON.stringify(intent))
+    .update(JSON.stringify(messageDigestSnapshot(transaction)))
     .digest("hex");
 }
 
