@@ -314,6 +314,19 @@ async function resolvePerpsReply(input: {
     };
   }
 
+  if (intent.action === "open" && intent.leverageError) {
+    return {
+      role: "assistant",
+      content: intent.leverageError === "conflicting"
+        ? "I found multiple conflicting leverage values. State exactly one leverage between 1x and 10x; no order was prepared."
+        : "Leverage must be between 1x and 10x. No order was prepared.",
+    };
+  }
+  const requestedLeverage = intent.leverage ?? 2;
+  const requestedNotionalUsd = intent.marginUsd
+    ? (Number(intent.marginUsd) * requestedLeverage).toFixed(2)
+    : intent.notionalUsd;
+
   const account = await getPerpAccount(walletAddress);
   if (intent.action === "close") {
     const position = account.positions.find((entry) => entry.symbol === market.symbol);
@@ -341,7 +354,7 @@ async function resolvePerpsReply(input: {
   if (!intent.direction) {
     // The side is never guessed, but when the size is already known the choice
     // can be offered as two buttons that go straight into preflight.
-    if (intent.baseAmount || intent.notionalUsd) {
+    if (intent.baseAmount || requestedNotionalUsd) {
       return {
         role: "assistant",
         content: `Choose the side for ${market.symbol}. Selecting one builds and simulates the order immediately, then your wallet asks for the single approval that opens the position.`,
@@ -351,7 +364,9 @@ async function resolvePerpsReply(input: {
           direction: undefined,
           reduceOnly: false,
           baseAmount: intent.baseAmount,
-          notionalUsd: intent.notionalUsd,
+          notionalUsd: requestedNotionalUsd,
+          collateralUsdc: intent.marginUsd ?? undefined,
+          leverage: requestedLeverage,
           oraclePriceUsd: null,
           limitPriceUsd: intent.limitPrice,
           account,
@@ -361,20 +376,11 @@ async function resolvePerpsReply(input: {
     }
     return { role: "assistant", content: `State the side explicitly for ${market.symbol}: long or short, and the size. Mirae never picks a direction for you.` };
   }
-  if (!intent.baseAmount && !intent.notionalUsd) {
+  if (!intent.baseAmount && !requestedNotionalUsd) {
     return { role: "assistant", content: `Provide the position size for ${market.symbol}, either in base units (\`0.5 ${market.baseAssetSymbol}\`) or USD notional (\`$250\`). No order was prepared.` };
   }
   if (!account.accountExists) {
     return { role: "assistant", content: `This wallet has no perpetuals account yet. Open the PERPS panel and set the collateral for your first order; the account is opened in the same transaction. No order was prepared.` };
-  }
-
-  if (intent.action === "open" && intent.leverageError) {
-    return {
-      role: "assistant",
-      content: intent.leverageError === "conflicting"
-        ? "I found multiple conflicting leverage values. State exactly one leverage between 1x and 10x; no order was prepared."
-        : "Leverage must be between 1x and 10x. No order was prepared.",
-    };
   }
 
   let setup: PerpSetupAssessment | null = null;
@@ -405,18 +411,18 @@ async function resolvePerpsReply(input: {
 
   return {
     role: "assistant",
-    content: `${setup ? `${market.symbol} qualified as bullish (${setup.score}/${setup.checks.length} checks passed; at least ${setup.requiredScore} were required). ` : ""}A ${intent.direction} ${market.symbol} proposal is ready to prepare at ${intent.leverage ?? 2}x leverage${intent.leverage ? " as requested" : " by default"}. Select Prepare order to build and simulate the unsigned entry transaction; nothing has been signed or broadcast.${intent.stopLossPct || intent.takeProfitPct ? " The stop-loss and take-profit prices are planning references only and are not active exit orders." : ""}`,
+    content: `${setup ? `${market.symbol} qualified as bullish (${setup.score}/${setup.checks.length} checks passed; at least ${setup.requiredScore} were required). ` : ""}A ${intent.direction} ${market.symbol} proposal is ready to prepare at ${requestedLeverage}x leverage${intent.leverage ? " as requested" : " by default"}${intent.marginUsd ? ` using $${intent.marginUsd} USDC margin (approximately $${requestedNotionalUsd} notional)` : ""}. Select Prepare order to build and simulate the unsigned entry transaction; nothing has been signed or broadcast.${intent.stopLossPct || intent.takeProfitPct ? " The stop-loss and take-profit prices are planning references only and are not active exit orders." : ""}`,
     proposal: perpProposal({
       market: market.symbol,
       marketIndex: market.marketIndex,
       direction: intent.direction,
       reduceOnly: false,
       baseAmount: intent.baseAmount,
-      notionalUsd: intent.notionalUsd,
-      collateralUsdc: intent.notionalUsd
-        ? derivePerpCollateralUsdc(Number(intent.notionalUsd), intent.leverage ?? 2)
-        : undefined,
-      leverage: intent.leverage ?? 2,
+      notionalUsd: requestedNotionalUsd,
+      collateralUsdc: intent.marginUsd ?? (requestedNotionalUsd
+        ? derivePerpCollateralUsdc(Number(requestedNotionalUsd), requestedLeverage)
+        : undefined),
+      leverage: requestedLeverage,
       oraclePriceUsd: null,
       limitPriceUsd: intent.limitPrice,
       account,

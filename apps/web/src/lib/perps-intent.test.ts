@@ -101,3 +101,15 @@ test("parses analyze-then-propose with percentage exits", () => {
   assert.equal(intent.stopLossPct, 3);
   assert.equal(intent.takeProfitPct, 8);
 });
+
+test("parses SOL before market price and treats dollars as margin", () => {
+  const intent = parsePerpIntent("Long SOL with $3 margin at 5x leverage. Execute the order at market price.");
+  assert.equal(intent.requested, true);
+  if (!intent.requested) return;
+  assert.equal(intent.baseAssetSymbol, "SOL");
+  assert.equal(intent.direction, "long");
+  assert.equal(intent.marginUsd, "3");
+  assert.equal(intent.notionalUsd, null);
+  assert.equal(intent.leverage, 5);
+  assert.equal(intent.limitPrice, null);
+});
