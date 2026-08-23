@@ -2989,6 +2989,6 @@ export const PerpProposalSchema = z.object({
 });
 export type PerpProposal = z.infer<typeof PerpProposalSchema>;
 
-export * from "./perps-intent.js";
+export * from "./perps-intent";
 
 

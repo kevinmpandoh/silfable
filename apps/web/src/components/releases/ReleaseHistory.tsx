@@ -6,9 +6,26 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 const releases = [{
+  version: "0.2.2",
+  date: "Perpetuals Chat Update",
+  status: "Latest",
+  summary: "Deterministic Perpetual Orders from Desktop Chat",
+  added: [
+    "Desktop chat prepares real guarded Perpetual order proposals for supported markets",
+  ],
+  changed: [
+    "Margin and leverage prompts resolve to exact collateral and notional values",
+    "Prepared proposals reuse the same preflight and local-wallet signing boundary as the Perps panel",
+  ],
+  fixed: [
+    "Perpetual prompts no longer fall through to generic AI execution disclaimers",
+  ],
+  windowsHref: "https://github.com/mirae-trade/mirae/releases/download/v0.2.2/Mirae-0.2.2-windows-x64-unsigned-qa.zip",
+  releaseHref: "https://github.com/mirae-trade/mirae/releases/tag/v0.2.2",
+}, {
   version: "0.2.1",
   date: "Perpetuals Desktop Update",
-  status: "Latest",
+  status: "Official",
   summary: "Refined Mirae Perpetuals Desktop Experience",
   added: [
     "Release-build audit preventing internal venue branding from reaching the desktop UI",
@@ -81,7 +98,7 @@ export function ReleaseHistory() {
           <h2 className="mt-5 font-display text-5xl tracking-[-0.05em] sm:text-7xl">Version history</h2>
         </div>
         <p className="max-w-md text-sm leading-7 text-black/50 lg:justify-self-end">
-          v0.2.1 is the current Perps desktop release for Linux and Windows. The Windows v0.2.1 portable build is unsigned; signed v0.1.0 remains available as a legacy option.
+          v0.2.2 is the current Perps desktop release for Linux and Windows. The Windows v0.2.2 portable build is unsigned; signed v0.1.0 remains available as a legacy option.
         </p>
       </CurrentReveal>
 

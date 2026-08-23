@@ -13,7 +13,7 @@ import {
 import type { PerpProposal } from "@mirae/contracts";
 
 export function PerpProposalCard({
-  proposal,
+  proposal: initialProposal,
   walletAddress,
   onExecute,
   onReject,
@@ -27,6 +27,7 @@ export function PerpProposalCard({
   embedded?: boolean;
   fullAccess?: boolean;
 }) {
+  const [proposal, setProposal] = useState(initialProposal);
   const [executing, setExecuting] = useState(false);
   const [signature, setSignature] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +49,33 @@ export function PerpProposalCard({
     ? "Close Position"
     : `Execute ${proposal.direction.toUpperCase()} Order`;
 
+  useEffect(() => {
+    setProposal(initialProposal);
+    setSignature(null);
+    setError(null);
+    autoExecutedRef.current = false;
+  }, [initialProposal]);
+
+  const refreshExpiredPreflight = async (targetWallet: string) => {
+    const refreshed = await window.mirae.preparePerpOrder({
+      walletAddress: targetWallet,
+      symbol: proposal.symbol,
+      direction: proposal.direction,
+      notionalUsd: Number(proposal.notionalUsd),
+      leverage: proposal.leverage,
+      collateralUsdc: Number(
+        proposal.collateralUsdc ??
+          Number(proposal.notionalUsd) / proposal.leverage
+      ).toFixed(2),
+      reduceOnly: proposal.reduceOnly,
+      baseAmount: proposal.reduceOnly ? Number(proposal.baseAmount) : undefined,
+    });
+    setProposal(refreshed.proposal);
+    setError(
+      "Preflight was refreshed with current market and account data. Review the updated checks, then press Execute again to sign."
+    );
+  };
+
   const handleExecute = async () => {
     if (executing || signature || !canExecute || !proposal.plan) return;
     try {
@@ -57,6 +85,11 @@ export function PerpProposalCard({
       const targetWallet = walletAddress ?? proposal.account?.walletAddress;
       if (!targetWallet)
         throw new Error("No active wallet address available for execution.");
+
+      if (proposal.plan.expiresAt <= Date.now()) {
+        await refreshExpiredPreflight(targetWallet);
+        return;
+      }
 
       const res = await window.mirae?.executePerpOrder?.({
         plan: proposal.plan,
@@ -71,7 +104,19 @@ export function PerpProposalCard({
       }
     } catch (err: any) {
       console.error("Perp order execution failed", err);
-      setError(err?.message || "Transaction signing or broadcast failed.");
+      const message = err?.message || "Transaction signing or broadcast failed.";
+      const targetWallet = walletAddress ?? proposal.account?.walletAddress;
+      if (targetWallet && /preflight expired/i.test(message)) {
+        try {
+          await refreshExpiredPreflight(targetWallet);
+        } catch (refreshError: any) {
+          setError(
+            refreshError?.message || "The expired preflight could not be refreshed."
+          );
+        }
+      } else {
+        setError(message);
+      }
     } finally {
       setExecuting(false);
     }
