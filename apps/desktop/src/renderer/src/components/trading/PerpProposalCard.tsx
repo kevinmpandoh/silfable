@@ -8,7 +8,6 @@ import {
   ExternalLink,
   Loader2,
   CheckCircle2,
-  Zap,
 } from "lucide-react";
 import type { PerpProposal } from "@mirae/contracts";
 
@@ -32,6 +31,8 @@ export function PerpProposalCard({
   const [signature, setSignature] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const autoExecutedRef = useRef(false);
+  const executionInFlightRef = useRef(false);
+  const activeProposalIdRef = useRef(initialProposal.id);
 
   const isLong = proposal.direction === "long";
   const isFunding = proposal.action === "fund_collateral";
@@ -50,6 +51,8 @@ export function PerpProposalCard({
     : `Execute ${proposal.direction.toUpperCase()} Order`;
 
   useEffect(() => {
+    if (activeProposalIdRef.current === initialProposal.id) return;
+    activeProposalIdRef.current = initialProposal.id;
     setProposal(initialProposal);
     setSignature(null);
     setError(null);
@@ -77,7 +80,14 @@ export function PerpProposalCard({
   };
 
   const handleExecute = async () => {
-    if (executing || signature || !canExecute || !proposal.plan) return;
+    if (
+      executionInFlightRef.current ||
+      executing ||
+      signature ||
+      !canExecute ||
+      !proposal.plan
+    ) return;
+    executionInFlightRef.current = true;
     try {
       setExecuting(true);
       setError(null);
@@ -118,6 +128,7 @@ export function PerpProposalCard({
         setError(message);
       }
     } finally {
+      executionInFlightRef.current = false;
       setExecuting(false);
     }
   };
@@ -184,7 +195,6 @@ export function PerpProposalCard({
               </span>
               {fullAccess && (
                 <span className="flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">
-                  <Zap className="size-2.5 fill-amber-500 text-amber-500" />
                   <span>FULL ACCESS</span>
                 </span>
               )}
@@ -275,7 +285,7 @@ export function PerpProposalCard({
           <div className="flex items-center gap-2">
             <CheckCircle2 className="size-4 text-emerald-600" />
             <span>
-              {fullAccess ? "⚡ Full Access: " : ""}
+              {fullAccess ? "Full Access: " : ""}
               {isRegistration
                 ? "Trading account registered. Prepare the order again to fund collateral."
                 : isFunding
@@ -337,7 +347,7 @@ export function PerpProposalCard({
                 <Loader2 className="size-3.5 animate-spin" />
                 <span>
                   {fullAccess
-                    ? "⚡ Full Access: Signing & Broadcasting…"
+                    ? "Full Access: Signing & Broadcasting…"
                     : "Signing & Broadcasting…"}
                 </span>
               </>
