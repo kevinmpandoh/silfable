@@ -4,7 +4,8 @@ import { CurrentReveal } from "@/components/motion/CurrentMotion";
 import { Button } from "@/components/ui/button";
 
 const windowsArtifacts = [
-  { label: "Windows v0.1.0 · x64 (.exe)", href: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-windows-x64-setup.exe", primary: true },
+  { label: "Windows v0.2.1 · x64 unsigned (.zip)", href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.1/Mirae-0.2.1-windows-x64-unsigned-qa.zip", primary: true },
+  { label: "Windows v0.1.0 · x64 signed (.exe)", href: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-windows-x64-setup.exe", primary: false },
 ] as const;
 
 const linuxArtifacts = [
@@ -35,10 +36,10 @@ export function ReleaseDownloads() {
           <CurrentReveal className="releaseLinuxFeature" delay={0.04}>
             <div className="releaseLinuxIdentity">
               <div className="releasePlatformIcon"><Laptop /></div>
-              <div><span>LEGACY AVAILABLE</span><h3>Windows</h3><p>v0.1.0 signed installer · v0.2.1 signing pending</p></div>
+              <div><span>AVAILABLE NOW</span><h3>Windows</h3><p>v0.2.1 unsigned portable build · SmartScreen warning expected</p></div>
             </div>
             <div className="releaseBuildLedger">
-              <span>VERSION <strong>0.1.0</strong></span><span>CHANNEL <strong>Legacy Official</strong></span><span>EXECUTION <strong>Local Encrypted Vault</strong></span>
+              <span>VERSION <strong>0.2.1</strong></span><span>CHANNEL <strong>Unsigned QA</strong></span><span>EXECUTION <strong>Local Encrypted Vault</strong></span>
             </div>
             <div className="releaseArtifactGrid">
               {windowsArtifacts.map((artifact) => (
@@ -47,7 +48,7 @@ export function ReleaseDownloads() {
                 </Button>
               ))}
             </div>
-            <p className="releaseVerifyNote"><FileKey2 /> Verify the selected artifact against SHA256SUMS.txt before installation.</p>
+            <p className="releaseVerifyNote"><FileKey2 /> v0.2.1 is unsigned and may trigger Windows SmartScreen. Verify it against SHA256SUMS-WINDOWS-QA.txt before running.</p>
           </CurrentReveal>
 
           <CurrentReveal className="releaseUpcoming" delay={0.08}>
@@ -56,7 +57,7 @@ export function ReleaseDownloads() {
               const Icon = build.icon;
               return <article key={build.platform} className="releaseUpcomingRow"><Icon /><div><h3>{build.platform}</h3><p>{build.detail}</p></div><span>COMING SOON</span><small>{build.note}</small></article>;
             })}
-            <div className="releaseAvailabilityNote"><CheckCircle2 /> Linux v0.2.1 is current; signed Windows v0.1.0 remains available.</div>
+            <div className="releaseAvailabilityNote"><CheckCircle2 /> Windows and Linux v0.2.1 are available; Windows v0.2.1 is explicitly unsigned.</div>
           </CurrentReveal>
         </div>
 
