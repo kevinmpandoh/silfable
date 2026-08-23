@@ -531,9 +531,10 @@ export type BuildPerpOrderInput = {
   reduceOnly?: boolean;
   /** USDC moved into the isolated subaccount alongside the order, in whole USDC. */
   collateralUsdc?: string;
+  leverage?: number;
 };
 
-export function derivePerpCollateralUsdc(notionalUsd: number, leverage = 3): string {
+export function derivePerpCollateralUsdc(notionalUsd: number, leverage = 2): string {
   if (!Number.isFinite(notionalUsd) || notionalUsd <= 0) {
     throw new Error("Perpetual notional must be positive before collateral is derived.");
   }
@@ -595,8 +596,8 @@ export async function buildPerpOrderTransaction(
     if (!effectiveCollateral || effectiveCollateral <= 0) {
       // Phoenix orders use isolated collateral. The aggregate account snapshot
       // cannot prove that collateral is available in the target market's
-      // subaccount, so match the form path and attach an explicit 3x margin.
-      effectiveCollateral = Number(derivePerpCollateralUsdc(notionalUsd));
+      // subaccount, so attach the conservative default 2x margin.
+      effectiveCollateral = Number(derivePerpCollateralUsdc(notionalUsd, input.leverage));
     }
 
     if (effectiveCollateral > 0) {

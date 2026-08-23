@@ -77,6 +77,16 @@ test("rejects a leverage outside the supported range", () => {
   assert.equal(intent.requested, true);
   if (!intent.requested) return;
   assert.equal(intent.leverage, null);
+  assert.equal(intent.leverageError, "out_of_range");
+});
+
+test("rejects conflicting leverage values instead of guessing", () => {
+  const intent = parsePerpIntent("long ETH perp 2x $1 lev 5x");
+  assert.equal(intent.requested, true);
+  if (!intent.requested) return;
+  assert.equal(intent.notionalUsd, "1");
+  assert.equal(intent.leverage, null);
+  assert.equal(intent.leverageError, "conflicting");
 });
 
 test("parses analyze-then-propose with percentage exits", () => {

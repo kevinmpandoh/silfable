@@ -30,6 +30,7 @@ const RequestSchema = z.discriminatedUnion("action", [
     baseAmount: z.string().regex(DECIMAL).optional(),
     notionalUsd: z.string().regex(DECIMAL).optional(),
     collateralUsdc: z.string().regex(DECIMAL).optional(),
+    leverage: z.number().min(1).max(MAX_PERP_LEVERAGE).optional(),
   }).strict(),
   z.object({
     action: z.literal("close"),
@@ -106,6 +107,7 @@ export async function POST(request: NextRequest) {
       baseAmount: body.baseAmount,
       notionalUsd: body.notionalUsd,
       collateralUsdc: body.collateralUsdc,
+      leverage: body.leverage,
     });
     console.log("[perps/prepare] open digest created", {
       digest: plan.transactionDigest,

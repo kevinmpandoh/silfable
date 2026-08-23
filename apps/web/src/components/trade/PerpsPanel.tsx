@@ -59,6 +59,7 @@ export type PerpOrderRequest =
       baseAmount?: string;
       notionalUsd?: string;
       collateralUsdc?: string;
+      leverage?: number;
     }
   | { action: "close"; symbol: string };
 

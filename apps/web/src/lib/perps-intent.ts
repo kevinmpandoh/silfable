@@ -23,6 +23,7 @@ export type PerpIntent =
       /** Limit price in USD. Null means a market order. */
       limitPrice: string | null;
       leverage: number | null;
+      leverageError: "conflicting" | "out_of_range" | null;
       analyzeBeforeOpen: boolean;
       stopLossPct: number | null;
       takeProfitPct: number | null;
@@ -52,6 +53,7 @@ export function parsePerpIntent(text: string): PerpIntent {
       : OVERVIEW_MARKER.test(value)
         ? "overview"
         : "overview";
+  const leverage = action === "open" ? resolveLeverage(value) : { value: null, error: null };
 
   return {
     requested: true,
@@ -61,7 +63,8 @@ export function parsePerpIntent(text: string): PerpIntent {
     baseAmount: action === "open" ? resolveBaseAmount(value) : null,
     notionalUsd: action === "open" ? resolveNotionalUsd(value) : null,
     limitPrice: action === "open" ? resolveLimitPrice(value) : null,
-    leverage: action === "open" ? resolveLeverage(value) : null,
+    leverage: leverage.value,
+    leverageError: leverage.error,
     analyzeBeforeOpen: action === "open" && /\b(?:analy[sz]e|analisis|analisa)\b/iu.test(value),
     stopLossPct: action === "open" ? resolveRiskPercent(value, "stop") : null,
     takeProfitPct: action === "open" ? resolveRiskPercent(value, "take") : null,
@@ -126,12 +129,19 @@ function resolveLimitPrice(value: string): string | null {
   return match ? normalizeDecimal(match[1]) : null;
 }
 
-function resolveLeverage(value: string): number | null {
-  const match = new RegExp(String.raw`(${NUMBER})\s*x\b|\bleverage\s*(?:of|:)?\s*(${NUMBER})`, "iu").exec(value);
-  const raw = match?.[1] ?? match?.[2];
-  if (!raw) return null;
-  const leverage = Number(normalizeDecimal(raw));
-  return Number.isFinite(leverage) && leverage > 0 && leverage <= 20 ? leverage : null;
+function resolveLeverage(value: string): { value: number | null; error: "conflicting" | "out_of_range" | null } {
+  const matches = [
+    ...value.matchAll(new RegExp(String.raw`(${NUMBER})\s*x\b`, "giu")),
+    ...value.matchAll(new RegExp(String.raw`\b(?:lev|leverage)\s*(?:of|:)?\s*(${NUMBER})(?!\s*x\b)`, "giu")),
+  ];
+  const values = matches
+    .map((match) => Number(normalizeDecimal(match[1]!)))
+    .filter(Number.isFinite);
+  if (values.length === 0) return { value: null, error: null };
+  if (values.some((leverage) => leverage < 1 || leverage > 10)) return { value: null, error: "out_of_range" };
+  const distinct = [...new Set(values)];
+  if (distinct.length > 1) return { value: null, error: "conflicting" };
+  return { value: distinct[0]!, error: null };
 }
 
 function normalizeDecimal(raw: string): string {

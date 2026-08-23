@@ -368,6 +368,15 @@ async function resolvePerpsReply(input: {
     return { role: "assistant", content: `This wallet has no perpetuals account yet. Open the PERPS panel and set the collateral for your first order; the account is opened in the same transaction. No order was prepared.` };
   }
 
+  if (intent.action === "open" && intent.leverageError) {
+    return {
+      role: "assistant",
+      content: intent.leverageError === "conflicting"
+        ? "I found multiple conflicting leverage values. State exactly one leverage between 1x and 10x; no order was prepared."
+        : "Leverage must be between 1x and 10x. No order was prepared.",
+    };
+  }
+
   let setup: PerpSetupAssessment | null = null;
   if (intent.analyzeBeforeOpen) {
     const [feed, candles] = await Promise.all([
@@ -396,7 +405,7 @@ async function resolvePerpsReply(input: {
 
   return {
     role: "assistant",
-    content: `${setup ? `${market.symbol} qualified as bullish (${setup.score}/${setup.checks.length} checks passed; at least ${setup.requiredScore} were required). ` : ""}A ${intent.direction} ${market.symbol} proposal is ready to prepare${intent.leverage ? ` (you mentioned ${intent.leverage}x; Mirae sizes from your stated amount and shows the resulting account leverage after preflight)` : ""}. Select Prepare order to build and simulate the unsigned entry transaction; nothing has been signed or broadcast.${intent.stopLossPct || intent.takeProfitPct ? " The stop-loss and take-profit prices are planning references only and are not active exit orders." : ""}`,
+    content: `${setup ? `${market.symbol} qualified as bullish (${setup.score}/${setup.checks.length} checks passed; at least ${setup.requiredScore} were required). ` : ""}A ${intent.direction} ${market.symbol} proposal is ready to prepare at ${intent.leverage ?? 2}x leverage${intent.leverage ? " as requested" : " by default"}. Select Prepare order to build and simulate the unsigned entry transaction; nothing has been signed or broadcast.${intent.stopLossPct || intent.takeProfitPct ? " The stop-loss and take-profit prices are planning references only and are not active exit orders." : ""}`,
     proposal: perpProposal({
       market: market.symbol,
       marketIndex: market.marketIndex,
@@ -405,8 +414,9 @@ async function resolvePerpsReply(input: {
       baseAmount: intent.baseAmount,
       notionalUsd: intent.notionalUsd,
       collateralUsdc: intent.notionalUsd
-        ? derivePerpCollateralUsdc(Number(intent.notionalUsd), intent.leverage ?? 3)
+        ? derivePerpCollateralUsdc(Number(intent.notionalUsd), intent.leverage ?? 2)
         : undefined,
+      leverage: intent.leverage ?? 2,
       oraclePriceUsd: null,
       limitPriceUsd: intent.limitPrice,
       account,
@@ -428,6 +438,7 @@ function perpProposal(input: {
   baseAmount?: string | null;
   notionalUsd?: string | null;
   collateralUsdc?: string;
+  leverage?: number;
   oraclePriceUsd: string | null;
   limitPriceUsd: string | null;
   account: PerpAccountSnapshot;
@@ -455,6 +466,7 @@ function perpProposal(input: {
     perpBaseAmount: input.baseAmount ?? undefined,
     perpNotionalUsd: input.notionalUsd ?? undefined,
     perpCollateralUsdc: input.collateralUsdc,
+    perpRequestedLeverage: input.leverage,
     perpLimitPriceUsd: input.limitPriceUsd ?? undefined,
     perpOraclePriceUsd: input.oraclePriceUsd ?? undefined,
     perpFreeCollateralUsd: input.account.freeCollateralUsd.toFixed(2),

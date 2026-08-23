@@ -109,6 +109,7 @@ function proposalToPerpRequest(proposal: WebProposal): PerpOrderRequest | null {
     baseAmount: proposal.perpBaseAmount,
     notionalUsd: proposal.perpNotionalUsd,
     collateralUsdc: proposal.perpCollateralUsdc,
+    leverage: proposal.perpRequestedLeverage,
   };
 }
 

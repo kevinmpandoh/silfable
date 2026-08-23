@@ -149,6 +149,8 @@ export function PerpPreviewCard({
       { label: "Order type", value: proposal.perpLimitPriceUsd ? `Limit @ $${proposal.perpLimitPriceUsd}` : "Market" },
       { label: "Oracle price", value: proposal.perpOraclePriceUsd ? `$${proposal.perpOraclePriceUsd}` : "Read at preflight" },
       { label: "Notional", value: proposal.perpNotionalUsd ? `$${proposal.perpNotionalUsd}` : "Computed at preflight" },
+      ...(proposal.perpRequestedLeverage ? [{ label: "Target leverage", value: `${proposal.perpRequestedLeverage}x` }] : []),
+      ...(proposal.perpCollateralUsdc ? [{ label: "Order collateral", value: `$${proposal.perpCollateralUsdc} USDC` }] : []),
       { label: "Free collateral", value: proposal.perpFreeCollateralUsd ? `$${proposal.perpFreeCollateralUsd}` : "Unavailable" },
       { label: "Account health", value: proposal.perpAccountHealthPct === undefined ? "Unavailable" : `${proposal.perpAccountHealthPct}%` },
       ...(proposal.perpAnalysisVerdict ? [{ label: "Setup", value: `${proposal.perpAnalysisVerdict} · ${proposal.perpAnalysisScore}/${proposal.perpAnalysisTotalChecks} passed (minimum ${proposal.perpAnalysisRequiredScore})` }] : []),

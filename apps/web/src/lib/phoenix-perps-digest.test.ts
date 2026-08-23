@@ -16,7 +16,7 @@ const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ
 const LIGHTHOUSE_PROGRAM_ID = new PublicKey("L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95");
 
 test("derives the same default isolated collateral as the perps form", () => {
-  assert.equal(derivePerpCollateralUsdc(0.5), "0.17");
+  assert.equal(derivePerpCollateralUsdc(0.5), "0.25");
   assert.equal(derivePerpCollateralUsdc(250, 5), "50.00");
 });
 
