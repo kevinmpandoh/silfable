@@ -6,8 +6,8 @@ export type DesktopUpdateInfo = {
   publishedAt: string | null;
 };
 
-const RELEASES_API = "https://api.github.com/repos/Mirae-AI-Trade/mirae/releases/latest";
-const RELEASES_URL = "https://github.com/mirae-trade/mirae/releases";
+const RELEASES_API = "https://api.github.com/repos/mirae-trade/mirae-desktop-releases/releases/latest";
+const RELEASES_URL = "https://github.com/mirae-trade/mirae-desktop-releases/releases";
 
 export function compareVersions(left: string, right: string): number {
   const normalize = (value: string) => (value.replace(/^v/iu, "").split("-")[0] ?? "0").split(".").map((part) => Number(part));

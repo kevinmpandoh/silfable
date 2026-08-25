@@ -40,8 +40,8 @@ const releases = [{
   fixed: [
     "Perpetual prompts no longer fall through to generic AI execution disclaimers",
   ],
-  windowsHref: "https://github.com/mirae-trade/mirae/releases/download/v0.2.2/Mirae-0.2.2-windows-x64-unsigned-qa.zip",
-  releaseHref: "https://github.com/mirae-trade/mirae/releases/tag/v0.2.2",
+  windowsHref: "https://github.com/mirae-trade/mirae-desktop-releases/releases/download/v0.2.2/Mirae-0.2.2-windows-x64-unsigned-qa.zip",
+  releaseHref: "https://github.com/mirae-trade/mirae-desktop-releases/releases/tag/v0.2.2",
 }, {
   version: "0.2.1",
   date: "Perpetuals Desktop Update",
@@ -57,8 +57,8 @@ const releases = [{
   fixed: [
     "Desktop release metadata and downloadable Linux artifacts",
   ],
-  windowsHref: "https://github.com/mirae-trade/mirae/releases/download/v0.2.1/Mirae-0.2.1-windows-x64-unsigned-qa.zip",
-  releaseHref: "https://github.com/mirae-trade/mirae/releases/tag/v0.2.1",
+  windowsHref: "https://github.com/mirae-trade/mirae-desktop-releases/releases/download/v0.2.1/Mirae-0.2.1-windows-x64-unsigned-qa.zip",
+  releaseHref: "https://github.com/mirae-trade/mirae-desktop-releases/releases/tag/v0.2.1",
 }, {
   version: "0.2.0",
   date: "Perpetuals Release",
@@ -81,7 +81,7 @@ const releases = [{
     "Tokenized-asset portfolio metadata resolution",
   ],
   windowsHref: null,
-  releaseHref: "https://github.com/mirae-trade/mirae/releases/tag/v0.2.0",
+  releaseHref: "https://github.com/mirae-trade/mirae-desktop-releases/releases/tag/v0.2.0",
 }, {
   version: "0.1.0",
   date: "Windows & Linux Release",
@@ -105,8 +105,8 @@ const releases = [{
     "Desktop privilege-boundary audits",
     "Windows & Linux package compatibility checks",
   ],
-  windowsHref: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-windows-x64-setup.exe",
-  releaseHref: "https://github.com/mirae-trade/mirae/releases/tag/v0.1.0",
+  windowsHref: "https://github.com/mirae-trade/mirae-desktop-releases/releases/download/v0.1.0/Mirae-0.1.0-windows-x64-setup.exe",
+  releaseHref: "https://github.com/mirae-trade/mirae-desktop-releases/releases/tag/v0.1.0",
 }] as const;
 
 export function ReleaseHistory() {

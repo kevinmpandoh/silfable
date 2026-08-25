@@ -9,7 +9,7 @@ test("compares stable semantic versions numerically", () => {
 });
 
 test("reports a newer official release without downloading it", async () => {
-  const request = async () => new Response(JSON.stringify({ tag_name: "v0.2.0", html_url: "https://github.com/mirae-trade/mirae/releases/tag/v0.2.0", published_at: "2026-08-14T00:00:00Z", draft: false, prerelease: false }), { status: 200 });
+  const request = async () => new Response(JSON.stringify({ tag_name: "v0.2.0", html_url: "https://github.com/mirae-trade/mirae-desktop-releases/releases/tag/v0.2.0", published_at: "2026-08-14T00:00:00Z", draft: false, prerelease: false }), { status: 200 });
   const result = await checkLatestRelease("0.1.0", request as typeof fetch);
   assert.equal(result.available, true);
   assert.equal(result.latestVersion, "0.2.0");
