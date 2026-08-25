@@ -1,4 +1,5 @@
 import type { ReactNode, RefObject } from "react";
+import Image from "next/image";
 import type { WebMessage } from "@/lib/db";
 
 interface TradeMessageFeedProps {
@@ -167,6 +168,18 @@ export function TradeMessageFeed({ messages, activeSessionId, loading, viewportR
         .filter((message) => message.sessionId === activeSessionId && !isLegacyProgressMessage(message))
         .map((message) => (
           <article key={message.id} className={message.role}>
+            {message.role === "assistant" && (
+              <span className="avatar" role="img" aria-label="Mirae AI">
+                <Image
+                  className="avatarLogo"
+                  src="/mirae-logo.png"
+                  alt=""
+                  width={26}
+                  height={26}
+                  aria-hidden="true"
+                />
+              </span>
+            )}
             <div>
               <small className="mb-1.5 block text-[8px] uppercase tracking-[0.1em] text-[var(--muted)]">
                 {message.role === "user" ? "You" : "Mirae"} <span aria-hidden="true">·</span>{" "}

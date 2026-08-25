@@ -766,14 +766,13 @@ export async function buildRegisterTraderTransaction(
     }).compileToV0Message()
   );
 
-  const [simulation, fee, blockHeight] = await Promise.all([
+  const [simulation, fee] = await Promise.all([
     connection.simulateTransaction(transaction, {
       commitment: "confirmed",
       sigVerify: false,
       replaceRecentBlockhash: false,
     }),
     connection.getFeeForMessage(transaction.message, "confirmed"),
-    connection.getBlockHeight("confirmed"),
   ]);
   if (simulation.value.err)
     throw new Error(

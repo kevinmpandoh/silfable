@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export * from "./x402";
+
 const SolanaAddressSchema = z.string().regex(
   /^[1-9A-HJ-NP-Za-km-z]{32,44}$/u,
   "Expected a base58 Solana address",
@@ -211,6 +213,10 @@ export const IPC_CHANNELS = {
   perpsAccountGet: "perps:get-account",
   perpsOrderPrepare: "perps:prepare-order",
   perpsOrderExecute: "perps:execute-order",
+  x402Discover: "xpay:discover",
+  x402Prepare: "xpay:prepare",
+  x402Execute: "xpay:execute",
+  x402ReceiptsList: "xpay:list-receipts",
 } as const;
 
 const RequestBaseSchema = z.object({

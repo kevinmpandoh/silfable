@@ -45,8 +45,6 @@ for (const root of roots) {
 
 const pumpHarnessOnlyDependencies = [
   "@pump-fun/pump-sdk",
-  "@solana/spl-token",
-  "@solana/web3.js",
   "bn.js",
 ];
 const desktopPackage = JSON.parse(
@@ -69,8 +67,6 @@ const pumpProductionMarkers = [
   "@pump-fun/pump-sdk",
   "@pump-fun/pump-swap-sdk",
   "@pump-fun/agent-payments-sdk",
-  "bigint-buffer",
-  "Failed to load bindings, pure JS will be used",
 ];
 const productionCodecPaths = [
   resolve(repositoryRoot, "apps/desktop/src/main/pump/codec.ts"),

@@ -5,27 +5,27 @@ function releaseAsset(tag: string, filename: string): string {
 }
 
 export const CURRENT_DESKTOP_RELEASE = {
-  version: "0.2.3",
-  tag: "v0.2.3",
-  releaseUrl: `${RELEASE_BASE_URL}/tag/v0.2.3`,
+  version: "0.3.0",
+  tag: "v0.3.0",
+  releaseUrl: `${RELEASE_BASE_URL}/tag/v0.3.0`,
   windows: {
-    label: "Windows v0.2.3",
+    label: "Windows v0.3.0",
     detail: "x64 unsigned portable build",
-    filename: "Mirae-0.2.3-windows-x64-unsigned-qa.zip",
+    filename: "Mirae-0.3.0-windows-x64-unsigned-qa.zip",
     url: releaseAsset(
-      "v0.2.3",
-      "Mirae-0.2.3-windows-x64-unsigned-qa.zip",
+      "v0.3.0",
+      "Mirae-0.3.0-windows-x64-unsigned-qa.zip",
     ),
-    checksumUrl: releaseAsset("v0.2.3", "SHA256SUMS-WINDOWS-QA.txt"),
+    checksumUrl: releaseAsset("v0.3.0", "SHA256SUMS-WINDOWS-QA.txt"),
     signed: false,
   },
   linux: {
-    label: "Linux v0.2.3",
-    appImageX64Url: releaseAsset("v0.2.3", "Mirae-0.2.3-x86_64.AppImage"),
-    appImageArm64Url: releaseAsset("v0.2.3", "Mirae-0.2.3-arm64.AppImage"),
-    debX64Url: releaseAsset("v0.2.3", "Mirae-0.2.3-amd64.deb"),
-    debArm64Url: releaseAsset("v0.2.3", "Mirae-0.2.3-arm64.deb"),
-    checksumUrl: releaseAsset("v0.2.3", "SHA256SUMS.txt"),
+    label: "Linux v0.3.0",
+    appImageX64Url: releaseAsset("v0.3.0", "Mirae-0.3.0-x86_64.AppImage"),
+    appImageArm64Url: releaseAsset("v0.3.0", "Mirae-0.3.0-arm64.AppImage"),
+    debX64Url: releaseAsset("v0.3.0", "Mirae-0.3.0-amd64.deb"),
+    debArm64Url: releaseAsset("v0.3.0", "Mirae-0.3.0-arm64.deb"),
+    checksumUrl: releaseAsset("v0.3.0", "SHA256SUMS.txt"),
   },
 } as const;
 

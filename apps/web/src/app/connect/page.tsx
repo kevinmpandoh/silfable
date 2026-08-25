@@ -56,7 +56,6 @@ function ConnectContent() {
     const force = searchParams.get("force") === "1";
     if (force) {
       void fetch("/api/auth/wallet/logout", { method: "POST" });
-      setAuthState("ready");
       return;
     }
     fetch("/api/auth/wallet/session", { cache: "no-store" })

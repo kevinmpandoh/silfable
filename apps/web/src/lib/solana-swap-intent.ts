@@ -17,6 +17,9 @@ export function resolveSolanaSwapIntent(text: string): SolanaSwapIntent {
   if (!SWAP_KEYWORDS.test(trimmed)) {
     return { requested: false, amount: null, inputSymbol: "USDC", outputSymbol: null };
   }
+  if (/\b(?:do not|don't|never|jangan|tidak)\b[^.!?\n]{0,80}\b(?:swap|trade|buy|beli|tukar|convert)\b/iu.test(trimmed)) {
+    return { requested: false, amount: null, inputSymbol: "USDC", outputSymbol: null };
+  }
 
   // Check if it's a bridge request (which has "bridge" or cross-chain keywords)
   if (/\bbridge\b/iu.test(trimmed)) {

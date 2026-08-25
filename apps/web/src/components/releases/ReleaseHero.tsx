@@ -12,11 +12,11 @@ export function ReleaseHero() {
         <CurrentReveal className="releaseConsoleHeroGrid grid gap-10 lg:grid-cols-[.72fr_1fr] lg:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-3">
-              <Badge>v0.2.0 Release</Badge>
+              <Badge>v0.3.0 Release</Badge>
               <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/35">Windows & Linux Available</span>
             </div>
             <h1 className="releaseStamp mt-7 text-[clamp(3.6rem,7vw,7rem)] leading-[0.84] tracking-[-0.07em]">
-              Changelog <em className="block">0.2.0</em>
+              Changelog <em className="block">0.3.0</em>
             </h1>
           </div>
           <div className="releaseConsoleSummary border-l border-white/15 pl-7 lg:mb-2">
@@ -32,7 +32,7 @@ export function ReleaseHero() {
             <div className="mt-7 flex flex-wrap items-center gap-4">
               <Button asChild size="lg" className="solarPrimaryButton w-full sm:w-auto">
                 <a href="#downloads">
-                  View v0.2.0 Downloads <ArrowDownToLine className="ml-3 size-4" />
+                  View v0.3.0 Downloads <ArrowDownToLine className="ml-3 size-4" />
                 </a>
               </Button>
               <Button asChild variant="outline" size="lg" className="outlineButton w-full sm:w-auto">

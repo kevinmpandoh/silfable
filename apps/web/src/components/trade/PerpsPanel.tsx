@@ -299,7 +299,8 @@ export function PerpsPanel({
   );
 
   useEffect(() => {
-    void loadData();
+    const timer = window.setTimeout(() => void loadData(), 0);
+    return () => window.clearTimeout(timer);
   }, [loadData]);
 
   useEffect(() => {
@@ -331,41 +332,41 @@ export function PerpsPanel({
 
   const market =
     markets.find((entry) => entry.baseAssetSymbol === selected) ?? markets[0];
+  const marketSymbol = market?.symbol;
   useEffect(() => {
-    if (!market) return;
+    if (!marketSymbol) return;
     const controller = new AbortController();
-    setCandleLoading(true);
-    setCandleError(null);
-    fetch(
-      `/api/perps/candles?symbol=${encodeURIComponent(
-        market.symbol
-      )}&timeframe=${timeframe}&limit=120`,
-      { cache: "no-store", signal: controller.signal }
-    )
-      .then(async (response) => {
-        const result = (await response.json()) as {
-          candles?: PerpCandle[];
-          error?: string;
-        };
-        if (!response.ok || !result.candles)
-          throw new Error(result.error || "Candle data is unavailable.");
-        setCandles(result.candles);
-      })
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted) return;
-        setCandles([]);
-        setCandleError(
-          cause instanceof Error ? cause.message : "Candle data is unavailable."
-        );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setCandleLoading(false);
-      });
-    return () => controller.abort();
-  }, [market?.symbol, timeframe]);
-  const position = account?.positions.find(
-    (entry) => entry.symbol === market?.symbol
-  );
+    const timer = window.setTimeout(() => {
+      setCandleLoading(true);
+      setCandleError(null);
+      fetch(
+        `/api/perps/candles?symbol=${encodeURIComponent(
+          marketSymbol
+        )}&timeframe=${timeframe}&limit=120`,
+        { cache: "no-store", signal: controller.signal }
+      )
+        .then(async (response) => {
+          const result = (await response.json()) as {
+            candles?: PerpCandle[];
+            error?: string;
+          };
+          if (!response.ok || !result.candles)
+            throw new Error(result.error || "Candle data is unavailable.");
+          setCandles(result.candles);
+        })
+        .catch((cause: unknown) => {
+          if (controller.signal.aborted) return;
+          setCandles([]);
+          setCandleError(
+            cause instanceof Error ? cause.message : "Candle data is unavailable."
+          );
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setCandleLoading(false);
+        });
+    }, 0);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [marketSymbol, timeframe]);
   const numericSize = Number(size.replace(",", "."));
   const estimatedNotional =
     !market || !Number.isFinite(numericSize) || numericSize <= 0

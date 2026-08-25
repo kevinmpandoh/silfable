@@ -7,19 +7,21 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { CURRENT_DESKTOP_RELEASE } from "@/lib/desktop-releases";
 
 const releases = [{
-  version: "0.2.3",
-  date: "Full Access Execution Fix",
+  version: "0.3.0",
+  date: "Native Solana x402",
   status: "Latest",
-  summary: "Single-attempt Perpetual Execution",
+  summary: "User-approved USDC payments for external data",
   added: [
-    "A synchronous per-proposal execution lock for Full Access Perpetual orders",
+    "Mirae-curated market-analysis catalog for external Solana x402 resources",
+    "USDC purchase review, settlement receipts, and provider evidence in web and desktop chat",
   ],
   changed: [
-    "Full Access remains clearly labeled without lightning iconography",
+    "Every x402 purchase requires a user click in Restricted and Full Access sessions",
+    "Desktop Full Access can sign from an active local vault session after approval",
   ],
   fixed: [
-    "Strict Mode can no longer trigger duplicate Perpetual execution attempts",
-    "A single proposal no longer displays conflicting failure and success states",
+    "Request, requirements, wallet, and session are cryptographically bound before signing",
+    "Hard caps, expiry, SSRF filtering, response limits, and duplicate-submit protection",
   ],
   windowsHref: CURRENT_DESKTOP_RELEASE.windows.url,
   releaseHref: CURRENT_DESKTOP_RELEASE.releaseUrl,

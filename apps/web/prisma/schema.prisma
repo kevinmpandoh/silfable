@@ -24,6 +24,7 @@ model User {
   solanaAutomationProposals  SolanaAutomationProposal[]
   evmAutomationStrategies    EvmAutomationStrategy[]
   evmAutomationProposals     EvmAutomationProposal[]
+  x402Receipts               X402Receipt[]
 }
 
 model LinkedWallet {
@@ -261,6 +262,42 @@ model ChatSession {
   automationProposals     SolanaAutomationProposal[]
   evmAutomationStrategies EvmAutomationStrategy[]
   evmAutomationProposals  EvmAutomationProposal[]
+  x402Receipts            X402Receipt[]
+}
+
+model X402Receipt {
+  id                        String      @id @default(auto()) @map("_id") @db.ObjectId
+  publicId                  String      @unique
+  planId                    String      @unique
+  userId                    String      @db.ObjectId
+  user                      User        @relation(fields: [userId], references: [id])
+  sessionId                 String      @db.ObjectId
+  session                   ChatSession @relation(fields: [sessionId], references: [id])
+  walletAddress             String
+  resourceId                String
+  resourceUrl               String
+  providerOrigin            String
+  requestJson               String
+  requestDigest             String
+  requirementsJson          String
+  requirementsDigest        String
+  idempotencyKey            String      @unique
+  preparedTransactionBase64 String
+  amount                    String
+  asset                     String
+  payTo                     String
+  status                    String
+  signature                 String?
+  settlementJson            String?
+  resourceResponseJson      String?
+  errorCode                 String?
+  errorMessage              String?
+  expiresAt                 DateTime
+  createdAt                 DateTime    @default(now())
+  updatedAt                 DateTime    @updatedAt
+
+  @@index([userId, status, createdAt])
+  @@index([sessionId, status])
 }
 
 model ChatMessage {

@@ -1,6 +1,6 @@
 {
   "name": "@mirae/cloud-worker",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Monitor-only cloud runtime; signing and autonomous execution are frozen",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "prisma:generate": "prisma generate"
   },
   "dependencies": {
-    "@mirae/contracts": "0.2.0",
+    "@mirae/contracts": "0.3.0",
     "@prisma/client": "^6.4.1",
     "@pump-fun/pump-sdk": "^1.36.0",
     "@solana/spl-token": "^0.4.15",

@@ -140,6 +140,10 @@ declare global {
   interface Window {
     mirae: {
       getRuntimeStatus(): Promise<RuntimeStatus>;
+      discoverX402(request: import("@mirae/contracts").X402DiscoverRequest): Promise<import("@mirae/contracts").X402DiscoverResponse>;
+      prepareX402(request: import("@mirae/contracts").X402PrepareRequest): Promise<import("@mirae/contracts").X402PrepareResponse>;
+      executeX402(request: import("@mirae/contracts").X402ExecuteRequest): Promise<import("@mirae/contracts").X402ExecuteResponse>;
+      listX402Receipts(): Promise<import("@mirae/contracts").X402ReceiptsResponse>;
       getEmergencyStop(): Promise<EmergencyStopGetResponse>;
       engageEmergencyStop(request: EmergencyStopEngageRequest): Promise<EmergencyStopMutationResponse>;
       releaseEmergencyStop(request: EmergencyStopReleaseRequest): Promise<EmergencyStopMutationResponse>;

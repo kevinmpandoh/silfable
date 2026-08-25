@@ -1057,7 +1057,17 @@ function MainWorkspace({
         ? parseMiraePerpPrompt(text)
         : { requested: false as const };
       let response: any;
-      if (perpIntent.requested) {
+      const requestsX402 = /\bx402\b|pay (?:for|through)|paid (?:data|resource|api)/iu.test(text);
+      if (requestsX402) {
+        if (target.walletScope !== "solana") {
+          response = { text: "x402 purchases in this release require a Solana workspace. No discovery or payment was attempted.", toolsUsed: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 } };
+        } else if (!target.walletAddress) {
+          response = { text: "Connect the Solana wallet for this session before discovering x402 resources. Nothing was charged.", toolsUsed: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 } };
+        } else {
+          const discovered = await window.mirae.discoverX402({ schemaVersion: 1, requestId: crypto.randomUUID(), query: text.slice(0, 240), maxUsdPrice: 0.03, limit: 10 });
+          response = { text: discovered.resources.length > 0 ? `Found ${discovered.resources.length} external USDC Solana x402 resources. Choose a resource below; nothing has been signed or paid.` : `No compatible external USDC Solana x402 resource was found under the $0.03 limit (${discovered.rejectedCount} incompatible results rejected). Nothing was charged.`, toolsUsed: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 }, x402Resources: discovered.resources, x402Input: { query: text } };
+        }
+      } else if (perpIntent.requested) {
         if (perpIntent.error || !perpIntent.symbol || !perpIntent.direction || !perpIntent.notionalUsd) {
           const reason = perpIntent.error === "conflicting_leverage"
             ? "State exactly one leverage between 1x and 10x."
@@ -1137,6 +1147,7 @@ function MainWorkspace({
             }
           : {}),
         ...(response.perpProposal ? { perpProposal: response.perpProposal } : {}),
+        ...(response.x402Resources ? { x402Resources: response.x402Resources, x402Input: response.x402Input, x402Receipts: [] } : {}),
       };
       setAnimatedMessageIds((current) => [...current, assistant.id]);
       const sessionWithAssistant = {
@@ -1207,6 +1218,19 @@ function MainWorkspace({
     } finally {
       setThinkingIds((current) => current.filter((id) => id !== target.id));
     }
+  }
+
+  async function executeX402Purchase(target: SessionItem, messageId: string, resource: import("@mirae/contracts").X402Resource, masterPassword?: string): Promise<void> {
+    if (!target.walletAddress || target.walletScope !== "solana") return;
+    const message = target.messages.find((candidate) => candidate.id === messageId) as any;
+    const prepared = await window.mirae.prepareX402({ schemaVersion: 1, requestId: crypto.randomUUID(), sessionId: target.id, walletAddress: target.walletAddress, resource, input: message?.x402Input ?? null, maxResourceAmount: "30000", maxMissionAmount: "100000" });
+    const executed = await window.mirae.executeX402({ schemaVersion: 1, requestId: crypto.randomUUID(), planId: prepared.prepared.id, sessionId: target.id, walletAddress: target.walletAddress, signedTransactionBase64: prepared.prepared.transactionBase64, approved: true, ...(target.permission === "restricted" ? { masterPassword: masterPassword ?? "" } : {}) });
+    setSessions((current) => current.map((session) => {
+      if (session.id !== target.id) return session;
+      const next = { ...session, messages: session.messages.map((entry) => entry.id === messageId ? { ...entry, x402Receipts: [...((entry as any).x402Receipts ?? []), executed.receipt] } : entry) };
+      void persistSession(next);
+      return next;
+    }));
   }
   async function prepareEvmSwap(input: {
     sessionId: string;
@@ -2718,6 +2742,7 @@ function MainWorkspace({
               active.evmChainKey === "robinhood"
             }
             onOpenDriftPerps={() => setShowDriftPerpsPanel(true)}
+            onExecuteX402={(messageId, resource, masterPassword) => executeX402Purchase(active, messageId, resource, masterPassword)}
             onPrepareEvmSwap={(messageId, proposal) =>
               void prepareEvmSwap({
                 sessionId: active.id,

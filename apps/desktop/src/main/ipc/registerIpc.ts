@@ -172,6 +172,13 @@ import {
   WalletImportPrivateKeyRequestSchema,
   WalletImportResponseSchema,
   WalletListResponseSchema,
+  X402DiscoverRequestSchema,
+  X402DiscoverResponseSchema,
+  X402PrepareRequestSchema,
+  X402PrepareResponseSchema,
+  X402ExecuteRequestSchema,
+  X402ExecuteResponseSchema,
+  X402ReceiptsResponseSchema,
   type BridgeReceipt,
   type PumpExecutionRecord,
   type PumpLaunchExecutionRecord,
@@ -261,9 +268,10 @@ import { FullAccessEvmAssetAuthorizationService } from "../security/full-access-
 import { LocalSigningSessionService } from "../security/local-signing-session.js";
 import { AutonomousJobStore } from "../execution/autonomous-job-store.js";
 import { AutonomousExecutorService } from "../execution/autonomous-executor.js";
+import type { X402DesktopService } from "../x402/service.js";
 
 
-export function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, emergencyStop: EmergencyStopService, wallets: WalletOnboardingService, evmWallet: EvmWalletService, evmReceipts: EncryptedEvmReceiptService, evmBridgeReceipts: EncryptedEvmBridgeReceiptService, evmSwapQuotes: EvmSwapRouterService, uniswapQuotes: UniswapQuoteService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService, pumpLaunchPreflight: PumpLaunchPreflightService, strategyManager: PositionStrategyManager, observationService: DurableBackgroundObservationService, automationManager: AutomationManager, fullAccessExecutionGrants: EncryptedFullAccessExecutionGrantService, localSigningSession: LocalSigningSessionService, autonomousJobs: AutonomousJobStore, fullAccessEvmAssets: FullAccessEvmAssetAuthorizationService,
+export function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, emergencyStop: EmergencyStopService, wallets: WalletOnboardingService, evmWallet: EvmWalletService, evmReceipts: EncryptedEvmReceiptService, evmBridgeReceipts: EncryptedEvmBridgeReceiptService, evmSwapQuotes: EvmSwapRouterService, uniswapQuotes: UniswapQuoteService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService, pumpLaunchPreflight: PumpLaunchPreflightService, strategyManager: PositionStrategyManager, observationService: DurableBackgroundObservationService, automationManager: AutomationManager, fullAccessExecutionGrants: EncryptedFullAccessExecutionGrantService, localSigningSession: LocalSigningSessionService, autonomousJobs: AutonomousJobStore, fullAccessEvmAssets: FullAccessEvmAssetAuthorizationService, x402: X402DesktopService,
   getMainWindow: () => Electron.BrowserWindow | null,
   createVerifiedEvmEngine: (secretStore: LocalEncryptedKeystore, chainKey: ReturnType<typeof getEvmChain>["key"], executionGate?: VenueExecutionGate, executionVenue?: VenueId) => Promise<EvmEngine>
 ): void {
@@ -569,6 +577,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     await fullAccessExecutionGrants.emergencyStop();
     automationManager.emergencyStop();
     localSigningSession.clear("emergency stop engaged");
+    x402.clearPrepared();
     observationService.stopObservationLoop();
     return EmergencyStopMutationResponseSchema.parse({
       schemaVersion: 1,
@@ -738,6 +747,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     await database.backupTo(join(backupDirectory, "mirae-mainnet.sqlite3"));
     const backupCreated = await secretStore.backupAndReset(backupDirectory);
     database.resetVaultData();
+    x402.clearPrepared();
     return SecurityResetVaultResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, reset: true, backupCreated });
   });
 
@@ -1130,6 +1140,41 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     assertTrustedSender(event);
     requireUnlocked();
     return AiSettingsResponseSchema.parse({ schemaVersion: 1, providers: await ai.listSettings() });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.x402Discover, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = X402DiscoverRequestSchema.parse(raw);
+    const maxAtomic = BigInt(Math.min(Math.round((request.maxUsdPrice ?? 0.03) * 1_000_000), 30_000));
+    const result = await x402.discover(request.query, maxAtomic, request.limit);
+    return X402DiscoverResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, ...result });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.x402Prepare, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    emergencyStop.assertExecutionAllowed();
+    const request = X402PrepareRequestSchema.parse(raw);
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (!sessionRecord || sessionRecord.walletScope !== "solana" || sessionRecord.walletAddress !== request.walletAddress) throw new Error("x402 requires the exact Solana wallet bound to this session");
+    const prepared = await x402.prepare({ sessionId: request.sessionId, walletAddress: request.walletAddress, resource: request.resource, requestInput: request.input, maxResourceAtomic: BigInt(request.maxResourceAmount), maxMissionAtomic: BigInt(request.maxMissionAmount) });
+    return X402PrepareResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, prepared });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.x402Execute, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    emergencyStop.assertExecutionAllowed();
+    const request = X402ExecuteRequestSchema.parse(raw);
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (!sessionRecord || sessionRecord.walletScope !== "solana" || sessionRecord.walletAddress !== request.walletAddress) throw new Error("x402 requires the exact Solana wallet bound to this session");
+    if (sessionRecord.permission === "full") localSigningSession.assertActive();
+    else if (!request.masterPassword || !(await passwords.verify(request.masterPassword))) throw new Error("Master password is required for a Restricted x402 purchase");
+    const receipt = await x402.execute({ planId: request.planId, sessionId: request.sessionId, walletAddress: request.walletAddress });
+    return X402ExecuteResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.x402ReceiptsList, async (event) => {
+    assertTrustedSender(event);
+    return X402ReceiptsResponseSchema.parse({ schemaVersion: 1, requestId: crypto.randomUUID(), receipts: await x402.listReceipts() });
   });
 
   ipcMain.handle(IPC_CHANNELS.aiPreviewOpenRouterModels, async (event, raw: unknown) => {

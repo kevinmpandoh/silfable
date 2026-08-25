@@ -141,6 +141,13 @@ import {
   WalletImportPrivateKeyRequestSchema,
   WalletImportResponseSchema,
   WalletListResponseSchema,
+  X402DiscoverRequestSchema,
+  X402DiscoverResponseSchema,
+  X402PrepareRequestSchema,
+  X402PrepareResponseSchema,
+  X402ExecuteRequestSchema,
+  X402ExecuteResponseSchema,
+  X402ReceiptsResponseSchema,
   EvmWalletGetResponseSchema,
   EvmWalletCreateRequestSchema,
   EvmWalletCreateResponseSchema,
@@ -248,11 +255,26 @@ import {
   type SecurityUnlockRequest,
   type SecurityResetVaultRequest,
   type SessionUpsertRequest,
+  type X402DiscoverRequest,
+  type X402PrepareRequest,
+  type X402ExecuteRequest,
 } from "@mirae/contracts";
 
 const api = {
   async getRuntimeStatus() {
     return RuntimeStatusSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.runtimeStatus));
+  },
+  async discoverX402(request: X402DiscoverRequest) {
+    return X402DiscoverResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.x402Discover, X402DiscoverRequestSchema.parse(request)));
+  },
+  async prepareX402(request: X402PrepareRequest) {
+    return X402PrepareResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.x402Prepare, X402PrepareRequestSchema.parse(request)));
+  },
+  async executeX402(request: X402ExecuteRequest) {
+    return X402ExecuteResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.x402Execute, X402ExecuteRequestSchema.parse(request)));
+  },
+  async listX402Receipts() {
+    return X402ReceiptsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.x402ReceiptsList));
   },
   async getEvmWallets() {
     return EvmWalletGetResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmWalletGet));

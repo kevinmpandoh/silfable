@@ -29,6 +29,7 @@ export type SecretName =
   | "robinhood-receipt-store-key"
   | "evm-receipt-store-key"
   | "evm-bridge-receipt-store-key"
+  | "x402-receipt-store-key"
   | "mission-runtime-store-key"
   | "portfolio-history-store-key"
   | "full-access-store-key"

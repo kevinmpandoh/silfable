@@ -91,14 +91,13 @@ export async function POST(req: NextRequest) {
         if (!owned) {
           return NextResponse.json({ error: "Session not found." }, { status: 404 });
         }
-        const automationStrategies = await safeDbQuery(
-          () => cloudDb.solanaAutomationStrategy.findMany({ where: { sessionId: owned.id }, select: { id: true } }),
-          [],
-        );
-        await safeDbQuery(() => cloudDb.solanaAutomationProposal.deleteMany({ where: { strategyId: { in: automationStrategies.map((strategy) => strategy.id) } } }), null);
-        await safeDbQuery(() => cloudDb.solanaAutomationStrategy.deleteMany({ where: { sessionId: owned.id } }), null);
-        await safeDbQuery(() => cloudDb.chatMessage.deleteMany({ where: { sessionId: owned.id } }), null);
-        await safeDbQuery(() => cloudDb.chatSession.delete({ where: { id: owned.id } }), null);
+        await cloudDb.x402Receipt.deleteMany({ where: { sessionId: owned.id } });
+        await cloudDb.solanaAutomationProposal.deleteMany({ where: { sessionId: owned.id } });
+        await cloudDb.solanaAutomationStrategy.deleteMany({ where: { sessionId: owned.id } });
+        await cloudDb.evmAutomationProposal.deleteMany({ where: { sessionId: owned.id } });
+        await cloudDb.evmAutomationStrategy.deleteMany({ where: { sessionId: owned.id } });
+        await cloudDb.chatMessage.deleteMany({ where: { sessionId: owned.id } });
+        await cloudDb.chatSession.delete({ where: { id: owned.id } });
       }
       return NextResponse.json({ success: true });
     }
@@ -113,10 +112,13 @@ export async function POST(req: NextRequest) {
         []
       );
       const sessionIds = userSessions.map((s) => s.id);
-      await safeDbQuery(() => cloudDb.solanaAutomationProposal.deleteMany({ where: { userId: user.id } }), null);
-      await safeDbQuery(() => cloudDb.solanaAutomationStrategy.deleteMany({ where: { userId: user.id } }), null);
-      await safeDbQuery(() => cloudDb.chatMessage.deleteMany({ where: { sessionId: { in: sessionIds } } }), null);
-      await safeDbQuery(() => cloudDb.chatSession.deleteMany({ where: { userId: user.id } }), null);
+      await cloudDb.x402Receipt.deleteMany({ where: { userId: user.id } });
+      await cloudDb.solanaAutomationProposal.deleteMany({ where: { userId: user.id } });
+      await cloudDb.solanaAutomationStrategy.deleteMany({ where: { userId: user.id } });
+      await cloudDb.evmAutomationProposal.deleteMany({ where: { userId: user.id } });
+      await cloudDb.evmAutomationStrategy.deleteMany({ where: { userId: user.id } });
+      await cloudDb.chatMessage.deleteMany({ where: { sessionId: { in: sessionIds } } });
+      await cloudDb.chatSession.deleteMany({ where: { userId: user.id } });
       return NextResponse.json({ success: true });
     }
 

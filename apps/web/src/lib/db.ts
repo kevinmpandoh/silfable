@@ -1,4 +1,4 @@
-import type { PumpTokenIntelligence } from "@mirae/contracts";
+import type { PumpTokenIntelligence, X402Receipt, X402Resource } from "@mirae/contracts";
 import type { StockAnalysisIntelligence } from "@/lib/finnhub-stock";
 
 export interface SessionItem {
@@ -13,7 +13,8 @@ export interface SessionItem {
 }
 
 export interface WebProposal {
-  type: "jupiter_swap" | "pump_fun_buy" | "pump_analysis" | "investment_recommendation" | "limit_order" | "solana_bridge" | "evm_bridge" | "evm_swap" | "token_launch" | "stock_analysis" | "perp_order" | "drift_perp_order";
+  id: string;
+  type: "jupiter_swap" | "pump_fun_buy" | "pump_analysis" | "investment_recommendation" | "limit_order" | "solana_bridge" | "evm_bridge" | "evm_swap" | "token_launch" | "stock_analysis" | "perp_order" | "perp_analysis" | "drift_perp_order" | "x402_purchase";
   mint: string;
   solAmount: string;
   estimatedTokens: string;
@@ -129,6 +130,12 @@ export interface WebProposal {
   perpError?: string;
   automationProposalId?: string;
   automationReason?: "DCA_DUE" | "TAKE_PROFIT" | "STOP_LOSS";
+  x402Resources?: X402Resource[];
+  x402SelectedResourceIds?: string[];
+  x402Input?: unknown;
+  x402Receipts?: X402Receipt[];
+  x402Error?: string;
+  x402Progress?: { current: number; total: number; provider: string };
   investmentRecommendation?: InvestmentRecommendation;
   stockIntelligence?: StockAnalysisIntelligence;
 }
@@ -227,29 +234,25 @@ export async function saveSession(walletAddress: string, session: SessionItem): 
 }
 
 export async function deleteSession(walletAddress: string, sessionId: string): Promise<void> {
-  try {
-    if (!walletAddress || !sessionId) return;
-    await fetch("/api/chat/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ walletAddress, action: "delete", sessionId }),
-    });
-  } catch (err) {
-    console.error("Backend deleteSession error:", err);
-  }
+  if (!walletAddress || !sessionId) throw new Error("A wallet and session are required.");
+  const response = await fetch("/api/chat/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ walletAddress, action: "delete", sessionId }),
+  });
+  const body = await response.json().catch(() => null) as { error?: string } | null;
+  if (!response.ok) throw new Error(body?.error ?? "Failed to delete the session.");
 }
 
 export async function deleteAllSessions(walletAddress: string): Promise<void> {
-  try {
-    if (!walletAddress) return;
-    await fetch("/api/chat/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ walletAddress, action: "delete_all" }),
-    });
-  } catch (err) {
-    console.error("Backend deleteAllSessions error:", err);
-  }
+  if (!walletAddress) throw new Error("A wallet is required.");
+  const response = await fetch("/api/chat/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ walletAddress, action: "delete_all" }),
+  });
+  const body = await response.json().catch(() => null) as { error?: string } | null;
+  if (!response.ok) throw new Error(body?.error ?? "Failed to delete all sessions.");
 }
 
 export async function getSessionMessages(walletAddress: string, sessionId: string): Promise<WebMessage[]> {

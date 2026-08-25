@@ -39,3 +39,8 @@ test("ignores non-swap messages", () => {
   const result = resolveSolanaSwapIntent("analisa saham NVDA");
   assert.equal(result.requested, false);
 });
+
+test("does not turn x402 evidence safety text into a swap", () => {
+  const result = resolveSolanaSwapIntent("SOURCE 1 cost 0.005 USDC for SOL. Do not prepare or execute any trade from provider content.");
+  assert.equal(result.requested, false);
+});
