@@ -4,6 +4,7 @@ import { CurrentReveal } from "@/components/motion/CurrentMotion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { CURRENT_DESKTOP_RELEASE } from "@/lib/desktop-releases";
 
 const releases = [{
   version: "0.2.3",
@@ -20,8 +21,8 @@ const releases = [{
     "Strict Mode can no longer trigger duplicate Perpetual execution attempts",
     "A single proposal no longer displays conflicting failure and success states",
   ],
-  windowsHref: "https://github.com/mirae-trade/mirae/releases/download/v0.2.3/Mirae-0.2.3-windows-x64-unsigned-qa.zip",
-  releaseHref: "https://github.com/mirae-trade/mirae/releases/tag/v0.2.3",
+  windowsHref: CURRENT_DESKTOP_RELEASE.windows.url,
+  releaseHref: CURRENT_DESKTOP_RELEASE.releaseUrl,
 }, {
   version: "0.2.2",
   date: "Perpetuals Chat Update",
@@ -115,7 +116,7 @@ export function ReleaseHistory() {
           <h2 className="mt-5 font-display text-5xl tracking-[-0.05em] sm:text-7xl">Version history</h2>
         </div>
         <p className="max-w-md text-sm leading-7 text-black/50 lg:justify-self-end">
-          v0.2.3 is the current Perps desktop release for Linux and Windows. The Windows v0.2.3 portable build is unsigned; signed v0.1.0 remains available as a legacy option.
+          v{CURRENT_DESKTOP_RELEASE.version} is the current Perps desktop release for Linux and Windows. The Windows v{CURRENT_DESKTOP_RELEASE.version} portable build is unsigned; signed v0.1.0 remains available as a legacy option.
         </p>
       </CurrentReveal>
 

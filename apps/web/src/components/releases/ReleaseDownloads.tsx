@@ -2,17 +2,18 @@ import { Apple, ArrowDownToLine, CheckCircle2, Clock3, FileKey2, Laptop, Monitor
 
 import { CurrentReveal } from "@/components/motion/CurrentMotion";
 import { Button } from "@/components/ui/button";
+import { CURRENT_DESKTOP_RELEASE, LEGACY_SIGNED_WINDOWS_RELEASE } from "@/lib/desktop-releases";
 
 const windowsArtifacts = [
-  { label: "Windows v0.2.3 · x64 unsigned (.zip)", href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.3/Mirae-0.2.3-windows-x64-unsigned-qa.zip", primary: true },
-  { label: "Windows v0.1.0 · x64 signed (.exe)", href: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-windows-x64-setup.exe", primary: false },
+  { label: `${CURRENT_DESKTOP_RELEASE.windows.label} · x64 unsigned (.zip)`, href: CURRENT_DESKTOP_RELEASE.windows.url, primary: true },
+  { label: `${LEGACY_SIGNED_WINDOWS_RELEASE.label} · x64 (.exe)`, href: LEGACY_SIGNED_WINDOWS_RELEASE.url, primary: false },
 ] as const;
 
 const linuxArtifacts = [
-  { label: "AppImage · x64", href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.3/Mirae-0.2.3-x86_64.AppImage", primary: true },
-  { label: "AppImage · ARM64", href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.3/Mirae-0.2.3-arm64.AppImage", primary: false },
-  { label: "Debian · x64", href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.3/Mirae-0.2.3-amd64.deb", primary: false },
-  { label: "Debian · ARM64", href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.3/Mirae-0.2.3-arm64.deb", primary: false },
+  { label: "AppImage · x64", href: CURRENT_DESKTOP_RELEASE.linux.appImageX64Url, primary: true },
+  { label: "AppImage · ARM64", href: CURRENT_DESKTOP_RELEASE.linux.appImageArm64Url, primary: false },
+  { label: "Debian · x64", href: CURRENT_DESKTOP_RELEASE.linux.debX64Url, primary: false },
+  { label: "Debian · ARM64", href: CURRENT_DESKTOP_RELEASE.linux.debArm64Url, primary: false },
 ] as const;
 
 const upcoming = [
@@ -24,7 +25,7 @@ export function ReleaseDownloads() {
     <section id="downloads" className="scroll-mt-24 border-b border-[var(--line)] py-20 sm:py-28">
       <CurrentReveal className="releaseDownloadHeading">
         <div>
-          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--sc-orange)]">Release artifacts / 0.2.3 + legacy 0.1.0</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--sc-orange)]">Release artifacts / {CURRENT_DESKTOP_RELEASE.version} + legacy {LEGACY_SIGNED_WINDOWS_RELEASE.version}</p>
           <h2 className="mt-5 text-5xl font-bold tracking-[-0.06em] sm:text-6xl">Install Mirae Desktop.</h2>
         </div>
         <p>Choose the artifact that matches your operating system. Every transaction keeps local key storage and requires an explicit wallet review.</p>
@@ -36,10 +37,10 @@ export function ReleaseDownloads() {
           <CurrentReveal className="releaseLinuxFeature" delay={0.04}>
             <div className="releaseLinuxIdentity">
               <div className="releasePlatformIcon"><Laptop /></div>
-              <div><span>AVAILABLE NOW</span><h3>Windows</h3><p>v0.2.3 unsigned portable build · SmartScreen warning expected</p></div>
+              <div><span>AVAILABLE NOW</span><h3>Windows</h3><p>v{CURRENT_DESKTOP_RELEASE.version} unsigned portable build · SmartScreen warning expected</p></div>
             </div>
             <div className="releaseBuildLedger">
-              <span>VERSION <strong>0.2.3</strong></span><span>CHANNEL <strong>Unsigned QA</strong></span><span>EXECUTION <strong>Local Encrypted Vault</strong></span>
+              <span>VERSION <strong>{CURRENT_DESKTOP_RELEASE.version}</strong></span><span>CHANNEL <strong>Unsigned QA</strong></span><span>EXECUTION <strong>Local Encrypted Vault</strong></span>
             </div>
             <div className="releaseArtifactGrid">
               {windowsArtifacts.map((artifact) => (
@@ -48,7 +49,7 @@ export function ReleaseDownloads() {
                 </Button>
               ))}
             </div>
-            <p className="releaseVerifyNote"><FileKey2 /> v0.2.3 is unsigned and may trigger Windows SmartScreen. Verify it against SHA256SUMS-WINDOWS-QA.txt before running.</p>
+            <p className="releaseVerifyNote"><FileKey2 /> v{CURRENT_DESKTOP_RELEASE.version} is unsigned and may trigger Windows SmartScreen. Verify it against SHA256SUMS-WINDOWS-QA.txt before running.</p>
           </CurrentReveal>
 
           <CurrentReveal className="releaseUpcoming" delay={0.08}>
@@ -57,7 +58,7 @@ export function ReleaseDownloads() {
               const Icon = build.icon;
               return <article key={build.platform} className="releaseUpcomingRow"><Icon /><div><h3>{build.platform}</h3><p>{build.detail}</p></div><span>COMING SOON</span><small>{build.note}</small></article>;
             })}
-            <div className="releaseAvailabilityNote"><CheckCircle2 /> Windows and Linux v0.2.3 are available; Windows v0.2.3 is explicitly unsigned.</div>
+            <div className="releaseAvailabilityNote"><CheckCircle2 /> Windows and Linux v{CURRENT_DESKTOP_RELEASE.version} are available; Windows v{CURRENT_DESKTOP_RELEASE.version} is explicitly unsigned.</div>
           </CurrentReveal>
         </div>
 
@@ -69,7 +70,7 @@ export function ReleaseDownloads() {
               <div><span>AVAILABLE NOW</span><h3>Linux</h3><p>AppImage and Debian · x64 and ARM64</p></div>
             </div>
             <div className="releaseBuildLedger">
-              <span>VERSION <strong>0.2.3</strong></span><span>CHANNEL <strong>Latest</strong></span><span>EXECUTION <strong>Perps Chat + Wallet Review</strong></span>
+              <span>VERSION <strong>{CURRENT_DESKTOP_RELEASE.version}</strong></span><span>CHANNEL <strong>Latest</strong></span><span>EXECUTION <strong>Perps Chat + Wallet Review</strong></span>
             </div>
             <div className="releaseArtifactGrid">
               {linuxArtifacts.map((artifact) => (

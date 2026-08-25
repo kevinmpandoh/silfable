@@ -3,6 +3,7 @@ import { ArrowDownToLine, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CurrentReveal } from "@/components/motion/CurrentMotion";
+import { CURRENT_DESKTOP_RELEASE, LEGACY_SIGNED_WINDOWS_RELEASE } from "@/lib/desktop-releases";
 
 export function ReleaseHero() {
   return (
@@ -20,7 +21,7 @@ export function ReleaseHero() {
           </div>
           <div className="releaseConsoleSummary border-l border-white/15 pl-7 lg:mb-2">
             <p className="text-lg leading-8 text-white/60">
-              Mirae 0.2.0 introduces guarded Solana perpetuals with live markets, charts, collateral visibility, and explicit wallet-reviewed Long, Short, and Close actions. Mirae 0.1.0 remains available as the legacy Windows release.
+              Mirae {CURRENT_DESKTOP_RELEASE.version} includes guarded Solana perpetuals, deterministic chat orders, and single-attempt Full Access execution. Mirae {LEGACY_SIGNED_WINDOWS_RELEASE.version} remains available as the legacy signed Windows release.
             </p>
             <div className="mt-7 flex flex-wrap gap-x-6 gap-y-3 font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">
               <span className="flex items-center gap-2"><CheckCircle2 className="size-3.5 text-[var(--sc-ice)]" /> Windows (.exe)</span>

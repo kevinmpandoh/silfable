@@ -5,6 +5,7 @@ import { Menu, X } from "lucide-react";
 import { useState } from "react";
 
 import { MIRAE_X_URL } from "@/lib/social-links";
+import { NAV_DOWNLOAD_LINKS } from "@/lib/desktop-releases";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -17,24 +18,7 @@ const communityLinks = [
   { label: "Discord", href: "#", external: false, soon: true },
 ];
 
-const downloadLinks = [
-  {
-    label: "Windows v0.1.0",
-    href: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-windows-x64-setup.exe",
-    external: true,
-    download: true,
-    soon: false,
-  },
-  {
-    label: "Linux v0.2.0",
-    href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.0/Mirae-0.2.0-x86_64.AppImage",
-    external: true,
-    download: true,
-    soon: false,
-  },
-  { label: "All versions", href: "/releases", external: false, download: false, soon: false },
-  { label: "macOS", href: "#", external: false, soon: true },
-];
+const downloadLinks = NAV_DOWNLOAD_LINKS;
 
 const linkClass =
   "font-display text-sm font-semibold text-black transition-colors hover:text-primary";
@@ -45,7 +29,7 @@ function NavDropdown({
   external,
 }: {
   label: string;
-  items: Array<{ label: string; href?: string; external?: boolean; download?: boolean; soon?: boolean }>;
+  items: ReadonlyArray<{ label: string; href?: string; external?: boolean; download?: boolean; soon?: boolean }>;
   external?: boolean;
 }) {
   return (

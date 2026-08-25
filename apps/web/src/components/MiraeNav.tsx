@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { NAV_DOWNLOAD_LINKS } from "@/lib/desktop-releases";
+
 const navLinks = [
   { label: "Home", href: "/" },
   { label: "Whitepaper", href: "/whitepaper" },
@@ -9,20 +11,11 @@ const communityLinks: { label: string; href?: string; available?: boolean }[] = 
   { label: "X", href: "https://x.com/projectmirae", available: true },
   { label: "Discord", available: false },
 ];
-const downloadLinks: { label: string; href?: string; available?: boolean }[] = [
-  {
-    label: "Windows v0.1.0",
-    href: "https://github.com/mirae-trade/mirae/releases/download/v0.1.0/Mirae-0.1.0-windows-x64-setup.exe",
-    available: true,
-  },
-  {
-    label: "Linux v0.2.0",
-    href: "https://github.com/mirae-trade/mirae/releases/download/v0.2.0/Mirae-0.2.0-x86_64.AppImage",
-    available: true,
-  },
-  { label: "All versions", href: "/releases", available: true },
-  { label: "macOS", available: false },
-];
+const downloadLinks = NAV_DOWNLOAD_LINKS.map((item) => ({
+  label: item.label,
+  href: item.href,
+  available: !item.soon,
+}));
 
 const linkClass =
   "font-display text-sm font-semibold text-black transition-colors hover:text-primary";
