@@ -132,6 +132,32 @@ export const X402PrepareResponseSchema = RequestBaseSchema.extend({ prepared: X4
 export const X402ExecuteRequestSchema = RequestBaseSchema.extend({ planId: z.string().uuid(), sessionId: z.string().min(1).max(128), walletAddress: SolanaAddressSchema, signedTransactionBase64: z.string().min(32).max(16_000), approved: z.literal(true), masterPassword: z.string().min(1).max(256).optional() }).strict();
 export const X402ExecuteResponseSchema = RequestBaseSchema.extend({ receipt: X402ReceiptSchema }).strict();
 export const X402ReceiptsResponseSchema = RequestBaseSchema.extend({ receipts: z.array(X402ReceiptSchema).max(500) }).strict();
+export const X402SelectRequestSchema = RequestBaseSchema.extend({
+  sessionId: z.string().min(1).max(128),
+  walletAddress: SolanaAddressSchema,
+  messageId: z.string().min(1).max(128),
+}).strict();
+export const X402SelectResponseSchema = RequestBaseSchema.extend({
+  resourceIds: z.array(z.string().regex(/^sha256:[a-f0-9]{64}$/u)).min(1).max(10),
+  rationale: z.string().min(1).max(500),
+  maximumAmount: AtomicAmountSchema,
+}).strict();
+export const X402AnalyzeRequestSchema = RequestBaseSchema.extend({
+  sessionId: z.string().min(1).max(128),
+  walletAddress: SolanaAddressSchema,
+  messageId: z.string().min(1).max(128),
+  receiptIds: z.array(z.string().uuid()).min(1).max(10),
+}).strict();
+export const X402AnalyzeResponseSchema = RequestBaseSchema.extend({
+  model: z.string().min(1).max(192),
+  text: z.string().min(1).max(12_000),
+  usage: z.object({
+    inputTokens: z.number().int().nonnegative(),
+    outputTokens: z.number().int().nonnegative(),
+    totalTokens: z.number().int().nonnegative(),
+    costUsd: z.number().nonnegative().nullable(),
+  }).strict(),
+}).strict();
 
 export type X402DiscoverRequest = z.infer<typeof X402DiscoverRequestSchema>;
 export type X402DiscoverResponse = z.infer<typeof X402DiscoverResponseSchema>;
@@ -139,3 +165,7 @@ export type X402PrepareRequest = z.infer<typeof X402PrepareRequestSchema>;
 export type X402PrepareResponse = z.infer<typeof X402PrepareResponseSchema>;
 export type X402ExecuteRequest = z.infer<typeof X402ExecuteRequestSchema>;
 export type X402ExecuteResponse = z.infer<typeof X402ExecuteResponseSchema>;
+export type X402SelectRequest = z.infer<typeof X402SelectRequestSchema>;
+export type X402SelectResponse = z.infer<typeof X402SelectResponseSchema>;
+export type X402AnalyzeRequest = z.infer<typeof X402AnalyzeRequestSchema>;
+export type X402AnalyzeResponse = z.infer<typeof X402AnalyzeResponseSchema>;

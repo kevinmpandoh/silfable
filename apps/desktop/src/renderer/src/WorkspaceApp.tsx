@@ -124,7 +124,7 @@ import type {
   TransactionSettings,
   WalletActivitySnapshot,
 } from "@mirae/contracts";
-import { parseMiraePerpPrompt } from "@mirae/contracts";
+import { assessPerpSetup, parseConditionalX402PerpIntent, parseMiraePerpPrompt } from "@mirae/contracts";
 import {
   BRIDGE_ROBINHOOD_CHAIN_ID,
   BRIDGE_ROBINHOOD_USDG_ADDRESS,
@@ -1065,7 +1065,7 @@ function MainWorkspace({
           response = { text: "Connect the Solana wallet for this session before discovering x402 resources. Nothing was charged.", toolsUsed: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 } };
         } else {
           const discovered = await window.mirae.discoverX402({ schemaVersion: 1, requestId: crypto.randomUUID(), query: text.slice(0, 240), maxUsdPrice: 0.03, limit: 10 });
-          response = { text: discovered.resources.length > 0 ? `Found ${discovered.resources.length} external USDC Solana x402 resources. Choose a resource below; nothing has been signed or paid.` : `No compatible external USDC Solana x402 resource was found under the $0.03 limit (${discovered.rejectedCount} incompatible results rejected). Nothing was charged.`, toolsUsed: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 }, x402Resources: discovered.resources, x402Input: { query: text } };
+          response = { text: discovered.resources.length > 0 ? (target.permission === "full" ? `Mirae found ${discovered.resources.length} compatible paid market-data sources. Full Access will select the smallest useful set and continue automatically within the x402 budget.` : `Mirae found ${discovered.resources.length} compatible paid market-data sources. Select only what you need; nothing has been signed or charged.`) : `No compatible external USDC Solana market-data source was found under the $0.03 limit (${discovered.rejectedCount} incompatible results rejected). Nothing was charged.`, toolsUsed: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 }, x402Resources: discovered.resources, x402Input: { query: text } };
         }
       } else if (perpIntent.requested) {
         if (perpIntent.error || !perpIntent.symbol || !perpIntent.direction || !perpIntent.notionalUsd) {
@@ -1167,6 +1167,9 @@ function MainWorkspace({
           return sessionWithAssistant;
         })
       );
+      if (target.permission === "full" && response.x402Resources?.length > 0) {
+        await runFullAccessX402(sessionWithAssistant, assistant.id, response.x402Resources);
+      }
       if (target.permission === "full" && response.missionPreview) {
         await runSimulation({
           sessionId: target.id,
@@ -1220,14 +1223,118 @@ function MainWorkspace({
     }
   }
 
-  async function executeX402Purchase(target: SessionItem, messageId: string, resource: import("@mirae/contracts").X402Resource, masterPassword?: string): Promise<void> {
-    if (!target.walletAddress || target.walletScope !== "solana") return;
+  async function runFullAccessX402(target: SessionItem, messageId: string, resources: import("@mirae/contracts").X402Resource[]): Promise<void> {
+    if (!target.walletAddress || target.walletScope !== "solana" || target.permission !== "full") return;
+    let working = target;
+    const updateSource = async (patch: Record<string, unknown>) => {
+      working = { ...working, messages: working.messages.map((message) => message.id === messageId ? { ...message, ...patch } : message) };
+      await persistSession(working);
+      setSessions((current) => current.map((session) => session.id === working.id ? working : session));
+    };
+    try {
+      await updateSource({ x402AutoStatus: "selecting", x402AutoError: null });
+      const selection = await window.mirae.selectX402({ schemaVersion: 1, requestId: crypto.randomUUID(), sessionId: target.id, walletAddress: target.walletAddress, messageId });
+      const selectedResources = selection.resourceIds.map((id) => resources.find((resource) => resource.id === id)).filter((resource): resource is import("@mirae/contracts").X402Resource => resource !== undefined);
+      if (selectedResources.length !== selection.resourceIds.length || selectedResources.length < 1) throw new Error("AI selection did not match the verified resource list");
+      await updateSource({ x402SelectedResourceIds: selection.resourceIds, x402SelectionRationale: selection.rationale, x402AutoStatus: "purchasing" });
+
+      const receiptIds: string[] = [];
+      for (const resource of selectedResources) {
+        try {
+          const sourceMessage = working.messages.find((message) => message.id === messageId) as any;
+          const prepared = await window.mirae.prepareX402({ schemaVersion: 1, requestId: crypto.randomUUID(), sessionId: target.id, walletAddress: target.walletAddress, resource, input: sourceMessage?.x402Input ?? null, maxResourceAmount: "30000", maxMissionAmount: "100000" });
+          const executed = await window.mirae.executeX402({ schemaVersion: 1, requestId: crypto.randomUUID(), planId: prepared.prepared.id, sessionId: target.id, walletAddress: target.walletAddress, signedTransactionBase64: prepared.prepared.transactionBase64, approved: true });
+          receiptIds.push(executed.receipt.id);
+          const currentReceipts = ((working.messages.find((message) => message.id === messageId) as any)?.x402Receipts ?? []) as import("@mirae/contracts").X402Receipt[];
+          await updateSource({ x402Receipts: [...currentReceipts, executed.receipt] });
+        } catch (cause) {
+          await updateSource({ x402AutoStatus: "failed", x402AutoError: `Automatic purchase stopped safely: ${cause instanceof Error ? cause.message.replace(/^Error invoking remote method '[^']+': Error:\s*/iu, "") : "unknown error"}` });
+          break;
+        }
+      }
+      if (receiptIds.length > 0) {
+        await updateSource({ x402AutoStatus: "analyzing" });
+        await analyzeX402Purchase(working, messageId, receiptIds);
+      }
+    } catch (cause) {
+      await updateSource({ x402AutoStatus: "failed", x402AutoError: `Automatic x402 stopped before payment: ${cause instanceof Error ? cause.message.replace(/^Error invoking remote method '[^']+': Error:\s*/iu, "") : "unknown error"}` });
+    }
+  }
+
+  async function executeX402Purchase(target: SessionItem, messageId: string, resource: import("@mirae/contracts").X402Resource, masterPassword?: string): Promise<import("@mirae/contracts").X402Receipt> {
+    if (!target.walletAddress || target.walletScope !== "solana") throw new Error("A Solana wallet-scoped session is required.");
     const message = target.messages.find((candidate) => candidate.id === messageId) as any;
     const prepared = await window.mirae.prepareX402({ schemaVersion: 1, requestId: crypto.randomUUID(), sessionId: target.id, walletAddress: target.walletAddress, resource, input: message?.x402Input ?? null, maxResourceAmount: "30000", maxMissionAmount: "100000" });
     const executed = await window.mirae.executeX402({ schemaVersion: 1, requestId: crypto.randomUUID(), planId: prepared.prepared.id, sessionId: target.id, walletAddress: target.walletAddress, signedTransactionBase64: prepared.prepared.transactionBase64, approved: true, ...(target.permission === "restricted" ? { masterPassword: masterPassword ?? "" } : {}) });
     setSessions((current) => current.map((session) => {
       if (session.id !== target.id) return session;
       const next = { ...session, messages: session.messages.map((entry) => entry.id === messageId ? { ...entry, x402Receipts: [...((entry as any).x402Receipts ?? []), executed.receipt] } : entry) };
+      void persistSession(next);
+      return next;
+    }));
+    return executed.receipt;
+  }
+  async function analyzeX402Purchase(target: SessionItem, messageId: string, receiptIds: string[]): Promise<void> {
+    if (!target.walletAddress || target.walletScope !== "solana") throw new Error("A Solana wallet-scoped session is required.");
+    const sourceMessage = target.messages.find((message) => message.id === messageId) as any;
+    const originalPrompt = String(sourceMessage?.x402Input?.query ?? "");
+    const result = await window.mirae.analyzeX402({ schemaVersion: 1, requestId: crypto.randomUUID(), sessionId: target.id, walletAddress: target.walletAddress, messageId, receiptIds });
+    const analysisMessage: ChatMessage = { id: crypto.randomUUID(), role: "assistant", text: result.text, at: new Date().toISOString(), toolsUsed: [] };
+    const appended: ChatMessage[] = [analysisMessage];
+    const conditionalIntent = parseConditionalX402PerpIntent(originalPrompt);
+
+    if (conditionalIntent.requested) {
+      try {
+        if (!conditionalIntent.symbol || !conditionalIntent.notionalUsd) {
+          appended.push({ id: crypto.randomUUID(), role: "assistant", text: "Mirae received the paid data, but the conditional trade request is missing a supported market or USD position size. No order was prepared.", at: new Date().toISOString(), toolsUsed: [] });
+        } else {
+          const symbol = `${conditionalIntent.symbol}-PERP`;
+          const [{ markets }, { candles }] = await Promise.all([
+            window.mirae.getPerpMarkets(),
+            window.mirae.getPerpCandles({ symbol: conditionalIntent.symbol, timeframe: "1h", limit: 120 }),
+          ]);
+          const market = markets.find((candidate) => candidate.symbol === symbol || candidate.baseAssetSymbol === conditionalIntent.symbol);
+          if (!market) {
+            appended.push({ id: crypto.randomUUID(), role: "assistant", text: `${symbol} is not available in Mirae's guarded perpetual markets. The x402 receipts remain valid, but no order was prepared.`, at: new Date().toISOString(), toolsUsed: [] });
+          } else {
+            const assessment = assessPerpSetup(conditionalIntent.direction, market, candles);
+            const expectedVerdict = conditionalIntent.direction === "long" ? "bullish" : "bearish";
+            if (assessment.verdict !== expectedVerdict) {
+              appended.push({ id: crypto.randomUUID(), role: "assistant", text: `${symbol} did not meet Mirae's guarded ${expectedVerdict} threshold, so no transaction was prepared.`, at: new Date().toISOString(), toolsUsed: [], perpMarket: symbol, perpAssessment: assessment } as any);
+            } else {
+              const prepared = await window.mirae.preparePerpOrder({
+                walletAddress: target.walletAddress,
+                symbol: conditionalIntent.symbol,
+                direction: conditionalIntent.direction,
+                notionalUsd: conditionalIntent.notionalUsd,
+                leverage: conditionalIntent.leverage,
+                collateralUsdc: (conditionalIntent.notionalUsd / conditionalIntent.leverage).toFixed(2),
+              });
+              const hasProtectionPlan = Boolean(conditionalIntent.stopLossPct || conditionalIntent.takeProfitPct);
+              const proposal = {
+                ...prepared.proposal,
+                ...(conditionalIntent.stopLossPct ? { stopLossPct: conditionalIntent.stopLossPct, plannedStopLossPriceUsd: assessment.priceUsd * (conditionalIntent.direction === "long" ? 1 - conditionalIntent.stopLossPct / 100 : 1 + conditionalIntent.stopLossPct / 100) } : {}),
+                ...(conditionalIntent.takeProfitPct ? { takeProfitPct: conditionalIntent.takeProfitPct, plannedTakeProfitPriceUsd: assessment.priceUsd * (conditionalIntent.direction === "long" ? 1 + conditionalIntent.takeProfitPct / 100 : 1 - conditionalIntent.takeProfitPct / 100) } : {}),
+                ...(hasProtectionPlan ? { exitProtectionStatus: "planned_not_placed" as const } : {}),
+              };
+              appended.push({
+                id: crypto.randomUUID(), role: "assistant",
+                text: `${symbol} qualified as ${expectedVerdict} (${assessment.score}/${assessment.checks.length} checks passed). Mirae prepared a $${conditionalIntent.notionalUsd.toFixed(2)} ${conditionalIntent.direction.toUpperCase()} proposal at ${conditionalIntent.leverage}x leverage. ${target.permission === "full" ? "Full Access will run the independent Perps execution automatically while the local signing session remains active" : "Review the independent Perps preflight and explicitly approve the entry"}${hasProtectionPlan ? "; the requested stop loss and take profit are planning references and are not active exit orders yet" : ""}.`,
+                at: new Date().toISOString(), toolsUsed: [], perpMarket: symbol, perpAssessment: assessment, perpProposal: proposal, perpManualApproval: target.permission !== "full",
+              } as any);
+            }
+          }
+        }
+      } catch {
+        appended.push({ id: crypto.randomUUID(), role: "assistant", text: "The paid market data was received, but Mirae could not complete fresh venue checks safely. No Perps transaction was prepared and no additional payment was made.", at: new Date().toISOString(), toolsUsed: [] });
+      }
+    }
+
+    setAnimatedMessageIds((current) => [...current, analysisMessage.id]);
+    setSessions((current) => current.map((session) => {
+      if (session.id !== target.id) return session;
+      const sourceUpdated = session.messages.map((message) => message.id === messageId ? { ...message, x402AutoStatus: (message as any).x402AutoError ? "partial" : "complete" } : message);
+      const next = { ...session, messages: [...sourceUpdated, ...appended] };
       void persistSession(next);
       return next;
     }));
@@ -2743,6 +2850,7 @@ function MainWorkspace({
             }
             onOpenDriftPerps={() => setShowDriftPerpsPanel(true)}
             onExecuteX402={(messageId, resource, masterPassword) => executeX402Purchase(active, messageId, resource, masterPassword)}
+            onAnalyzeX402={(messageId, receiptIds) => analyzeX402Purchase(active, messageId, receiptIds)}
             onPrepareEvmSwap={(messageId, proposal) =>
               void prepareEvmSwap({
                 sessionId: active.id,

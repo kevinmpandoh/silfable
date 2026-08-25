@@ -14,6 +14,7 @@ import type { PerpProposal } from "@mirae/contracts";
 export function PerpProposalCard({
   proposal: initialProposal,
   walletAddress,
+  sessionId,
   onExecute,
   onReject,
   embedded = false,
@@ -21,6 +22,7 @@ export function PerpProposalCard({
 }: {
   proposal: PerpProposal;
   walletAddress?: string;
+  sessionId?: string;
   onExecute?: () => void;
   onReject?: () => void;
   embedded?: boolean;
@@ -74,9 +76,14 @@ export function PerpProposalCard({
       baseAmount: proposal.reduceOnly ? Number(proposal.baseAmount) : undefined,
     });
     setProposal(refreshed.proposal);
-    setError(
-      "Preflight was refreshed with current market and account data. Review the updated checks, then press Execute again to sign."
-    );
+    if (fullAccess) {
+      autoExecutedRef.current = false;
+      setError(null);
+    } else {
+      setError(
+        "Preflight was refreshed with current market and account data. Review the updated checks, then press Execute again to sign."
+      );
+    }
   };
 
   const handleExecute = async () => {
@@ -104,6 +111,7 @@ export function PerpProposalCard({
       const res = await window.mirae?.executePerpOrder?.({
         plan: proposal.plan,
         walletAddress: targetWallet,
+        ...(fullAccess ? { sessionId, automaticFullAccess: true } : {}),
       });
 
       if (res?.signature) {
@@ -145,7 +153,7 @@ export function PerpProposalCard({
       autoExecutedRef.current = true;
       void handleExecute();
     }
-  }, [fullAccess, canExecute, executing, signature, error]);
+  }, [fullAccess, canExecute, executing, signature, error, proposal.plan?.transactionDigest]);
 
   return (
     <div
@@ -254,6 +262,16 @@ export function PerpProposalCard({
         </div>
       </div>
 
+      {proposal.exitProtectionStatus === "planned_not_placed" && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            {proposal.plannedStopLossPriceUsd ? <div><span className="text-[10px] font-medium text-amber-800">Planned stop loss · {proposal.stopLossPct}%</span><p className="font-mono text-[13px] font-bold text-[#20212A]">${proposal.plannedStopLossPriceUsd.toLocaleString(undefined, { maximumFractionDigits: 4 })}</p></div> : null}
+            {proposal.plannedTakeProfitPriceUsd ? <div><span className="text-[10px] font-medium text-amber-800">Planned take profit · {proposal.takeProfitPct}%</span><p className="font-mono text-[13px] font-bold text-[#20212A]">${proposal.plannedTakeProfitPriceUsd.toLocaleString(undefined, { maximumFractionDigits: 4 })}</p></div> : null}
+          </div>
+          <p className="mt-2 text-[10px] leading-relaxed text-amber-800">Planning reference only. This approval opens the entry position; stop loss and take profit are not yet active exit orders.</p>
+        </div>
+      )}
+
       {/* Security Checks */}
       <div className="space-y-1.5 border-t border-[#20212A]/10 pt-3 text-[11px]">
         {proposal.checks.map((check, idx) => (
@@ -315,6 +333,11 @@ export function PerpProposalCard({
             <span>View Solscan</span>
             <ExternalLink className="size-3" />
           </button>
+        </div>
+      ) : fullAccess ? (
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-900">
+          {executing ? <Loader2 className="size-4 animate-spin" /> : <ShieldAlert className="size-4" />}
+          <span>{executing ? "Full Access is signing and broadcasting this guarded order automatically…" : error ? "Automatic execution stopped safely." : "Full Access execution is starting…"}</span>
         </div>
       ) : (
         <div className="mt-4 flex items-center justify-end gap-3">

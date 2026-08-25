@@ -217,6 +217,8 @@ export const IPC_CHANNELS = {
   x402Prepare: "xpay:prepare",
   x402Execute: "xpay:execute",
   x402ReceiptsList: "xpay:list-receipts",
+  x402Select: "xpay:select",
+  x402Analyze: "xpay:analyze",
 } as const;
 
 const RequestBaseSchema = z.object({
@@ -2992,9 +2994,15 @@ export const PerpProposalSchema = z.object({
   })),
   account: PerpAccountSchema.optional(),
   plan: PerpOrderPlanSchema.optional(),
+  stopLossPct: z.number().positive().max(100).optional(),
+  takeProfitPct: z.number().positive().max(100).optional(),
+  plannedStopLossPriceUsd: z.number().positive().optional(),
+  plannedTakeProfitPriceUsd: z.number().positive().optional(),
+  exitProtectionStatus: z.literal("planned_not_placed").optional(),
 });
 export type PerpProposal = z.infer<typeof PerpProposalSchema>;
 
 export * from "./perps-intent";
+export * from "./perps-setup-analysis";
 
 

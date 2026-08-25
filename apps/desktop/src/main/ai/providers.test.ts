@@ -1,11 +1,60 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
-import { callOpenRouterChat, previewOpenRouterModels } from "./providers.js";
+import { callOpenRouterChat, callOpenRouterX402Selection, previewOpenRouterModels } from "./providers.js";
 import type { PumpDiscoverySnapshot, PumpTokenIntelligence } from "@mirae/contracts";
 
 const originalFetch = globalThis.fetch;
 after(() => { globalThis.fetch = originalFetch; });
+
+test("Full Access x402 selection returns only the AI's structured candidate IDs", { concurrency: false }, async () => {
+  let body: Record<string, unknown> = {};
+  globalThis.fetch = async (_input, init) => {
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return Response.json({ choices: [{ message: { content: JSON.stringify({ resourceIds: ["sha256:" + "a".repeat(64)], rationale: "Funding and open-interest data covers the requested perpetual analysis." }) } }] });
+  };
+  const result = await callOpenRouterX402Selection({
+    apiKey: "sk-or-private-value",
+    model: "vendor/safe",
+    originalRequest: "Analyze ETH through x402",
+    resources: [{ id: "sha256:" + "a".repeat(64), name: "Perps", description: "Funding and open interest", tags: ["eth", "perps"], amount: "10000" }],
+  });
+  assert.deepEqual(result.resourceIds, ["sha256:" + "a".repeat(64)]);
+  assert.match(result.rationale, /Funding/u);
+  assert.equal(((body.tool_choice as { function?: { name?: unknown } }).function?.name), "select_x402_resources");
+  assert.equal(JSON.stringify(body).includes("sk-or-private-value"), false);
+});
+
+test("Full Access x402 selection accepts a forced OpenRouter tool call with null content", { concurrency: false }, async () => {
+  const id = "sha256:" + "b".repeat(64);
+  globalThis.fetch = async () => Response.json({ choices: [{ message: { content: null, tool_calls: [{ id: "selection-1", type: "function", function: { name: "select_x402_resources", arguments: JSON.stringify({ resourceIds: [id], rationale: "This source directly covers live perpetual funding." }) } }] } }] });
+  const result = await callOpenRouterX402Selection({ apiKey: "sk-or-private-value", model: "vendor/tools", originalRequest: "Analyze SOL", resources: [{ id, name: "Perps", description: "Funding", tags: ["sol"], amount: "10000" }] });
+  assert.deepEqual(result.resourceIds, [id]);
+});
+
+test("Full Access x402 selection accepts object tool arguments", { concurrency: false }, async () => {
+  const id = "sha256:" + "c".repeat(64);
+  globalThis.fetch = async () => Response.json({ choices: [{ message: { content: null, tool_calls: [{ id: "selection-2", type: "function", function: { name: "select_x402_resources", arguments: { resourceIds: [id], rationale: "The provider covers the requested market." } } }] } }] });
+  const result = await callOpenRouterX402Selection({ apiKey: "sk-or-private-value", model: "vendor/tools", originalRequest: "Analyze ETH", resources: [{ id, name: "Perps", description: "Funding", tags: ["eth"], amount: "10000" }] });
+  assert.deepEqual(result.resourceIds, [id]);
+});
+
+test("Full Access x402 selection uses one bounded relevant fallback when the provider returns no selection", { concurrency: false }, async () => {
+  const perpsId = "sha256:" + "d".repeat(64);
+  const midsId = "sha256:" + "e".repeat(64);
+  globalThis.fetch = async () => Response.json({ choices: [{ message: { content: null } }] });
+  const result = await callOpenRouterX402Selection({
+    apiKey: "sk-or-private-value",
+    model: "vendor/nonconforming",
+    originalRequest: "Analyze SOL and open a long only if bullish",
+    resources: [
+      { id: midsId, name: "Mid Prices", description: "Current price", tags: ["sol", "price"], amount: "5000" },
+      { id: perpsId, name: "Perpetual Market", description: "Funding and open interest", tags: ["sol", "perps"], amount: "10000" },
+    ],
+  });
+  assert.deepEqual(result.resourceIds, [perpsId]);
+  assert.match(result.rationale, /bounded local relevance policy/u);
+});
 
 test("OpenRouter model preview keeps only compatible text models", { concurrency: false }, async () => {
   globalThis.fetch = async () => Response.json({ data: [

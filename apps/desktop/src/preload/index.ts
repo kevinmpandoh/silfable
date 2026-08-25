@@ -148,6 +148,10 @@ import {
   X402ExecuteRequestSchema,
   X402ExecuteResponseSchema,
   X402ReceiptsResponseSchema,
+  X402SelectRequestSchema,
+  X402SelectResponseSchema,
+  X402AnalyzeRequestSchema,
+  X402AnalyzeResponseSchema,
   EvmWalletGetResponseSchema,
   EvmWalletCreateRequestSchema,
   EvmWalletCreateResponseSchema,
@@ -275,6 +279,12 @@ const api = {
   },
   async listX402Receipts() {
     return X402ReceiptsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.x402ReceiptsList));
+  },
+  async selectX402(request: import("@mirae/contracts").X402SelectRequest) {
+    return X402SelectResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.x402Select, X402SelectRequestSchema.parse(request)));
+  },
+  async analyzeX402(request: import("@mirae/contracts").X402AnalyzeRequest) {
+    return X402AnalyzeResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.x402Analyze, X402AnalyzeRequestSchema.parse(request)));
   },
   async getEvmWallets() {
     return EvmWalletGetResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmWalletGet));

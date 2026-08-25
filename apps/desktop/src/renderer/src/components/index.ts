@@ -17,6 +17,7 @@ export * from "./workspace/WorkspacePanels";
 export * from "./trading/ActivityCards";
 export * from "./trading/PerpsPanel";
 export * from "./trading/PerpProposalCard";
+export * from "./trading/PerpAnalysisCard";
 export * from "./trading/DriftPerpsPanel";
 export * from "./trading/DriftPerpProposalCard";
 export * from "./workspace/MarkdownComponents";

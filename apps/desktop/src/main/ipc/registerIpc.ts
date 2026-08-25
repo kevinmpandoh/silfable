@@ -174,11 +174,16 @@ import {
   WalletListResponseSchema,
   X402DiscoverRequestSchema,
   X402DiscoverResponseSchema,
+  X402ResourceSchema,
   X402PrepareRequestSchema,
   X402PrepareResponseSchema,
   X402ExecuteRequestSchema,
   X402ExecuteResponseSchema,
   X402ReceiptsResponseSchema,
+  X402SelectRequestSchema,
+  X402SelectResponseSchema,
+  X402AnalyzeRequestSchema,
+  X402AnalyzeResponseSchema,
   type BridgeReceipt,
   type PumpExecutionRecord,
   type PumpLaunchExecutionRecord,
@@ -1175,6 +1180,53 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
   ipcMain.handle(IPC_CHANNELS.x402ReceiptsList, async (event) => {
     assertTrustedSender(event);
     return X402ReceiptsResponseSchema.parse({ schemaVersion: 1, requestId: crypto.randomUUID(), receipts: await x402.listReceipts() });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.x402Select, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    emergencyStop.assertExecutionAllowed();
+    localSigningSession.assertActive();
+    const request = X402SelectRequestSchema.parse(raw);
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (!sessionRecord || sessionRecord.permission !== "full" || sessionRecord.walletScope !== "solana" || sessionRecord.walletAddress !== request.walletAddress) throw new Error("Automatic x402 selection requires the exact active Full Access Solana session");
+    const message = sessionRecord.messages.find((entry) => entry.id === request.messageId) as any;
+    if (!message || !Array.isArray(message.x402Resources) || message.x402Resources.length < 1) throw new Error("x402 resource candidates are unavailable");
+    const resources = message.x402Resources.map((resource: unknown) => X402ResourceSchema.parse(resource));
+    const originalRequest = typeof message.x402Input?.query === "string" ? message.x402Input.query : message.text;
+    const selection = await ai.selectX402Resources({ originalRequest, resources });
+    const offered = new Map(resources.map((resource) => [resource.id, resource]));
+    const selected = selection.resourceIds.map((id) => offered.get(id)).filter((resource): resource is (typeof resources)[number] => resource !== undefined);
+    if (selected.length !== selection.resourceIds.length || selected.length < 1) throw new Error("AI selected a resource outside the verified discovery set");
+    const maximumAmount = selected.reduce((sum, resource) => sum + BigInt(resource.requirements.amount), 0n);
+    if (maximumAmount > 100_000n || selected.some((resource) => BigInt(resource.requirements.amount) > 30_000n)) throw new Error("AI-selected x402 resources exceed the Full Access budget");
+    return X402SelectResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, resourceIds: selection.resourceIds, rationale: selection.rationale, maximumAmount: maximumAmount.toString() });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.x402Analyze, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    requireUnlocked();
+    const request = X402AnalyzeRequestSchema.parse(raw);
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (!sessionRecord || sessionRecord.walletScope !== "solana" || sessionRecord.walletAddress !== request.walletAddress) throw new Error("x402 analysis requires the exact Solana wallet bound to this session");
+    const message = sessionRecord.messages.find((entry) => entry.id === request.messageId) as any;
+    if (!message || !Array.isArray(message.x402Resources)) throw new Error("x402 message context is unavailable");
+    const offeredResourceIds = new Set(message.x402Resources.map((entry: any) => entry?.id));
+    const stored = await x402.listReceipts();
+    const receipts = request.receiptIds.map((id) => stored.find((entry) => entry.id === id));
+    if (receipts.some((entry) => !entry || entry.sessionId !== request.sessionId || entry.walletAddress !== request.walletAddress || !offeredResourceIds.has(entry.resourceId) || entry.status !== "RESOURCE_RECEIVED" || !entry.resourceResponse)) throw new Error("Verified x402 evidence is unavailable");
+    const evidence = receipts.map((entry) => {
+      const receipt = entry!;
+      const source = new URL(receipt.resourceUrl);
+      return [
+        `SOURCE: ${source.hostname}${source.pathname}`,
+        `FETCHED_AT: ${receipt.resourceResponse!.receivedAt}`,
+        `COST_USDC: ${(Number(receipt.amount) / 1_000_000).toFixed(6)}`,
+        receipt.resourceResponse!.body,
+      ].join("\n");
+    }).join("\n\n---\n\n");
+    const originalRequest = typeof message.x402Input?.query === "string" ? message.x402Input.query : message.text;
+    const result = await ai.analyzeX402Evidence({ originalRequest, evidence, walletAddress: request.walletAddress });
+    return X402AnalyzeResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, model: result.model, text: result.text, usage: { inputTokens: result.inputTokens, outputTokens: result.outputTokens, totalTokens: result.totalTokens, costUsd: result.costUsd } });
   });
 
   ipcMain.handle(IPC_CHANNELS.aiPreviewOpenRouterModels, async (event, raw: unknown) => {
@@ -2701,8 +2753,24 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     assertTrustedSender(event);
     requireUnlocked();
     const rpcUrl = resolveSolanaRpcUrl();
-    const input = z.object({ walletAddress: z.string().min(32).max(44), plan: PerpOrderPlanSchema }).parse(request);
+    const input = z.object({
+      walletAddress: z.string().min(32).max(44),
+      plan: PerpOrderPlanSchema,
+      sessionId: z.string().uuid().optional(),
+      automaticFullAccess: z.literal(true).optional(),
+    }).strict().superRefine((value, context) => {
+      if (value.automaticFullAccess && !value.sessionId) context.addIssue({ code: "custom", path: ["sessionId"], message: "Automatic Full Access Perps execution requires a session" });
+      if (!value.automaticFullAccess && value.sessionId) context.addIssue({ code: "custom", path: ["automaticFullAccess"], message: "A Perps session ID is accepted only for automatic Full Access execution" });
+    }).parse(request);
     if (input.walletAddress !== input.plan.walletAddress) throw new Error("Prepared perpetual order is bound to another wallet.");
+    if (input.automaticFullAccess) {
+      emergencyStop.assertExecutionAllowed();
+      localSigningSession.assertActive();
+      const sessionRecord = await sessions.get(input.sessionId!);
+      if (!sessionRecord || sessionRecord.permission !== "full" || sessionRecord.walletScope !== "solana" || sessionRecord.walletAddress !== input.walletAddress) {
+        throw new Error("Automatic Perps execution requires the exact active Full Access Solana session.");
+      }
+    }
     return await wallets.withWalletWeb3Keypair(input.walletAddress, async (keypair) => {
       const result = await executePhoenixOrder({
         plan: input.plan,

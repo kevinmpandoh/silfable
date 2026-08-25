@@ -144,6 +144,8 @@ declare global {
       prepareX402(request: import("@mirae/contracts").X402PrepareRequest): Promise<import("@mirae/contracts").X402PrepareResponse>;
       executeX402(request: import("@mirae/contracts").X402ExecuteRequest): Promise<import("@mirae/contracts").X402ExecuteResponse>;
       listX402Receipts(): Promise<import("@mirae/contracts").X402ReceiptsResponse>;
+      selectX402(request: import("@mirae/contracts").X402SelectRequest): Promise<import("@mirae/contracts").X402SelectResponse>;
+      analyzeX402(request: import("@mirae/contracts").X402AnalyzeRequest): Promise<import("@mirae/contracts").X402AnalyzeResponse>;
       getEmergencyStop(): Promise<EmergencyStopGetResponse>;
       engageEmergencyStop(request: EmergencyStopEngageRequest): Promise<EmergencyStopMutationResponse>;
       releaseEmergencyStop(request: EmergencyStopReleaseRequest): Promise<EmergencyStopMutationResponse>;

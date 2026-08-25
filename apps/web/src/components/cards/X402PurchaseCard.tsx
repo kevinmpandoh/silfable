@@ -12,6 +12,14 @@ function safeResourceHostname(value: string) {
   }
 }
 
+function friendlyProviderName(resource: NonNullable<WebProposal["x402Resources"]>[number]) {
+  const name = resource.resource.serviceName ?? safeResourceHostname(resource.resource.url);
+  if (/^x402Atlas Hyperliquid Perps$/iu.test(name)) return "Atlas · Hyperliquid Perpetuals";
+  if (/^x402Atlas Hyperliquid Mid Prices$/iu.test(name)) return "Atlas · Hyperliquid Prices";
+  if (/^three\.ws Market Derivatives$/iu.test(name)) return "three.ws · Derivatives Market Data";
+  return name.replace(/^x402\s*/iu, "").trim() || "External market data";
+}
+
 class X402CardErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
 
@@ -63,8 +71,8 @@ export function X402PurchaseCard({ proposal, busy, onPurchase }: { proposal: Web
             const checked = selected.has(resource.id); const paid = receivedIds.has(resource.id);
             const recommended = resource.id === recommendedResourceId;
             return <div key={`${proposal.id}:${resource.id}`} className={`group flex items-start gap-3 rounded-xl border p-3.5 transition ${checked || paid ? "border-[#df6b22]/45 bg-[#fff8f3] shadow-[inset_3px_0_0_#df6b22]" : "border-black/10 bg-[#fcfcfb] hover:border-[#df6b22]/30 hover:bg-[#fffaf6]"}`}>
-              <label className="relative mt-0.5 grid size-5 shrink-0 cursor-pointer place-items-center" aria-label={`Select ${resource.resource.serviceName ?? safeResourceHostname(resource.resource.url)}`}><input className="peer absolute inset-0 size-5 cursor-pointer appearance-none rounded border border-black/20 bg-white transition checked:border-[#df6b22] checked:bg-[#df6b22] disabled:cursor-not-allowed disabled:opacity-60" type="checkbox" checked={checked || paid} disabled={busy || paid} onChange={(event) => { const nextChecked = event.currentTarget.checked; setSelectedResourceIds((current) => nextChecked ? [...new Set([...current, resource.id])] : current.filter((id) => id !== resource.id)); }} /><Check className="pointer-events-none relative text-transparent peer-checked:text-white" size={13} strokeWidth={3} aria-hidden="true" /></label>
-              <span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><strong className="text-sm font-semibold">{resource.resource.serviceName ?? safeResourceHostname(resource.resource.url)}</strong>{recommended && !paid ? <span className="rounded bg-[#fff0e5] px-1.5 py-0.5 font-mono text-[7px] font-semibold uppercase tracking-wider text-[#a9470c]">Recommended</span> : null}{paid ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-wider text-emerald-700">Received</span> : null}</span><span className="mt-1 block text-xs leading-relaxed text-[#686970]">{resource.resource.description ?? resource.resource.url}</span><span className="mt-2 block font-mono text-[9px] uppercase tracking-[0.08em] text-[#929399]">External provider · paid with USDC</span></span>
+              <label className="relative mt-0.5 grid size-5 shrink-0 cursor-pointer place-items-center" aria-label={`Select ${friendlyProviderName(resource)}`}><input className="peer absolute inset-0 size-5 cursor-pointer appearance-none rounded border border-black/20 bg-white transition checked:border-[#df6b22] checked:bg-[#df6b22] disabled:cursor-not-allowed disabled:opacity-60" type="checkbox" checked={checked || paid} disabled={busy || paid} onChange={(event) => { const nextChecked = event.currentTarget.checked; setSelectedResourceIds((current) => nextChecked ? [...new Set([...current, resource.id])] : current.filter((id) => id !== resource.id)); }} /><Check className="pointer-events-none relative text-transparent peer-checked:text-white" size={13} strokeWidth={3} aria-hidden="true" /></label>
+              <span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><strong className="text-sm font-semibold">{friendlyProviderName(resource)}</strong>{recommended && !paid ? <span className="rounded bg-[#fff0e5] px-1.5 py-0.5 font-mono text-[7px] font-semibold uppercase tracking-wider text-[#a9470c]">Recommended</span> : null}{paid ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-wider text-emerald-700">Received</span> : null}</span><span className="mt-1 block text-xs leading-relaxed text-[#686970]">{resource.resource.description ?? resource.resource.url}</span><span className="mt-2 block font-mono text-[9px] uppercase tracking-[0.08em] text-[#929399]">External provider · paid with USDC</span></span>
               <span className="shrink-0 text-right"><strong className="block font-mono text-sm">${(Number(resource.requirements.amount) / 1_000_000).toFixed(4)}</strong><small className="font-mono text-[8px] uppercase tracking-wider text-[#929399]">USDC</small></span>
             </div>;
           })}

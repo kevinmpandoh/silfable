@@ -99,6 +99,25 @@ test("released legacy and venue-isolated record names keep an existing vault rea
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
+test("x402 receipt encryption key keeps the local vault readable after its first purchase", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "mirae-keystore-x402-"));
+  const path = join(directory, "secrets.json");
+  const storage = new IntegrityStorage();
+  const keystore = new PortableEncryptedKeystore(path, storage);
+  try {
+    keystore.unlock();
+    const receiptKey = Buffer.alloc(32, 7).toString("base64");
+    await keystore.setSecret("x402-receipt-store-key", receiptKey);
+    assert.equal(await keystore.getSecret("x402-receipt-store-key"), receiptKey);
+
+    const reopened = new PortableEncryptedKeystore(path, storage);
+    reopened.unlock();
+    assert.equal(await reopened.getSecret("x402-receipt-store-key"), receiptKey);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("locked vault reset moves the encrypted keystore into a backup directory", async () => {
   const directory = await mkdtemp(join(tmpdir(), "mirae-keystore-reset-"));
   const path = join(directory, "secrets.json");

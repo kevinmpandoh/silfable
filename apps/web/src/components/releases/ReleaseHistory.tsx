@@ -7,17 +7,17 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { CURRENT_DESKTOP_RELEASE } from "@/lib/desktop-releases";
 
 const releases = [{
-  version: "0.3.0",
+  version: CURRENT_DESKTOP_RELEASE.version,
   date: "Native Solana x402",
   status: "Latest",
-  summary: "User-approved USDC payments for external data",
+  summary: "Policy-bounded USDC payments for external market data",
   added: [
     "Mirae-curated market-analysis catalog for external Solana x402 resources",
     "USDC purchase review, settlement receipts, and provider evidence in web and desktop chat",
   ],
   changed: [
-    "Every x402 purchase requires a user click in Restricted and Full Access sessions",
-    "Desktop Full Access can sign from an active local vault session after approval",
+    "Restricted x402 purchases require manual source selection, password, and approval",
+    "Desktop Full Access can let AI select and pay the smallest useful provider set within hard x402 limits",
   ],
   fixed: [
     "Request, requirements, wallet, and session are cryptographically bound before signing",
