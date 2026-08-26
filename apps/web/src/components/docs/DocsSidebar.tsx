@@ -1,7 +1,8 @@
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { CURRENT_DESKTOP_RELEASE } from "@/lib/desktop-releases";
 
 const chapters = [
-  { label: "Whitepaper", href: "#whitepaper" },
+  { label: "Whitepaper", href: "/whitepaper" },
   { label: "Introduction", href: "#introduction" },
   { label: "Installation", href: "#quick-start" },
   { label: "How it works", href: "#core-concepts" },
@@ -46,7 +47,7 @@ export function DocsSidebar() {
           </ScrollArea>
           <div className="mt-10 border-t border-black/15 pt-6">
             <p className="font-mono text-[8px] uppercase tracking-[0.18em] text-black/30">Current docs</p>
-            <p className="mt-2 font-mono text-xs text-[var(--sc-violet)]">v0.1.0</p>
+            <p className="mt-2 font-mono text-xs text-[var(--sc-violet)]">v{CURRENT_DESKTOP_RELEASE.version}</p>
           </div>
         </div>
       </aside>

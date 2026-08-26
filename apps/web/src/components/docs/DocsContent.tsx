@@ -1,5 +1,6 @@
 import { AlertTriangle, ArrowRight, Check, KeyRound, Monitor, ShieldCheck, TerminalSquare } from "lucide-react";
 import Image from "next/image";
+import { CURRENT_DESKTOP_RELEASE } from "@/lib/desktop-releases";
 
 const concepts = [
   { icon: TerminalSquare, title: "Workspace", text: "Keeps market research, wallet context, transaction previews, and final status together." },
@@ -11,7 +12,7 @@ export function DocsContent() {
   return (
     <article className="min-w-0">
       <section id="introduction" className="scroll-mt-36 border-b border-black/15 pb-16">
-        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--sc-orange)]">Start here / v0.1.0</p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--sc-orange)]">Start here / v{CURRENT_DESKTOP_RELEASE.version}</p>
         <h1 className="mt-7 max-w-4xl font-serif text-[clamp(3.1rem,7vw,7.5rem)] leading-[0.86] tracking-[-0.06em]">
           Operate on Solana.<br />Keep every checkpoint visible.
         </h1>
