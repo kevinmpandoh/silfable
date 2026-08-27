@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createSolanaRpc, address } from "@solana/kit";
+import { createNoopSigner } from "@solana/signers";
+import { KaminoAction, KaminoMarket, VanillaObligation, getCurrentLedgerInstant } from "@kamino-finance/klend-sdk";
+import BN from "bn.js";
+import { KLEND_PROGRAM_ID } from "@mirae/contracts";
 import { KaminoRwaDesktopService } from "./service.js";
 
 function mockFetchSequence(responses: Array<{ status: number; body: unknown }>): typeof fetch {
@@ -58,4 +63,45 @@ test("discover fails closed when the Kamino API errors, without returning partia
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("prepare rejects an amount above the caller-supplied max", async () => {
+  const service = new KaminoRwaDesktopService({} as any, {} as any, {} as any);
+  await assert.rejects(
+    () => service.prepare({ sessionId: "s1", walletAddress: "4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofM", lendingMarket: "3hd61ZpG35tBwrmDvdmYVJoazC2mjJxHb6rEYEWs4QhH", amountAtomic: 100n, maxSupplyAtomic: 50n }),
+    /exceeds/i,
+  );
+});
+
+test("prepare rejects a lendingMarket not present in the catalog", async () => {
+  const service = new KaminoRwaDesktopService({} as any, {} as any, {} as any);
+  await assert.rejects(
+    () => service.prepare({ sessionId: "s1", walletAddress: "4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofM", lendingMarket: "NotInCatalog11111111111111111111111111111", amountAtomic: 1n, maxSupplyAtomic: 100n }),
+    /catalog/i,
+  );
+});
+
+test("manual: observe real instructions for an Obligate Market USDC deposit", { skip: process.env.KAMINO_RWA_LIVE_CHECK !== "1" }, async () => {
+  const rpcUrl = process.env.MIRAE_TEST_SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com";
+  const rpc = createSolanaRpc(rpcUrl);
+  const slotDurationResponse = await fetch("https://api.kamino.finance/slots/duration");
+  const { recentSlotDurationInMs } = (await slotDurationResponse.json()) as { recentSlotDurationInMs: number };
+  const kaminoMarket = await KaminoMarket.load(rpc, address("3hd61ZpG35tBwrmDvdmYVJoazC2mjJxHb6rEYEWs4QhH"), recentSlotDurationInMs, address(KLEND_PROGRAM_ID));
+  assert.ok(kaminoMarket, "market should load");
+  const currentLedgerInstant = await getCurrentLedgerInstant(rpc);
+  const owner = createNoopSigner(address("4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofM"));
+  const action = await KaminoAction.buildDepositTxns({
+    kaminoMarket: kaminoMarket!,
+    amount: new BN("1000000"),
+    reserveAddress: address("Au2Cg9CNNTX1KfzVhNnpi1ouHX74CwMMBvmSchmqS5ZW"),
+    owner,
+    obligation: new VanillaObligation(address(KLEND_PROGRAM_ID)),
+    useV2Ixs: true,
+    scopeRefreshConfig: undefined,
+    currentLedgerInstant,
+    initUserMetadata: { skipInitialization: false, skipLutCreation: true },
+  });
+  const ixs = KaminoAction.actionToIxs(action);
+  console.log("Observed program IDs:", [...new Set(ixs.map((ix) => ix.programAddress))]);
+  assert.ok(ixs.length > 0);
 });
