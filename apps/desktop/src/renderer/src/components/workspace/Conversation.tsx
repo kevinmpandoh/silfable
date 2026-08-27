@@ -17,6 +17,7 @@ import { PerpProposalCard } from '../trading/PerpProposalCard';
 import { PerpAnalysisCard } from '../trading/PerpAnalysisCard';
 import { DriftPerpProposalCard } from '../trading/DriftPerpProposalCard';
 import { X402ResourcesCard } from './X402ResourcesCard';
+import { KaminoRwaCard } from './KaminoRwaCard';
 import { Composer } from './WorkspacePanels';
 import { AnimatedMarkdownMessage, MarkdownMessage, BridgePreparationForm } from './MarkdownComponents';
 import { StatusPill, Notice, Field, SetupCard, SetupActions, Brand, BrandMark, CornerFooter, RailSection, ProviderCard } from '../setup/SetupHelpers';
@@ -556,6 +557,17 @@ export function Conversation({
             {session.mode === "mission" && (
               <BridgePreparationForm busy={preparingBridge} onPrepare={onPrepareBridge} />
             )}
+            <KaminoRwaCard
+              sessionId={session.id}
+              walletAddress={session.walletAddress}
+              restricted={session.permission === "restricted"}
+              onExecuted={(position) => {
+                // KaminoRwaCard renders its own inline confirmation (position status + Solscan
+                // link), matching EvmBridgeWorkspace's self-contained receipt display — there is
+                // no session-level toast/notice channel reachable from this component today.
+                console.info("Kamino RWA position executed", position.id, position.status);
+              }}
+            />
           </>
         )}
         {session.walletScope === "evm" && session.walletAddress !== null && session.evmChainKey === "robinhood" && (

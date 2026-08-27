@@ -134,6 +134,13 @@ import type {
   WalletListResponse,
   EvmWalletClearAllRequest,
   EvmWalletClearAllResponse,
+  KaminoRwaDiscoverRequest,
+  KaminoRwaDiscoverResponse,
+  KaminoRwaPrepareRequest,
+  KaminoRwaPrepareResponse,
+  KaminoRwaExecuteRequest,
+  KaminoRwaExecuteResponse,
+  KaminoRwaPositionsResponse,
 } from "@mirae/contracts";
 
 declare global {
@@ -146,6 +153,10 @@ declare global {
       listX402Receipts(): Promise<import("@mirae/contracts").X402ReceiptsResponse>;
       selectX402(request: import("@mirae/contracts").X402SelectRequest): Promise<import("@mirae/contracts").X402SelectResponse>;
       analyzeX402(request: import("@mirae/contracts").X402AnalyzeRequest): Promise<import("@mirae/contracts").X402AnalyzeResponse>;
+      discoverKaminoRwa(request: KaminoRwaDiscoverRequest): Promise<KaminoRwaDiscoverResponse>;
+      prepareKaminoRwa(request: KaminoRwaPrepareRequest): Promise<KaminoRwaPrepareResponse>;
+      executeKaminoRwa(request: KaminoRwaExecuteRequest): Promise<KaminoRwaExecuteResponse>;
+      listKaminoRwaPositions(): Promise<KaminoRwaPositionsResponse>;
       getEmergencyStop(): Promise<EmergencyStopGetResponse>;
       engageEmergencyStop(request: EmergencyStopEngageRequest): Promise<EmergencyStopMutationResponse>;
       releaseEmergencyStop(request: EmergencyStopReleaseRequest): Promise<EmergencyStopMutationResponse>;
