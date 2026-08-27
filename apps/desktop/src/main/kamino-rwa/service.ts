@@ -1,8 +1,8 @@
 import { randomUUID, createHash, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { Connection, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
-import { createSolanaRpc, address } from "@solana/kit";
+import { createSolanaRpc, address, type Rpc } from "@solana/kit";
 import { createNoopSigner } from "@solana/signers";
-import { KaminoAction, KaminoMarket, VanillaObligation, getCurrentLedgerInstant } from "@kamino-finance/klend-sdk";
+import { KaminoAction, KaminoMarket, VanillaObligation, getCurrentLedgerInstant, type KaminoMarketRpcApi } from "@kamino-finance/klend-sdk";
 import BN from "bn.js";
 import { KAMINO_API_BASE_URL, KAMINO_RWA_HIGH_UTILIZATION_WARNING, KAMINO_RWA_MARKET_CATALOG, KAMINO_RWA_SOLANA_USDC_MINT, KLEND_PROGRAM_ID, KaminoRwaPoolSchema, KaminoRwaPositionSchema, KaminoRwaReserveMetricsSchema, KaminoRwaSupplyPlanSchema, type KaminoRwaPool, type KaminoRwaPosition, type KaminoRwaSupplyPlan } from "@mirae/contracts";
 import type { RuntimeDatabase } from "../storage/database.js";
@@ -71,7 +71,11 @@ export class KaminoRwaDesktopService {
     if (!pool) throw new Error("Requested market no longer has a live USDC reserve; discover again");
 
     const rpcUrl = (await this.secrets.getSecret("solana-rpc-url")) ?? "https://api.mainnet-beta.solana.com";
-    const rpc = createSolanaRpc(rpcUrl);
+    // klend-sdk nests its own @solana/kit@2.x with a slightly different (but runtime-compatible)
+    // Rpc type than this workspace's @solana/kit@7.x — verified compatible by Task 5's live
+    // integration test against real Mainnet RPC; this assertion resolves only the type-level
+    // version mismatch, not a real behavioral difference.
+    const rpc = createSolanaRpc(rpcUrl) as unknown as Rpc<KaminoMarketRpcApi>;
     const slotDurationResponse = await fetch("https://api.kamino.finance/slots/duration");
     if (!slotDurationResponse.ok) throw new Error("Unable to read Kamino slot duration");
     const { recentSlotDurationInMs } = (await slotDurationResponse.json()) as { recentSlotDurationInMs: number };

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSolanaRpc, address } from "@solana/kit";
+import { createSolanaRpc, address, type Rpc } from "@solana/kit";
 import { createNoopSigner } from "@solana/signers";
-import { KaminoAction, KaminoMarket, VanillaObligation, getCurrentLedgerInstant } from "@kamino-finance/klend-sdk";
+import { KaminoAction, KaminoMarket, VanillaObligation, getCurrentLedgerInstant, type KaminoMarketRpcApi } from "@kamino-finance/klend-sdk";
 import BN from "bn.js";
 import { KLEND_PROGRAM_ID } from "@mirae/contracts";
 import { KaminoRwaDesktopService } from "./service.js";
@@ -123,7 +123,11 @@ test("save then listPositions round-trips a position through AES-256-GCM encrypt
 
 test("manual: observe real instructions for an Obligate Market USDC deposit", { skip: process.env.KAMINO_RWA_LIVE_CHECK !== "1" }, async () => {
   const rpcUrl = process.env.MIRAE_TEST_SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com";
-  const rpc = createSolanaRpc(rpcUrl);
+  // klend-sdk nests its own @solana/kit@2.x with a slightly different (but runtime-compatible)
+  // Rpc type than this workspace's @solana/kit@7.x — verified compatible by this very live
+  // integration test against real Mainnet RPC; this assertion resolves only the type-level
+  // version mismatch, not a real behavioral difference.
+  const rpc = createSolanaRpc(rpcUrl) as unknown as Rpc<KaminoMarketRpcApi>;
   const slotDurationResponse = await fetch("https://api.kamino.finance/slots/duration");
   const { recentSlotDurationInMs } = (await slotDurationResponse.json()) as { recentSlotDurationInMs: number };
   const kaminoMarket = await KaminoMarket.load(rpc, address("3hd61ZpG35tBwrmDvdmYVJoazC2mjJxHb6rEYEWs4QhH"), recentSlotDurationInMs, address(KLEND_PROGRAM_ID));
