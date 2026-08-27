@@ -1,10 +1,10 @@
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID, createHash, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { Connection, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { createSolanaRpc, address } from "@solana/kit";
 import { createNoopSigner } from "@solana/signers";
 import { KaminoAction, KaminoMarket, VanillaObligation, getCurrentLedgerInstant } from "@kamino-finance/klend-sdk";
 import BN from "bn.js";
-import { KAMINO_API_BASE_URL, KAMINO_RWA_HIGH_UTILIZATION_WARNING, KAMINO_RWA_MARKET_CATALOG, KAMINO_RWA_SOLANA_USDC_MINT, KLEND_PROGRAM_ID, KaminoRwaPoolSchema, KaminoRwaReserveMetricsSchema, KaminoRwaSupplyPlanSchema, type KaminoRwaPool, type KaminoRwaSupplyPlan } from "@mirae/contracts";
+import { KAMINO_API_BASE_URL, KAMINO_RWA_HIGH_UTILIZATION_WARNING, KAMINO_RWA_MARKET_CATALOG, KAMINO_RWA_SOLANA_USDC_MINT, KLEND_PROGRAM_ID, KaminoRwaPoolSchema, KaminoRwaPositionSchema, KaminoRwaReserveMetricsSchema, KaminoRwaSupplyPlanSchema, type KaminoRwaPool, type KaminoRwaPosition, type KaminoRwaSupplyPlan } from "@mirae/contracts";
 import type { RuntimeDatabase } from "../storage/database.js";
 import type { LocalEncryptedKeystore } from "../storage/keystore.js";
 import type { WalletOnboardingService } from "../wallet/onboarding.js";
@@ -24,6 +24,9 @@ const KNOWN_DEPOSIT_PROGRAM_IDS = new Set<string>([
 ]);
 
 export class KaminoRwaDesktopService {
+  readonly #prepared = new Map<string, KaminoRwaSupplyPlan>();
+  private static readonly AAD = Buffer.from("mirae-kamino-rwa-positions-v1", "utf8");
+
   constructor(
     readonly database: RuntimeDatabase,
     readonly secrets: LocalEncryptedKeystore,
@@ -105,7 +108,7 @@ export class KaminoRwaDesktopService {
     if (simulation.value.err) throw new Error(`Kamino deposit simulation failed: ${JSON.stringify(simulation.value.err)}`);
 
     const now = new Date();
-    return KaminoRwaSupplyPlanSchema.parse({
+    const plan = KaminoRwaSupplyPlanSchema.parse({
       id: randomUUID(),
       sessionId: input.sessionId,
       walletAddress: input.walletAddress,
@@ -121,6 +124,65 @@ export class KaminoRwaDesktopService {
       expiresAt: new Date(now.getTime() + 90_000).toISOString(),
       createdAt: now.toISOString(),
     });
+    this.#prepared.set(plan.id, plan);
+    return plan;
+  }
+
+  async execute(input: { planId: string; sessionId: string; walletAddress: string }): Promise<KaminoRwaPosition> {
+    const plan = this.#prepared.get(input.planId);
+    if (!plan || plan.sessionId !== input.sessionId || plan.walletAddress !== input.walletAddress) throw new Error("Prepared Kamino RWA plan is unavailable for this session");
+    if (Date.parse(plan.expiresAt) <= Date.now()) { this.#prepared.delete(input.planId); throw new Error("Prepared Kamino RWA plan expired"); }
+    const catalogEntry = KAMINO_RWA_MARKET_CATALOG.find((entry) => entry.lendingMarket === plan.lendingMarket)!;
+    const now = new Date();
+    let position: KaminoRwaPosition = KaminoRwaPositionSchema.parse({
+      id: randomUUID(), planId: plan.id, sessionId: plan.sessionId, walletAddress: plan.walletAddress,
+      lendingMarket: plan.lendingMarket, marketName: catalogEntry.name, usdcReserve: plan.usdcReserve,
+      amountSuppliedAtomic: plan.amountAtomic, supplyApyAtEntry: plan.supplyApyAtPrepare,
+      signature: null, status: "SUBMITTED", errorMessage: null, createdAt: now.toISOString(), updatedAt: now.toISOString(),
+    });
+    try {
+      const transaction = VersionedTransaction.deserialize(Buffer.from(plan.transactionBase64, "base64"));
+      await this.wallets.withWalletWeb3Keypair(plan.walletAddress, async (keypair) => { transaction.sign([keypair]); });
+      const rpcUrl = (await this.secrets.getSecret("solana-rpc-url")) ?? "https://api.mainnet-beta.solana.com";
+      const connection = new Connection(rpcUrl, "confirmed");
+      const signature = await connection.sendRawTransaction(transaction.serialize(), { skipPreflight: false, maxRetries: 0 });
+      await connection.confirmTransaction({ signature, blockhash: plan.blockhash, lastValidBlockHeight: Number(plan.lastValidBlockHeight) }, "confirmed");
+      position = KaminoRwaPositionSchema.parse({ ...position, signature, status: "CONFIRMED", updatedAt: new Date().toISOString() });
+      await this.save(position);
+      this.#prepared.delete(input.planId);
+      return position;
+    } catch (error) {
+      position = KaminoRwaPositionSchema.parse({ ...position, status: "UNKNOWN", errorMessage: error instanceof Error ? error.message.slice(0, 500) : "Unknown broadcast outcome", updatedAt: new Date().toISOString() });
+      await this.save(position);
+      throw error;
+    }
+  }
+
+  async listPositions(): Promise<KaminoRwaPosition[]> {
+    const key = await this.key();
+    return this.database.listKaminoRwaPositionRecords().map((row) => {
+      const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(row.nonce, "base64"));
+      decipher.setAAD(KaminoRwaDesktopService.AAD);
+      decipher.setAuthTag(Buffer.from(row.tag, "base64"));
+      return KaminoRwaPositionSchema.parse(JSON.parse(Buffer.concat([decipher.update(Buffer.from(row.ciphertext, "base64")), decipher.final()]).toString("utf8")));
+    });
+  }
+
+  private async save(position: KaminoRwaPosition): Promise<void> {
+    const key = await this.key();
+    const nonce = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", key, nonce);
+    cipher.setAAD(KaminoRwaDesktopService.AAD);
+    const ciphertext = Buffer.concat([cipher.update(JSON.stringify(position), "utf8"), cipher.final()]);
+    this.database.upsertKaminoRwaPositionRecord({ id: position.id, ciphertext: ciphertext.toString("base64"), nonce: nonce.toString("base64"), tag: cipher.getAuthTag().toString("base64"), updatedAt: position.updatedAt });
+  }
+
+  private async key(): Promise<Buffer> {
+    let encoded = await this.secrets.getSecret("kamino-rwa-position-store-key");
+    if (!encoded) { encoded = randomBytes(32).toString("base64"); await this.secrets.setSecret("kamino-rwa-position-store-key", encoded); }
+    const key = Buffer.from(encoded, "base64");
+    if (key.length !== 32) throw new Error("Kamino RWA position store key is invalid");
+    return key;
   }
 }
 

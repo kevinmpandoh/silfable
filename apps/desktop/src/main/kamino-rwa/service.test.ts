@@ -81,6 +81,46 @@ test("prepare rejects a lendingMarket not present in the catalog", async () => {
   );
 });
 
+test("execute rejects an unknown planId", async () => {
+  const service = new KaminoRwaDesktopService({} as any, {} as any, {} as any);
+  await assert.rejects(
+    () => service.execute({ planId: "22222222-2222-4222-8222-222222222222", sessionId: "s1", walletAddress: "4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofM" }),
+    /unavailable/i,
+  );
+});
+
+test("listPositions returns an empty array with no stored positions", async () => {
+  const database = { listKaminoRwaPositionRecords: () => [] } as any;
+  const secrets = { getSecret: async () => null, setSecret: async () => {} } as any;
+  const service = new KaminoRwaDesktopService(database, secrets, {} as any);
+  assert.deepEqual(await service.listPositions(), []);
+});
+
+test("save then listPositions round-trips a position through AES-256-GCM encryption", async () => {
+  const stored: Array<{ id: string; ciphertext: string; nonce: string; tag: string; updatedAt: string }> = [];
+  const database = {
+    listKaminoRwaPositionRecords: () => stored,
+    upsertKaminoRwaPositionRecord: (record: any) => { stored.push(record); },
+  } as any;
+  let storedKey: string | null = null;
+  const secrets = {
+    getSecret: async () => storedKey,
+    setSecret: async (_name: string, value: string) => { storedKey = value; },
+  } as any;
+  const service = new KaminoRwaDesktopService(database, secrets, {} as any);
+  const position = {
+    id: "33333333-3333-4333-8333-333333333333", planId: "44444444-4444-4444-8444-444444444444",
+    sessionId: "s1", walletAddress: "4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofM",
+    lendingMarket: "3hd61ZpG35tBwrmDvdmYVJoazC2mjJxHb6rEYEWs4QhH", marketName: "Obligate Market",
+    usdcReserve: "Au2Cg9CNNTX1KfzVhNnpi1ouHX74CwMMBvmSchmqS5ZW", amountSuppliedAtomic: "1000000",
+    supplyApyAtEntry: 0.052, signature: "5" + "x".repeat(63), status: "CONFIRMED" as const, errorMessage: null,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  };
+  await (service as any).save(position);
+  const positions = await service.listPositions();
+  assert.deepEqual(positions, [position]);
+});
+
 test("manual: observe real instructions for an Obligate Market USDC deposit", { skip: process.env.KAMINO_RWA_LIVE_CHECK !== "1" }, async () => {
   const rpcUrl = process.env.MIRAE_TEST_SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com";
   const rpc = createSolanaRpc(rpcUrl);
