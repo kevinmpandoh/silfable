@@ -14,17 +14,25 @@ test("toWeb3Instruction maps program address, account roles, and data correctly"
     accounts: [
       { address: writableSigner, role: AccountRole.WRITABLE_SIGNER },
       { address: readonly, role: AccountRole.READONLY },
+      { address: programAddress, role: AccountRole.READONLY_SIGNER },
+      { address: writableSigner, role: AccountRole.WRITABLE },
     ],
     data: new Uint8Array([1, 2, 3]),
   });
   assert.equal(result.programId.toBase58(), programAddress);
-  assert.equal(result.keys.length, 2);
-  assert.equal(result.keys[0].pubkey.toBase58(), writableSigner);
-  assert.equal(result.keys[0].isSigner, true);
-  assert.equal(result.keys[0].isWritable, true);
-  assert.equal(result.keys[1].pubkey.toBase58(), readonly);
-  assert.equal(result.keys[1].isSigner, false);
-  assert.equal(result.keys[1].isWritable, false);
+  assert.equal(result.keys.length, 4);
+  assert.equal(result.keys[0]!.pubkey.toBase58(), writableSigner);
+  assert.equal(result.keys[0]!.isSigner, true);
+  assert.equal(result.keys[0]!.isWritable, true);
+  assert.equal(result.keys[1]!.pubkey.toBase58(), readonly);
+  assert.equal(result.keys[1]!.isSigner, false);
+  assert.equal(result.keys[1]!.isWritable, false);
+  assert.equal(result.keys[2]!.pubkey.toBase58(), programAddress);
+  assert.equal(result.keys[2]!.isSigner, true);
+  assert.equal(result.keys[2]!.isWritable, false);
+  assert.equal(result.keys[3]!.pubkey.toBase58(), writableSigner);
+  assert.equal(result.keys[3]!.isSigner, false);
+  assert.equal(result.keys[3]!.isWritable, true);
   assert.deepEqual([...result.data], [1, 2, 3]);
   assert.ok(result.programId instanceof PublicKey);
 });
