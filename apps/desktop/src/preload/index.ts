@@ -31,6 +31,13 @@ import {
   EmergencyStopMutationResponseSchema,
   EmergencyStopReleaseRequestSchema,
   IPC_CHANNELS,
+  KaminoRwaDiscoverRequestSchema,
+  KaminoRwaDiscoverResponseSchema,
+  KaminoRwaPrepareRequestSchema,
+  KaminoRwaPrepareResponseSchema,
+  KaminoRwaExecuteRequestSchema,
+  KaminoRwaExecuteResponseSchema,
+  KaminoRwaPositionsResponseSchema,
   JupiterKeyMutationResponseSchema,
   JupiterSaveKeyRequestSchema,
   JupiterSettingsResponseSchema,
@@ -259,6 +266,9 @@ import {
   type SecurityUnlockRequest,
   type SecurityResetVaultRequest,
   type SessionUpsertRequest,
+  type KaminoRwaDiscoverRequest,
+  type KaminoRwaPrepareRequest,
+  type KaminoRwaExecuteRequest,
   type X402DiscoverRequest,
   type X402PrepareRequest,
   type X402ExecuteRequest,
@@ -285,6 +295,18 @@ const api = {
   },
   async analyzeX402(request: import("@mirae/contracts").X402AnalyzeRequest) {
     return X402AnalyzeResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.x402Analyze, X402AnalyzeRequestSchema.parse(request)));
+  },
+  async discoverKaminoRwa(request: KaminoRwaDiscoverRequest) {
+    return KaminoRwaDiscoverResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.kaminoRwaDiscover, KaminoRwaDiscoverRequestSchema.parse(request)));
+  },
+  async prepareKaminoRwa(request: KaminoRwaPrepareRequest) {
+    return KaminoRwaPrepareResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.kaminoRwaPrepare, KaminoRwaPrepareRequestSchema.parse(request)));
+  },
+  async executeKaminoRwa(request: KaminoRwaExecuteRequest) {
+    return KaminoRwaExecuteResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.kaminoRwaExecute, KaminoRwaExecuteRequestSchema.parse(request)));
+  },
+  async listKaminoRwaPositions() {
+    return KaminoRwaPositionsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.kaminoRwaListPositions));
   },
   async getEvmWallets() {
     return EvmWalletGetResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmWalletGet));
