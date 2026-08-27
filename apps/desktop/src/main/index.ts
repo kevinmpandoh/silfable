@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { checkLatestRelease, MIRAE_RELEASES_URL } from "./update/release-check.js";
 import { BUNDLED_UNISWAP_API_KEY } from "./config/managed-provider-defaults.js";
 import { X402DesktopService } from "./x402/service.js";
+import { KaminoRwaDesktopService } from "./kamino-rwa/service.js";
 
 import {
   AiChatRequestSchema,
@@ -411,6 +412,7 @@ app.whenReady().then(async () => {
   const emergencyStop = new EmergencyStopService(runtimeDatabase);
   const wallets = new WalletOnboardingService(keystore, runtimeDatabase);
   const x402 = new X402DesktopService(runtimeDatabase, keystore, wallets);
+  const kaminoRwa = new KaminoRwaDesktopService(runtimeDatabase, keystore, wallets);
   const evmWallet = new EvmWalletService(keystore);
   const evmReceipts = new EncryptedEvmReceiptService(runtimeDatabase, keystore);
   const evmBridgeReceipts = new EncryptedEvmBridgeReceiptService(runtimeDatabase, keystore);
@@ -720,7 +722,7 @@ function resolveEvmTokenMetadata(address: string): { symbol: string; decimals: n
     return map;
   });
 
-  registerIpc(keystore, runtimeDatabase, passwords, emergencyStop, wallets, evmWallet, evmReceipts, evmBridgeReceipts, evmSwapQuotes, uniswapQuotes, reads, ai, sessions, simulations, limitOrders, transactionSettings, pumpRiskSettings, pumpRiskLedger, pumpReceipts, pumpRpc, preparedPump, launchPreflightService, strategyManager, observationService, automationManager, fullAccessExecutionGrants, localSigningSession, autonomousJobs, fullAccessEvmAssets, x402, () => mainWindow, createVerifiedEvmEngine);
+  registerIpc(keystore, runtimeDatabase, passwords, emergencyStop, wallets, evmWallet, evmReceipts, evmBridgeReceipts, evmSwapQuotes, uniswapQuotes, reads, ai, sessions, simulations, limitOrders, transactionSettings, pumpRiskSettings, pumpRiskLedger, pumpReceipts, pumpRpc, preparedPump, launchPreflightService, strategyManager, observationService, automationManager, fullAccessExecutionGrants, localSigningSession, autonomousJobs, fullAccessEvmAssets, x402, kaminoRwa, () => mainWindow, createVerifiedEvmEngine);
 
   ipcMain.handle("update:check", async () => {
     try {

@@ -184,6 +184,13 @@ import {
   X402SelectResponseSchema,
   X402AnalyzeRequestSchema,
   X402AnalyzeResponseSchema,
+  KaminoRwaDiscoverRequestSchema,
+  KaminoRwaDiscoverResponseSchema,
+  KaminoRwaPrepareRequestSchema,
+  KaminoRwaPrepareResponseSchema,
+  KaminoRwaExecuteRequestSchema,
+  KaminoRwaExecuteResponseSchema,
+  KaminoRwaPositionsResponseSchema,
   type BridgeReceipt,
   type PumpExecutionRecord,
   type PumpLaunchExecutionRecord,
@@ -274,9 +281,10 @@ import { LocalSigningSessionService } from "../security/local-signing-session.js
 import { AutonomousJobStore } from "../execution/autonomous-job-store.js";
 import { AutonomousExecutorService } from "../execution/autonomous-executor.js";
 import type { X402DesktopService } from "../x402/service.js";
+import type { KaminoRwaDesktopService } from "../kamino-rwa/service.js";
 
 
-export function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, emergencyStop: EmergencyStopService, wallets: WalletOnboardingService, evmWallet: EvmWalletService, evmReceipts: EncryptedEvmReceiptService, evmBridgeReceipts: EncryptedEvmBridgeReceiptService, evmSwapQuotes: EvmSwapRouterService, uniswapQuotes: UniswapQuoteService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService, pumpLaunchPreflight: PumpLaunchPreflightService, strategyManager: PositionStrategyManager, observationService: DurableBackgroundObservationService, automationManager: AutomationManager, fullAccessExecutionGrants: EncryptedFullAccessExecutionGrantService, localSigningSession: LocalSigningSessionService, autonomousJobs: AutonomousJobStore, fullAccessEvmAssets: FullAccessEvmAssetAuthorizationService, x402: X402DesktopService,
+export function registerIpc(secretStore: LocalEncryptedKeystore, database: RuntimeDatabase, passwords: MasterPasswordService, emergencyStop: EmergencyStopService, wallets: WalletOnboardingService, evmWallet: EvmWalletService, evmReceipts: EncryptedEvmReceiptService, evmBridgeReceipts: EncryptedEvmBridgeReceiptService, evmSwapQuotes: EvmSwapRouterService, uniswapQuotes: UniswapQuoteService, reads: MainnetReadService, ai: AiService, sessions: SessionService, simulations: MissionSimulationService, limitOrders: LimitOrderService, transactionSettings: TransactionSettingsService, pumpRiskSettings: PumpRiskSettingsService, pumpRiskLedger: PumpRiskLedgerService, pumpReceipts: EncryptedPumpReceiptService, pumpRpc: PumpMainnetRpc, preparedPump: PumpPreparedExecutionService, pumpLaunchPreflight: PumpLaunchPreflightService, strategyManager: PositionStrategyManager, observationService: DurableBackgroundObservationService, automationManager: AutomationManager, fullAccessExecutionGrants: EncryptedFullAccessExecutionGrantService, localSigningSession: LocalSigningSessionService, autonomousJobs: AutonomousJobStore, fullAccessEvmAssets: FullAccessEvmAssetAuthorizationService, x402: X402DesktopService, kaminoRwa: KaminoRwaDesktopService,
   getMainWindow: () => Electron.BrowserWindow | null,
   createVerifiedEvmEngine: (secretStore: LocalEncryptedKeystore, chainKey: ReturnType<typeof getEvmChain>["key"], executionGate?: VenueExecutionGate, executionVenue?: VenueId) => Promise<EvmEngine>
 ): void {
@@ -1227,6 +1235,40 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     const originalRequest = typeof message.x402Input?.query === "string" ? message.x402Input.query : message.text;
     const result = await ai.analyzeX402Evidence({ originalRequest, evidence, walletAddress: request.walletAddress });
     return X402AnalyzeResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, model: result.model, text: result.text, usage: { inputTokens: result.inputTokens, outputTokens: result.outputTokens, totalTokens: result.totalTokens, costUsd: result.costUsd } });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.kaminoRwaDiscover, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    const request = KaminoRwaDiscoverRequestSchema.parse(raw);
+    const pools = await kaminoRwa.discover();
+    return KaminoRwaDiscoverResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, pools });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.kaminoRwaPrepare, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    emergencyStop.assertExecutionAllowed();
+    const request = KaminoRwaPrepareRequestSchema.parse(raw);
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (!sessionRecord || sessionRecord.walletScope !== "solana" || sessionRecord.walletAddress !== request.walletAddress) throw new Error("Kamino RWA supply requires the exact Solana wallet bound to this session");
+    const plan = await kaminoRwa.prepare({ sessionId: request.sessionId, walletAddress: request.walletAddress, lendingMarket: request.lendingMarket, amountAtomic: BigInt(request.amountAtomic), maxSupplyAtomic: BigInt(request.maxSupplyAtomic) });
+    return KaminoRwaPrepareResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, plan });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.kaminoRwaExecute, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    emergencyStop.assertExecutionAllowed();
+    const request = KaminoRwaExecuteRequestSchema.parse(raw);
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (!sessionRecord || sessionRecord.walletScope !== "solana" || sessionRecord.walletAddress !== request.walletAddress) throw new Error("Kamino RWA supply requires the exact Solana wallet bound to this session");
+    if (sessionRecord.permission === "full") localSigningSession.assertActive();
+    else if (!request.masterPassword || !(await passwords.verify(request.masterPassword))) throw new Error("Master password is required for a Restricted Kamino RWA supply");
+    const position = await kaminoRwa.execute({ planId: request.planId, sessionId: request.sessionId, walletAddress: request.walletAddress });
+    return KaminoRwaExecuteResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, position });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.kaminoRwaListPositions, async (event) => {
+    assertTrustedSender(event);
+    return KaminoRwaPositionsResponseSchema.parse({ schemaVersion: 1, requestId: crypto.randomUUID(), positions: await kaminoRwa.listPositions() });
   });
 
   ipcMain.handle(IPC_CHANNELS.aiPreviewOpenRouterModels, async (event, raw: unknown) => {
