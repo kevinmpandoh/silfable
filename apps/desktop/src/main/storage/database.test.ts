@@ -50,7 +50,7 @@ test("kamino rwa position records round-trip through the database", async () => 
     database.upsertKaminoRwaPositionRecord(updated);
     const rows = database.listKaminoRwaPositionRecords();
     assert.equal(rows.length, 1);
-    assert.equal(rows[0].ciphertext, "cipher2");
+    assert.equal(rows[0]!.ciphertext, "cipher2");
     database.close();
   } finally {
     await rm(dir, { recursive: true, force: true });
