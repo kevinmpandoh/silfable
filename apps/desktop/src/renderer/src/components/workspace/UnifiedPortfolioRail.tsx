@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useState, useMemo, useEffect } from "react";
-import type { EvmChainKey, EvmPortfolioSnapshot, PortfolioSnapshot, RuntimeStatus } from "@mirae/contracts";
+import type { EvmChainKey, EvmPortfolioSnapshot, KaminoRwaPosition, PortfolioSnapshot, RuntimeStatus } from "@mirae/contracts";
+import { KAMINO_RWA_USDC_DECIMALS } from "@mirae/contracts";
 import { Button } from "../ui";
 import { RailSection } from "../setup/SetupHelpers";
 import { resolveTokenSymbol } from "../../lib/utils";
@@ -67,6 +68,28 @@ export function formatPortfolioAmount(value: string): string {
   return numeric.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
+const KAMINO_USDC_BASE = 10n ** BigInt(KAMINO_RWA_USDC_DECIMALS);
+
+export function kaminoAtomicToAmount(atomic: string): string {
+  const value = BigInt(atomic);
+  const whole = value / KAMINO_USDC_BASE;
+  const fraction = value % KAMINO_USDC_BASE;
+  return `${whole}.${fraction.toString().padStart(KAMINO_RWA_USDC_DECIMALS, "0")}`;
+}
+
+// Estimated accrued yield = amountSupplied * currentSupplyApy * (elapsedDays / 365).
+// `apy` should be the position's LIVE current APY (matched by lendingMarket from a fresh
+// discoverKaminoRwa() call) when available, since APY drifts after entry; the caller falls
+// back to `supplyApyAtEntry` when the live pool list is unavailable or no longer lists the
+// market, rather than hiding the estimate entirely.
+export function kaminoAccruedYieldUsd(position: KaminoRwaPosition, apy: number): number | null {
+  const amountSupplied = Number(kaminoAtomicToAmount(position.amountSuppliedAtomic));
+  if (!Number.isFinite(amountSupplied)) return null;
+  const elapsedDays = Math.max(0, (Date.now() - new Date(position.createdAt).getTime()) / 86_400_000);
+  const value = amountSupplied * apy * (elapsedDays / 365);
+  return Number.isFinite(value) ? value : null;
+}
+
 export function PortfolioAssetRow({ symbol, amount, usdValue }: { symbol: string; amount: string; usdValue: number | null }) {
   return (
     <div className="portfolioAssetRow">
@@ -105,6 +128,8 @@ export function UnifiedPortfolioRail({
   const [chainFilter, setChainFilter] = useState<"all" | EvmChainKey>("all");
   const [retry, setRetry] = useState(0);
   const [costBasisSummary, setCostBasisSummary] = useState<any | null>(null);
+  const [kaminoPositions, setKaminoPositions] = useState<KaminoRwaPosition[]>([]);
+  const [kaminoApyByMarket, setKaminoApyByMarket] = useState<Map<string, number>>(new Map());
 
   const sessionScope = session?.walletScope;
   const sessionWallet = session?.walletAddress ?? null;
@@ -234,6 +259,41 @@ export function UnifiedPortfolioRail({
     return () => { active = false; };
   }, [runtime?.keystore, solanaTargets, refreshToken, retry]);
 
+  useEffect(() => {
+    let active = true;
+    if (runtime?.keystore !== "unlocked" || solanaTargets.length === 0) {
+      setKaminoPositions([]);
+      setKaminoApyByMarket(new Map());
+      return () => { active = false; };
+    }
+    const solanaAddresses = new Set(solanaTargets.map((wallet) => wallet.address));
+    window.mirae.listKaminoRwaPositions()
+      .then((response) => {
+        if (!active) return;
+        setKaminoPositions(response.positions.filter((position) => solanaAddresses.has(position.walletAddress)));
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.warn("Failed to list Kamino RWA positions", err);
+        setKaminoPositions([]);
+      });
+    // Live APY refresh: if this fails or a position's market drops out of the curated pool
+    // list, kaminoApyByMarket simply won't have an entry for it, and the render below falls
+    // back to that position's supplyApyAtEntry rather than dropping the position or crashing
+    // the rail.
+    window.mirae.discoverKaminoRwa({ schemaVersion: 1, requestId: crypto.randomUUID() })
+      .then((response) => {
+        if (!active) return;
+        setKaminoApyByMarket(new Map(response.pools.map((pool) => [pool.lendingMarket, pool.supplyApy])));
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.warn("Failed to refresh live Kamino RWA APY; falling back to entry APY", err);
+        setKaminoApyByMarket(new Map());
+      });
+    return () => { active = false; };
+  }, [runtime?.keystore, solanaTargets, refreshToken, retry]);
+
   const selectedSolana = solanaViews.filter(() => walletFilter === "all" || walletFilter === "solana");
   const selectedEvm = evmViews.filter((entry) =>
     (walletFilter === "all" || walletFilter === "evm")
@@ -275,6 +335,7 @@ export function UnifiedPortfolioRail({
     : totalUsd === null ? "Unpriced" : formatPortfolioUsd(totalUsd);
 
   return (
+    <>
     <RailSection title={session ? "Position" : "Portfolio"}>
       <div className="portfolioHeadingRow">
         <span className="totalLabel">{session
@@ -369,5 +430,32 @@ export function UnifiedPortfolioRail({
         ))}
       </div>
     </RailSection>
+    {kaminoPositions.length > 0 && (
+      <RailSection title="RWA Yield">
+        <div className="portfolioAssetGroups">
+          {kaminoPositions.map((position) => {
+            const amount = kaminoAtomicToAmount(position.amountSuppliedAtomic);
+            const liveApy = kaminoApyByMarket.get(position.lendingMarket);
+            const usingLiveApy = liveApy !== undefined;
+            const apyUsed = liveApy ?? position.supplyApyAtEntry;
+            const accruedYield = kaminoAccruedYieldUsd(position, apyUsed);
+            return (
+              <div className="portfolioAssetGroup" key={position.id}>
+                <div className="portfolioGroupTitle">
+                  <span>{position.marketName.toUpperCase()}</span>
+                  <strong>{(apyUsed * 100).toFixed(2)}% APY{usingLiveApy ? "" : " (entry)"}</strong>
+                </div>
+                <PortfolioAssetRow symbol="USDC supplied" amount={amount} usdValue={Number(amount)} />
+                <div className="portfolioAssetRow">
+                  <span>Est. accrued yield</span>
+                  <strong>{accruedYield === null ? "Unavailable" : `~${formatPortfolioUsd(accruedYield)} estimated`}</strong>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </RailSection>
+    )}
+    </>
   );
 }
