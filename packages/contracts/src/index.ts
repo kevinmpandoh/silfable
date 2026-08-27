@@ -220,10 +220,10 @@ export const IPC_CHANNELS = {
   x402ReceiptsList: "xpay:list-receipts",
   x402Select: "xpay:select",
   x402Analyze: "xpay:analyze",
-  kaminoRwaDiscover: "kamino-rwa:discover",
-  kaminoRwaPrepare: "kamino-rwa:prepare",
-  kaminoRwaExecute: "kamino-rwa:execute",
-  kaminoRwaListPositions: "kamino-rwa:list-positions",
+  kaminoRwaDiscover: "kaminorwa:discover",
+  kaminoRwaPrepare: "kaminorwa:prepare",
+  kaminoRwaExecute: "kaminorwa:execute",
+  kaminoRwaListPositions: "kaminorwa:list-positions",
 } as const;
 
 const RequestBaseSchema = z.object({
