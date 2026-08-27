@@ -38,6 +38,25 @@ test("provider settings persist without secret material", async () => {
   }
 });
 
+test("kamino rwa position records round-trip through the database", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "mirae-kamino-rwa-db-"));
+  const database = await RuntimeDatabase.open(join(dir, "test.sqlite3"));
+  try {
+    assert.deepEqual(database.listKaminoRwaPositionRecords(), []);
+    const record = { id: "11111111-1111-4111-8111-111111111111", ciphertext: "cipher", nonce: "nonce", tag: "tag", updatedAt: new Date().toISOString() };
+    database.upsertKaminoRwaPositionRecord(record);
+    assert.deepEqual(database.listKaminoRwaPositionRecords(), [record]);
+    const updated = { ...record, ciphertext: "cipher2", updatedAt: new Date(Date.now() + 1000).toISOString() };
+    database.upsertKaminoRwaPositionRecord(updated);
+    const rows = database.listKaminoRwaPositionRecords();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].ciphertext, "cipher2");
+    database.close();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("vault reset clears active settings, wallets, and encrypted sessions", async () => {
   const directory = await mkdtemp(join(tmpdir(), "mirae-reset-db-"));
   try {
