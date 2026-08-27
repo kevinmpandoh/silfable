@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export * from "./x402";
+export * from "./kamino-rwa";
 
 const SolanaAddressSchema = z.string().regex(
   /^[1-9A-HJ-NP-Za-km-z]{32,44}$/u,
@@ -219,6 +220,10 @@ export const IPC_CHANNELS = {
   x402ReceiptsList: "xpay:list-receipts",
   x402Select: "xpay:select",
   x402Analyze: "xpay:analyze",
+  kaminoRwaDiscover: "kamino-rwa:discover",
+  kaminoRwaPrepare: "kamino-rwa:prepare",
+  kaminoRwaExecute: "kamino-rwa:execute",
+  kaminoRwaListPositions: "kamino-rwa:list-positions",
 } as const;
 
 const RequestBaseSchema = z.object({
