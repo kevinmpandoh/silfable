@@ -1,10 +1,10 @@
 import { randomUUID, createHash, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { Connection, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
+import { Connection, PublicKey, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { createSolanaRpc, address, type Rpc } from "@solana/kit";
 import { createNoopSigner } from "@solana/signers";
 import { KaminoAction, KaminoMarket, VanillaObligation, getCurrentLedgerInstant, type KaminoMarketRpcApi } from "@kamino-finance/klend-sdk";
 import BN from "bn.js";
-import { KAMINO_API_BASE_URL, KAMINO_RWA_HIGH_UTILIZATION_WARNING, KAMINO_RWA_MARKET_CATALOG, KAMINO_RWA_SOLANA_USDC_MINT, KLEND_PROGRAM_ID, KaminoRwaPoolSchema, KaminoRwaPositionSchema, KaminoRwaReserveMetricsSchema, KaminoRwaSupplyPlanSchema, type KaminoRwaPool, type KaminoRwaPosition, type KaminoRwaSupplyPlan } from "@mirae/contracts";
+import { KAMINO_API_BASE_URL, KAMINO_RWA_GLOBAL_MAX_SUPPLY_ATOMIC, KAMINO_RWA_HIGH_UTILIZATION_WARNING, KAMINO_RWA_MARKET_CATALOG, KAMINO_RWA_SOLANA_USDC_MINT, KLEND_PROGRAM_ID, KaminoRwaPoolSchema, KaminoRwaPositionSchema, KaminoRwaReserveMetricsSchema, KaminoRwaSupplyPlanSchema, type KaminoRwaPool, type KaminoRwaPosition, type KaminoRwaSupplyPlan } from "@mirae/contracts";
 import type { RuntimeDatabase } from "../storage/database.js";
 import type { LocalEncryptedKeystore } from "../storage/keystore.js";
 import type { WalletOnboardingService } from "../wallet/onboarding.js";
@@ -45,7 +45,8 @@ export class KaminoRwaDesktopService {
       const usdc = KaminoRwaReserveMetricsSchema.parse(rawUsdc);
       const totalSupplyUsd = Number(usdc.totalSupplyUsd);
       const totalBorrowUsd = Number(usdc.totalBorrowUsd);
-      const utilization = totalSupplyUsd > 0 ? totalBorrowUsd / totalSupplyUsd : 0;
+      const rawUtilization = totalSupplyUsd > 0 ? totalBorrowUsd / totalSupplyUsd : 0;
+      const utilization = Math.min(1, rawUtilization);
       pools.push(KaminoRwaPoolSchema.parse({
         lendingMarket: entry.lendingMarket,
         name: entry.name,
@@ -56,7 +57,7 @@ export class KaminoRwaDesktopService {
         totalSupplyUsd,
         totalBorrowUsd,
         utilization,
-        highUtilizationWarning: utilization >= KAMINO_RWA_HIGH_UTILIZATION_WARNING,
+        highUtilizationWarning: rawUtilization >= KAMINO_RWA_HIGH_UTILIZATION_WARNING,
         discoveredAt: new Date().toISOString(),
       }));
     }
@@ -64,6 +65,7 @@ export class KaminoRwaDesktopService {
   }
 
   async prepare(input: { sessionId: string; walletAddress: string; lendingMarket: string; amountAtomic: bigint; maxSupplyAtomic: bigint }): Promise<KaminoRwaSupplyPlan> {
+    if (input.maxSupplyAtomic > BigInt(KAMINO_RWA_GLOBAL_MAX_SUPPLY_ATOMIC)) throw new Error("Kamino RWA budget exceeds hard cap");
     if (input.amountAtomic > input.maxSupplyAtomic) throw new Error("Requested supply amount exceeds the approved budget");
     const catalogEntry = KAMINO_RWA_MARKET_CATALOG.find((entry) => entry.lendingMarket === input.lendingMarket);
     if (!catalogEntry) throw new Error("Requested market is not in the Kamino RWA catalog");
@@ -76,7 +78,7 @@ export class KaminoRwaDesktopService {
     // integration test against real Mainnet RPC; this assertion resolves only the type-level
     // version mismatch, not a real behavioral difference.
     const rpc = createSolanaRpc(rpcUrl) as unknown as Rpc<KaminoMarketRpcApi>;
-    const slotDurationResponse = await fetch("https://api.kamino.finance/slots/duration");
+    const slotDurationResponse = await fetch("https://api.kamino.finance/slots/duration", { signal: AbortSignal.timeout(15_000) });
     if (!slotDurationResponse.ok) throw new Error("Unable to read Kamino slot duration");
     const { recentSlotDurationInMs } = (await slotDurationResponse.json()) as { recentSlotDurationInMs: number };
     const kaminoMarket = await KaminoMarket.load(rpc, address(input.lendingMarket), recentSlotDurationInMs, address(KLEND_PROGRAM_ID));
@@ -100,10 +102,15 @@ export class KaminoRwaDesktopService {
     }
     const instructions = kitIxs.map(toWeb3Instruction);
 
+    const payer = new PublicKey(input.walletAddress);
+    for (const ix of instructions) {
+      for (const key of ix.keys) {
+        if (key.isSigner && !key.pubkey.equals(payer)) throw new Error(`Deposit instructions require an unexpected signer: ${key.pubkey.toBase58()}`);
+      }
+    }
+
     const connection = new Connection(rpcUrl, "confirmed");
     const latest = await connection.getLatestBlockhash("confirmed");
-    const payer = instructions.find((ix) => ix.keys.some((key) => key.isSigner))?.keys.find((key) => key.isSigner)?.pubkey;
-    if (!payer) throw new Error("Deposit instructions have no signer account");
     const transaction = new VersionedTransaction(new TransactionMessage({ payerKey: payer, recentBlockhash: latest.blockhash, instructions }).compileToV0Message());
     const [fee, simulation] = await Promise.all([
       connection.getFeeForMessage(transaction.message, "confirmed"),
@@ -144,10 +151,21 @@ export class KaminoRwaDesktopService {
       amountSuppliedAtomic: plan.amountAtomic, supplyApyAtEntry: plan.supplyApyAtPrepare,
       signature: null, status: "SUBMITTED", errorMessage: null, createdAt: now.toISOString(), updatedAt: now.toISOString(),
     });
+    await this.save(position);
+
+    let transaction: VersionedTransaction;
+    let rpcUrl: string;
     try {
-      const transaction = VersionedTransaction.deserialize(Buffer.from(plan.transactionBase64, "base64"));
+      transaction = VersionedTransaction.deserialize(Buffer.from(plan.transactionBase64, "base64"));
       await this.wallets.withWalletWeb3Keypair(plan.walletAddress, async (keypair) => { transaction.sign([keypair]); });
-      const rpcUrl = (await this.secrets.getSecret("solana-rpc-url")) ?? "https://api.mainnet-beta.solana.com";
+      rpcUrl = (await this.secrets.getSecret("solana-rpc-url")) ?? "https://api.mainnet-beta.solana.com";
+    } catch (error) {
+      position = KaminoRwaPositionSchema.parse({ ...position, status: "FAILED", errorMessage: error instanceof Error ? error.message.slice(0, 500) : "Unknown pre-broadcast failure", updatedAt: new Date().toISOString() });
+      await this.save(position);
+      throw error;
+    }
+
+    try {
       const connection = new Connection(rpcUrl, "confirmed");
       const signature = await connection.sendRawTransaction(transaction.serialize(), { skipPreflight: false, maxRetries: 0 });
       await connection.confirmTransaction({ signature, blockhash: plan.blockhash, lastValidBlockHeight: Number(plan.lastValidBlockHeight) }, "confirmed");
@@ -161,6 +179,8 @@ export class KaminoRwaDesktopService {
       throw error;
     }
   }
+
+  clearPrepared(): void { this.#prepared.clear(); }
 
   async listPositions(): Promise<KaminoRwaPosition[]> {
     const key = await this.key();
@@ -191,14 +211,14 @@ export class KaminoRwaDesktopService {
 }
 
 async function fetchCurationFlags(): Promise<Map<string, boolean>> {
-  const response = await fetch(`${KAMINO_API_BASE_URL}/v2/kamino-market`);
+  const response = await fetch(`${KAMINO_API_BASE_URL}/v2/kamino-market`, { signal: AbortSignal.timeout(15_000) });
   if (!response.ok) throw new Error(`Kamino market list request failed (${response.status})`);
   const body = (await response.json()) as KaminoMarketListEntry[];
   return new Map(body.map((entry) => [entry.lendingMarket, entry.isCurated === true]));
 }
 
 async function fetchReserveMetrics(lendingMarket: string): Promise<unknown[]> {
-  const response = await fetch(`${KAMINO_API_BASE_URL}/kamino-market/${lendingMarket}/reserves/metrics`);
+  const response = await fetch(`${KAMINO_API_BASE_URL}/kamino-market/${lendingMarket}/reserves/metrics`, { signal: AbortSignal.timeout(15_000) });
   if (!response.ok) throw new Error(`Kamino reserve metrics request failed for ${lendingMarket} (${response.status})`);
   const body = await response.json();
   return body as unknown[];

@@ -591,6 +591,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     automationManager.emergencyStop();
     localSigningSession.clear("emergency stop engaged");
     x402.clearPrepared();
+    kaminoRwa.clearPrepared();
     observationService.stopObservationLoop();
     return EmergencyStopMutationResponseSchema.parse({
       schemaVersion: 1,
@@ -761,6 +762,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     const backupCreated = await secretStore.backupAndReset(backupDirectory);
     database.resetVaultData();
     x402.clearPrepared();
+    kaminoRwa.clearPrepared();
     return SecurityResetVaultResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, reset: true, backupCreated });
   });
 

@@ -36,16 +36,11 @@ export const KAMINO_RWA_MARKET_CATALOG: readonly KaminoRwaMarketCatalogEntry[] =
 
 export const KaminoRwaReserveMetricsSchema = z.object({
   reserve: SolanaAddressSchema,
-  liquidityToken: z.string().min(1).max(32),
   liquidityTokenMint: SolanaAddressSchema,
-  maxLtv: z.string(),
-  borrowApy: z.string(),
   supplyApy: z.string(),
-  totalSupply: z.string(),
-  totalBorrow: z.string(),
   totalBorrowUsd: z.string(),
   totalSupplyUsd: z.string(),
-}).strict();
+});
 export type KaminoRwaReserveMetrics = z.infer<typeof KaminoRwaReserveMetricsSchema>;
 
 export const KaminoRwaPoolSchema = z.object({
