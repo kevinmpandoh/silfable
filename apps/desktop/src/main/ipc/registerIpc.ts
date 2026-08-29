@@ -191,6 +191,10 @@ import {
   KaminoRwaExecuteRequestSchema,
   KaminoRwaExecuteResponseSchema,
   KaminoRwaPositionsResponseSchema,
+  KaminoRwaPrepareWithdrawRequestSchema,
+  KaminoRwaPrepareWithdrawResponseSchema,
+  KaminoRwaExecuteWithdrawRequestSchema,
+  KaminoRwaExecuteWithdrawResponseSchema,
   type BridgeReceipt,
   type PumpExecutionRecord,
   type PumpLaunchExecutionRecord,
@@ -1273,6 +1277,28 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
     return KaminoRwaPositionsResponseSchema.parse({ schemaVersion: 1, requestId: crypto.randomUUID(), positions: await kaminoRwa.listPositions() });
   });
 
+  ipcMain.handle(IPC_CHANNELS.kaminoRwaPrepareWithdraw, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    emergencyStop.assertExecutionAllowed();
+    const request = KaminoRwaPrepareWithdrawRequestSchema.parse(raw);
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (!sessionRecord || sessionRecord.walletScope !== "solana" || sessionRecord.walletAddress !== request.walletAddress) throw new Error("Kamino RWA withdraw requires the exact Solana wallet bound to this session");
+    const plan = await kaminoRwa.prepareWithdraw({ sessionId: request.sessionId, walletAddress: request.walletAddress, lendingMarket: request.lendingMarket, amountAtomic: BigInt(request.amountAtomic) });
+    return KaminoRwaPrepareWithdrawResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, plan });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.kaminoRwaExecuteWithdraw, async (event, raw: unknown) => {
+    assertTrustedSender(event);
+    emergencyStop.assertExecutionAllowed();
+    const request = KaminoRwaExecuteWithdrawRequestSchema.parse(raw);
+    const sessionRecord = await sessions.get(request.sessionId);
+    if (!sessionRecord || sessionRecord.walletScope !== "solana" || sessionRecord.walletAddress !== request.walletAddress) throw new Error("Kamino RWA withdraw requires the exact Solana wallet bound to this session");
+    if (sessionRecord.permission === "full") localSigningSession.assertActive();
+    else if (!request.masterPassword || !(await passwords.verify(request.masterPassword))) throw new Error("Master password is required for a Restricted Kamino RWA withdraw");
+    const receipt = await kaminoRwa.executeWithdraw({ planId: request.planId, sessionId: request.sessionId, walletAddress: request.walletAddress });
+    return KaminoRwaExecuteWithdrawResponseSchema.parse({ schemaVersion: 1, requestId: request.requestId, receipt });
+  });
+
   ipcMain.handle(IPC_CHANNELS.aiPreviewOpenRouterModels, async (event, raw: unknown) => {
     assertTrustedSender(event);
     requireUnlocked();
@@ -1387,6 +1413,7 @@ export function registerIpc(secretStore: LocalEncryptedKeystore, database: Runti
       bridgeProposal: result.bridgeProposal,
       bridgePreflight: result.bridgePreflight,
       evmBridgePreparation: result.evmBridgePreparation,
+      kaminoRwaProposal: result.kaminoRwaProposal,
       dcaSetup: result.dcaSetup,
       exitSetup: result.exitSetup,
     });

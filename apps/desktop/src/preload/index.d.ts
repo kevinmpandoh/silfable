@@ -141,6 +141,10 @@ import type {
   KaminoRwaExecuteRequest,
   KaminoRwaExecuteResponse,
   KaminoRwaPositionsResponse,
+  KaminoRwaPrepareWithdrawRequest,
+  KaminoRwaPrepareWithdrawResponse,
+  KaminoRwaExecuteWithdrawRequest,
+  KaminoRwaExecuteWithdrawResponse,
 } from "@mirae/contracts";
 
 declare global {
@@ -156,6 +160,8 @@ declare global {
       discoverKaminoRwa(request: KaminoRwaDiscoverRequest): Promise<KaminoRwaDiscoverResponse>;
       prepareKaminoRwa(request: KaminoRwaPrepareRequest): Promise<KaminoRwaPrepareResponse>;
       executeKaminoRwa(request: KaminoRwaExecuteRequest): Promise<KaminoRwaExecuteResponse>;
+      prepareKaminoRwaWithdraw(request: KaminoRwaPrepareWithdrawRequest): Promise<KaminoRwaPrepareWithdrawResponse>;
+      executeKaminoRwaWithdraw(request: KaminoRwaExecuteWithdrawRequest): Promise<KaminoRwaExecuteWithdrawResponse>;
       listKaminoRwaPositions(): Promise<KaminoRwaPositionsResponse>;
       getEmergencyStop(): Promise<EmergencyStopGetResponse>;
       engageEmergencyStop(request: EmergencyStopEngageRequest): Promise<EmergencyStopMutationResponse>;

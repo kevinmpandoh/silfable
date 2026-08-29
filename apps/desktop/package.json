@@ -1,6 +1,6 @@
 {
   "name": "@mirae/desktop",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Local-first AI trading runtime with enforceable limits",
   "private": true,
   "homepage": "https://github.com/mirae-trade/mirae-desktop-releases",
@@ -28,6 +28,8 @@
   "dependencies": {
     "@ellipsis-labs/rise": "^0.4.67",
     "@kamino-finance/klend-sdk": "11.0.1",
+    "@kamino-finance/ktoken-sdk": "^1.1.20",
+    "@mirae/contracts": "0.4.0",
     "@nktkas/hyperliquid": "0.33.2",
     "@radix-ui/react-dialog": "^1.1.23",
     "@solana-program/compute-budget": "^0.8.0",

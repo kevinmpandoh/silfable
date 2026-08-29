@@ -453,6 +453,7 @@ function resolveEvmTokenMetadata(address: string): { symbol: string; decimals: n
     settings: runtimeDatabase,
     readService: reads,
     transactionSettings,
+    kaminoRwa,
     evmSwapQuotes: {
       quote: async (input) => {
         if (!(await evmWallet.hasAddress(input.walletAddress))) {

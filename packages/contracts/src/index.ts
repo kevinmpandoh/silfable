@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export * from "./x402";
 export * from "./kamino-rwa";
+import { KaminoRwaSupplyProposalSchema, KaminoRwaWithdrawProposalSchema } from "./kamino-rwa";
 
 const SolanaAddressSchema = z.string().regex(
   /^[1-9A-HJ-NP-Za-km-z]{32,44}$/u,
@@ -223,6 +224,8 @@ export const IPC_CHANNELS = {
   kaminoRwaDiscover: "kaminorwa:discover",
   kaminoRwaPrepare: "kaminorwa:prepare",
   kaminoRwaExecute: "kaminorwa:execute",
+  kaminoRwaPrepareWithdraw: "kaminorwa:prepare-withdraw",
+  kaminoRwaExecuteWithdraw: "kaminorwa:execute-withdraw",
   kaminoRwaListPositions: "kaminorwa:list-positions",
 } as const;
 
@@ -1725,6 +1728,8 @@ export const SessionMessageSchema = z.object({
   bridgePreflight: BridgePreflightEvidenceSchema.optional(),
   bridgeReceipt: BridgeReceiptSchema.optional(),
   evmBridgePreparation: z.object({ quote: EvmBridgeQuoteSchema, preflight: EvmBridgePreflightSchema }).passthrough().optional(),
+  kaminoRwaProposal: KaminoRwaSupplyProposalSchema.optional(),
+  kaminoRwaWithdrawProposal: KaminoRwaWithdrawProposalSchema.optional(),
   dcaSetup: AutomationSetupDcaRequestSchema.optional(),
   exitSetup: AutomationSetupExitRequestSchema.optional(),
 }).passthrough();
@@ -2008,6 +2013,8 @@ export const AiChatResponseSchema = RequestBaseSchema.extend({
   bridgePreflight: BridgePreflightEvidenceSchema.nullable().optional(),
   bridgeReceipt: BridgeReceiptSchema.nullable().optional(),
   evmBridgePreparation: z.unknown().nullable().optional(),
+  kaminoRwaProposal: KaminoRwaSupplyProposalSchema.nullable().optional(),
+  kaminoRwaWithdrawProposal: KaminoRwaWithdrawProposalSchema.nullable().optional(),
   dcaSetup: AutomationSetupDcaRequestSchema.nullable().optional(),
   exitSetup: AutomationSetupExitRequestSchema.nullable().optional(),
 }).passthrough();

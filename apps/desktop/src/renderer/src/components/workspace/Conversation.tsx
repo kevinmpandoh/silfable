@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
-import { Activity, ArrowUp, Bot, Brain, CirclePlus, Settings, ShieldCheck, Target } from 'lucide-react';
+import { Activity, ArrowUp, Bot, Brain, CirclePlus, Coins, Settings, ShieldCheck, Target, TrendingUp } from 'lucide-react';
 import { Button, Modal } from '../ui';
 import { shorten, cn } from '../../lib/utils';
 
@@ -18,6 +18,8 @@ import { PerpAnalysisCard } from '../trading/PerpAnalysisCard';
 import { DriftPerpProposalCard } from '../trading/DriftPerpProposalCard';
 import { X402ResourcesCard } from './X402ResourcesCard';
 import { KaminoRwaCard } from './KaminoRwaCard';
+import { KaminoRwaWithdrawCard } from './KaminoRwaWithdrawCard';
+import { KaminoRwaWorkspaceModal } from './KaminoRwaWorkspaceModal';
 import { Composer } from './WorkspacePanels';
 import { AnimatedMarkdownMessage, MarkdownMessage, BridgePreparationForm } from './MarkdownComponents';
 import { StatusPill, Notice, Field, SetupCard, SetupActions, Brand, BrandMark, CornerFooter, RailSection, ProviderCard } from '../setup/SetupHelpers';
@@ -206,6 +208,7 @@ export function Conversation({
   ) => void;
 }) {
   const messagesRef = useRef<HTMLDivElement | null>(null);
+  const [rwaModalOpen, setRwaModalOpen] = useState(false);
 
   useLayoutEffect(() => {
     const messages = messagesRef.current;
@@ -251,10 +254,20 @@ export function Conversation({
       </header>
       {session.walletScope === "solana" && session.walletAddress !== null && (
         <div className="conversationLaunchBar flex items-center justify-between gap-2">
-          <PumpLaunchDraftForm
-            creatorWallet={session.walletAddress}
-            onCreate={onCreatePumpLaunchDraft}
-          />
+          <div className="flex items-center gap-2">
+            <PumpLaunchDraftForm
+              creatorWallet={session.walletAddress}
+              onCreate={onCreatePumpLaunchDraft}
+            />
+            <button
+              type="button"
+              onClick={() => setRwaModalOpen(true)}
+              className="rwaToggle"
+            >
+              <Coins className="size-3.5" />
+              RWA
+            </button>
+          </div>
           {onOpenDriftPerps && (
             <button
               type="button"
@@ -266,6 +279,15 @@ export function Conversation({
             </button>
           )}
         </div>
+      )}
+      {session.walletScope === "solana" && session.walletAddress !== null && (
+        <KaminoRwaWorkspaceModal
+          isOpen={rwaModalOpen}
+          onClose={() => setRwaModalOpen(false)}
+          sessionId={session.id}
+          walletAddress={session.walletAddress}
+          restricted={session.permission === "restricted"}
+        />
       )}
       <div className="messages" ref={messagesRef}>
         {session.messages.map((message) => (
@@ -334,6 +356,28 @@ export function Conversation({
                   walletAddress={session.walletAddress ?? undefined}
                   sessionId={session.id}
                   fullAccess={session.permission === "full"}
+                />
+              )}
+              {(message as any).kaminoRwaProposal && session.walletAddress && (
+                <KaminoRwaCard
+                  sessionId={session.id}
+                  walletAddress={session.walletAddress}
+                  restricted={session.permission === "restricted"}
+                  proposal={(message as any).kaminoRwaProposal}
+                  onExecuted={(position) => {
+                    console.info("Kamino RWA position executed", position.id, position.status);
+                  }}
+                />
+              )}
+              {(message as any).kaminoRwaWithdrawProposal && session.walletAddress && (
+                <KaminoRwaWithdrawCard
+                  sessionId={session.id}
+                  walletAddress={session.walletAddress}
+                  restricted={session.permission === "restricted"}
+                  proposal={(message as any).kaminoRwaWithdrawProposal}
+                  onExecuted={(receipt) => {
+                    console.info("Kamino RWA withdraw executed", receipt.id, receipt.status);
+                  }}
                 />
               )}
               {(message as any).evmAssetAuthorizationReview && (
@@ -552,23 +596,8 @@ export function Conversation({
         )}
       </div>
       <div className="conversationComposer">
-        {session.walletScope === "solana" && session.walletAddress !== null && (
-          <>
-            {session.mode === "mission" && (
-              <BridgePreparationForm busy={preparingBridge} onPrepare={onPrepareBridge} />
-            )}
-            <KaminoRwaCard
-              sessionId={session.id}
-              walletAddress={session.walletAddress}
-              restricted={session.permission === "restricted"}
-              onExecuted={(position) => {
-                // KaminoRwaCard renders its own inline confirmation (position status + Solscan
-                // link), matching EvmBridgeWorkspace's self-contained receipt display — there is
-                // no session-level toast/notice channel reachable from this component today.
-                console.info("Kamino RWA position executed", position.id, position.status);
-              }}
-            />
-          </>
+        {session.walletScope === "solana" && session.walletAddress !== null && session.mode === "mission" && (
+          <BridgePreparationForm busy={preparingBridge} onPrepare={onPrepareBridge} />
         )}
         {session.walletScope === "evm" && session.walletAddress !== null && session.evmChainKey === "robinhood" && (
           <EvmBridgeWorkspace

@@ -58,6 +58,26 @@ export const KaminoRwaPoolSchema = z.object({
 }).strict();
 export type KaminoRwaPool = z.infer<typeof KaminoRwaPoolSchema>;
 
+export const KaminoRwaSupplyProposalSchema = z.object({
+  id: z.string().uuid(),
+  sessionId: z.string().min(1).max(128),
+  walletAddress: SolanaAddressSchema,
+  lendingMarket: SolanaAddressSchema,
+  marketName: z.string().min(1).max(160),
+  rwaReason: z.string().min(1).max(300),
+  usdcReserve: SolanaAddressSchema.optional(),
+  amountAtomic: AtomicAmountSchema,
+  displayAmount: z.string().min(1).max(32),
+  supplyApy: z.number().nonnegative(),
+  totalSupplyUsd: z.number().nonnegative(),
+  utilization: z.number().min(0).max(1),
+  highUtilizationWarning: z.boolean(),
+  status: z.literal("ready-for-review"),
+  pools: z.array(KaminoRwaPoolSchema).max(20).optional(),
+  createdAt: z.string().datetime(),
+}).strict();
+export type KaminoRwaSupplyProposal = z.infer<typeof KaminoRwaSupplyProposalSchema>;
+
 export const KaminoRwaSupplyPlanSchema = z.object({
   id: z.string().uuid(),
   sessionId: z.string().min(1).max(128),
@@ -130,6 +150,76 @@ export const KaminoRwaPositionsResponseSchema = RequestBaseSchema.extend({
   positions: z.array(KaminoRwaPositionSchema).max(500),
 }).strict();
 
+export const KaminoRwaWithdrawPlanSchema = z.object({
+  id: z.string().uuid(),
+  sessionId: z.string().min(1).max(128),
+  walletAddress: SolanaAddressSchema,
+  lendingMarket: SolanaAddressSchema,
+  usdcReserve: SolanaAddressSchema,
+  amountAtomic: AtomicAmountSchema,
+  requirementsDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  transactionBase64: z.string().min(32).max(16_000),
+  blockhash: SolanaAddressSchema,
+  lastValidBlockHeight: z.string().regex(/^\d+$/u),
+  estimatedNetworkFeeLamports: z.string().regex(/^\d+$/u),
+  expiresAt: z.string().datetime(),
+  createdAt: z.string().datetime(),
+}).strict();
+export type KaminoRwaWithdrawPlan = z.infer<typeof KaminoRwaWithdrawPlanSchema>;
+
+export const KaminoRwaWithdrawProposalSchema = z.object({
+  id: z.string().uuid(),
+  sessionId: z.string().min(1).max(128),
+  walletAddress: SolanaAddressSchema,
+  lendingMarket: SolanaAddressSchema,
+  marketName: z.string().min(1).max(160),
+  rwaReason: z.string().min(1).max(300),
+  usdcReserve: SolanaAddressSchema.optional(),
+  amountAtomic: AtomicAmountSchema,
+  displayAmount: z.string().min(1).max(32),
+  status: z.literal("ready-for-review"),
+  createdAt: z.string().datetime(),
+}).strict();
+export type KaminoRwaWithdrawProposal = z.infer<typeof KaminoRwaWithdrawProposalSchema>;
+
+export const KaminoRwaWithdrawReceiptSchema = z.object({
+  id: z.string().uuid(),
+  planId: z.string().uuid(),
+  sessionId: z.string().min(1).max(128),
+  walletAddress: SolanaAddressSchema,
+  lendingMarket: SolanaAddressSchema,
+  marketName: z.string().min(1).max(160),
+  amountWithdrawnAtomic: AtomicAmountSchema,
+  signature: z.string().min(64).max(128).nullable(),
+  status: KaminoRwaPositionStatusSchema,
+  errorMessage: z.string().max(500).nullable(),
+  createdAt: z.string().datetime(),
+}).strict();
+export type KaminoRwaWithdrawReceipt = z.infer<typeof KaminoRwaWithdrawReceiptSchema>;
+
+export const KaminoRwaPrepareWithdrawRequestSchema = RequestBaseSchema.extend({
+  sessionId: z.string().min(1).max(128),
+  walletAddress: SolanaAddressSchema,
+  lendingMarket: SolanaAddressSchema,
+  amountAtomic: AtomicAmountSchema,
+}).strict();
+export const KaminoRwaPrepareWithdrawResponseSchema = RequestBaseSchema.extend({
+  plan: KaminoRwaWithdrawPlanSchema,
+}).strict();
+
+export const KaminoRwaExecuteWithdrawRequestSchema = RequestBaseSchema.extend({
+  planId: z.string().uuid(),
+  sessionId: z.string().min(1).max(128),
+  walletAddress: SolanaAddressSchema,
+  approved: z.literal(true),
+  masterPassword: z.string().min(1).max(256).optional(),
+}).strict();
+export const KaminoRwaExecuteWithdrawResponseSchema = RequestBaseSchema.extend({
+  receipt: KaminoRwaWithdrawReceiptSchema,
+}).strict();
+
+export const KaminoRwaListPositionsRequestSchema = RequestBaseSchema.strict();
+
 export type KaminoRwaDiscoverRequest = z.infer<typeof KaminoRwaDiscoverRequestSchema>;
 export type KaminoRwaDiscoverResponse = z.infer<typeof KaminoRwaDiscoverResponseSchema>;
 export type KaminoRwaPrepareRequest = z.infer<typeof KaminoRwaPrepareRequestSchema>;
@@ -137,3 +227,9 @@ export type KaminoRwaPrepareResponse = z.infer<typeof KaminoRwaPrepareResponseSc
 export type KaminoRwaExecuteRequest = z.infer<typeof KaminoRwaExecuteRequestSchema>;
 export type KaminoRwaExecuteResponse = z.infer<typeof KaminoRwaExecuteResponseSchema>;
 export type KaminoRwaPositionsResponse = z.infer<typeof KaminoRwaPositionsResponseSchema>;
+export type KaminoRwaPrepareWithdrawRequest = z.infer<typeof KaminoRwaPrepareWithdrawRequestSchema>;
+export type KaminoRwaPrepareWithdrawResponse = z.infer<typeof KaminoRwaPrepareWithdrawResponseSchema>;
+export type KaminoRwaExecuteWithdrawRequest = z.infer<typeof KaminoRwaExecuteWithdrawRequestSchema>;
+export type KaminoRwaExecuteWithdrawResponse = z.infer<typeof KaminoRwaExecuteWithdrawResponseSchema>;
+export type KaminoRwaListPositionsRequest = z.infer<typeof KaminoRwaListPositionsRequestSchema>;
+

@@ -430,32 +430,6 @@ export function UnifiedPortfolioRail({
         ))}
       </div>
     </RailSection>
-    {kaminoPositions.length > 0 && (
-      <RailSection title="RWA Yield">
-        <div className="portfolioAssetGroups">
-          {kaminoPositions.map((position) => {
-            const amount = kaminoAtomicToAmount(position.amountSuppliedAtomic);
-            const liveApy = kaminoApyByMarket.get(position.lendingMarket);
-            const usingLiveApy = liveApy !== undefined;
-            const apyUsed = liveApy ?? position.supplyApyAtEntry;
-            const accruedYield = kaminoAccruedYieldUsd(position, apyUsed);
-            return (
-              <div className="portfolioAssetGroup" key={position.id}>
-                <div className="portfolioGroupTitle">
-                  <span>{position.marketName.toUpperCase()}</span>
-                  <strong>{(apyUsed * 100).toFixed(2)}% APY{usingLiveApy ? "" : " (entry)"}</strong>
-                </div>
-                <PortfolioAssetRow symbol="USDC supplied" amount={amount} usdValue={Number(amount)} />
-                <div className="portfolioAssetRow">
-                  <span>Est. accrued yield</span>
-                  <strong>{accruedYield === null ? "Unavailable" : `~${formatPortfolioUsd(accruedYield)} estimated`}</strong>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </RailSection>
-    )}
     </>
   );
 }

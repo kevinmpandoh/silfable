@@ -4,7 +4,7 @@ import { createSolanaRpc, address, type Rpc } from "@solana/kit";
 import { createNoopSigner } from "@solana/signers";
 import { KaminoAction, KaminoMarket, VanillaObligation, getCurrentLedgerInstant, type KaminoMarketRpcApi } from "@kamino-finance/klend-sdk";
 import BN from "bn.js";
-import { KAMINO_API_BASE_URL, KAMINO_RWA_GLOBAL_MAX_SUPPLY_ATOMIC, KAMINO_RWA_HIGH_UTILIZATION_WARNING, KAMINO_RWA_MARKET_CATALOG, KAMINO_RWA_SOLANA_USDC_MINT, KLEND_PROGRAM_ID, KaminoRwaPoolSchema, KaminoRwaPositionSchema, KaminoRwaReserveMetricsSchema, KaminoRwaSupplyPlanSchema, type KaminoRwaPool, type KaminoRwaPosition, type KaminoRwaSupplyPlan } from "@mirae/contracts";
+import { KAMINO_API_BASE_URL, KAMINO_RWA_GLOBAL_MAX_SUPPLY_ATOMIC, KAMINO_RWA_HIGH_UTILIZATION_WARNING, KAMINO_RWA_MARKET_CATALOG, KAMINO_RWA_SOLANA_USDC_MINT, KLEND_PROGRAM_ID, KaminoRwaPoolSchema, KaminoRwaPositionSchema, KaminoRwaReserveMetricsSchema, KaminoRwaSupplyPlanSchema, KaminoRwaWithdrawPlanSchema, KaminoRwaWithdrawReceiptSchema, type KaminoRwaPool, type KaminoRwaPosition, type KaminoRwaSupplyPlan, type KaminoRwaWithdrawPlan, type KaminoRwaWithdrawReceipt } from "@mirae/contracts";
 import type { RuntimeDatabase } from "../storage/database.js";
 import type { LocalEncryptedKeystore } from "../storage/keystore.js";
 import type { WalletOnboardingService } from "../wallet/onboarding.js";
@@ -12,19 +12,25 @@ import { toWeb3Instruction } from "./instructionBridge.js";
 
 type KaminoMarketListEntry = { lendingMarket: string; isCurated: boolean };
 
-// Populated from the real observed output of the Step 2 live-instruction check against
-// the Obligate Market (KAMINO_RWA_LIVE_CHECK=1 run, see service.test.ts): a 1 USDC deposit
-// into an already-initialized obligation produced ComputeBudget, Associated Token Program,
-// and KLend instructions only (no SPL Token Program instruction appeared in that run, and
-// no Kamino Farms Program instruction — this reserve has no farm attached).
 const KNOWN_DEPOSIT_PROGRAM_IDS = new Set<string>([
   "ComputeBudget111111111111111111111111111111", // Compute Budget Program
   "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", // Associated Token Program
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // SPL Token Program
+  "11111111111111111111111111111111", // System Program
+  KLEND_PROGRAM_ID,
+]);
+
+const KNOWN_WITHDRAW_PROGRAM_IDS = new Set<string>([
+  "ComputeBudget111111111111111111111111111111", // Compute Budget Program
+  "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", // Associated Token Program
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // SPL Token Program
+  "11111111111111111111111111111111", // System Program
   KLEND_PROGRAM_ID,
 ]);
 
 export class KaminoRwaDesktopService {
   readonly #prepared = new Map<string, KaminoRwaSupplyPlan>();
+  readonly #preparedWithdraw = new Map<string, KaminoRwaWithdrawPlan>();
   private static readonly AAD = Buffer.from("mirae-kamino-rwa-positions-v1", "utf8");
 
   constructor(
@@ -180,7 +186,114 @@ export class KaminoRwaDesktopService {
     }
   }
 
-  clearPrepared(): void { this.#prepared.clear(); }
+  async prepareWithdraw(input: { sessionId: string; walletAddress: string; lendingMarket: string; amountAtomic: bigint }): Promise<KaminoRwaWithdrawPlan> {
+    const catalogEntry = KAMINO_RWA_MARKET_CATALOG.find((entry) => entry.lendingMarket === input.lendingMarket);
+    if (!catalogEntry) throw new Error("Requested market is not in the Kamino RWA catalog");
+    const [pool] = (await this.discover()).filter((entry) => entry.lendingMarket === input.lendingMarket);
+    if (!pool) throw new Error("Requested market no longer has a live USDC reserve; discover again");
+
+    const rpcUrl = (await this.secrets.getSecret("solana-rpc-url")) ?? "https://api.mainnet-beta.solana.com";
+    const rpc = createSolanaRpc(rpcUrl) as unknown as Rpc<KaminoMarketRpcApi>;
+    const slotDurationResponse = await fetch("https://api.kamino.finance/slots/duration", { signal: AbortSignal.timeout(15_000) });
+    if (!slotDurationResponse.ok) throw new Error("Unable to read Kamino slot duration");
+    const { recentSlotDurationInMs } = (await slotDurationResponse.json()) as { recentSlotDurationInMs: number };
+    const kaminoMarket = await KaminoMarket.load(rpc, address(input.lendingMarket), recentSlotDurationInMs, address(KLEND_PROGRAM_ID));
+    if (!kaminoMarket) throw new Error("Kamino market failed to load");
+    const currentLedgerInstant = await getCurrentLedgerInstant(rpc);
+
+    const action = await KaminoAction.buildWithdrawTxns({
+      kaminoMarket,
+      amount: new BN(input.amountAtomic.toString()),
+      reserveAddress: address(pool.usdcReserve),
+      owner: createNoopSigner(address(input.walletAddress)),
+      obligation: new VanillaObligation(address(KLEND_PROGRAM_ID)),
+      useV2Ixs: true,
+      scopeRefreshConfig: undefined,
+      currentLedgerInstant,
+    });
+    const kitIxs = KaminoAction.actionToIxs(action);
+    for (const ix of kitIxs) {
+      if (!KNOWN_WITHDRAW_PROGRAM_IDS.has(ix.programAddress)) throw new Error(`Unexpected program in Kamino withdraw instructions: ${ix.programAddress}`);
+    }
+    const instructions = kitIxs.map(toWeb3Instruction);
+
+    const payer = new PublicKey(input.walletAddress);
+    for (const ix of instructions) {
+      for (const key of ix.keys) {
+        if (key.isSigner && !key.pubkey.equals(payer)) throw new Error(`Withdraw instructions require an unexpected signer: ${key.pubkey.toBase58()}`);
+      }
+    }
+
+    const connection = new Connection(rpcUrl, "confirmed");
+    const latest = await connection.getLatestBlockhash("confirmed");
+    const transaction = new VersionedTransaction(new TransactionMessage({ payerKey: payer, recentBlockhash: latest.blockhash, instructions }).compileToV0Message());
+    const [fee, simulation] = await Promise.all([
+      connection.getFeeForMessage(transaction.message, "confirmed"),
+      connection.simulateTransaction(transaction, { replaceRecentBlockhash: true, sigVerify: false }),
+    ]);
+    if (simulation.value.err) throw new Error(`Kamino withdraw simulation failed: ${JSON.stringify(simulation.value.err)}`);
+
+    const now = new Date();
+    const plan = KaminoRwaWithdrawPlanSchema.parse({
+      id: randomUUID(),
+      sessionId: input.sessionId,
+      walletAddress: input.walletAddress,
+      lendingMarket: input.lendingMarket,
+      usdcReserve: pool.usdcReserve,
+      amountAtomic: input.amountAtomic.toString(),
+      requirementsDigest: `sha256:${createHash("sha256").update(JSON.stringify({ lendingMarket: input.lendingMarket, usdcReserve: pool.usdcReserve, amountAtomic: input.amountAtomic.toString() })).digest("hex")}`,
+      transactionBase64: Buffer.from(transaction.serialize()).toString("base64"),
+      blockhash: latest.blockhash,
+      lastValidBlockHeight: String(latest.lastValidBlockHeight),
+      estimatedNetworkFeeLamports: String(fee.value ?? 0),
+      expiresAt: new Date(now.getTime() + 90_000).toISOString(),
+      createdAt: now.toISOString(),
+    });
+    this.#preparedWithdraw.set(plan.id, plan);
+    return plan;
+  }
+
+  async executeWithdraw(input: { planId: string; sessionId: string; walletAddress: string }): Promise<KaminoRwaWithdrawReceipt> {
+    const plan = this.#preparedWithdraw.get(input.planId);
+    if (!plan || plan.sessionId !== input.sessionId || plan.walletAddress !== input.walletAddress) throw new Error("Prepared Kamino RWA withdraw plan is unavailable for this session");
+    if (Date.parse(plan.expiresAt) <= Date.now()) { this.#preparedWithdraw.delete(input.planId); throw new Error("Prepared Kamino RWA withdraw plan expired"); }
+    const catalogEntry = KAMINO_RWA_MARKET_CATALOG.find((entry) => entry.lendingMarket === plan.lendingMarket)!;
+    const now = new Date();
+    let receipt: KaminoRwaWithdrawReceipt = KaminoRwaWithdrawReceiptSchema.parse({
+      id: randomUUID(), planId: plan.id, sessionId: plan.sessionId, walletAddress: plan.walletAddress,
+      lendingMarket: plan.lendingMarket, marketName: catalogEntry.name,
+      amountWithdrawnAtomic: plan.amountAtomic, signature: null, status: "SUBMITTED", errorMessage: null,
+      createdAt: now.toISOString(),
+    });
+
+    let transaction: VersionedTransaction;
+    let rpcUrl: string;
+    try {
+      transaction = VersionedTransaction.deserialize(Buffer.from(plan.transactionBase64, "base64"));
+      await this.wallets.withWalletWeb3Keypair(plan.walletAddress, async (keypair) => { transaction.sign([keypair]); });
+      rpcUrl = (await this.secrets.getSecret("solana-rpc-url")) ?? "https://api.mainnet-beta.solana.com";
+    } catch (error) {
+      receipt = KaminoRwaWithdrawReceiptSchema.parse({ ...receipt, status: "FAILED", errorMessage: error instanceof Error ? error.message.slice(0, 500) : "Unknown pre-broadcast failure" });
+      throw error;
+    }
+
+    try {
+      const connection = new Connection(rpcUrl, "confirmed");
+      const signature = await connection.sendRawTransaction(transaction.serialize(), { skipPreflight: false, maxRetries: 0 });
+      await connection.confirmTransaction({ signature, blockhash: plan.blockhash, lastValidBlockHeight: Number(plan.lastValidBlockHeight) }, "confirmed");
+      receipt = KaminoRwaWithdrawReceiptSchema.parse({ ...receipt, signature, status: "CONFIRMED" });
+      this.#preparedWithdraw.delete(input.planId);
+      return receipt;
+    } catch (error) {
+      receipt = KaminoRwaWithdrawReceiptSchema.parse({ ...receipt, status: "UNKNOWN", errorMessage: error instanceof Error ? error.message.slice(0, 500) : "Unknown broadcast outcome" });
+      throw error;
+    }
+  }
+
+  clearPrepared(): void {
+    this.#prepared.clear();
+    this.#preparedWithdraw.clear();
+  }
 
   async listPositions(): Promise<KaminoRwaPosition[]> {
     const key = await this.key();

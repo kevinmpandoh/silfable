@@ -38,6 +38,12 @@ import {
   KaminoRwaExecuteRequestSchema,
   KaminoRwaExecuteResponseSchema,
   KaminoRwaPositionsResponseSchema,
+  KaminoRwaPrepareWithdrawRequestSchema,
+  KaminoRwaPrepareWithdrawResponseSchema,
+  KaminoRwaExecuteWithdrawRequestSchema,
+  KaminoRwaExecuteWithdrawResponseSchema,
+  type KaminoRwaPrepareWithdrawRequest,
+  type KaminoRwaExecuteWithdrawRequest,
   JupiterKeyMutationResponseSchema,
   JupiterSaveKeyRequestSchema,
   JupiterSettingsResponseSchema,
@@ -307,6 +313,12 @@ const api = {
   },
   async listKaminoRwaPositions() {
     return KaminoRwaPositionsResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.kaminoRwaListPositions));
+  },
+  async prepareKaminoRwaWithdraw(request: KaminoRwaPrepareWithdrawRequest) {
+    return KaminoRwaPrepareWithdrawResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.kaminoRwaPrepareWithdraw, KaminoRwaPrepareWithdrawRequestSchema.parse(request)));
+  },
+  async executeKaminoRwaWithdraw(request: KaminoRwaExecuteWithdrawRequest) {
+    return KaminoRwaExecuteWithdrawResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.kaminoRwaExecuteWithdraw, KaminoRwaExecuteWithdrawRequestSchema.parse(request)));
   },
   async getEvmWallets() {
     return EvmWalletGetResponseSchema.parse(await ipcRenderer.invoke(IPC_CHANNELS.evmWalletGet));

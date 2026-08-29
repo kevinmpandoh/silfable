@@ -3,7 +3,7 @@ import { after, test } from "node:test";
 
 import type { MainnetReadService } from "../integrations/read-only.js";
 import type { SecretName } from "../storage/keystore.js";
-import { AiService } from "./service.js";
+import { AiService, parseDirectKaminoRwaSupply, parseDirectKaminoRwaWithdraw } from "./service.js";
 
 const originalFetch = globalThis.fetch;
 after(() => { globalThis.fetch = originalFetch; });
@@ -93,7 +93,7 @@ test("complete Solana DCA instructions bind directly to the active session", { c
     sessionId: "session-real-123",
   });
   assert.equal(providerFetches, 0);
-  assert.equal(result.toolsUsed.includes("create_automation_strategy"), true);
+  assert.equal((result.toolsUsed as string[]).includes("create_automation_strategy"), true);
   assert.ok(createInput);
   const { expiresAt, ...boundInput } = createInput as unknown as Record<string, unknown>;
   assert.equal(typeof expiresAt, "string");
@@ -136,7 +136,7 @@ test("Solana tokenized stock DCA instructions bind directly with calculated cycl
     sessionId: "session-aapl-123",
   });
   assert.equal(providerFetches, 0);
-  assert.equal(result.toolsUsed.includes("create_automation_strategy"), true);
+  assert.equal((result.toolsUsed as string[]).includes("create_automation_strategy"), true);
   assert.ok(createInput);
   const { expiresAt, ...boundInput } = createInput as unknown as Record<string, unknown>;
   assert.equal(typeof expiresAt, "string");
@@ -179,7 +179,7 @@ test("start DCAing prompt phrasing binds directly to the active session", { conc
     sessionId: "session-aapl-123",
   });
   assert.equal(providerFetches, 0);
-  assert.equal(result.toolsUsed.includes("create_automation_strategy"), true);
+  assert.equal((result.toolsUsed as string[]).includes("create_automation_strategy"), true);
   assert.ok(createInput);
   const { expiresAt, ...boundInput } = createInput as unknown as Record<string, unknown>;
   assert.equal(typeof expiresAt, "string");
@@ -222,7 +222,7 @@ test("complete Solana TP/SL instructions bind directly to the active session", {
     sessionId: "session-real-123",
   });
   assert.equal(providerFetches, 0);
-  assert.equal(result.toolsUsed.includes("create_automation_strategy"), true);
+  assert.equal((result.toolsUsed as string[]).includes("create_automation_strategy"), true);
   assert.ok(createInput);
   const { expiresAt, ...boundInput } = createInput as unknown as Record<string, unknown>;
   assert.equal(typeof expiresAt, "string");
@@ -289,7 +289,7 @@ test("direct JUP swap shows an insufficient-balance policy block without calling
   });
   assert.equal(providerFetches, 0);
   assert.equal(result.missionPreview?.status, "blocked");
-  assert.equal(result.missionPreview?.checks.find((check) => check.code === "balance_sufficient")?.status, "fail");
+  assert.equal(result.missionPreview?.checks.find((check: { code: string; status: string }) => check.code === "balance_sufficient")?.status, "fail");
   assert.match(result.text, /blocked by local policy/u);
 });
 
@@ -574,3 +574,135 @@ test("Pump discovery cursor is injected by the trusted session boundary, not the
   });
   assert.deepEqual(scannerInput, { signatureLimit: 2, untilSignature: cursor });
 });
+
+test("parseDirectKaminoRwaSupply recognizes English and Indonesian supply requests and market selection", () => {
+  const req1 = parseDirectKaminoRwaSupply("supply 10 USDC to Kamino RWA", "solana");
+  assert.notEqual(req1, null);
+  assert.equal(req1?.displayAmount, "10");
+  assert.equal(req1?.amountAtomic, "10000000");
+  assert.equal(req1?.marketNameQuery, undefined);
+
+  const req2 = parseDirectKaminoRwaSupply("supply 25 USDC to Obligate", "solana");
+  assert.notEqual(req2, null);
+  assert.equal(req2?.displayAmount, "25");
+  assert.equal(req2?.amountAtomic, "25000000");
+  assert.equal(req2?.marketNameQuery, "obligate");
+
+  const req3 = parseDirectKaminoRwaSupply("supply 15.50 USDC ke PAXG market", "solana");
+  assert.notEqual(req3, null);
+  assert.equal(req3?.displayAmount, "15.50");
+  assert.equal(req3?.amountAtomic, "15500000");
+  assert.equal(req3?.marketNameQuery, "paxg");
+
+  const req4 = parseDirectKaminoRwaSupply("setor 50 USDC ke Kamino RWA", "solana");
+  assert.notEqual(req4, null);
+  assert.equal(req4?.displayAmount, "50");
+  assert.equal(req4?.amountAtomic, "50000000");
+
+  // General questions should not be parsed as direct supply
+  assert.equal(parseDirectKaminoRwaSupply("what is Kamino RWA?", "solana"), null);
+
+  // EVM wallet scope should not match
+  assert.equal(parseDirectKaminoRwaSupply("supply 10 USDC to Kamino RWA", "evm"), null);
+});
+
+test("AiService.chat generates a deterministic KaminoRwaSupplyProposal for valid supply requests", async () => {
+  const secrets = new MemorySecrets();
+  const service = new AiService({
+    keystore: secrets,
+    settings: new MemorySettings(),
+    kaminoRwa: {
+      discover: async () => [
+        {
+          lendingMarket: "3hd61ZpG35tBwrmDvdmYVJoazC2mjJxHb6rEYEWs4QhH",
+          name: "Obligate Market",
+          rwaReason: "Backed by oTFY",
+          isCurated: true,
+          usdcReserve: "4sLZeGzQspPj54p1b7X4X8wP5Kz6T4gHwJvFk9q8m7k6",
+          supplyApy: 0.0518,
+          totalSupplyUsd: 5100000,
+          totalBorrowUsd: 4500000,
+          utilization: 0.88,
+          highUtilizationWarning: false,
+          discoveredAt: "2026-08-27T00:00:00.000Z",
+        },
+      ],
+    },
+  });
+
+  const testWallet = "3hd61ZpG35tBwrmDvdmYVJoazC2mjJxHb6rEYEWs4QhH";
+  const res = await service.chat({
+    prompt: "supply 10 USDC to Kamino RWA",
+    mode: "agent",
+    walletAddress: testWallet,
+    walletScope: "solana",
+    sessionId: "test-session-id",
+  });
+
+  assert.notEqual(res.kaminoRwaProposal, null);
+  assert.equal(res.kaminoRwaProposal?.displayAmount, "10");
+  assert.equal(res.kaminoRwaProposal?.marketName, "Obligate Market");
+  assert.equal(res.kaminoRwaProposal?.status, "ready-for-review");
+  assert.equal(res.kaminoRwaProposal?.walletAddress, testWallet);
+});
+
+test("parseDirectKaminoRwaWithdraw parses withdraw intent across English and Indonesian prompts", () => {
+  const res1 = parseDirectKaminoRwaWithdraw("withdraw 10 USDC from Kamino RWA", "solana");
+  assert.notEqual(res1, null);
+  assert.equal(res1?.displayAmount, "10");
+  assert.equal(res1?.amountAtomic, "10000000");
+
+  const res2 = parseDirectKaminoRwaWithdraw("tarik 25.5 USDC dari Obligate", "solana");
+  assert.notEqual(res2, null);
+  assert.equal(res2?.marketNameQuery, "obligate");
+  assert.equal(res2?.displayAmount, "25.5");
+  assert.equal(res2?.amountAtomic, "25500000");
+
+  const res3 = parseDirectKaminoRwaWithdraw("withdraw 5 USDC from PAXG market", "solana");
+  assert.notEqual(res3, null);
+  assert.equal(res3?.marketNameQuery, "paxg");
+  assert.equal(res3?.displayAmount, "5");
+
+  assert.equal(parseDirectKaminoRwaWithdraw("withdraw 10 USDC from Kamino", "evm"), null);
+});
+
+test("AiService.chat builds typed KaminoRwaWithdrawProposal when direct withdraw prompt is received", async () => {
+  const service = new AiService({
+    keystore: new MemorySecrets(),
+    settings: new MemorySettings(),
+    kaminoRwa: {
+      discover: async () => [
+        {
+          lendingMarket: "3hd61ZpG35tBwrmDvdmYVJoazC2mjJxHb6rEYEWs4QhH",
+          name: "Obligate Market",
+          rwaReason: "Backed by oTFY",
+          isCurated: true,
+          usdcReserve: "4sLZeGzQspPj54p1b7X4X8wP5Kz6T4gHwJvFk9q8m7k6",
+          supplyApy: 0.0518,
+          totalSupplyUsd: 5100000,
+          totalBorrowUsd: 4500000,
+          utilization: 0.88,
+          highUtilizationWarning: false,
+          discoveredAt: "2026-08-27T00:00:00.000Z",
+        },
+      ],
+    },
+  });
+
+  const testWallet = "3hd61ZpG35tBwrmDvdmYVJoazC2mjJxHb6rEYEWs4QhH";
+  const res = await service.chat({
+    prompt: "withdraw 10 USDC from Obligate",
+    mode: "agent",
+    walletAddress: testWallet,
+    walletScope: "solana",
+    sessionId: "test-session-id",
+  });
+
+  assert.notEqual(res.kaminoRwaWithdrawProposal, null);
+  assert.equal(res.kaminoRwaWithdrawProposal?.displayAmount, "10");
+  assert.equal(res.kaminoRwaWithdrawProposal?.marketName, "Obligate Market");
+  assert.equal(res.kaminoRwaWithdrawProposal?.status, "ready-for-review");
+  assert.equal(res.kaminoRwaWithdrawProposal?.walletAddress, testWallet);
+});
+
+

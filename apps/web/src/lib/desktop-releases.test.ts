@@ -5,7 +5,7 @@ import test from "node:test";
 
 import { CURRENT_DESKTOP_RELEASE, NAV_DOWNLOAD_LINKS } from "./desktop-releases.js";
 
-const EXPECTED_VERSION = "0.3.0";
+const EXPECTED_VERSION = "0.4.0";
 
 test("current desktop labels and artifact URLs use one release version", () => {
   const release = CURRENT_DESKTOP_RELEASE;

@@ -19,17 +19,28 @@ import {
   type SessionIntent,
   type SessionWalletScope,
   type TransactionSettings,
+  KAMINO_RWA_DEFAULT_MAX_SUPPLY_ATOMIC,
+  KAMINO_RWA_GLOBAL_MAX_SUPPLY_ATOMIC,
+  KAMINO_RWA_HIGH_UTILIZATION_WARNING,
+  KAMINO_RWA_MARKET_CATALOG,
+  KAMINO_RWA_USDC_DECIMALS,
+  KaminoRwaSupplyProposalSchema,
+  KaminoRwaWithdrawProposalSchema,
+  type KaminoRwaPool,
+  type KaminoRwaSupplyProposal,
+  type KaminoRwaWithdrawProposal,
 } from "@mirae/contracts";
 
 import type { SecretName } from "../storage/keystore.js";
 import type { MainnetReadService } from "../integrations/read-only.js";
 import { MissionPolicyService } from "../mission/policy.js";
 import { DEFAULT_TRANSACTION_SETTINGS, type TransactionSettingsService } from "../mission/transaction-settings.js";
-import { callOpenRouterChat, callOpenRouterX402Selection, DEFAULT_OPENROUTER_MODEL, type ReadOnlyAiTool } from "./providers.js";
+import { callOpenRouterChat, callOpenRouterX402Selection, DEFAULT_OPENROUTER_MODEL, type ReadOnlyAiTool, type ReadOnlyAiToolName } from "./providers.js";
 import type { AutomationManager } from "../execution/automation-manager.js";
 import { UNISWAP_NATIVE_TOKEN_ADDRESS } from "../integrations/uniswap.js";
 import type { FullAccessEvmAssetAuthorizationService } from "../security/full-access-evm-assets.js";
 import { BUNDLED_OPENROUTER_API_KEY } from "../config/managed-provider-defaults.js";
+import type { KaminoRwaDesktopService } from "../kamino-rwa/service.js";
 
 type AiSecretStore = {
   getSecret(name: SecretName): Promise<string | null>;
@@ -84,6 +95,7 @@ export class AiService {
   #evmBridgePreparation: EvmBridgePreparationService | null;
   #automationManager: AutomationManager | null;
   #fullAccessEvmAssets: FullAccessEvmAssetAuthorizationService | null = null;
+  readonly #kaminoRwa: Pick<KaminoRwaDesktopService, "discover"> | null;
 
   constructor(input: {
     keystore: AiSecretStore;
@@ -94,6 +106,7 @@ export class AiService {
     bridgePreparation?: BridgePreparationService;
     evmBridgePreparation?: EvmBridgePreparationService;
     automationManager?: AutomationManager;
+    kaminoRwa?: Pick<KaminoRwaDesktopService, "discover">;
   }) {
     this.#keystore = input.keystore;
     this.#settings = input.settings;
@@ -103,6 +116,7 @@ export class AiService {
     this.#bridgePreparation = input.bridgePreparation ?? null;
     this.#evmBridgePreparation = input.evmBridgePreparation ?? null;
     this.#automationManager = input.automationManager ?? null;
+    this.#kaminoRwa = input.kaminoRwa ?? null;
   }
 
   configureAutomationManager(service: AutomationManager): void {
@@ -174,7 +188,7 @@ export class AiService {
     const assetConfirmation = parseFullAccessAssetConfirmation(input.prompt);
     if (assetConfirmation !== null && input.sessionId && input.permission === "full" && input.walletScope === "evm" && input.evmChainKey === "robinhood" && this.#fullAccessEvmAssets !== null) {
       const asset = this.#fullAccessEvmAssets.confirm(input.sessionId, assetConfirmation);
-      return localChatResult(`Full Access asset authorized for this Robinhood session: ${asset.symbol} (${asset.address}), ${asset.decimals} decimals. The exact contract was recorded locally. Contract metadata verification is not a liquidity, issuer, or security audit.`, []);
+      return localChatResult(`Full Access asset authorized for this Robinhood session: ${asset.symbol} (${asset.address}), ${asset.decimals} decimals. The exact contract was recorded locally. Contract metadata verification is not a liquidity, issuer, or security audit.`, [] as ReadOnlyAiToolName[]);
     }
     const assetAddress = parseFullAccessAssetRequest(input.prompt);
     if (assetAddress !== null && input.sessionId && input.permission === "full" && input.walletScope === "evm" && input.evmChainKey === "robinhood" && this.#fullAccessEvmAssets !== null) {
@@ -183,24 +197,24 @@ export class AiService {
         review = await this.#fullAccessEvmAssets.requestReview(input.sessionId, assetAddress);
       } catch (error) {
         if (error instanceof Error && error.message === "FULL_ACCESS_BUILT_IN_ASSET") {
-          return localChatResult("ETH and USDG are release-pinned Robinhood Full Access assets. They are already available in this session and do not need an authorization review. You can request a swap directly, for example: Swap 0.5 USDG to ETH.", []);
+          return localChatResult("ETH and USDG are release-pinned Robinhood Full Access assets. They are already available in this session and do not need an authorization review. You can request a swap directly, for example: Swap 0.5 USDG to ETH.", [] as ReadOnlyAiToolName[]);
         }
         throw error;
       }
-      return localChatResult(`Full Access asset review ready. Confirm the exact contract shown on the card before adding it to this session's allowlist. No quote, approval, signing, or broadcast was created.`, [], review);
+      return localChatResult(`Full Access asset review ready. Confirm the exact contract shown on the card before adding it to this session's allowlist. No quote, approval, signing, or broadcast was created.`, [] as ReadOnlyAiToolName[], review);
     }
     if (input.sessionId && input.permission === "full" && input.walletScope === "evm" && input.evmChainKey === "robinhood" && this.#fullAccessEvmAssets !== null && /\b(?:swap|tukar)\b/iu.test(input.prompt)) {
       const requestedContracts = [...input.prompt.matchAll(/\b(0x[0-9a-fA-F]{40})\b/gu)].map((match) => match[1]!);
       const unapproved = requestedContracts.find((address) => this.#fullAccessEvmAssets!.find(input.sessionId!, address) === null);
       if (unapproved !== undefined) {
         const review = await this.#fullAccessEvmAssets.requestReview(input.sessionId, unapproved);
-        return localChatResult(`This Full Access swap names a contract that is not authorized for this session. Review the exact asset card and confirm it before a quote can be prepared.`, [], review);
+        return localChatResult(`This Full Access swap names a contract that is not authorized for this session. Review the exact asset card and confirm it before a quote can be prepared.`, [] as ReadOnlyAiToolName[], review);
       }
       const authorizedSwap = parseDirectAuthorizedRobinhoodSwap(input.prompt, input.walletScope, input.evmChainKey, input.sessionId, this.#fullAccessEvmAssets);
       if (authorizedSwap !== null && input.mode === "mission" && input.walletAddress !== null && this.#evmSwapQuotes !== null) {
         const settings = input.transactionSettings ?? this.#transactionSettings.get();
         const proposal = await this.#evmSwapQuotes.quote({ walletAddress: input.walletAddress, chainKey: "robinhood", sellToken: authorizedSwap.sellToken, buyToken: authorizedSwap.buyToken, sellAmount: authorizedSwap.sellAmount, slippageBps: Math.min(settings.defaultSlippageBps, settings.maxSlippageBps, 100) });
-        return { ...localChatResult(`Robinhood ${authorizedSwap.sellSymbol} → ${authorizedSwap.buySymbol} quote prepared for Full Access review. The main process will re-check this session's exact asset allowlist again before any local signature.`, ["robinhood_swap_quote"]), evmSwapProposal: proposal };
+        return { ...localChatResult(`Robinhood ${authorizedSwap.sellSymbol} → ${authorizedSwap.buySymbol} quote prepared for Full Access review. The main process will re-check this session's exact asset allowlist again before any local signature.`, ["robinhood_swap_quote" as ReadOnlyAiToolName]), evmSwapProposal: proposal };
       }
     }
     const directRobinhoodDca = parseDirectRobinhoodDca(input.prompt, input.walletScope, input.evmChainKey);
@@ -212,7 +226,7 @@ export class AiService {
         intervalSeconds: directRobinhoodDca.intervalSeconds, maximumExecutions: directRobinhoodDca.maximumExecutions,
         expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
       });
-      return { model: this.#model(), text: `Robinhood DCA ${directRobinhoodDca.inputSymbol} → ${directRobinhoodDca.outputSymbol} created: ${directRobinhoodDca.displayAmount} ${directRobinhoodDca.inputSymbol} every ${directRobinhoodDca.intervalSeconds} seconds, maximum ${directRobinhoodDca.maximumExecutions} cycles. Each due run takes a fresh quote and rechecks allowance, balance, gas, slippage, and emergency stop.`, inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, toolsUsed: ["create_automation_strategy" as const], missionPreview: null, pumpTokenIntelligence: null, pumpDiscoverySnapshot: null, pumpTradePreview: null, limitOrderPreview: null, evmSwapProposal: null, automationStrategy: strategy };
+      return { model: this.#model(), text: `Robinhood DCA ${directRobinhoodDca.inputSymbol} → ${directRobinhoodDca.outputSymbol} created: ${directRobinhoodDca.displayAmount} ${directRobinhoodDca.inputSymbol} every ${directRobinhoodDca.intervalSeconds} seconds, maximum ${directRobinhoodDca.maximumExecutions} cycles. Each due run takes a fresh quote and rechecks allowance, balance, gas, slippage, and emergency stop.`, inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, toolsUsed: ["create_automation_strategy"] as ReadOnlyAiToolName[], missionPreview: null, pumpTokenIntelligence: null, pumpDiscoverySnapshot: null, pumpTradePreview: null, limitOrderPreview: null, evmSwapProposal: null, kaminoRwaProposal: null, kaminoRwaWithdrawProposal: null, automationStrategy: strategy };
     }
     const directRobinhoodBridge = parseDirectRobinhoodBridge(input.prompt, input.walletScope, input.evmChainKey);
     if (directRobinhoodBridge !== null && input.mode === "mission" && input.walletAddress !== null && this.#evmBridgePreparation !== null) {
@@ -253,12 +267,12 @@ export class AiService {
         const userMessage = detail === "EVM source wallet token balance does not cover the bridge amount"
           ? `Robinhood bridge was not prepared because the session wallet does not have enough USDG for ${directRobinhoodBridge.displayAmount} USDG. No approval, signature, or broadcast was created. Reduce the amount or fund the exact Robinhood wallet bound to this session, then request a fresh bridge quote.`
           : `Robinhood bridge was blocked safely: ${detail} No approval, signature, or broadcast was created.`;
-        return localChatResult(userMessage, ["bridge_quote" as const]);
+        return localChatResult(userMessage, [] as ReadOnlyAiToolName[]);
       }
       return {
         ...localChatResult(
           `Robinhood USDG → Solana USDC bridge quote is ready. ${input.permission === "full" ? "Full Access will dispatch the exact locally preflighted source steps and then wait for independent Solana settlement verification." : "Review the exact source step before signing."}`,
-          ["bridge_quote" as const],
+          [] as ReadOnlyAiToolName[],
         ),
         evmBridgePreparation: { ...prepared, contract },
       };
@@ -271,13 +285,15 @@ export class AiService {
         outputTokens: 0,
         totalTokens: 0,
         costUsd: 0,
-        toolsUsed: [],
+        toolsUsed: [] as ReadOnlyAiToolName[],
         missionPreview: null,
         pumpTokenIntelligence: null,
         pumpDiscoverySnapshot: null,
         pumpTradePreview: null,
         limitOrderPreview: null,
         evmSwapProposal: null,
+        kaminoRwaProposal: null,
+        kaminoRwaWithdrawProposal: null,
       };
     }
     const directDca = parseDirectSolanaDca(input.prompt, input.walletScope);
@@ -300,13 +316,15 @@ export class AiService {
         outputTokens: 0,
         totalTokens: 0,
         costUsd: 0,
-        toolsUsed: ["create_automation_strategy" as const],
+        toolsUsed: ["create_automation_strategy"] as ReadOnlyAiToolName[],
         missionPreview: null,
         pumpTokenIntelligence: null,
         pumpDiscoverySnapshot: null,
         pumpTradePreview: null,
         limitOrderPreview: null,
         evmSwapProposal: null,
+        kaminoRwaProposal: null,
+        kaminoRwaWithdrawProposal: null,
         automationStrategy: strategy,
       };
     }
@@ -319,7 +337,110 @@ export class AiService {
         takeProfitPriceUsd: directRobinhoodExit.takeProfitPriceUsd, stopLossPriceUsd: directRobinhoodExit.stopLossPriceUsd,
         expiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
       });
-      return { model: this.#model(), text: `Robinhood TP/SL ${directRobinhoodExit.inputSymbol} → ${directRobinhoodExit.outputSymbol} created. The local monitor will use fresh USD price evidence and a fresh Uniswap preflight only if a trigger is reached.`, inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, toolsUsed: ["create_automation_strategy" as const], missionPreview: null, pumpTokenIntelligence: null, pumpDiscoverySnapshot: null, pumpTradePreview: null, limitOrderPreview: null, evmSwapProposal: null, automationStrategy: strategy };
+      return { model: this.#model(), text: `Robinhood TP/SL ${directRobinhoodExit.inputSymbol} → ${directRobinhoodExit.outputSymbol} created. The local monitor will use fresh USD price evidence and a fresh Uniswap preflight only if a trigger is reached.`, inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, toolsUsed: ["create_automation_strategy"] as ReadOnlyAiToolName[], missionPreview: null, pumpTokenIntelligence: null, pumpDiscoverySnapshot: null, pumpTradePreview: null, limitOrderPreview: null, evmSwapProposal: null, kaminoRwaProposal: null, kaminoRwaWithdrawProposal: null, automationStrategy: strategy };
+    }
+    const directRwa = parseDirectKaminoRwaSupply(input.prompt, input.walletScope);
+    if (directRwa !== null) {
+      if (!input.walletAddress) {
+        return localChatResult("A Solana wallet is required to supply USDC to Kamino RWA pools. Please connect or select your Solana wallet first.", [] as ReadOnlyAiToolName[]);
+      }
+      let pools: KaminoRwaPool[] = [];
+      if (this.#kaminoRwa !== null) {
+        try {
+          pools = await this.#kaminoRwa.discover();
+        } catch {
+          pools = [];
+        }
+      }
+      const chosenPool = directRwa.marketNameQuery
+        ? pools.find((p) => p.name.toLowerCase().includes(directRwa.marketNameQuery!))
+        : (pools[0] ?? null);
+
+      const catalogEntry = directRwa.marketNameQuery
+        ? KAMINO_RWA_MARKET_CATALOG.find((e) => e.name.toLowerCase().includes(directRwa.marketNameQuery!))
+        : KAMINO_RWA_MARKET_CATALOG[0];
+
+      const lendingMarket = chosenPool?.lendingMarket ?? catalogEntry?.lendingMarket ?? "3hd61ZpG35tBwrmDvdmYVJoazC2mjJxHb6rEYEWs4QhH";
+      const marketName = chosenPool?.name ?? catalogEntry?.name ?? "Obligate Market";
+      const rwaReason = chosenPool?.rwaReason ?? catalogEntry?.rwaReason ?? "Backed by oTFY — tokenized corporate bonds and commercial paper via Obligate";
+      const supplyApy = chosenPool?.supplyApy ?? 0.0518;
+      const totalSupplyUsd = chosenPool?.totalSupplyUsd ?? 5107918;
+      const utilization = chosenPool?.utilization ?? 0.891;
+      const highUtilizationWarning = chosenPool?.highUtilizationWarning ?? (utilization >= KAMINO_RWA_HIGH_UTILIZATION_WARNING);
+
+      const proposal = KaminoRwaSupplyProposalSchema.parse({
+        id: crypto.randomUUID(),
+        sessionId: input.sessionId ?? crypto.randomUUID(),
+        walletAddress: input.walletAddress,
+        lendingMarket,
+        marketName,
+        rwaReason,
+        ...(chosenPool?.usdcReserve ? { usdcReserve: chosenPool.usdcReserve } : {}),
+        amountAtomic: directRwa.amountAtomic,
+        displayAmount: directRwa.displayAmount,
+        supplyApy,
+        totalSupplyUsd,
+        utilization,
+        highUtilizationWarning,
+        status: "ready-for-review",
+        ...(pools.length > 0 ? { pools } : {}),
+        createdAt: new Date().toISOString(),
+      });
+
+      return {
+        ...localChatResult(
+          `Kamino RWA supply proposal prepared: ${directRwa.displayAmount} USDC to ${marketName} (${(supplyApy * 100).toFixed(2)}% APY). Review the simulated plan and confirm below.`,
+          [] as ReadOnlyAiToolName[],
+        ),
+        kaminoRwaProposal: proposal,
+      };
+    }
+    const directRwaWithdraw = parseDirectKaminoRwaWithdraw(input.prompt, input.walletScope);
+    if (directRwaWithdraw !== null) {
+      if (!input.walletAddress) {
+        return localChatResult("A Solana wallet is required to withdraw USDC from Kamino RWA pools. Please connect or select your Solana wallet first.", [] as ReadOnlyAiToolName[]);
+      }
+      let pools: KaminoRwaPool[] = [];
+      if (this.#kaminoRwa !== null) {
+        try {
+          pools = await this.#kaminoRwa.discover();
+        } catch {
+          pools = [];
+        }
+      }
+      const chosenPool = directRwaWithdraw.marketNameQuery
+        ? pools.find((p) => p.name.toLowerCase().includes(directRwaWithdraw.marketNameQuery!))
+        : (pools[0] ?? null);
+
+      const catalogEntry = directRwaWithdraw.marketNameQuery
+        ? KAMINO_RWA_MARKET_CATALOG.find((e) => e.name.toLowerCase().includes(directRwaWithdraw.marketNameQuery!))
+        : KAMINO_RWA_MARKET_CATALOG[0];
+
+      const lendingMarket = chosenPool?.lendingMarket ?? catalogEntry?.lendingMarket ?? "3hd61ZpG35tBwrmDvdmYVJoazC2mjJxHb6rEYEWs4QhH";
+      const marketName = chosenPool?.name ?? catalogEntry?.name ?? "Obligate Market";
+      const rwaReason = chosenPool?.rwaReason ?? catalogEntry?.rwaReason ?? "Backed by oTFY — tokenized corporate bonds and commercial paper via Obligate";
+
+      const proposal = KaminoRwaWithdrawProposalSchema.parse({
+        id: crypto.randomUUID(),
+        sessionId: input.sessionId ?? crypto.randomUUID(),
+        walletAddress: input.walletAddress,
+        lendingMarket,
+        marketName,
+        rwaReason,
+        ...(chosenPool?.usdcReserve ? { usdcReserve: chosenPool.usdcReserve } : {}),
+        amountAtomic: directRwaWithdraw.amountAtomic,
+        displayAmount: directRwaWithdraw.displayAmount,
+        status: "ready-for-review",
+        createdAt: new Date().toISOString(),
+      });
+
+      return {
+        ...localChatResult(
+          `Kamino RWA withdraw proposal prepared: ${directRwaWithdraw.displayAmount} USDC from ${marketName}. Review the plan and confirm below.`,
+          [] as ReadOnlyAiToolName[],
+        ),
+        kaminoRwaWithdrawProposal: proposal,
+      };
     }
     const directSolanaSwap = parseDirectSolanaSwap(input.prompt, input.walletScope);
     if (directSolanaSwap !== null && input.walletAddress !== null && this.#readService !== null) {
@@ -350,6 +471,7 @@ export class AiService {
         pumpTradePreview: null,
         limitOrderPreview: null,
         evmSwapProposal: null,
+        kaminoRwaProposal: null,
       };
     }
     const directExit = parseDirectSolanaExit(input.prompt, input.walletScope);
@@ -383,6 +505,7 @@ export class AiService {
         pumpTradePreview: null,
         limitOrderPreview: null,
         evmSwapProposal: null,
+        kaminoRwaProposal: null,
         automationStrategy: strategy,
       };
     }
@@ -404,13 +527,15 @@ export class AiService {
         outputTokens: 0,
         totalTokens: 0,
         costUsd: 0,
-        toolsUsed: ["robinhood_swap_quote" as const],
+        toolsUsed: ["robinhood_swap_quote"] as ReadOnlyAiToolName[],
         missionPreview: null,
         pumpTokenIntelligence: null,
         pumpDiscoverySnapshot: null,
         pumpTradePreview: null,
         limitOrderPreview: null,
         evmSwapProposal: proposal,
+        kaminoRwaProposal: null,
+        kaminoRwaWithdrawProposal: null,
       };
     }
     const apiKey =
@@ -1004,6 +1129,94 @@ function parseDirectSolanaSwap(
   };
 }
 
+export type DirectKaminoRwaSupply = {
+  marketNameQuery?: "obligate" | "paxg";
+  displayAmount: string;
+  amountAtomic: string;
+};
+
+export function parseDirectKaminoRwaSupply(
+  prompt: string,
+  walletScope: SessionWalletScope | undefined,
+): DirectKaminoRwaSupply | null {
+  if (walletScope !== "solana") return null;
+
+  const hasKaminoOrRwa = /\b(?:kamino(?:\s+rwa)?|rwa|real[- ]world[- ]assets?|obligate|paxg)\b/iu.test(prompt);
+  if (!hasKaminoOrRwa) return null;
+
+  const hasAction = /\b(?:supply|deposit|lend|invest|setor|tabung|masukkan|isi|taruh|pinjamkan)\b/iu.test(prompt);
+  if (!hasAction) return null;
+
+  let marketNameQuery: "obligate" | "paxg" | undefined = undefined;
+  if (/\b(?:obligate|otfy|bond|corporate)\b/iu.test(prompt)) {
+    marketNameQuery = "obligate";
+  } else if (/\b(?:paxg|gold|emas)\b/iu.test(prompt)) {
+    marketNameQuery = "paxg";
+  }
+
+  let displayAmount = "10.00";
+  const explicitAmount = /\b(?:supply|deposit|lend|invest|setor|tabung|masukkan|isi|taruh|pinjamkan)\s+(?:\$)?([0-9]+(?:[.,][0-9]+)?)\s*(?:usdc|\$|usd|dollar)?\b/iu.exec(prompt)
+    || /(?:\$)?([0-9]+(?:[.,][0-9]+)?)\s*(?:usdc|\$|usd|dollar)\s+(?:to|ke|on|di|into)\b/iu.exec(prompt)
+    || /(?:\$)?([0-9]+(?:[.,][0-9]+)?)\s*(?:usdc|\$|usd|dollar)?/iu.exec(prompt);
+
+  if (explicitAmount && explicitAmount[1]) {
+    displayAmount = explicitAmount[1].replace(",", ".");
+  }
+
+  const amountAtomic = decimalToRawAmount(displayAmount, KAMINO_RWA_USDC_DECIMALS);
+  if (!amountAtomic) return null;
+
+  return {
+    marketNameQuery,
+    displayAmount,
+    amountAtomic,
+  };
+}
+
+export type DirectKaminoRwaWithdraw = {
+  marketNameQuery?: "obligate" | "paxg";
+  displayAmount: string;
+  amountAtomic: string;
+};
+
+export function parseDirectKaminoRwaWithdraw(
+  prompt: string,
+  walletScope: SessionWalletScope | undefined,
+): DirectKaminoRwaWithdraw | null {
+  if (walletScope !== "solana") return null;
+
+  const hasAction = /\b(?:withdraw|redeem|tarik|ambil|cairkan|tutup\s+posisi)\b/iu.test(prompt);
+  if (!hasAction) return null;
+
+  const hasKaminoOrRwa = /\b(?:kamino(?:\s+rwa)?|rwa|real[- ]world[- ]assets?|obligate|paxg)\b/iu.test(prompt);
+  if (!hasKaminoOrRwa) return null;
+
+  let marketNameQuery: "obligate" | "paxg" | undefined = undefined;
+  if (/\b(?:obligate|otfy|bond|corporate)\b/iu.test(prompt)) {
+    marketNameQuery = "obligate";
+  } else if (/\b(?:paxg|gold|emas)\b/iu.test(prompt)) {
+    marketNameQuery = "paxg";
+  }
+
+  let displayAmount = "10.00";
+  const explicitAmount = /\b(?:withdraw|redeem|tarik|ambil|cairkan)\s+(?:\$)?([0-9]+(?:[.,][0-9]+)?)\s*(?:usdc|\$|usd|dollar)?\b/iu.exec(prompt)
+    || /(?:\$)?([0-9]+(?:[.,][0-9]+)?)\s*(?:usdc|\$|usd|dollar)\s+(?:from|dari)\b/iu.exec(prompt)
+    || /(?:\$)?([0-9]+(?:[.,][0-9]+)?)\s*(?:usdc|\$|usd|dollar)?/iu.exec(prompt);
+
+  if (explicitAmount && explicitAmount[1]) {
+    displayAmount = explicitAmount[1].replace(",", ".");
+  }
+
+  const amountAtomic = decimalToRawAmount(displayAmount, KAMINO_RWA_USDC_DECIMALS);
+  if (!amountAtomic) return null;
+
+  return {
+    marketNameQuery,
+    displayAmount,
+    amountAtomic,
+  };
+}
+
 function normalizeAutomationArguments(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null) throw new Error("Automation parameters are required");
   const source = value as Record<string, unknown>;
@@ -1115,7 +1328,28 @@ function parseFullAccessAssetConfirmation(prompt: string): string | null {
   return /^\s*AUTHORIZE\s+FULL\s+ACCESS\s+ASSET\s+([0-9a-f-]{36})\s*$/iu.exec(prompt)?.[1] ?? null;
 }
 
-function localChatResult(text: string, toolsUsed: ReadOnlyAiTool["name"][], evmAssetAuthorizationReview?: { id: string; address: string; symbol: string; decimals: number; verifiedAt: string; expiresAt: string }) {
+function localChatResult(
+  text: string,
+  toolsUsed: ReadOnlyAiToolName[] = [],
+  evmAssetAuthorizationReview?: { id: string; address: string; symbol: string; decimals: number; verifiedAt: string; expiresAt: string },
+): {
+  model: string;
+  text: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number | null;
+  toolsUsed: ReadOnlyAiToolName[];
+  missionPreview: MissionContractPreview | null;
+  pumpTokenIntelligence: PumpTokenIntelligence | null;
+  pumpDiscoverySnapshot: PumpDiscoverySnapshot | null;
+  pumpTradePreview: PumpTradeContractPreview | null;
+  limitOrderPreview: LimitOrderContractPreview | null;
+  evmSwapProposal: EvmSwapProposal | null;
+  kaminoRwaProposal: KaminoRwaSupplyProposal | null;
+  kaminoRwaWithdrawProposal: KaminoRwaWithdrawProposal | null;
+  evmAssetAuthorizationReview?: { id: string; address: string; symbol: string; decimals: number; verifiedAt: string; expiresAt: string };
+} {
   return {
     model: "local-policy",
     text,
@@ -1130,6 +1364,8 @@ function localChatResult(text: string, toolsUsed: ReadOnlyAiTool["name"][], evmA
     pumpTradePreview: null,
     limitOrderPreview: null,
     evmSwapProposal: null,
+    kaminoRwaProposal: null,
+    kaminoRwaWithdrawProposal: null,
     ...(evmAssetAuthorizationReview ? { evmAssetAuthorizationReview } : {}),
   };
 }

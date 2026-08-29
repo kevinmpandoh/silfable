@@ -1147,6 +1147,8 @@ function MainWorkspace({
             }
           : {}),
         ...(response.perpProposal ? { perpProposal: response.perpProposal } : {}),
+        ...(response.kaminoRwaProposal ? { kaminoRwaProposal: response.kaminoRwaProposal } : {}),
+        ...(response.kaminoRwaWithdrawProposal ? { kaminoRwaWithdrawProposal: response.kaminoRwaWithdrawProposal } : {}),
         ...(response.x402Resources ? { x402Resources: response.x402Resources, x402Input: response.x402Input, x402Receipts: [] } : {}),
       };
       setAnimatedMessageIds((current) => [...current, assistant.id]);
