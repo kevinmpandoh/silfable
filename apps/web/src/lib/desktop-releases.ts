@@ -1,4 +1,4 @@
-const RELEASE_BASE_URL = "https://github.com/kevinmpandoh/silfable/releases";
+const RELEASE_BASE_URL = "https://github.com/mirae-trade/mirae-desktop-releases/releases";
 
 function releaseAsset(tag: string, filename: string): string {
   return `${RELEASE_BASE_URL}/download/${tag}/${filename}`;
