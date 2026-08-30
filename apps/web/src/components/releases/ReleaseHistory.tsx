@@ -1,4 +1,4 @@
-import { ArrowDownToLine } from "lucide-react";
+import { ArrowDown, ExternalLink } from "lucide-react";
 
 import { CurrentReveal } from "@/components/motion/CurrentMotion";
 import { Badge } from "@/components/ui/badge";
@@ -144,16 +144,14 @@ export function ReleaseHistory() {
                   <ChangeList title="Fixed" items={release.fixed} />
                 </div>
                 <div className="mt-9 border-t border-black/10 pt-7 flex flex-wrap gap-4">
-                  {release.windowsHref ? <Button asChild className="solarPrimaryButton">
-                    <a href={release.windowsHref} download>
-                      Download Windows (v{release.version})<ArrowDownToLine className="ml-3 size-3.5" />
+                  <Button asChild className="solarPrimaryButton">
+                    <a href={release.releaseHref} target="_blank" rel="noopener noreferrer">
+                      View v{release.version} on GitHub <ExternalLink className="ml-3 size-3.5" />
                     </a>
-                  </Button> : <Button asChild className="solarPrimaryButton">
-                    <a href={release.releaseHref}>View v{release.version} artifacts<ArrowDownToLine className="ml-3 size-3.5" /></a>
-                  </Button>}
+                  </Button>
                   <Button asChild variant="outline">
                     <a href="#downloads">
-                      All Downloads & Linux<ArrowDownToLine className="ml-3 size-3.5" />
+                      All Current Downloads <ArrowDown className="ml-3 size-3.5" />
                     </a>
                   </Button>
                 </div>
