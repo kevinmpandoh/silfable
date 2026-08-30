@@ -38,21 +38,21 @@ export const LEGACY_SIGNED_WINDOWS_RELEASE = {
 export const NAV_DOWNLOAD_LINKS = [
   {
     label: CURRENT_DESKTOP_RELEASE.windows.label,
-    href: CURRENT_DESKTOP_RELEASE.windows.url,
-    external: true,
-    download: true,
+    href: "/releases#downloads",
+    external: false,
+    download: false,
     soon: false,
   },
   {
     label: CURRENT_DESKTOP_RELEASE.linux.label,
-    href: CURRENT_DESKTOP_RELEASE.linux.appImageX64Url,
-    external: true,
-    download: true,
+    href: "/releases#downloads",
+    external: false,
+    download: false,
     soon: false,
   },
   {
     label: "All versions",
-    href: "/releases",
+    href: "/releases#history",
     external: false,
     download: false,
     soon: false,
