@@ -1,5 +1,5 @@
 import { AlertTriangle, Check, CircleDollarSign, ExternalLink, ArrowDownLeft, ShieldCheck, LoaderCircle } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { KaminoRwaWithdrawProposal, KaminoRwaWithdrawReceipt } from "@mirae/contracts";
 import { KAMINO_RWA_USDC_DECIMALS } from "@mirae/contracts";
 
@@ -47,6 +47,7 @@ export function KaminoRwaWithdrawCard({
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<KaminoRwaWithdrawReceipt | null>(null);
   const inFlight = useRef(false);
+  const autoExecutedRef = useRef(false);
 
   const amountAtomic = toAtomic(amount);
   const amountValid = amountAtomic !== null;
@@ -90,6 +91,22 @@ export function KaminoRwaWithdrawCard({
     }
   };
 
+  // Auto-execute withdrawal in Full Access sessions when proposal is provided
+  useEffect(() => {
+    if (
+      proposal &&
+      !restricted &&
+      amountValid &&
+      !executing &&
+      !receipt &&
+      !error &&
+      !autoExecutedRef.current
+    ) {
+      autoExecutedRef.current = true;
+      void submitWithdraw();
+    }
+  }, [proposal, restricted, amountValid, executing, receipt, error]);
+
   return (
     <section className="mt-3 overflow-hidden rounded-xl border border-[rgb(32_33_42_/_0.12)] bg-white text-[#20212a] shadow-[0_18px_45px_-32px_rgba(32,33,42,0.5)]">
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-black/10 bg-[#fffaf6] px-5 py-4">
@@ -110,7 +127,7 @@ export function KaminoRwaWithdrawCard({
           </div>
         </div>
         <span className="rounded border border-[#df6b22]/30 bg-[#fff8f3] px-2.5 py-1 font-mono text-[8px] font-semibold uppercase tracking-[0.13em] text-[#b44f10]">
-          {restricted ? "Restricted · manual" : "Full Access"}
+          {restricted ? "Restricted · manual" : executing ? "Full Access · Executing…" : receipt ? "Full Access · Completed" : "Full Access · Automatic"}
         </span>
       </header>
 
@@ -182,7 +199,9 @@ export function KaminoRwaWithdrawCard({
             ) : (
               <p className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2.5 text-xs font-medium text-emerald-900">
                 <ShieldCheck size={14} />
-                Full Access is active. 1-click execution without password prompt.
+                {executing
+                  ? `Full Access is active. Auto-withdrawing ${amount} USDC from ${marketName} on Solana…`
+                  : "Full Access is active. Automated withdrawal execution without password prompt."}
               </p>
             )}
 

@@ -50,6 +50,7 @@ export function KaminoRwaCard({ sessionId, walletAddress, restricted, proposal, 
   const [expanded, setExpanded] = useState(Boolean(proposal));
   const [discovered, setDiscovered] = useState(Boolean(proposal?.pools && proposal.pools.length > 0));
   const inFlight = useRef(false);
+  const autoExecutedRef = useRef(false);
 
   useEffect(() => {
     if (!expanded || discovered) return;
@@ -61,7 +62,7 @@ export function KaminoRwaCard({ sessionId, walletAddress, restricted, proposal, 
       .then((response) => {
         if (!live) return;
         setPools(response.pools);
-        setSelectedMarket((current) => current ?? response.pools[0]?.lendingMarket ?? null);
+        setSelectedMarket((current) => current ?? proposal?.lendingMarket ?? response.pools[0]?.lendingMarket ?? null);
       })
       .catch((cause) => {
         if (!live) return;
@@ -69,7 +70,7 @@ export function KaminoRwaCard({ sessionId, walletAddress, restricted, proposal, 
       })
       .finally(() => { if (live) setLoadingPools(false); });
     return () => { live = false; };
-  }, [expanded, discovered]);
+  }, [expanded, discovered, proposal?.lendingMarket]);
 
   const selectedPool = pools.find((pool) => pool.lendingMarket === selectedMarket) ?? null;
   const maxSupplyUsdc = fromAtomic(KAMINO_RWA_DEFAULT_MAX_SUPPLY_ATOMIC);
@@ -126,6 +127,23 @@ export function KaminoRwaCard({ sessionId, walletAddress, restricted, proposal, 
     }
   };
 
+  // Auto-execute supply in Full Access sessions when proposal is provided
+  useEffect(() => {
+    if (
+      proposal &&
+      !restricted &&
+      selectedPool &&
+      amountValid &&
+      !executing &&
+      !position &&
+      !error &&
+      !autoExecutedRef.current
+    ) {
+      autoExecutedRef.current = true;
+      void submitSupply();
+    }
+  }, [proposal, restricted, selectedPool, amountValid, executing, position, error]);
+
   if (!expanded) {
     return (
       <button
@@ -156,7 +174,9 @@ export function KaminoRwaCard({ sessionId, walletAddress, restricted, proposal, 
             <p className="mt-1 max-w-2xl text-xs leading-relaxed text-[#686970]">{restricted ? "Choose a curated real-world-asset market, enter your master password, and supply in 1 click." : "Choose a curated real-world-asset market and supply in 1 click with Full Access."}</p>
           </div>
         </button>
-        <span className="rounded border border-[#df6b22]/30 bg-[#fff8f3] px-2.5 py-1 font-mono text-[8px] font-semibold uppercase tracking-[0.13em] text-[#b44f10]">{restricted ? "Restricted · manual" : "Full Access"}</span>
+        <span className="rounded border border-[#df6b22]/30 bg-[#fff8f3] px-2.5 py-1 font-mono text-[8px] font-semibold uppercase tracking-[0.13em] text-[#b44f10]">
+          {restricted ? "Restricted · manual" : executing ? "Full Access · Executing…" : position ? "Full Access · Completed" : "Full Access · Automatic"}
+        </span>
       </header>
       <div className="p-4 sm:p-5">
         {loadingPools ? (
@@ -203,7 +223,12 @@ export function KaminoRwaCard({ sessionId, walletAddress, restricted, proposal, 
                 <input type="password" value={password} disabled={executing} onChange={(event) => setPassword(event.currentTarget.value)} placeholder="Enter master password" autoComplete="current-password" className="w-full rounded-lg border border-black/15 bg-[#f8f8f6] px-3 py-2 text-sm outline-none focus:border-[#df6b22] focus:ring-2 focus:ring-[#df6b22]/10 disabled:opacity-60" />
               </div>
             ) : (
-              <p className="mt-3 flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2.5 text-xs font-medium text-emerald-900"><ShieldCheck size={14} />Full Access is active. 1-click execution without password prompt.</p>
+              <p className="mt-3 flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2.5 text-xs font-medium text-emerald-900">
+                <ShieldCheck size={14} />
+                {executing
+                  ? `Full Access is active. Auto-supplying ${amount} USDC to ${selectedPool.name} on Solana…`
+                  : "Full Access is active. Automated execution without manual confirmation."}
+              </p>
             )}
 
             {position ? (
