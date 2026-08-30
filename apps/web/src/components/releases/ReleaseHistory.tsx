@@ -118,7 +118,7 @@ export function ReleaseHistory() {
           <h2 className="mt-5 font-display text-5xl tracking-[-0.05em] sm:text-7xl">Version history</h2>
         </div>
         <p className="max-w-md text-sm leading-7 text-black/50 lg:justify-self-end">
-          v{CURRENT_DESKTOP_RELEASE.version} is the current Perps desktop release for Linux and Windows. The Windows v{CURRENT_DESKTOP_RELEASE.version} portable build is unsigned; signed v0.1.0 remains available as a legacy option.
+          v{CURRENT_DESKTOP_RELEASE.version} is the current Perps desktop release for Linux and Windows. Windows v0.1.0 remains available as an earlier build option.
         </p>
       </CurrentReveal>
 

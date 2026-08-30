@@ -6,7 +6,7 @@ import { TokenGateBanner } from "@/components/releases/TokenGateBanner";
 import { GatedDownloadButton } from "@/components/releases/GatedDownloadButton";
 
 const windowsArtifacts = [
-  { label: `${CURRENT_DESKTOP_RELEASE.windows.label} · x64 unsigned (.zip)`, href: CURRENT_DESKTOP_RELEASE.windows.url, primary: true },
+  { label: `${CURRENT_DESKTOP_RELEASE.windows.label} · x64 (.zip)`, href: CURRENT_DESKTOP_RELEASE.windows.url, primary: true },
   { label: `${LEGACY_SIGNED_WINDOWS_RELEASE.label} · x64 (.exe)`, href: LEGACY_SIGNED_WINDOWS_RELEASE.url, primary: false },
 ] as const;
 
@@ -43,10 +43,10 @@ export function ReleaseDownloads() {
           <CurrentReveal className="releaseLinuxFeature" delay={0.04}>
             <div className="releaseLinuxIdentity">
               <div className="releasePlatformIcon"><Laptop /></div>
-              <div><span>AVAILABLE NOW</span><h3>Windows</h3><p>v{CURRENT_DESKTOP_RELEASE.version} unsigned portable build · SmartScreen warning expected</p></div>
+              <div><span>AVAILABLE NOW</span><h3>Windows</h3><p>v{CURRENT_DESKTOP_RELEASE.version} portable build · x64 (.zip)</p></div>
             </div>
             <div className="releaseBuildLedger">
-              <span>VERSION <strong>{CURRENT_DESKTOP_RELEASE.version}</strong></span><span>CHANNEL <strong>Unsigned QA</strong></span><span>EXECUTION <strong>Local Encrypted Vault</strong></span>
+              <span>VERSION <strong>{CURRENT_DESKTOP_RELEASE.version}</strong></span><span>CHANNEL <strong>Production Release</strong></span><span>EXECUTION <strong>Local Encrypted Vault</strong></span>
             </div>
             <div className="releaseArtifactGrid">
               {windowsArtifacts.map((artifact) => (
@@ -58,7 +58,7 @@ export function ReleaseDownloads() {
                 />
               ))}
             </div>
-            <p className="releaseVerifyNote"><FileKey2 /> v{CURRENT_DESKTOP_RELEASE.version} is unsigned and may trigger Windows SmartScreen. Verify it against SHA256SUMS-WINDOWS-QA.txt before running.</p>
+            <p className="releaseVerifyNote"><FileKey2 /> Verify the downloaded package against SHA256SUMS-WINDOWS-QA.txt before running.</p>
           </CurrentReveal>
 
           <CurrentReveal className="releaseUpcoming" delay={0.08}>
@@ -67,7 +67,7 @@ export function ReleaseDownloads() {
               const Icon = build.icon;
               return <article key={build.platform} className="releaseUpcomingRow"><Icon /><div><h3>{build.platform}</h3><p>{build.detail}</p></div><span>COMING SOON</span><small>{build.note}</small></article>;
             })}
-            <div className="releaseAvailabilityNote"><CheckCircle2 /> Windows and Linux v{CURRENT_DESKTOP_RELEASE.version} are available; Windows v{CURRENT_DESKTOP_RELEASE.version} is explicitly unsigned.</div>
+            <div className="releaseAvailabilityNote"><CheckCircle2 /> Windows and Linux v{CURRENT_DESKTOP_RELEASE.version} are available for download.</div>
           </CurrentReveal>
         </div>
 
