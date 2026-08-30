@@ -10,7 +10,7 @@ export const CURRENT_DESKTOP_RELEASE = {
   releaseUrl: `${RELEASE_BASE_URL}/tag/v0.4.1`,
   windows: {
     label: "Windows v0.4.1",
-    detail: "x64 unsigned portable build",
+    detail: "x64 portable build",
     filename: "Mirae-0.4.1-windows-x64-unsigned-qa.zip",
     url: releaseAsset(
       "v0.4.1",
@@ -31,7 +31,7 @@ export const CURRENT_DESKTOP_RELEASE = {
 
 export const LEGACY_SIGNED_WINDOWS_RELEASE = {
   version: "0.1.0",
-  label: "Windows v0.1.0 signed",
+  label: "Windows v0.1.0",
   url: releaseAsset("v0.1.0", "Mirae-0.1.0-windows-x64-setup.exe"),
 } as const;
 

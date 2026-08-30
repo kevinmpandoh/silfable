@@ -21,7 +21,7 @@ export function ReleaseHero() {
           </div>
           <div className="releaseConsoleSummary border-l border-white/15 pl-7 lg:mb-2">
             <p className="text-lg leading-8 text-white/60">
-              Mirae {CURRENT_DESKTOP_RELEASE.version} brings Real-World Asset (RWA) institutional lending, refined desktop UX, and native Solana execution. Mirae {LEGACY_SIGNED_WINDOWS_RELEASE.version} remains available as the legacy signed Windows release.
+              Mirae {CURRENT_DESKTOP_RELEASE.version} brings Real-World Asset (RWA) institutional lending, refined desktop UX, and native Solana execution. Mirae {LEGACY_SIGNED_WINDOWS_RELEASE.version} remains available as an earlier Windows release option.
             </p>
             <div className="mt-7 flex flex-wrap gap-x-6 gap-y-3 font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">
               <span className="flex items-center gap-2"><CheckCircle2 className="size-3.5 text-[var(--sc-ice)]" /> Windows portable (.zip)</span>

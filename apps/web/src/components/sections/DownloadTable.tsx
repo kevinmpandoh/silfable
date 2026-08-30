@@ -20,8 +20,8 @@ export function DownloadTable() {
     {
       platform: "Windows",
       detail: CURRENT_DESKTOP_RELEASE.windows.detail,
-      requirement: "Windows 10 / 11 64-bit. Unsigned build; SmartScreen warning expected.",
-      primaryLabel: "Portable · x64 unsigned (.zip)",
+      requirement: "Windows 10 / 11 64-bit.",
+      primaryLabel: "Portable · x64 (.zip)",
       href: CURRENT_DESKTOP_RELEASE.windows.url,
     },
     {
@@ -36,7 +36,7 @@ export function DownloadTable() {
     {
       platform: "macOS",
       detail: "Apple Silicon & Intel",
-      requirement: "Signed package in preparation.",
+      requirement: "macOS package in preparation.",
       primaryLabel: "Coming soon",
     },
   ];

@@ -1,7 +1,7 @@
 import { CurrentReveal } from "@/components/motion/CurrentMotion";
 
 const channels = [
-  { name: "Stable", cadence: "Recommended", description: "Signed releases promoted after compatibility and recovery testing." },
+  { name: "Stable", cadence: "Recommended", description: "Official production releases promoted after compatibility and recovery testing." },
   { name: "Preview", cadence: "Opt-in", description: "Early access to new adapters and policy features. Receipt formats may evolve." },
   { name: "Nightly", cadence: "Developers", description: "Automated builds for integration testing. Never recommended for funded missions." },
 ];
