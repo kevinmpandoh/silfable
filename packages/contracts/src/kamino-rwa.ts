@@ -10,6 +10,7 @@ export const KAMINO_RWA_HIGH_UTILIZATION_WARNING = 0.85 as const;
 
 const SolanaAddressSchema = z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/u);
 const AtomicAmountSchema = z.string().regex(/^\d+$/u).refine((value) => BigInt(value) > 0n, "Amount must be positive");
+const NonNegativeAtomicAmountSchema = z.string().regex(/^\d+$/u);
 
 export type KaminoRwaMarketCatalogEntry = {
   lendingMarket: string;
@@ -96,7 +97,7 @@ export const KaminoRwaSupplyPlanSchema = z.object({
 }).strict();
 export type KaminoRwaSupplyPlan = z.infer<typeof KaminoRwaSupplyPlanSchema>;
 
-export const KaminoRwaPositionStatusSchema = z.enum(["SUBMITTED", "CONFIRMED", "UNKNOWN", "FAILED"]);
+export const KaminoRwaPositionStatusSchema = z.enum(["SUBMITTED", "CONFIRMED", "WITHDRAWN", "CLOSED", "UNKNOWN", "FAILED"]);
 export type KaminoRwaPositionStatus = z.infer<typeof KaminoRwaPositionStatusSchema>;
 
 export const KaminoRwaPositionSchema = z.object({
@@ -107,7 +108,7 @@ export const KaminoRwaPositionSchema = z.object({
   lendingMarket: SolanaAddressSchema,
   marketName: z.string().min(1).max(160),
   usdcReserve: SolanaAddressSchema,
-  amountSuppliedAtomic: AtomicAmountSchema,
+  amountSuppliedAtomic: NonNegativeAtomicAmountSchema,
   supplyApyAtEntry: z.number().nonnegative(),
   signature: z.string().min(64).max(128).nullable(),
   status: KaminoRwaPositionStatusSchema,

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Coins, TrendingUp, ArrowDownLeft, ArrowUpRight, ExternalLink, RefreshCw, Check, AlertTriangle, CircleDollarSign, LoaderCircle } from "lucide-react";
+import { TrendingUp, ArrowDownLeft, ArrowUpRight, ExternalLink, RefreshCw, Check, AlertTriangle, ShieldCheck, Loader2 } from "lucide-react";
 import { Modal, Button, Badge } from "../ui";
 import type { KaminoRwaPosition, KaminoRwaPool, KaminoRwaWithdrawReceipt } from "@mirae/contracts";
 import { KAMINO_RWA_DEFAULT_MAX_SUPPLY_ATOMIC, KAMINO_RWA_USDC_DECIMALS, KAMINO_RWA_MARKET_CATALOG } from "@mirae/contracts";
@@ -86,16 +86,20 @@ export function KaminoRwaWorkspaceModal({
         window.mirae.discoverKaminoRwa({ schemaVersion: 1, requestId: crypto.randomUUID() }),
       ]);
       if (posRes.status === "fulfilled") {
-        const walletPositions = posRes.value.positions.filter(
-          (p) => p.walletAddress.toLowerCase() === walletAddress.toLowerCase() && p.status === "CONFIRMED",
+        // Filter strictly active confirmed positions with non-zero balance
+        const activeWalletPositions = posRes.value.positions.filter(
+          (p) =>
+            p.walletAddress.toLowerCase() === walletAddress.toLowerCase() &&
+            p.status === "CONFIRMED" &&
+            BigInt(p.amountSuppliedAtomic) > 0n,
         );
-        setPositions(walletPositions);
+        setPositions(activeWalletPositions);
       }
       if (poolRes.status === "fulfilled") {
         setLivePools(poolRes.value.pools);
       }
     } catch {
-      // Ignore background error
+      // Ignore background load error
     } finally {
       setLoadingPositions(false);
     }
@@ -134,7 +138,7 @@ export function KaminoRwaWorkspaceModal({
   const supplyAmountAtomic = toAtomic(supplyAmount);
   const supplyAmountValid = supplyAmountAtomic !== null && BigInt(supplyAmountAtomic) <= MAX_SUPPLY_ATOMIC;
 
-  // 1-Click Supply Handler (seamless prepare + execute)
+  // 1-Click Supply Handler
   const handleSupply = async () => {
     if (supplyInFlight.current || !supplyAmountValid || (restricted && !supplyPassword)) return;
     supplyInFlight.current = true;
@@ -142,7 +146,6 @@ export function KaminoRwaWorkspaceModal({
     setSupplyExecuting(true);
     setLastSuppliedPosition(null);
     try {
-      // 1. Prepare Plan (simulate on RPC)
       const prepRes = await window.mirae.prepareKaminoRwa({
         schemaVersion: 1,
         requestId: crypto.randomUUID(),
@@ -153,7 +156,6 @@ export function KaminoRwaWorkspaceModal({
         maxSupplyAtomic: KAMINO_RWA_DEFAULT_MAX_SUPPLY_ATOMIC,
       });
 
-      // 2. Immediately execute on-chain
       const execRes = await window.mirae.executeKaminoRwa({
         schemaVersion: 1,
         requestId: crypto.randomUUID(),
@@ -183,7 +185,7 @@ export function KaminoRwaWorkspaceModal({
   const withdrawAmountAtomic = toAtomic(withdrawAmount);
   const withdrawAmountValid = withdrawAmountAtomic !== null;
 
-  // 1-Click Withdraw Handler (seamless prepare + execute)
+  // 1-Click Withdraw Handler
   const handleWithdraw = async () => {
     if (withdrawInFlight.current || !withdrawAmountValid || (restricted && !withdrawPassword)) return;
     withdrawInFlight.current = true;
@@ -191,7 +193,6 @@ export function KaminoRwaWorkspaceModal({
     setWithdrawExecuting(true);
     setLastWithdrawReceipt(null);
     try {
-      // 1. Prepare Plan (simulate on RPC)
       const prepRes = await window.mirae.prepareKaminoRwaWithdraw({
         schemaVersion: 1,
         requestId: crypto.randomUUID(),
@@ -201,7 +202,6 @@ export function KaminoRwaWorkspaceModal({
         amountAtomic: withdrawAmountAtomic!,
       });
 
-      // 2. Immediately execute on-chain
       const execRes = await window.mirae.executeKaminoRwaWithdraw({
         schemaVersion: 1,
         requestId: crypto.randomUUID(),
@@ -235,26 +235,29 @@ export function KaminoRwaWorkspaceModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Real-World Asset (RWA) Lending"
+      title="Real-World Asset Lending"
       subtitle="Supply USDC to institutional corporate credit and gold pools on Solana."
       maxWidth="780px"
       className="kaminoRwaModal"
     >
       <div className="flex flex-col gap-4 text-[#20212a]">
-        {/* Navigation Tabs Bar */}
-        <div className="flex items-center justify-between border-b border-[rgb(32_33_42_/_0.12)] pb-3">
-          <div className="flex items-center gap-1 bg-[#f3f4f6] p-1 rounded-xl">
+        {/* Navigation Tabs & Metrics Header */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/10 pb-3.5">
+          <div className="flex items-center gap-1 rounded-xl bg-[#f4f2ef] p-1">
             <button
               type="button"
-              onClick={() => setActiveTab("supply")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              onClick={() => {
+                setActiveTab("supply");
+                setLastSuppliedPosition(null);
+              }}
+              className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
                 activeTab === "supply"
-                  ? "bg-[#FFF3EB] text-[#DF6B22] border border-[#DF6B22]/30 shadow-xs"
-                  : "text-[#686970] hover:text-[#20212a] hover:bg-white/50"
+                  ? "bg-white text-[#df6b22] shadow-xs"
+                  : "text-[#686970] hover:text-[#20212a]"
               }`}
             >
               <ArrowUpRight className="size-3.5" />
-              <span>Supply USDC</span>
+              <span>Supply</span>
             </button>
             <button
               type="button"
@@ -262,10 +265,10 @@ export function KaminoRwaWorkspaceModal({
                 setActiveTab("positions");
                 void loadData();
               }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
                 activeTab === "positions"
-                  ? "bg-[#FFF3EB] text-[#DF6B22] border border-[#DF6B22]/30 shadow-xs"
-                  : "text-[#686970] hover:text-[#20212a] hover:bg-white/50"
+                  ? "bg-white text-[#df6b22] shadow-xs"
+                  : "text-[#686970] hover:text-[#20212a]"
               }`}
             >
               <TrendingUp className="size-3.5" />
@@ -273,26 +276,29 @@ export function KaminoRwaWorkspaceModal({
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab("withdraw")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              onClick={() => {
+                setActiveTab("withdraw");
+                setLastWithdrawReceipt(null);
+              }}
+              className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
                 activeTab === "withdraw"
-                  ? "bg-[#FFF3EB] text-[#DF6B22] border border-[#DF6B22]/30 shadow-xs"
-                  : "text-[#686970] hover:text-[#20212a] hover:bg-white/50"
+                  ? "bg-white text-[#df6b22] shadow-xs"
+                  : "text-[#686970] hover:text-[#20212a]"
               }`}
             >
               <ArrowDownLeft className="size-3.5" />
-              <span>Withdraw USDC</span>
+              <span>Withdraw</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-3 text-xs">
+          <div className="flex items-center gap-4 text-xs font-mono">
             <div className="text-right">
-              <span className="text-[#686970] block text-[9px] font-mono uppercase tracking-wider">TOTAL SUPPLIED</span>
-              <strong className="text-[#20212a] font-mono text-xs">{totalSuppliedUsdc.toFixed(4)} USDC</strong>
+              <span className="block text-[8px] uppercase tracking-wider text-[#686970]">Active Supplied</span>
+              <strong className="text-xs font-bold text-[#20212a]">{totalSuppliedUsdc.toFixed(2)} USDC</strong>
             </div>
             <div className="text-right">
-              <span className="text-[#686970] block text-[9px] font-mono uppercase tracking-wider">EST. YIELD</span>
-              <strong className="text-emerald-600 font-mono text-xs">+{formatUsd(totalAccruedYieldUsd)}</strong>
+              <span className="block text-[8px] uppercase tracking-wider text-[#686970]">Est. Accrued Yield</span>
+              <strong className="text-xs font-bold text-emerald-700">+{formatUsd(totalAccruedYieldUsd)}</strong>
             </div>
           </div>
         </div>
@@ -302,7 +308,7 @@ export function KaminoRwaWorkspaceModal({
           <div className="flex flex-col gap-4 py-1">
             <div>
               <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-wider text-[#686970]">
-                1. Select Curated RWA Market
+                Select Curated RWA Market
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {KAMINO_RWA_MARKET_CATALOG.map((market) => {
@@ -321,15 +327,15 @@ export function KaminoRwaWorkspaceModal({
                       }}
                       className={`flex items-start gap-3 rounded-xl border p-3.5 text-left transition cursor-pointer ${
                         isSelected
-                          ? "border-[#DF6B22] bg-[#FFF9F5] shadow-[inset_3px_0_0_#DF6B22]"
-                          : "border-[rgb(32_33_42_/_0.12)] bg-white hover:border-[#DF6B22]/40 hover:bg-[#FAF9F7]"
+                          ? "border-[#df6b22] bg-[#fffaf6] shadow-[inset_3px_0_0_#df6b22]"
+                          : "border-black/10 bg-white hover:border-[#df6b22]/40 hover:bg-[#fffdfa]"
                       }`}
                     >
                       <span
                         className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border ${
                           isSelected
-                            ? "border-[#DF6B22] bg-[#DF6B22] text-white"
-                            : "border-black/15 bg-[#F4F2EF] text-transparent"
+                            ? "border-[#df6b22] bg-[#df6b22] text-white"
+                            : "border-black/15 bg-[#f4f2ef] text-transparent"
                         }`}
                       >
                         <Check size={12} strokeWidth={3} />
@@ -337,7 +343,7 @@ export function KaminoRwaWorkspaceModal({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between">
                           <strong className="text-sm font-semibold text-[#20212a]">{market.name}</strong>
-                          <span className="inline-flex items-center gap-1 text-xs font-mono font-semibold text-emerald-700">
+                          <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-emerald-700">
                             <TrendingUp size={11} />
                             {(apy * 100).toFixed(2)}% APY
                           </span>
@@ -356,24 +362,24 @@ export function KaminoRwaWorkspaceModal({
               <div className="rounded-xl border border-emerald-300 bg-emerald-50/70 p-4">
                 <div className="flex items-center gap-2 font-mono text-xs font-bold text-emerald-800 uppercase tracking-wider">
                   <Check size={14} strokeWidth={3} />
-                  <span>Position Confirmed on Solana Mainnet</span>
+                  <span>Position Confirmed on Solana</span>
                 </div>
-                <p className="mt-1 text-xs leading-relaxed text-emerald-900">
-                  Successfully supplied {fromAtomic(lastSuppliedPosition.amountSuppliedAtomic)} USDC to{" "}
+                <p className="mt-1.5 text-xs leading-relaxed text-emerald-950">
+                  Successfully supplied <strong>{fromAtomic(lastSuppliedPosition.amountSuppliedAtomic)} USDC</strong> to{" "}
                   {lastSuppliedPosition.marketName}.
                 </p>
                 {lastSuppliedPosition.signature && (
                   <a
-                    className="mt-2 inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-emerald-800 underline hover:text-emerald-900"
+                    className="mt-2.5 inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-emerald-800 underline hover:text-emerald-900"
                     href={`https://solscan.io/tx/${lastSuppliedPosition.signature}`}
                     target="_blank"
                     rel="noreferrer"
                   >
                     <span>View on Solscan</span>
-                    <ExternalLink size={11} />
+                    <ExternalLink size={10} />
                   </a>
                 )}
-                <div className="mt-3 flex gap-2">
+                <div className="mt-3.5 flex gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -395,16 +401,16 @@ export function KaminoRwaWorkspaceModal({
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3.5">
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label
-                      className="block font-mono text-[9px] font-semibold uppercase tracking-wider text-[#686970]"
+                      className="block font-mono text-[8px] font-semibold uppercase tracking-wider text-[#686970]"
                       htmlFor="kamino-supply-modal-amount"
                     >
-                      2. Amount to Supply · USDC
+                      Amount to Supply · USDC
                     </label>
-                    <span className="font-mono text-[9px] text-[#686970]">
+                    <span className="font-mono text-[8px] uppercase tracking-wider text-[#686970]">
                       Session limit: {fromAtomic(KAMINO_RWA_DEFAULT_MAX_SUPPLY_ATOMIC)} USDC
                     </span>
                   </div>
@@ -421,9 +427,9 @@ export function KaminoRwaWorkspaceModal({
                           setSupplyError(null);
                         }}
                         placeholder="10.00"
-                        className="w-full rounded-lg border border-[rgb(32_33_42_/_0.15)] bg-[#F8F8F6] px-3 py-2 text-sm outline-none focus:border-[#DF6B22] focus:ring-2 focus:ring-[#DF6B22]/10 disabled:opacity-60"
+                        className="w-full rounded-lg border border-black/15 bg-[#f8f8f6] px-3.5 py-2 text-sm outline-none focus:border-[#df6b22] focus:ring-2 focus:ring-[#df6b22]/10 disabled:opacity-60"
                       />
-                      <span className="absolute right-3 top-2.5 text-xs font-semibold text-[#686970] pointer-events-none">
+                      <span className="absolute right-3.5 top-2.5 font-mono text-xs font-semibold text-[#686970] pointer-events-none">
                         USDC
                       </span>
                     </div>
@@ -437,7 +443,7 @@ export function KaminoRwaWorkspaceModal({
                             setSupplyAmount(preset);
                             setSupplyError(null);
                           }}
-                          className="px-2.5 py-2 text-xs font-mono font-semibold rounded-lg border border-[rgb(32_33_42_/_0.12)] bg-white text-[#686970] hover:border-[#DF6B22] hover:text-[#DF6B22] transition cursor-pointer disabled:opacity-50"
+                          className="px-2.5 py-2 text-xs font-mono font-semibold rounded-lg border border-black/10 bg-white text-[#686970] hover:border-[#df6b22] hover:text-[#df6b22] transition cursor-pointer disabled:opacity-50"
                         >
                           {preset}
                         </button>
@@ -454,10 +460,10 @@ export function KaminoRwaWorkspaceModal({
                 {restricted ? (
                   <div>
                     <label
-                      className="mb-1 block font-mono text-[9px] font-semibold uppercase tracking-wider text-[#686970]"
+                      className="mb-1 block font-mono text-[8px] font-semibold uppercase tracking-wider text-[#686970]"
                       htmlFor="kamino-supply-modal-pwd"
                     >
-                      3. Master Password · Required to Confirm
+                      Master Password · Required to Confirm
                     </label>
                     <input
                       id="kamino-supply-modal-pwd"
@@ -467,12 +473,12 @@ export function KaminoRwaWorkspaceModal({
                       onChange={(e) => setSupplyPassword(e.target.value)}
                       placeholder="Enter master password"
                       autoComplete="current-password"
-                      className="w-full rounded-lg border border-[rgb(32_33_42_/_0.15)] bg-[#F8F8F6] px-3 py-2 text-sm outline-none focus:border-[#DF6B22] focus:ring-2 focus:ring-[#DF6B22]/10 disabled:opacity-60"
+                      className="w-full rounded-lg border border-black/15 bg-[#f8f8f6] px-3.5 py-2 text-sm outline-none focus:border-[#df6b22] focus:ring-2 focus:ring-[#df6b22]/10 disabled:opacity-60"
                     />
                   </div>
                 ) : (
-                  <p className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium py-1">
-                    <Check size={13} strokeWidth={3} />
+                  <p className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900">
+                    <ShieldCheck size={14} />
                     <span>Full Access active · 1-click instant execution</span>
                   </p>
                 )}
@@ -484,10 +490,10 @@ export function KaminoRwaWorkspaceModal({
                   </div>
                 )}
 
-                <div className="flex items-center justify-between border-t border-[rgb(32_33_42_/_0.1)] pt-3 mt-1">
-                  <div className="flex items-center gap-2">
-                    <CircleDollarSign className="text-[#DF6B22] size-4" />
-                    <span className="text-xs font-semibold text-[#20212a]">{selectedSupplyPool.name}</span>
+                <div className="flex items-center justify-between border-t border-black/10 pt-3.5 mt-1">
+                  <div>
+                    <span className="block font-mono text-[8px] uppercase tracking-wider text-[#686970]">Selected Market</span>
+                    <strong className="text-xs font-semibold text-[#20212a]">{selectedSupplyPool.name}</strong>
                   </div>
                   <Button
                     variant="primary"
@@ -497,8 +503,8 @@ export function KaminoRwaWorkspaceModal({
                   >
                     {supplyExecuting ? (
                       <>
-                        <LoaderCircle className="size-3.5 animate-spin mr-1.5" />
-                        <span>Processing on Solana...</span>
+                        <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                        <span>Processing on Solana…</span>
                       </>
                     ) : (
                       `Supply ${supplyAmount || "0"} USDC`
@@ -514,13 +520,13 @@ export function KaminoRwaWorkspaceModal({
         {activeTab === "positions" && (
           <div className="flex flex-col gap-3 py-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#686970] uppercase tracking-wider font-mono text-[9px]">
-                Your Confirmed Solana Kamino Positions
+              <span className="font-mono text-[9px] font-semibold uppercase tracking-wider text-[#686970]">
+                Your Active Solana Kamino Positions
               </span>
               <button
                 type="button"
                 onClick={() => void loadData()}
-                className="inline-flex items-center gap-1 text-xs text-[#686970] hover:text-[#20212a] cursor-pointer"
+                className="inline-flex items-center gap-1 font-mono text-xs text-[#686970] hover:text-[#20212a] cursor-pointer"
                 disabled={loadingPositions}
               >
                 <RefreshCw className={`size-3 ${loadingPositions ? "animate-spin" : ""}`} />
@@ -529,11 +535,10 @@ export function KaminoRwaWorkspaceModal({
             </div>
 
             {positions.length === 0 ? (
-              <div className="flex flex-col items-center justify-center p-8 rounded-xl border border-dashed border-[rgb(32_33_42_/_0.15)] text-center bg-[#FAF9F7]">
-                <Coins className="size-8 text-[#686970] mb-2 opacity-50" />
-                <h5 className="text-sm font-semibold text-[#20212a]">No active RWA positions yet</h5>
+              <div className="flex flex-col items-center justify-center p-8 rounded-xl border border-dashed border-black/15 text-center bg-[#faf9f7]">
+                <h5 className="text-sm font-semibold text-[#20212a]">No active RWA positions</h5>
                 <p className="text-xs text-[#686970] mt-1 max-w-sm">
-                  Supply USDC to Obligate Market or PAXG Market to start earning real-world on-chain yield.
+                  Supply USDC to institutional Obligate or PAXG gold pools to start earning real-world on-chain yield.
                 </p>
                 <Button
                   variant="primary"
@@ -541,7 +546,7 @@ export function KaminoRwaWorkspaceModal({
                   className="mt-4 text-xs font-semibold"
                   onClick={() => setActiveTab("supply")}
                 >
-                  Supply USDC Now
+                  Supply USDC
                 </Button>
               </div>
             ) : (
@@ -554,36 +559,34 @@ export function KaminoRwaWorkspaceModal({
                 return (
                   <div
                     key={pos.id}
-                    className="flex flex-col gap-2.5 p-4 rounded-xl border border-[rgb(32_33_42_/_0.12)] bg-white hover:border-[#DF6B22]/30 transition shadow-2xs"
+                    className="flex flex-col gap-3 p-4 rounded-xl border border-black/10 bg-white hover:border-[#df6b22]/40 transition shadow-2xs"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm text-[#20212a]">{pos.marketName}</span>
-                        <Badge variant="success" className="text-[9px] py-0.5">
+                        <strong className="text-sm font-semibold text-[#20212a]">{pos.marketName}</strong>
+                        <Badge variant="success" className="text-[8px] py-0.5 font-mono">
                           ACTIVE
                         </Badge>
                       </div>
-                      <div className="text-right">
-                        <span className="text-xs font-bold text-emerald-600 font-mono">
-                          {(apyUsed * 100).toFixed(2)}% APY
-                        </span>
-                      </div>
+                      <span className="font-mono text-xs font-bold text-emerald-700">
+                        {(apyUsed * 100).toFixed(2)}% APY
+                      </span>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs py-2 border-t border-b border-[rgb(32_33_42_/_0.08)] bg-[#FAF9F7] rounded-lg px-3 my-0.5">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 py-2.5 border-t border-b border-black/5 bg-[#faf9f7] rounded-lg px-3.5">
                       <div>
-                        <span className="text-[#686970] text-[9px] font-mono uppercase block">Supplied Amount</span>
+                        <span className="block font-mono text-[8px] uppercase tracking-wider text-[#686970]">Active Supplied</span>
                         <strong className="font-mono text-xs text-[#20212a]">{amount} USDC</strong>
                       </div>
                       <div>
-                        <span className="text-[#686970] text-[9px] font-mono uppercase block">Est. Accrued Yield</span>
-                        <strong className="font-mono text-xs text-emerald-600">
+                        <span className="block font-mono text-[8px] uppercase tracking-wider text-[#686970]">Est. Accrued Yield</span>
+                        <strong className="font-mono text-xs text-emerald-700">
                           +{formatUsd(accruedYield)}
                         </strong>
                       </div>
                       <div className="col-span-2 sm:col-span-1">
-                        <span className="text-[#686970] text-[9px] font-mono uppercase block">Deposited At</span>
-                        <span className="text-[#686970] font-mono text-xs">
+                        <span className="block font-mono text-[8px] uppercase tracking-wider text-[#686970]">Created</span>
+                        <span className="font-mono text-xs text-[#686970]">
                           {new Date(pos.createdAt).toLocaleDateString()}
                         </span>
                       </div>
@@ -595,9 +598,9 @@ export function KaminoRwaWorkspaceModal({
                           href={`https://solscan.io/tx/${pos.signature}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-[#686970] hover:text-[#20212a] hover:underline"
+                          className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-[#686970] hover:text-[#20212a] hover:underline"
                         >
-                          <span>View on Solscan</span>
+                          <span>Solscan tx</span>
                           <ExternalLink className="size-3" />
                         </a>
                       ) : (
@@ -610,7 +613,7 @@ export function KaminoRwaWorkspaceModal({
                         onClick={() => handleStartWithdrawForPosition(pos)}
                       >
                         <ArrowDownLeft className="size-3 mr-1" />
-                        Withdraw
+                        <span>Withdraw</span>
                       </Button>
                     </div>
                   </div>
@@ -625,7 +628,7 @@ export function KaminoRwaWorkspaceModal({
           <div className="flex flex-col gap-4 py-1">
             <div>
               <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-wider text-[#686970]">
-                1. Select Market or Position to Withdraw
+                Select Market to Withdraw
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {KAMINO_RWA_MARKET_CATALOG.map((market) => {
@@ -646,15 +649,15 @@ export function KaminoRwaWorkspaceModal({
                       }}
                       className={`flex items-start gap-3 rounded-xl border p-3.5 text-left transition cursor-pointer ${
                         isSelected
-                          ? "border-[#DF6B22] bg-[#FFF9F5] shadow-[inset_3px_0_0_#DF6B22]"
-                          : "border-[rgb(32_33_42_/_0.12)] bg-white hover:border-[#DF6B22]/40 hover:bg-[#FAF9F7]"
+                          ? "border-[#df6b22] bg-[#fffaf6] shadow-[inset_3px_0_0_#df6b22]"
+                          : "border-black/10 bg-white hover:border-[#df6b22]/40 hover:bg-[#fffdfa]"
                       }`}
                     >
                       <span
                         className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border ${
                           isSelected
-                            ? "border-[#DF6B22] bg-[#DF6B22] text-white"
-                            : "border-black/15 bg-[#F4F2EF] text-transparent"
+                            ? "border-[#df6b22] bg-[#df6b22] text-white"
+                            : "border-black/15 bg-[#f4f2ef] text-transparent"
                         }`}
                       >
                         <Check size={12} strokeWidth={3} />
@@ -663,11 +666,11 @@ export function KaminoRwaWorkspaceModal({
                         <div className="flex items-center justify-between">
                           <strong className="text-sm font-semibold text-[#20212a]">{market.name}</strong>
                           {matchingPos ? (
-                            <Badge variant="success" className="text-[9px]">
+                            <Badge variant="success" className="text-[8px] font-mono">
                               {fromAtomic(matchingPos.amountSuppliedAtomic)} USDC
                             </Badge>
                           ) : (
-                            <span className="text-[10px] text-[#686970] font-mono">0.00 USDC</span>
+                            <span className="font-mono text-[10px] text-[#686970]">0.00 USDC</span>
                           )}
                         </div>
                         <p className="mt-1 text-xs leading-relaxed text-[#686970] line-clamp-1">
@@ -684,24 +687,24 @@ export function KaminoRwaWorkspaceModal({
               <div className="rounded-xl border border-emerald-300 bg-emerald-50/70 p-4">
                 <div className="flex items-center gap-2 font-mono text-xs font-bold text-emerald-800 uppercase tracking-wider">
                   <Check size={14} strokeWidth={3} />
-                  <span>Withdrawal Confirmed on Solana Mainnet</span>
+                  <span>Withdrawal Confirmed on Solana</span>
                 </div>
-                <p className="mt-1 text-xs leading-relaxed text-emerald-900">
-                  Successfully withdrew {fromAtomic(lastWithdrawReceipt.amountWithdrawnAtomic)} USDC from{" "}
+                <p className="mt-1.5 text-xs leading-relaxed text-emerald-950">
+                  Successfully withdrew <strong>{fromAtomic(lastWithdrawReceipt.amountWithdrawnAtomic)} USDC</strong> from{" "}
                   {withdrawMarketName}.
                 </p>
                 {lastWithdrawReceipt.signature && (
                   <a
-                    className="mt-2 inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-emerald-800 underline hover:text-emerald-900"
+                    className="mt-2.5 inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-emerald-800 underline hover:text-emerald-900"
                     href={`https://solscan.io/tx/${lastWithdrawReceipt.signature}`}
                     target="_blank"
                     rel="noreferrer"
                   >
                     <span>View on Solscan</span>
-                    <ExternalLink size={11} />
+                    <ExternalLink size={10} />
                   </a>
                 )}
-                <div className="mt-3 flex gap-2">
+                <div className="mt-3.5 flex gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -710,7 +713,7 @@ export function KaminoRwaWorkspaceModal({
                       setLastWithdrawReceipt(null);
                     }}
                   >
-                    Withdraw More
+                    Withdraw Again
                   </Button>
                   <Button
                     variant="primary"
@@ -723,17 +726,17 @@ export function KaminoRwaWorkspaceModal({
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3.5">
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label
-                      className="block font-mono text-[9px] font-semibold uppercase tracking-wider text-[#686970]"
+                      className="block font-mono text-[8px] font-semibold uppercase tracking-wider text-[#686970]"
                       htmlFor="kamino-withdraw-modal-amount"
                     >
-                      2. Amount to Withdraw · USDC
+                      Amount to Withdraw · USDC
                     </label>
                     {selectedWithdrawPosition && (
-                      <span className="font-mono text-[9px] text-[#686970]">
+                      <span className="font-mono text-[8px] uppercase tracking-wider text-[#686970]">
                         Available: {fromAtomic(selectedWithdrawPosition.amountSuppliedAtomic)} USDC
                       </span>
                     )}
@@ -751,9 +754,9 @@ export function KaminoRwaWorkspaceModal({
                           setWithdrawError(null);
                         }}
                         placeholder="10.00"
-                        className="w-full rounded-lg border border-[rgb(32_33_42_/_0.15)] bg-[#F8F8F6] px-3 py-2 text-sm outline-none focus:border-[#DF6B22] focus:ring-2 focus:ring-[#DF6B22]/10 disabled:opacity-60"
+                        className="w-full rounded-lg border border-black/15 bg-[#f8f8f6] px-3.5 py-2 text-sm outline-none focus:border-[#df6b22] focus:ring-2 focus:ring-[#df6b22]/10 disabled:opacity-60"
                       />
-                      <span className="absolute right-3 top-2.5 text-xs font-semibold text-[#686970] pointer-events-none">
+                      <span className="absolute right-3.5 top-2.5 font-mono text-xs font-semibold text-[#686970] pointer-events-none">
                         USDC
                       </span>
                     </div>
@@ -765,7 +768,7 @@ export function KaminoRwaWorkspaceModal({
                           setWithdrawAmount(fromAtomic(selectedWithdrawPosition.amountSuppliedAtomic));
                           setWithdrawError(null);
                         }}
-                        className="px-3 py-2 text-xs font-mono font-semibold rounded-lg border border-[#DF6B22]/30 bg-[#FFF3EB] text-[#DF6B22] hover:bg-[#FFE8D6] transition cursor-pointer disabled:opacity-50"
+                        className="px-3 py-2 text-xs font-mono font-semibold rounded-lg border border-[#df6b22]/30 bg-[#fff3e9] text-[#df6b22] hover:bg-[#ffe8d6] transition cursor-pointer disabled:opacity-50"
                       >
                         MAX
                       </button>
@@ -779,10 +782,10 @@ export function KaminoRwaWorkspaceModal({
                 {restricted ? (
                   <div>
                     <label
-                      className="mb-1 block font-mono text-[9px] font-semibold uppercase tracking-wider text-[#686970]"
+                      className="mb-1 block font-mono text-[8px] font-semibold uppercase tracking-wider text-[#686970]"
                       htmlFor="kamino-withdraw-modal-pwd"
                     >
-                      3. Master Password · Required to Confirm
+                      Master Password · Required to Confirm
                     </label>
                     <input
                       id="kamino-withdraw-modal-pwd"
@@ -792,12 +795,12 @@ export function KaminoRwaWorkspaceModal({
                       onChange={(e) => setWithdrawPassword(e.target.value)}
                       placeholder="Enter master password"
                       autoComplete="current-password"
-                      className="w-full rounded-lg border border-[rgb(32_33_42_/_0.15)] bg-[#F8F8F6] px-3 py-2 text-sm outline-none focus:border-[#DF6B22] focus:ring-2 focus:ring-[#DF6B22]/10 disabled:opacity-60"
+                      className="w-full rounded-lg border border-black/15 bg-[#f8f8f6] px-3.5 py-2 text-sm outline-none focus:border-[#df6b22] focus:ring-2 focus:ring-[#df6b22]/10 disabled:opacity-60"
                     />
                   </div>
                 ) : (
-                  <p className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium py-1">
-                    <Check size={13} strokeWidth={3} />
+                  <p className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900">
+                    <ShieldCheck size={14} />
                     <span>Full Access active · 1-click instant execution</span>
                   </p>
                 )}
@@ -809,10 +812,10 @@ export function KaminoRwaWorkspaceModal({
                   </div>
                 )}
 
-                <div className="flex items-center justify-between border-t border-[rgb(32_33_42_/_0.1)] pt-3 mt-1">
-                  <div className="flex items-center gap-2">
-                    <CircleDollarSign className="text-[#DF6B22] size-4" />
-                    <span className="text-xs font-semibold text-[#20212a]">{withdrawMarketName}</span>
+                <div className="flex items-center justify-between border-t border-black/10 pt-3.5 mt-1">
+                  <div>
+                    <span className="block font-mono text-[8px] uppercase tracking-wider text-[#686970]">Selected Market</span>
+                    <strong className="text-xs font-semibold text-[#20212a]">{withdrawMarketName}</strong>
                   </div>
                   <Button
                     variant="primary"
@@ -822,8 +825,8 @@ export function KaminoRwaWorkspaceModal({
                   >
                     {withdrawExecuting ? (
                       <>
-                        <LoaderCircle className="size-3.5 animate-spin mr-1.5" />
-                        <span>Processing on Solana...</span>
+                        <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                        <span>Processing on Solana…</span>
                       </>
                     ) : (
                       `Withdraw ${withdrawAmount || "0"} USDC`

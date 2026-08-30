@@ -121,6 +121,45 @@ test("save then listPositions round-trips a position through AES-256-GCM encrypt
   assert.deepEqual(positions, [position]);
 });
 
+test("applyWithdrawToPositions marks fully withdrawn positions as WITHDRAWN", async () => {
+  const stored: Array<{ id: string; ciphertext: string; nonce: string; tag: string; updatedAt: string }> = [];
+  const database = {
+    listKaminoRwaPositionRecords: () => stored,
+    upsertKaminoRwaPositionRecord: (record: any) => {
+      const idx = stored.findIndex((r) => r.id === record.id);
+      if (idx >= 0) stored[idx] = record;
+      else stored.push(record);
+    },
+  } as any;
+  let storedKey: string | null = null;
+  const secrets = {
+    getSecret: async () => storedKey,
+    setSecret: async (_name: string, value: string) => { storedKey = value; },
+  } as any;
+  const service = new KaminoRwaDesktopService(database, secrets, {} as any);
+  const position = {
+    id: "55555555-5555-4555-8555-555555555555", planId: "66666666-6666-4666-8666-666666666666",
+    sessionId: "s1", walletAddress: "4uQeVj5tqViQh7yWWGStvkEG1Zmhx6uasJtWCJziofM",
+    lendingMarket: "3hd61ZpG35tBwrmDvdmYVJoazC2mjJxHb6rEYEWs4QhH", marketName: "Obligate Market",
+    usdcReserve: "Au2Cg9CNNTX1KfzVhNnpi1ouHX74CwMMBvmSchmqS5ZW", amountSuppliedAtomic: "10000000",
+    supplyApyAtEntry: 0.052, signature: "5" + "x".repeat(63), status: "CONFIRMED" as const, errorMessage: null,
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  };
+  await (service as any).save(position);
+
+  // Apply full withdrawal
+  await (service as any).applyWithdrawToPositions({
+    walletAddress: position.walletAddress,
+    lendingMarket: position.lendingMarket,
+    withdrawnAtomic: 10000000n,
+  });
+
+  const updatedPositions = await service.listPositions();
+  assert.equal(updatedPositions.length, 1);
+  assert.equal(updatedPositions[0].status, "WITHDRAWN");
+  assert.equal(updatedPositions[0].amountSuppliedAtomic, "0");
+});
+
 test("manual: observe real instructions for an Obligate Market USDC deposit", { skip: process.env.KAMINO_RWA_LIVE_CHECK !== "1" }, async () => {
   const rpcUrl = process.env.MIRAE_TEST_SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com";
   // klend-sdk nests its own @solana/kit@2.x with a slightly different (but runtime-compatible)

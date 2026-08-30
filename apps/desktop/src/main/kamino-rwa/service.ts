@@ -283,10 +283,49 @@ export class KaminoRwaDesktopService {
       await connection.confirmTransaction({ signature, blockhash: plan.blockhash, lastValidBlockHeight: Number(plan.lastValidBlockHeight) }, "confirmed");
       receipt = KaminoRwaWithdrawReceiptSchema.parse({ ...receipt, signature, status: "CONFIRMED" });
       this.#preparedWithdraw.delete(input.planId);
+      await this.applyWithdrawToPositions({
+        walletAddress: plan.walletAddress,
+        lendingMarket: plan.lendingMarket,
+        withdrawnAtomic: BigInt(plan.amountAtomic),
+      });
       return receipt;
     } catch (error) {
       receipt = KaminoRwaWithdrawReceiptSchema.parse({ ...receipt, status: "UNKNOWN", errorMessage: error instanceof Error ? error.message.slice(0, 500) : "Unknown broadcast outcome" });
       throw error;
+    }
+  }
+
+  private async applyWithdrawToPositions(input: { walletAddress: string; lendingMarket: string; withdrawnAtomic: bigint }): Promise<void> {
+    const allPositions = await this.listPositions();
+    const matchingPositions = allPositions
+      .filter((p) => p.walletAddress.toLowerCase() === input.walletAddress.toLowerCase() && p.lendingMarket === input.lendingMarket && p.status === "CONFIRMED" && BigInt(p.amountSuppliedAtomic) > 0n)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    let remainingToDeduct = input.withdrawnAtomic;
+    const now = new Date().toISOString();
+
+    for (const pos of matchingPositions) {
+      if (remainingToDeduct <= 0n) break;
+      const currentBalance = BigInt(pos.amountSuppliedAtomic);
+      if (currentBalance <= remainingToDeduct) {
+        remainingToDeduct -= currentBalance;
+        const updated = KaminoRwaPositionSchema.parse({
+          ...pos,
+          amountSuppliedAtomic: "0",
+          status: "WITHDRAWN",
+          updatedAt: now,
+        });
+        await this.save(updated);
+      } else {
+        const newBalance = currentBalance - remainingToDeduct;
+        remainingToDeduct = 0n;
+        const updated = KaminoRwaPositionSchema.parse({
+          ...pos,
+          amountSuppliedAtomic: newBalance.toString(),
+          updatedAt: now,
+        });
+        await this.save(updated);
+      }
     }
   }
 

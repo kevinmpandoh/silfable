@@ -270,7 +270,7 @@ export function UnifiedPortfolioRail({
     window.mirae.listKaminoRwaPositions()
       .then((response) => {
         if (!active) return;
-        setKaminoPositions(response.positions.filter((position) => solanaAddresses.has(position.walletAddress) && position.status === "CONFIRMED"));
+        setKaminoPositions(response.positions.filter((position) => solanaAddresses.has(position.walletAddress) && position.status === "CONFIRMED" && BigInt(position.amountSuppliedAtomic) > 0n));
       })
       .catch((err) => {
         if (!active) return;
