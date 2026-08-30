@@ -1,4 +1,4 @@
-import { ArrowDownToLine, CheckCircle2 } from "lucide-react";
+import { ArrowDown, CheckCircle2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ export function ReleaseHero() {
           </div>
           <div className="releaseConsoleSummary border-l border-white/15 pl-7 lg:mb-2">
             <p className="text-lg leading-8 text-white/60">
-              Mirae {CURRENT_DESKTOP_RELEASE.version} adds native Solana x402 market-data payments to the guarded Perpetuals workflow on web and desktop. Mirae {LEGACY_SIGNED_WINDOWS_RELEASE.version} remains available as the legacy signed Windows release.
+              Mirae {CURRENT_DESKTOP_RELEASE.version} brings Real-World Asset (RWA) institutional lending, refined desktop UX, and native Solana execution. Mirae {LEGACY_SIGNED_WINDOWS_RELEASE.version} remains available as the legacy signed Windows release.
             </p>
             <div className="mt-7 flex flex-wrap gap-x-6 gap-y-3 font-mono text-[9px] uppercase tracking-[0.16em] text-white/35">
               <span className="flex items-center gap-2"><CheckCircle2 className="size-3.5 text-[var(--sc-ice)]" /> Windows portable (.zip)</span>
@@ -31,13 +31,13 @@ export function ReleaseHero() {
             </div>
             <div className="mt-7 flex flex-wrap items-center gap-4">
               <Button asChild size="lg" className="solarPrimaryButton w-full sm:w-auto">
-                <a href="#downloads">
-                  View v{CURRENT_DESKTOP_RELEASE.version} Downloads <ArrowDownToLine className="ml-3 size-4" />
+                <a href="#windows">
+                  View v{CURRENT_DESKTOP_RELEASE.version} Downloads <ArrowDown className="ml-3 size-4" />
                 </a>
               </Button>
               <Button asChild variant="outline" size="lg" className="outlineButton w-full sm:w-auto">
-                <a href="#downloads">
-                  Linux & All Downloads <ArrowDownToLine className="ml-3 size-4" />
+                <a href="#linux">
+                  Linux & All Downloads <ArrowDown className="ml-3 size-4" />
                 </a>
               </Button>
             </div>
