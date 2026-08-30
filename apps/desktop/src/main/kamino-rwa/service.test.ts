@@ -156,8 +156,8 @@ test("applyWithdrawToPositions marks fully withdrawn positions as WITHDRAWN", as
 
   const updatedPositions = await service.listPositions();
   assert.equal(updatedPositions.length, 1);
-  assert.equal(updatedPositions[0].status, "WITHDRAWN");
-  assert.equal(updatedPositions[0].amountSuppliedAtomic, "0");
+  assert.equal(updatedPositions[0]!.status, "WITHDRAWN");
+  assert.equal(updatedPositions[0]!.amountSuppliedAtomic, "0");
 });
 
 test("manual: observe real instructions for an Obligate Market USDC deposit", { skip: process.env.KAMINO_RWA_LIVE_CHECK !== "1" }, async () => {

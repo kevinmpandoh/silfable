@@ -84,6 +84,8 @@ export function Conversation({
   onOpenDriftPerps,
   onExecuteX402,
   onAnalyzeX402,
+  onExecuteKaminoSupply,
+  onExecuteKaminoWithdraw,
 }: {
   session: SessionItem;
   draft: string;
@@ -92,6 +94,8 @@ export function Conversation({
   onOpenDriftPerps?: () => void;
   onExecuteX402: (messageId: string, resource: import("@mirae/contracts").X402Resource, masterPassword?: string) => Promise<import("@mirae/contracts").X402Receipt>;
   onAnalyzeX402: (messageId: string, receiptIds: string[]) => Promise<void>;
+  onExecuteKaminoSupply?: (messageId: string, position: import("@mirae/contracts").KaminoRwaPosition) => void;
+  onExecuteKaminoWithdraw?: (messageId: string, receipt: import("@mirae/contracts").KaminoRwaWithdrawReceipt) => void;
   onCreatePumpLaunchDraft: (input: PumpLaunchDraftInput) => Promise<void>;
   onPreflightPumpLaunch: (draft: PumpLaunchDraft) => Promise<void>;
   onFinalRevalidatePumpLaunch: (draft: PumpLaunchDraft, preflight: PumpLaunchPreflight) => Promise<void>;
@@ -365,7 +369,7 @@ export function Conversation({
                   restricted={session.permission === "restricted"}
                   proposal={(message as any).kaminoRwaProposal}
                   onExecuted={(position) => {
-                    console.info("Kamino RWA position executed", position.id, position.status);
+                    onExecuteKaminoSupply?.(message.id, position);
                   }}
                 />
               )}
@@ -376,7 +380,7 @@ export function Conversation({
                   restricted={session.permission === "restricted"}
                   proposal={(message as any).kaminoRwaWithdrawProposal}
                   onExecuted={(receipt) => {
-                    console.info("Kamino RWA withdraw executed", receipt.id, receipt.status);
+                    onExecuteKaminoWithdraw?.(message.id, receipt);
                   }}
                 />
               )}

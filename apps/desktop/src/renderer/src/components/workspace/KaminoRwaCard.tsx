@@ -6,6 +6,8 @@ import { KAMINO_RWA_DEFAULT_MAX_SUPPLY_ATOMIC, KAMINO_RWA_USDC_DECIMALS } from "
 const MAX_SUPPLY_ATOMIC = BigInt(KAMINO_RWA_DEFAULT_MAX_SUPPLY_ATOMIC);
 const USDC_BASE = 10n ** BigInt(KAMINO_RWA_USDC_DECIMALS);
 
+const executedSupplyProposalIds = new Set<string>();
+
 function toAtomic(amount: string): string | null {
   if (!/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/u.test(amount)) return null;
   const [whole = "0", fraction = ""] = amount.split(".");
@@ -52,11 +54,19 @@ export function KaminoRwaCard({
   const [password, setPassword] = useState("");
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [position, setPosition] = useState<KaminoRwaPosition | null>(null);
+  const [position, setPosition] = useState<KaminoRwaPosition | null>(proposal?.position ?? null);
   const [expanded, setExpanded] = useState(Boolean(proposal));
   const [discovered, setDiscovered] = useState(Boolean(proposal?.pools && proposal.pools.length > 0));
   const inFlight = useRef(false);
-  const autoExecutedRef = useRef(false);
+
+  const isAlreadyExecuted = Boolean(
+    proposal?.status === "executed" ||
+    proposal?.status === "confirmed" ||
+    proposal?.position ||
+    (proposal?.id && executedSupplyProposalIds.has(proposal.id)) ||
+    position
+  );
+  const autoExecutedRef = useRef(isAlreadyExecuted);
 
   useEffect(() => {
     if (!expanded || discovered) return;
@@ -92,13 +102,14 @@ export function KaminoRwaCard({
 
   const submitSupply = async () => {
     if (inFlight.current || !selectedPool || !amountValid || (restricted && !password)) return;
+    if (proposal?.id && executedSupplyProposalIds.has(proposal.id)) return;
     const atomic = toAtomic(amount);
     if (atomic === null) { setError("Enter a valid USDC amount."); return; }
     if (BigInt(atomic) > MAX_SUPPLY_ATOMIC) { setError(`Amount exceeds the ${maxSupplyUsdc} USDC session limit.`); return; }
+    if (proposal?.id) executedSupplyProposalIds.add(proposal.id);
     inFlight.current = true;
     setError(null);
     setExecuting(true);
-    setPosition(null);
     try {
       const prepRes = await window.mirae.prepareKaminoRwa({
         schemaVersion: 1,
@@ -124,6 +135,7 @@ export function KaminoRwaCard({
       setPassword("");
       onExecuted(execRes.position);
     } catch (cause) {
+      if (proposal?.id) executedSupplyProposalIds.delete(proposal.id);
       setError(friendlyExecuteError(cause));
     } finally {
       setExecuting(false);
@@ -134,6 +146,10 @@ export function KaminoRwaCard({
   useEffect(() => {
     if (
       proposal &&
+      proposal.status !== "executed" &&
+      proposal.status !== "confirmed" &&
+      !proposal.position &&
+      (!proposal.id || !executedSupplyProposalIds.has(proposal.id)) &&
       !restricted &&
       selectedPool &&
       amountValid &&

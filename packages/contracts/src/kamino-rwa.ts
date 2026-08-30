@@ -73,8 +73,9 @@ export const KaminoRwaSupplyProposalSchema = z.object({
   totalSupplyUsd: z.number().nonnegative(),
   utilization: z.number().min(0).max(1),
   highUtilizationWarning: z.boolean(),
-  status: z.literal("ready-for-review"),
+  status: z.enum(["ready-for-review", "executed", "confirmed"]),
   pools: z.array(KaminoRwaPoolSchema).max(20).optional(),
+  position: z.lazy(() => KaminoRwaPositionSchema).optional(),
   createdAt: z.string().datetime(),
 }).strict();
 export type KaminoRwaSupplyProposal = z.infer<typeof KaminoRwaSupplyProposalSchema>;
@@ -178,7 +179,8 @@ export const KaminoRwaWithdrawProposalSchema = z.object({
   usdcReserve: SolanaAddressSchema.optional(),
   amountAtomic: AtomicAmountSchema,
   displayAmount: z.string().min(1).max(32),
-  status: z.literal("ready-for-review"),
+  status: z.enum(["ready-for-review", "executed", "confirmed"]),
+  receipt: z.lazy(() => KaminoRwaWithdrawReceiptSchema).optional(),
   createdAt: z.string().datetime(),
 }).strict();
 export type KaminoRwaWithdrawProposal = z.infer<typeof KaminoRwaWithdrawProposalSchema>;

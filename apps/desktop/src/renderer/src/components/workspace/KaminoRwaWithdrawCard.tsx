@@ -5,6 +5,8 @@ import { KAMINO_RWA_USDC_DECIMALS } from "@mirae/contracts";
 
 const USDC_BASE = 10n ** BigInt(KAMINO_RWA_USDC_DECIMALS);
 
+const executedWithdrawProposalIds = new Set<string>();
+
 function toAtomic(amount: string): string | null {
   if (!/^(?:0|[1-9]\d*)(?:\.\d{1,6})?$/u.test(amount)) return null;
   const [whole = "0", fraction = ""] = amount.split(".");
@@ -45,21 +47,29 @@ export function KaminoRwaWithdrawCard({
   const [password, setPassword] = useState("");
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [receipt, setReceipt] = useState<KaminoRwaWithdrawReceipt | null>(null);
+  const [receipt, setReceipt] = useState<KaminoRwaWithdrawReceipt | null>(proposal?.receipt ?? null);
   const inFlight = useRef(false);
-  const autoExecutedRef = useRef(false);
+
+  const isAlreadyExecuted = Boolean(
+    proposal?.status === "executed" ||
+    proposal?.status === "confirmed" ||
+    proposal?.receipt ||
+    (proposal?.id && executedWithdrawProposalIds.has(proposal.id)) ||
+    receipt
+  );
+  const autoExecutedRef = useRef(isAlreadyExecuted);
 
   const amountAtomic = toAtomic(amount);
   const amountValid = amountAtomic !== null;
 
   const submitWithdraw = async () => {
     if (inFlight.current || !amountValid || (restricted && !password)) return;
+    if (proposal?.id && executedWithdrawProposalIds.has(proposal.id)) return;
+    if (proposal?.id) executedWithdrawProposalIds.add(proposal.id);
     inFlight.current = true;
     setError(null);
     setExecuting(true);
-    setReceipt(null);
     try {
-      // 1. Prepare Plan (RPC simulation)
       const prepRes = await window.mirae.prepareKaminoRwaWithdraw({
         schemaVersion: 1,
         requestId: crypto.randomUUID(),
@@ -69,7 +79,6 @@ export function KaminoRwaWithdrawCard({
         amountAtomic: amountAtomic!,
       });
 
-      // 2. Immediately execute on-chain
       const execRes = await window.mirae.executeKaminoRwaWithdraw({
         schemaVersion: 1,
         requestId: crypto.randomUUID(),
@@ -84,6 +93,7 @@ export function KaminoRwaWithdrawCard({
       setPassword("");
       onExecuted?.(execRes.receipt);
     } catch (cause) {
+      if (proposal?.id) executedWithdrawProposalIds.delete(proposal.id);
       setError(friendlyError(cause, "Withdraw transaction failed."));
     } finally {
       setExecuting(false);
@@ -91,10 +101,13 @@ export function KaminoRwaWithdrawCard({
     }
   };
 
-  // Auto-execute withdrawal in Full Access sessions when proposal is provided
   useEffect(() => {
     if (
       proposal &&
+      proposal.status !== "executed" &&
+      proposal.status !== "confirmed" &&
+      !proposal.receipt &&
+      (!proposal.id || !executedWithdrawProposalIds.has(proposal.id)) &&
       !restricted &&
       amountValid &&
       !executing &&
@@ -247,4 +260,3 @@ export function KaminoRwaWithdrawCard({
     </section>
   );
 }
-

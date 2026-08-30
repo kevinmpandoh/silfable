@@ -2853,6 +2853,48 @@ function MainWorkspace({
             onOpenDriftPerps={() => setShowDriftPerpsPanel(true)}
             onExecuteX402={(messageId, resource, masterPassword) => executeX402Purchase(active, messageId, resource, masterPassword)}
             onAnalyzeX402={(messageId, receiptIds) => analyzeX402Purchase(active, messageId, receiptIds)}
+            onExecuteKaminoSupply={(messageId, position) => {
+              setSessions((current) =>
+                current.map((session) => {
+                  if (session.id !== active.id) return session;
+                  const next = {
+                    ...session,
+                    messages: session.messages.map((message) => {
+                      if (message.id !== messageId) return message;
+                      return {
+                        ...message,
+                        kaminoRwaProposal: message.kaminoRwaProposal
+                          ? { ...message.kaminoRwaProposal, status: "executed" as const, position }
+                          : undefined,
+                      };
+                    }),
+                  };
+                  void persistSession(next);
+                  return next;
+                })
+              );
+            }}
+            onExecuteKaminoWithdraw={(messageId, receipt) => {
+              setSessions((current) =>
+                current.map((session) => {
+                  if (session.id !== active.id) return session;
+                  const next = {
+                    ...session,
+                    messages: session.messages.map((message) => {
+                      if (message.id !== messageId) return message;
+                      return {
+                        ...message,
+                        kaminoRwaWithdrawProposal: message.kaminoRwaWithdrawProposal
+                          ? { ...message.kaminoRwaWithdrawProposal, status: "executed" as const, receipt }
+                          : undefined,
+                      };
+                    }),
+                  };
+                  void persistSession(next);
+                  return next;
+                })
+              );
+            }}
             onPrepareEvmSwap={(messageId, proposal) =>
               void prepareEvmSwap({
                 sessionId: active.id,
