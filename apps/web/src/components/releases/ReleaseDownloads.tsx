@@ -1,8 +1,9 @@
-import { Apple, ArrowDownToLine, CheckCircle2, Clock3, FileKey2, Laptop, MonitorDown } from "lucide-react";
+import { Apple, CheckCircle2, Clock3, FileKey2, Laptop, MonitorDown } from "lucide-react";
 
 import { CurrentReveal } from "@/components/motion/CurrentMotion";
-import { Button } from "@/components/ui/button";
 import { CURRENT_DESKTOP_RELEASE, LEGACY_SIGNED_WINDOWS_RELEASE } from "@/lib/desktop-releases";
+import { TokenGateBanner } from "@/components/releases/TokenGateBanner";
+import { GatedDownloadButton } from "@/components/releases/GatedDownloadButton";
 
 const windowsArtifacts = [
   { label: `${CURRENT_DESKTOP_RELEASE.windows.label} · x64 unsigned (.zip)`, href: CURRENT_DESKTOP_RELEASE.windows.url, primary: true },
@@ -28,10 +29,15 @@ export function ReleaseDownloads() {
           <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--sc-orange)]">Release artifacts / {CURRENT_DESKTOP_RELEASE.version} + legacy {LEGACY_SIGNED_WINDOWS_RELEASE.version}</p>
           <h2 className="mt-5 text-5xl font-bold tracking-[-0.06em] sm:text-6xl">Install Mirae Desktop.</h2>
         </div>
-        <p>Choose the artifact that matches your operating system. Every transaction keeps local key storage and requires an explicit wallet review.</p>
+        <p>Choose the artifact that matches your operating system. Desktop access requires holding 100,000 $MIRAE tokens in your connected Solana wallet.</p>
       </CurrentReveal>
 
-      <div className="grid gap-6 mt-10">
+      {/* Token Gate Verification Banner */}
+      <div className="mt-10">
+        <TokenGateBanner />
+      </div>
+
+      <div className="grid gap-6 mt-4">
         {/* Windows Release Card */}
         <div className="releaseDownloadConsole">
           <CurrentReveal className="releaseLinuxFeature" delay={0.04}>
@@ -44,9 +50,12 @@ export function ReleaseDownloads() {
             </div>
             <div className="releaseArtifactGrid">
               {windowsArtifacts.map((artifact) => (
-                <Button key={artifact.label} asChild variant={artifact.primary ? undefined : "outline"} className={artifact.primary ? "solarPrimaryButton" : "outlineButton"}>
-                  <a href={artifact.href} download>{artifact.label}<ArrowDownToLine className="ml-3 size-4" /></a>
-                </Button>
+                <GatedDownloadButton
+                  key={artifact.label}
+                  href={artifact.href}
+                  label={artifact.label}
+                  primary={artifact.primary}
+                />
               ))}
             </div>
             <p className="releaseVerifyNote"><FileKey2 /> v{CURRENT_DESKTOP_RELEASE.version} is unsigned and may trigger Windows SmartScreen. Verify it against SHA256SUMS-WINDOWS-QA.txt before running.</p>
@@ -74,9 +83,12 @@ export function ReleaseDownloads() {
             </div>
             <div className="releaseArtifactGrid">
               {linuxArtifacts.map((artifact) => (
-                <Button key={artifact.label} asChild variant={artifact.primary ? undefined : "outline"} className={artifact.primary ? "solarPrimaryButton" : "outlineButton"}>
-                  <a href={artifact.href} download>{artifact.label}<ArrowDownToLine className="ml-3 size-4" /></a>
-                </Button>
+                <GatedDownloadButton
+                  key={artifact.label}
+                  href={artifact.href}
+                  label={artifact.label}
+                  primary={artifact.primary}
+                />
               ))}
             </div>
             <p className="releaseVerifyNote"><FileKey2 /> Verify the selected artifact against SHA256SUMS.txt before installation.</p>
