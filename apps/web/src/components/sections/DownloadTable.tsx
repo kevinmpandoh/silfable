@@ -1,8 +1,9 @@
-import { Apple, ArrowDownToLine, Clock3, Laptop } from "lucide-react";
+import { Apple, Clock3, Laptop } from "lucide-react";
 import { CurrentReveal } from "@/components/motion/CurrentMotion";
 import { CurrentLabel, StatusSignal } from "@/components/solar/SolarPrimitives";
 import { Button } from "@/components/ui/button";
 import { CURRENT_DESKTOP_RELEASE } from "@/lib/desktop-releases";
+import { GatedDownloadButton } from "@/components/releases/GatedDownloadButton";
 
 type PlatformRelease = {
   platform: string;
@@ -20,14 +21,14 @@ export function DownloadTable() {
     {
       platform: "Windows",
       detail: CURRENT_DESKTOP_RELEASE.windows.detail,
-      requirement: "Windows 10 / 11 64-bit. Unsigned build; SmartScreen warning expected.",
+      requirement: "Windows 10 / 11 64-bit. Hold 100,000 $MIRAE to download.",
       primaryLabel: "Portable · x64 unsigned (.zip)",
       href: CURRENT_DESKTOP_RELEASE.windows.url,
     },
     {
       platform: "Linux",
       detail: "AppImage · x64 + ARM64",
-      requirement: "Choose x64 for Intel/AMD or ARM64 for aarch64 systems.",
+      requirement: "Choose x64 or ARM64. Hold 100,000 $MIRAE to download.",
       primaryLabel: "AppImage · x64",
       href: CURRENT_DESKTOP_RELEASE.linux.appImageX64Url,
       secondaryLabel: "AppImage · ARM64",
@@ -54,7 +55,7 @@ export function DownloadTable() {
             </h2>
           </div>
           <p>
-            Desktop keeps its encrypted vault, checks, and activity records local. Each platform shows its actual distribution state.
+            Desktop keeps its encrypted vault, checks, and activity records local. Downloading desktop builds requires holding 100,000 $MIRAE tokens.
           </p>
         </CurrentReveal>
         <CurrentReveal className="downloadInstrument" delay={0.08}>
@@ -73,12 +74,11 @@ export function DownloadTable() {
                 <p className="mt-6 text-xs leading-6">{release.requirement}</p>
                 <div className="downloadActions grid gap-2">
                   {release.href ? (
-                    <Button asChild>
-                      <a href={release.href} download>
-                        {release.primaryLabel}
-                        <ArrowDownToLine className="ml-2 size-4" />
-                      </a>
-                    </Button>
+                    <GatedDownloadButton
+                      href={release.href}
+                      label={release.primaryLabel}
+                      primary
+                    />
                   ) : (
                     <Button disabled>
                       {release.primaryLabel}
@@ -86,12 +86,10 @@ export function DownloadTable() {
                     </Button>
                   )}
                   {release.secondaryHref && (
-                    <Button asChild variant="outline">
-                      <a href={release.secondaryHref} download>
-                        {release.secondaryLabel}
-                        <ArrowDownToLine className="ml-2 size-4" />
-                      </a>
-                    </Button>
+                    <GatedDownloadButton
+                      href={release.secondaryHref}
+                      label={release.secondaryLabel || ""}
+                    />
                   )}
                 </div>
               </article>
