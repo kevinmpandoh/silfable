@@ -111,7 +111,7 @@ const releases = [{
 
 export function ReleaseHistory() {
   return (
-    <section className="py-20 sm:py-28">
+    <section id="history" className="scroll-mt-24 py-20 sm:py-28">
       <CurrentReveal className="mb-14 grid gap-7 border-b border-black/20 pb-10 lg:grid-cols-[1fr_0.6fr] lg:items-end">
         <div>
           <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--sc-orange)]">Changelog timeline</p>

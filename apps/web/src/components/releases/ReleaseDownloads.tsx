@@ -33,7 +33,7 @@ export function ReleaseDownloads() {
 
       <div className="grid gap-6 mt-10">
         {/* Windows Release Card */}
-        <div className="releaseDownloadConsole">
+        <div id="windows" className="releaseDownloadConsole scroll-mt-24">
           <CurrentReveal className="releaseLinuxFeature" delay={0.04}>
             <div className="releaseLinuxIdentity">
               <div className="releasePlatformIcon"><Laptop /></div>
@@ -63,7 +63,7 @@ export function ReleaseDownloads() {
         </div>
 
         {/* Linux Release Card */}
-        <div className="releaseDownloadConsole">
+        <div id="linux" className="releaseDownloadConsole scroll-mt-24">
           <CurrentReveal className="releaseLinuxFeature" delay={0.12}>
             <div className="releaseLinuxIdentity">
               <div className="releasePlatformIcon"><MonitorDown /></div>

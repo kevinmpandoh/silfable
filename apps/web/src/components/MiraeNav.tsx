@@ -38,12 +38,30 @@ function Dropdown({
         <div className="flex min-w-[9rem] flex-col rounded-2xl border border-primary/25 bg-gradient-to-b from-background/95 to-primary/10 p-2 shadow-soft backdrop-blur-md">
           {items.map((item) => {
             const disabled = item.available === false;
+            if (external) {
+              return (
+                <a
+                  key={item.label}
+                  href={disabled ? undefined : item.href}
+                  aria-disabled={disabled || undefined}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-center font-display text-sm font-semibold text-black transition-colors hover:bg-primary/10 hover:text-primary"
+                >
+                  {item.label}
+                  {disabled && (
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-wider text-primary/70">
+                      Soon
+                    </span>
+                  )}
+                </a>
+              );
+            }
             return (
-              <a
+              <Link
                 key={item.label}
-                href={disabled ? undefined : item.href}
+                href={disabled || !item.href ? "#" : item.href}
                 aria-disabled={disabled || undefined}
-                {...(external && !disabled ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                 className="flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-center font-display text-sm font-semibold text-black transition-colors hover:bg-primary/10 hover:text-primary"
               >
                 {item.label}
@@ -52,7 +70,7 @@ function Dropdown({
                     Soon
                   </span>
                 )}
-              </a>
+              </Link>
             );
           })}
         </div>
