@@ -1,6 +1,6 @@
 {
   "name": "@mirae/desktop",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Local-first AI trading runtime with enforceable limits",
   "private": true,
   "homepage": "https://github.com/mirae-trade/mirae-desktop-releases",

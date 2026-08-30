@@ -1,6 +1,6 @@
 {
   "name": "@mirae/cloud-worker",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Monitor-only cloud runtime; signing and autonomous execution are frozen",
   "private": true,
   "type": "module",
