@@ -36,6 +36,7 @@ test("workspace package versions stay aligned with the current desktop release",
     "package.json",
     "apps/web/package.json",
     "apps/desktop/package.json",
+    "apps/cloud-worker/package.json",
     "packages/contracts/package.json",
   ];
   for (const manifest of manifests) {

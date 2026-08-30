@@ -22,6 +22,8 @@
     "lint:web": "npm run lint --workspace @mirae/web",
     "dev:desktop": "npm run dev --workspace @mirae/desktop",
     "build:desktop": "npm run build --workspace @mirae/desktop",
+    "dev:worker": "npm run dev --workspace @mirae/cloud-worker",
+    "build:worker": "npm run build --workspace @mirae/cloud-worker",
     "audit:desktop": "node scripts/audit-desktop-bundles.mjs",
     "audit:desktop:win": "node scripts/audit-windows-artifacts.mjs apps/desktop/release",
     "qa:desktop:p2:win": "powershell -ExecutionPolicy Bypass -File scripts/start-windows-p2-qa.ps1",
