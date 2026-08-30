@@ -4,8 +4,9 @@ import { selectSolanaRpc } from "@/lib/server-solana-rpc";
 
 export const dynamic = "force-dynamic";
 
-export const MIRAE_TOKEN_MINT = "A4axW4db7Tdu7Yu3NyxqZ7ZDWVxUNBC8VXyzYE2upump";
-export const REQUIRED_TOKEN_BALANCE = 100_000;
+const DEFAULT_MINT = "A4axW4db7Tdu7Yu3NyxqZ7ZDWVxUNBC8VXyzYE2upump";
+const DEFAULT_REQUIRED = 100_000;
+const DEFAULT_SYMBOL = "$MIRAE";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -22,6 +23,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid Solana wallet address" }, { status: 400 });
   }
 
+  const mint =
+    process.env.TOKEN_GATE_MINT?.trim() ||
+    process.env.NEXT_PUBLIC_TOKEN_GATE_MINT?.trim() ||
+    DEFAULT_MINT;
+
+  const rawRequired =
+    process.env.TOKEN_GATE_REQUIRED_BALANCE?.trim() ||
+    process.env.NEXT_PUBLIC_TOKEN_GATE_REQUIRED_BALANCE?.trim();
+  const requiredBalance = rawRequired && !isNaN(Number(rawRequired)) ? Number(rawRequired) : DEFAULT_REQUIRED;
+
+  const symbol =
+    process.env.TOKEN_GATE_SYMBOL?.trim() ||
+    process.env.NEXT_PUBLIC_TOKEN_GATE_SYMBOL?.trim() ||
+    DEFAULT_SYMBOL;
+
   const rpcUrl = selectSolanaRpc();
 
   try {
@@ -34,7 +50,7 @@ export async function GET(request: NextRequest) {
         method: "getTokenAccountsByOwner",
         params: [
           ownerPubkey.toBase58(),
-          { mint: MIRAE_TOKEN_MINT },
+          { mint },
           { encoding: "jsonParsed" },
         ],
       }),
@@ -78,13 +94,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const isVerified = totalBalance >= REQUIRED_TOKEN_BALANCE;
+    const isVerified = totalBalance >= requiredBalance;
 
     return NextResponse.json({
       address: ownerPubkey.toBase58(),
-      mint: MIRAE_TOKEN_MINT,
+      mint,
+      symbol,
       balance: totalBalance,
-      required: REQUIRED_TOKEN_BALANCE,
+      required: requiredBalance,
       isVerified,
     });
   } catch (err: unknown) {
@@ -92,9 +109,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         address: ownerPubkey.toBase58(),
-        mint: MIRAE_TOKEN_MINT,
+        mint,
+        symbol,
         balance: 0,
-        required: REQUIRED_TOKEN_BALANCE,
+        required: requiredBalance,
         isVerified: false,
         error: "Failed to query on-chain balance. Please retry.",
       },

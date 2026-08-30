@@ -18,7 +18,7 @@ export function GatedDownloadButton({
   primary = false,
   className,
 }: GatedDownloadButtonProps) {
-  const { connected, isVerified, connectWallet, balance } = useMiraeTokenGate();
+  const { connected, isVerified, connectWallet, balance, requiredBalance, symbol } = useMiraeTokenGate();
 
   if (isVerified) {
     return (
@@ -35,6 +35,7 @@ export function GatedDownloadButton({
     );
   }
 
+  // When locked / not verified
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
     if (!connected) {
@@ -45,6 +46,8 @@ export function GatedDownloadButton({
     }
   };
 
+  const formattedRequired = requiredBalance >= 1000 ? `${requiredBalance / 1000}k` : String(requiredBalance);
+
   return (
     <Button
       type="button"
@@ -53,8 +56,8 @@ export function GatedDownloadButton({
       className={`opacity-85 hover:opacity-100 border-dashed ${className || ""}`}
       title={
         !connected
-          ? "Connect wallet holding 100,000 $MIRAE to download"
-          : `Requires 100,000 $MIRAE (Current: ${balance.toLocaleString()} $MIRAE)`
+          ? `Connect wallet holding ${requiredBalance.toLocaleString()} ${symbol} to download`
+          : `Requires ${requiredBalance.toLocaleString()} ${symbol} (Current: ${balance.toLocaleString()} ${symbol})`
       }
     >
       <span className="flex items-center gap-2 truncate">
@@ -62,7 +65,7 @@ export function GatedDownloadButton({
         <span>{label}</span>
       </span>
       <span className="ml-2 font-mono text-[10px] text-amber-600 dark:text-amber-400">
-        [100k $MIRAE]
+        [${formattedRequired} ${symbol}]
       </span>
     </Button>
   );

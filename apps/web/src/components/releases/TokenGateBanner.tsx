@@ -3,12 +3,7 @@
 import { useWallet } from "@solana/wallet-adapter-react";
 import { Coins, ExternalLink, Lock, RefreshCw, ShieldAlert, ShieldCheck, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  useMiraeTokenGate,
-  REQUIRED_TOKEN_BALANCE,
-  PUMPFUN_URL,
-  JUPITER_BUY_URL,
-} from "@/hooks/useMiraeTokenGate";
+import { useMiraeTokenGate } from "@/hooks/useMiraeTokenGate";
 
 export function TokenGateBanner() {
   const { disconnect } = useWallet();
@@ -18,6 +13,10 @@ export function TokenGateBanner() {
     balance,
     loading,
     isVerified,
+    requiredBalance,
+    symbol,
+    jupiterBuyUrl,
+    pumpfunUrl,
     refresh,
     connectWallet,
   } = useMiraeTokenGate();
@@ -25,15 +24,20 @@ export function TokenGateBanner() {
   const formattedBalance = balance.toLocaleString("en-US", {
     maximumFractionDigits: 2,
   });
+  const formattedRequired = requiredBalance.toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+  });
   const shortAddress = walletAddress
     ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`
     : "";
 
-  const percentProgress = Math.min(100, Math.round((balance / REQUIRED_TOKEN_BALANCE) * 100));
+  const percentProgress = Math.min(100, Math.round((balance / requiredBalance) * 100));
 
   return (
     <div className="mb-10 overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-6 shadow-sm">
       <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+        
+        {/* Left Side: Information */}
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             {isVerified ? (
@@ -44,7 +48,7 @@ export function TokenGateBanner() {
             ) : connected ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
                 <ShieldAlert className="size-3.5" />
-                HOLD 100,000 $MIRAE TO UNLOCK
+                HOLD {formattedRequired} {symbol} TO UNLOCK
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--sc-orange)]/10 px-3 py-1 text-xs font-semibold text-[var(--sc-orange)]">
@@ -57,32 +61,33 @@ export function TokenGateBanner() {
           <h3 className="text-xl font-bold tracking-tight text-[var(--foreground)]">
             {isVerified
               ? "Your Wallet is Verified for Desktop Access"
-              : "Desktop Builds Require 100,000 $MIRAE Token"}
+              : `Desktop Builds Require ${formattedRequired} ${symbol} Token`}
           </h3>
 
           <p className="max-w-2xl text-sm leading-relaxed text-[var(--muted-foreground)]">
             {isVerified ? (
               <>
-                Holding <strong className="text-[var(--foreground)]">{formattedBalance} $MIRAE</strong> in wallet{" "}
+                Holding <strong className="text-[var(--foreground)]">{formattedBalance} {symbol}</strong> in wallet{" "}
                 <span className="font-mono text-xs">{shortAddress}</span>. All desktop release artifacts are unlocked for download.
               </>
             ) : connected ? (
               <>
-                Connected wallet holds <strong className="text-[var(--foreground)]">{formattedBalance} / 100,000 $MIRAE</strong>. Please acquire additional tokens to unlock desktop installation packages.
+                Connected wallet holds <strong className="text-[var(--foreground)]">{formattedBalance} / {formattedRequired} {symbol}</strong>. Please acquire additional tokens to unlock desktop installation packages.
               </>
             ) : (
               <>
                 Connect your Solana wallet holding at least{" "}
-                <strong className="text-[var(--foreground)]">100,000 $MIRAE</strong> to verify ownership and unlock Linux & Windows desktop releases.
+                <strong className="text-[var(--foreground)]">{formattedRequired} {symbol}</strong> to verify ownership and unlock Linux & Windows desktop releases.
               </>
             )}
           </p>
 
+          {/* Progress bar if connected but insufficient */}
           {connected && !isVerified && (
             <div className="pt-2">
               <div className="flex items-center justify-between text-xs text-[var(--muted-foreground)] font-mono mb-1.5">
-                <span>Holdings: {formattedBalance} $MIRAE</span>
-                <span>{percentProgress}% of 100,000</span>
+                <span>Holdings: {formattedBalance} {symbol}</span>
+                <span>{percentProgress}% of {formattedRequired}</span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-black/5 dark:bg-white/10">
                 <div
@@ -94,6 +99,7 @@ export function TokenGateBanner() {
           )}
         </div>
 
+        {/* Right Side: Action Buttons */}
         <div className="flex flex-wrap items-center gap-3">
           {!connected ? (
             <Button
@@ -127,14 +133,14 @@ export function TokenGateBanner() {
           {(!connected || !isVerified) && (
             <div className="flex items-center gap-2">
               <Button asChild variant="outline" className="h-10 px-4 text-xs">
-                <a href={JUPITER_BUY_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5">
+                <a href={jupiterBuyUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5">
                   <Coins className="size-3.5 text-amber-500" />
                   Buy on Jupiter
                   <ExternalLink className="size-3 opacity-60" />
                 </a>
               </Button>
               <Button asChild variant="outline" className="h-10 px-4 text-xs">
-                <a href={PUMPFUN_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5">
+                <a href={pumpfunUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5">
                   Pump.fun
                   <ExternalLink className="size-3 opacity-60" />
                 </a>
@@ -142,6 +148,7 @@ export function TokenGateBanner() {
             </div>
           )}
         </div>
+
       </div>
     </div>
   );

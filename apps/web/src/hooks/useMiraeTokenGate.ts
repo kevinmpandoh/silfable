@@ -5,10 +5,28 @@ import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { PublicKey } from "@solana/web3.js";
 
-export const MIRAE_TOKEN_MINT = "A4axW4db7Tdu7Yu3NyxqZ7ZDWVxUNBC8VXyzYE2upump";
-export const REQUIRED_TOKEN_BALANCE = 100_000;
-export const PUMPFUN_URL = "https://pump.fun/coin/A4axW4db7Tdu7Yu3NyxqZ7ZDWVxUNBC8VXyzYE2upump";
-export const JUPITER_BUY_URL = "https://jup.ag/swap/SOL-A4axW4db7Tdu7Yu3NyxqZ7ZDWVxUNBC8VXyzYE2upump";
+// Configurable via NEXT_PUBLIC_ environment variables
+export const DEFAULT_MIRAE_TOKEN_MINT = "A4axW4db7Tdu7Yu3NyxqZ7ZDWVxUNBC8VXyzYE2upump";
+export const DEFAULT_REQUIRED_BALANCE = 100_000;
+export const DEFAULT_TOKEN_SYMBOL = "$MIRAE";
+
+export function getTokenGateConfig() {
+  const mint = process.env.NEXT_PUBLIC_TOKEN_GATE_MINT?.trim() || DEFAULT_MIRAE_TOKEN_MINT;
+  const rawBalance = process.env.NEXT_PUBLIC_TOKEN_GATE_REQUIRED_BALANCE?.trim();
+  const requiredBalance = rawBalance && !isNaN(Number(rawBalance)) ? Number(rawBalance) : DEFAULT_REQUIRED_BALANCE;
+  const symbol = process.env.NEXT_PUBLIC_TOKEN_GATE_SYMBOL?.trim() || DEFAULT_TOKEN_SYMBOL;
+
+  const pumpfunUrl = `https://pump.fun/coin/${mint}`;
+  const jupiterBuyUrl = `https://jup.ag/swap/SOL-${mint}`;
+
+  return {
+    mint,
+    requiredBalance,
+    symbol,
+    pumpfunUrl,
+    jupiterBuyUrl,
+  };
+}
 
 export type TokenGateState = {
   connected: boolean;
@@ -18,6 +36,9 @@ export type TokenGateState = {
   isVerified: boolean;
   requiredBalance: number;
   mintAddress: string;
+  symbol: string;
+  pumpfunUrl: string;
+  jupiterBuyUrl: string;
   error: string | null;
   refresh: () => Promise<void>;
   connectWallet: () => void;
@@ -28,6 +49,7 @@ export function useMiraeTokenGate(): TokenGateState {
   const { connection } = useConnection();
   const { setVisible: setWalletModalVisible } = useWalletModal();
 
+  const config = getTokenGateConfig();
   const [balance, setBalance] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +66,8 @@ export function useMiraeTokenGate(): TokenGateState {
     setError(null);
 
     try {
-      const mintPubkey = new PublicKey(MIRAE_TOKEN_MINT);
+      // 1. Try client-side RPC query
+      const mintPubkey = new PublicKey(config.mint);
       const accounts = await connection.getParsedTokenAccountsByOwner(publicKey, {
         mint: mintPubkey,
       });
@@ -61,12 +84,13 @@ export function useMiraeTokenGate(): TokenGateState {
 
       setBalance(total);
     } catch (clientErr) {
-      console.warn("Client RPC token balance check failed, trying API...", clientErr);
+      console.warn("Client RPC token balance check failed, trying API fallback...", clientErr);
       try {
+        // 2. Fallback to server API endpoint
         const res = await fetch(`/api/token-gate/balance?address=${publicKey.toBase58()}`, {
           cache: "no-store",
         });
-        if (!res.ok) throw new Error(`Server HTTP ${res.status}`);
+        if (!res.ok) throw new Error(`Server returned HTTP ${res.status}`);
         const data = await res.json();
         setBalance(typeof data.balance === "number" ? data.balance : 0);
       } catch (serverErr) {
@@ -76,7 +100,7 @@ export function useMiraeTokenGate(): TokenGateState {
     } finally {
       setLoading(false);
     }
-  }, [publicKey, connection]);
+  }, [publicKey, connection, config.mint]);
 
   useEffect(() => {
     if (connected && publicKey) {
@@ -92,7 +116,7 @@ export function useMiraeTokenGate(): TokenGateState {
     setWalletModalVisible(true);
   }, [setWalletModalVisible]);
 
-  const isVerified = connected && balance >= REQUIRED_TOKEN_BALANCE;
+  const isVerified = connected && balance >= config.requiredBalance;
 
   return {
     connected,
@@ -100,8 +124,11 @@ export function useMiraeTokenGate(): TokenGateState {
     balance,
     loading,
     isVerified,
-    requiredBalance: REQUIRED_TOKEN_BALANCE,
-    mintAddress: MIRAE_TOKEN_MINT,
+    requiredBalance: config.requiredBalance,
+    mintAddress: config.mint,
+    symbol: config.symbol,
+    pumpfunUrl: config.pumpfunUrl,
+    jupiterBuyUrl: config.jupiterBuyUrl,
     error,
     refresh: fetchBalance,
     connectWallet,
