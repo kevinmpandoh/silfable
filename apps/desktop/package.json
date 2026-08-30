@@ -50,7 +50,7 @@
     "viem": "^2.55.8"
   },
   "devDependencies": {
-    "@mirae/contracts": "0.4.0",
+    "@mirae/contracts": "0.4.1",
     "@pump-fun/pump-sdk": "1.36.0",
     "@types/bn.js": "5.2.0",
     "@types/node": "^24.13.3",
